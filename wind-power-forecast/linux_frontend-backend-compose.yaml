@@ -1,0 +1,200 @@
+# frontend-backend-compose.yml (Linux 部署版本)
+version: '3.8'
+
+services:
+  frontend:
+    # build: (删除 build 部分)
+    image: wind-power-frontend:v250522_1.0  # <--- 使用你导出的镜像名称和标签
+    ports:
+      - "8080:80"
+    networks:
+      - wind-power-network
+    depends_on:
+      - backend
+      - backend-autopredict
+    environment:
+      - TZ=Asia/Shanghai
+
+  backend:
+    # build: (删除 build 部分)
+    image: wind-power-backend:v250522_1.0 # <--- 使用你导出的镜像名称和标签
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production # 建议生产环境使用 production
+      - DB_HOST=kingbase
+      - DB_PORT=54321
+      - DB_USER=system
+      - DB_PASSWORD=12345678ab # 强烈建议使用 .env 文件或 Docker secrets 管理密码
+      - DB_NAME=windpower
+      - MINIO_ENDPOINT=minio
+      - MINIO_PORT=9000
+      - TZ=Asia/Shanghai
+    networks:
+      - wind-power-network
+    depends_on:
+      kingbase:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  backend-autopredict:
+    # build: (删除 build 部分)
+    image: wind-power-backend-autopredict:v250522_1.0 # <--- 使用你导出的镜像名称和标签
+    ports:
+      - "5001:5001"
+    environment:
+      - FLASK_ENV=production # 建议生产环境使用 production
+      - DB_HOST=kingbase
+      - DB_PORT=54321
+      - DB_USER=system
+      - DB_PASSWORD=12345678ab # 强烈建议使用 .env 文件或 Docker secrets
+      - DB_NAME=windpower
+      - MINIO_ENDPOINT=minio
+      - MINIO_PORT=9000
+      - BACKEND_API_URL=http://backend:5000
+      - TZ=Asia/Shanghai
+    networks:
+      - wind-power-network
+    depends_on:
+      kingbase:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    volumes:
+      # 路径挂载说明 (重要!):
+      # 以下主机路径 (例如 './backend-autopredict/auto_scripts/...') 都是相对于此 docker-compose.yml 文件在 Linux 服务器上的位置。
+      # 你需要将 Windows 上这些目录中的数据，按照相同的相对结构复制到 Linux 服务器上，
+      # 确保此 docker-compose.yml 文件所在的目录旁边有这些对应的文件夹和文件。
+      # 例如，如果你的 compose 文件在 /opt/myapp/frontend-backend-compose.yml，
+      # 那么你需要确保 /opt/myapp/backend-autopredict/auto_scripts/... 存在并包含数据。
+      # (保持你 Windows 版本中 volumes 的主机路径部分，因为这些相对路径将在 Linux 上重新解释)
+
+
+      # 你需要确保这些路径在 Linux 上相对于 compose 文件的位置是正确的，并且数据已迁移。
+      # 例如，如果你的 Windows compose 文件中是:
+      # - ./wind-power-forecast/backend-autopredict/auto_scripts/scripts/middle/models:/app/auto_scripts/scripts/middle/models
+      # 那么这里也应该是:
+      # - ./wind-power-forecast/backend-autopredict/auto_scripts/scripts/middle/models:/app/auto_scripts/scripts/middle/models
+      # 我将使用你原始 compose 文件中的 volumes 路径，因为你确认它们在你本地是正确的。
+      # 如果你的原始 compose 中 volumes 的主机路径已经是 `./backend-autopredict/...` 并且能工作，那么这里就保持它。
+
+      # 中期预测相关目录
+      - ./backend-autopredict/auto_scripts/scripts/middle/datasets:/app/auto_scripts/scripts/middle/datasets
+      - /data/daily_pre_csv/middle:/app/auto_scripts/scripts/middle/predict_inputs
+      - ./backend-autopredict/auto_scripts/scripts/middle/models:/app/auto_scripts/scripts/middle/models
+      - ./backend-autopredict/auto_scripts/scripts/middle/predict_outputs:/app/auto_scripts/scripts/middle/predict_outputs
+      - ./backend-autopredict/auto_scripts/scripts/middle/logs:/app/auto_scripts/scripts/middle/logs
+      - ./backend-autopredict/auto_scripts/scripts/middle/merged_predict_outputs:/app/auto_scripts/scripts/middle/merged_predict_outputs
+      - ./backend-autopredict/auto_scripts/scripts/middle/feature_importance:/app/auto_scripts/scripts/middle/feature_importance
+
+      # 短期预测相关目录
+      - ./backend-autopredict/auto_scripts/scripts/short/datasets:/app/auto_scripts/scripts/short/datasets
+      - /data/daily_pre_csv/short:/app/auto_scripts/scripts/short/predict_inputs
+      - ./backend-autopredict/auto_scripts/scripts/short/models:/app/auto_scripts/scripts/short/models
+      - ./backend-autopredict/auto_scripts/scripts/short/predict_outputs:/app/auto_scripts/scripts/short/predict_outputs
+      - ./backend-autopredict/auto_scripts/scripts/short/logs:/app/auto_scripts/scripts/short/logs
+      - ./backend-autopredict/auto_scripts/scripts/short/feature_importance:/app/auto_scripts/scripts/short/feature_importance
+      
+      # 超短期预测相关目录
+      - ./backend-autopredict/auto_scripts/scripts/supershort/datasets:/app/auto_scripts/scripts/supershort/datasets
+      - ./backend-autopredict/auto_scripts/scripts/supershort/saved_models:/app/auto_scripts/scripts/supershort/saved_models
+      - ./backend-autopredict/auto_scripts/scripts/supershort/prediction_inputs:/app/auto_scripts/scripts/supershort/prediction_inputs
+      - ./backend-autopredict/auto_scripts/scripts/supershort/prediction_results:/app/auto_scripts/scripts/supershort/prediction_results
+      - ./backend-autopredict/auto_scripts/scripts/supershort/logs:/app/auto_scripts/scripts/supershort/logs
+
+  kingbase:
+    image: kingbase_v009r001c002b0014_single_x86:v1 # <--- 确保这个镜像也被 load 到 Linux
+    container_name: wind-power-kingbase
+    privileged: true
+    environment:
+      - NEED_START=yes
+      - DB_USER=system
+      - DB_PASSWORD=12345678ab # 强烈建议使用 .env 文件或 Docker secrets
+      - DB_MODE=oracle
+      - ENCODING=UTF8
+      - TZ=Asia/Shanghai
+    volumes:
+      - kingbase_data:/home/kingbase/userdata/
+    ports:
+      - "54321:54321"
+    restart: unless-stopped
+    networks:
+      - wind-power-network
+    command: /usr/sbin/init
+    healthcheck:
+      test: ["CMD", "ls", "/home/kingbase/userdata/data"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  minio:
+    image: minio/minio:latest # <--- 使用你导出的镜像标签
+    container_name: wind-power-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin # 强烈建议使用 .env 文件或 Docker secrets
+      MINIO_ROOT_PASSWORD: minioadmin # 强烈建议使用 .env 文件或 Docker secrets
+      TZ: Asia/Shanghai
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9900:9000"
+      - "9901:9001"
+    restart: unless-stopped
+    networks:
+      - wind-power-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 10s
+
+  pgadmin:
+    image: dpage/pgadmin4:latest # <--- 使用你导出的镜像标签
+    container_name: wind-power-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com # 建议修改为安全的凭证
+      PGADMIN_DEFAULT_PASSWORD: admin # 强烈建议使用 .env 文件或 Docker secrets
+      TZ: Asia/Shanghai
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      kingbase:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - wind-power-network
+    healthcheck:
+      test: ["CMD", "wget", "-O", "-", "http://localhost:80/misc/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  kingbase_data:
+  minio_data:
+  pgadmin_data:
+
+networks:
+  wind-power-network:
+    driver: bridge

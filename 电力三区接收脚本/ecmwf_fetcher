@@ -1,0 +1,17 @@
+# /etc/logrotate.d/ecmwf_fetcher
+# 配置文件用于管理ECMWF数据获取脚本的日志轮转
+
+/var/log/ecmwf_fetcher.log {
+    daily                  # 每天轮转一次
+    rotate 14              # 保留14份旧日志文件(约两周)
+    compress               # 压缩旧的日志文件 (使用gzip)
+    delaycompress          # 下次轮转时再压缩上一份日志
+    missingok              # 如果日志文件不存在，不报错
+    notifempty             # 如果日志文件为空，不进行轮转
+    create 0640 root root  # 创建新日志文件，指定权限和所有者/组
+    sharedscripts          
+    postrotate
+        # 这里不需要特别操作，Python脚本每次运行时会重新打开日志文件
+        # 如果日志文件被其他常驻进程持续打开，可以考虑添加信号处理
+    endscript
+} 

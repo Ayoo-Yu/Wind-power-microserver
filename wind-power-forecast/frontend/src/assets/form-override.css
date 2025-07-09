@@ -1,0 +1,92 @@
+/* 输入控件文字颜色全局覆盖 */
+
+/* Element Plus变量覆盖 */
+:root {
+  --el-text-color-primary: #333 !important;
+  --el-text-color-regular: #333 !important;
+  --el-input-text-color: #333 !important;
+  --el-input-hover-border-color: #409eff !important;
+}
+
+/* 所有输入框强制文字颜色 */
+input,
+textarea,
+.el-input input,
+.el-input__inner,
+.el-input__wrapper input,
+.el-textarea__inner,
+.el-select input,
+.el-select-dropdown__item,
+.el-date-editor input,
+.el-date-editor .el-input__inner,
+.el-date-editor .el-range-input,
+.el-date-picker input,
+.el-date-picker__editor-wrap input,
+.el-date-table td span,
+.el-date-table th,
+.el-picker-panel,
+.el-picker-panel__content,
+.el-time-spinner__item,
+.el-time-spinner__list,
+.el-cascader__dropdown,
+.el-color-dropdown__value,
+.el-tree-node__label,
+.el-pagination span,
+.el-pagination button {
+  color: #333 !important;
+}
+
+/* 搜索框文字颜色 */
+.el-input__inner::placeholder {
+  color: #909399 !important;
+}
+
+/* 特别处理表格文字颜色 */
+.el-table {
+  color: #333 !important;
+}
+
+.el-table th, 
+.el-table tr, 
+.el-table td {
+  color: #333 !important;
+}
+
+/* 表单标签文字颜色 */
+.el-form-item__label {
+  color: #333 !important;
+}
+
+/* 日期选择器 */
+.el-date-table {
+  color: #333 !important;
+}
+
+/* 下拉菜单文字颜色 */
+.el-dropdown-menu__item {
+  color: #333 !important;
+}
+
+/* 确保弹窗文字颜色 */
+.el-dialog,
+.el-drawer,
+.el-popover,
+.el-tooltip {
+  color: #333 !important;
+}
+
+/* 确保白色背景时文字可见 */
+[class*='bg-white'],
+[class*='bg-light'],
+[style*='background: white'],
+[style*='background-color: white'],
+[style*='background: #fff'],
+[style*='background-color: #fff'] {
+  color: #333 !important;
+}
+
+/* 特殊情况处理：选中状态的颜色需要区分 */
+.el-select-dropdown__item.selected,
+.el-date-table td.current:not(.disabled) span {
+  color: #fff !important;
+} 

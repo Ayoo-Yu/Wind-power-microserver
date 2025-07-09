@@ -1,0 +1,14 @@
+[2025-06-06 00:35:55,756] INFO in logging_config: Wind Forecast Backend Startup with TimedRotatingFileHandler for app.log
+[2025-06-06 00:35:58,835] INFO in logging_config: Wind Forecast Backend Startup with TimedRotatingFileHandler for app.log
+[2025-06-06 00:39:21,974] INFO in logging_config: Wind Forecast Backend Startup with TimedRotatingFileHandler for app.log
+[2025-06-06 00:39:24,850] INFO in logging_config: Wind Forecast Backend Startup with TimedRotatingFileHandler for app.log
+[2025-06-06 15:05:41,034] INFO in logging_config: Wind Forecast Backend Startup with TimedRotatingFileHandler for app.log
+[2025-06-06 15:05:43,874] INFO in logging_config: Wind Forecast Backend Startup with TimedRotatingFileHandler for app.log
+[2025-06-06 16:02:44,080] INFO in feature_upload: Processing chunk 1 for train_pre_short...
+[2025-06-06 16:02:44,316] INFO in feature_upload: Chunk 1: Found 96 existing records for 96 valid timestamps.
+[2025-06-06 16:02:44,340] INFO in feature_upload: Finished processing all chunks for train_pre_short. Total Inserted: 0, Total Updated: 96, Total Errors: 0
+[2025-06-06 16:02:44,352] INFO in feature_upload: Final commit successful for train_pre_short.
+[2025-06-06 16:04:45,066] INFO in feature_upload: Processing chunk 1 for train_pre_middle...
+[2025-06-06 16:04:45,248] INFO in feature_upload: Chunk 1: Found 96 existing records for 96 valid timestamps.
+[2025-06-06 16:04:45,270] INFO in feature_upload: Finished processing all chunks for train_pre_middle. Total Inserted: 0, Total Updated: 96, Total Errors: 0
+[2025-06-06 16:04:45,282] INFO in feature_upload: Final commit successful for train_pre_middle.

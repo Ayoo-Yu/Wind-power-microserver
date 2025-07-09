@@ -1,0 +1,29 @@
+[2025-06-01 09:42:15,891] INFO in logging_config: Wind Forecast Backend Startup with TimedRotatingFileHandler for app.log
+[2025-06-01 09:42:18,989] INFO in logging_config: Wind Forecast Backend Startup with TimedRotatingFileHandler for app.log
+[2025-06-01 09:44:42,599] INFO in actual_power_router: 处理第 1 个数据块，包含 10000 行数据...
+[2025-06-01 09:44:45,085] INFO in actual_power_router: 数据块 1: 更新 10000 条现有记录
+[2025-06-01 09:44:45,139] INFO in actual_power_router: 数据块 1 处理完成并提交
+[2025-06-01 09:44:45,145] INFO in actual_power_router: 处理第 2 个数据块，包含 10000 行数据...
+[2025-06-01 09:44:47,631] INFO in actual_power_router: 数据块 2: 更新 10000 条现有记录
+[2025-06-01 09:44:47,727] INFO in actual_power_router: 数据块 2 处理完成并提交
+[2025-06-01 09:44:47,732] INFO in actual_power_router: 处理第 3 个数据块，包含 10000 行数据...
+[2025-06-01 09:44:50,247] INFO in actual_power_router: 数据块 3: 更新 10000 条现有记录
+[2025-06-01 09:44:50,295] INFO in actual_power_router: 数据块 3 处理完成并提交
+[2025-06-01 09:44:50,300] INFO in actual_power_router: 处理第 4 个数据块，包含 10000 行数据...
+[2025-06-01 09:44:52,815] INFO in actual_power_router: 数据块 4: 更新 10000 条现有记录
+[2025-06-01 09:44:52,864] INFO in actual_power_router: 数据块 4 处理完成并提交
+[2025-06-01 09:44:52,870] INFO in actual_power_router: 处理第 5 个数据块，包含 10000 行数据...
+[2025-06-01 09:44:55,359] INFO in actual_power_router: 数据块 5: 更新 10000 条现有记录
+[2025-06-01 09:44:55,410] INFO in actual_power_router: 数据块 5 处理完成并提交
+[2025-06-01 09:44:55,416] INFO in actual_power_router: 处理第 6 个数据块，包含 10000 行数据...
+[2025-06-01 09:44:57,957] INFO in actual_power_router: 数据块 6: 更新 10000 条现有记录
+[2025-06-01 09:44:58,006] INFO in actual_power_router: 数据块 6 处理完成并提交
+[2025-06-01 09:44:58,011] INFO in actual_power_router: 处理第 7 个数据块，包含 10000 行数据...
+[2025-06-01 09:45:00,486] INFO in actual_power_router: 数据块 7: 更新 10000 条现有记录
+[2025-06-01 09:45:00,536] INFO in actual_power_router: 数据块 7 处理完成并提交
+[2025-06-01 09:45:00,539] INFO in actual_power_router: 处理第 8 个数据块，包含 4496 行数据...
+[2025-06-01 09:45:01,665] INFO in actual_power_router: 数据块 8: 更新 4496 条现有记录
+[2025-06-01 09:45:01,688] INFO in actual_power_router: 数据块 8 处理完成并提交
+[2025-06-01 09:45:01,689] INFO in actual_power_router: 文件处理完成。总计: 插入 0, 更新 74496, 错误 0
+[2025-06-01 15:16:34,674] INFO in logging_config: Wind Forecast Backend Startup with TimedRotatingFileHandler for app.log
+[2025-06-01 15:16:37,558] INFO in logging_config: Wind Forecast Backend Startup with TimedRotatingFileHandler for app.log

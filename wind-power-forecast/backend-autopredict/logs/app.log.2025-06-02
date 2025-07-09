@@ -1,0 +1,2 @@
+[2025-06-02 12:45:38,745] INFO in logging_config: Wind Forecast Backend Startup with TimedRotatingFileHandler for app.log
+[2025-06-02 12:45:40,854] INFO in logging_config: Wind Forecast Backend Startup with TimedRotatingFileHandler for app.log

@@ -1,0 +1,10 @@
+FROM kingbase_v009r001c002b0014_single_x86:v1
+
+# 创建启动脚本
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+
+RUN chmod +x /docker-entrypoint.sh
+
+EXPOSE 54321
+
+CMD ["/docker-entrypoint.sh"] 

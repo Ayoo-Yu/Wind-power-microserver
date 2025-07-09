@@ -1,0 +1,123 @@
+[2025-06-03 00:20:18,925] SCADAClient - INFO - 日志系统已配置完成 - 文件: /app/logs/scada_client.log, 级别: INFO, 保留: 30天
+[2025-06-03 00:20:18,932] SCADAClient - INFO - --- SCADA Client Logging Initialized ---
+[2025-06-03 00:20:18,933] SCADAClient - INFO - Using config file: /app/config.ini
+[2025-06-03 00:20:18,934] SCADAClient - INFO - --- Configuration Loaded ---
+[2025-06-03 00:20:18,934] SCADAClient - INFO - SCADA_SERVER_IP: 192.168.42.218
+[2025-06-03 00:20:18,935] SCADAClient - INFO - SCADA_SERVER_PORT: 2404
+[2025-06-03 00:20:18,936] SCADAClient - INFO - COMMON_ADDRESS: 1
+[2025-06-03 00:20:18,937] SCADAClient - INFO - ORIGINATOR_ADDRESS: 0
+[2025-06-03 00:20:18,937] SCADAClient - INFO - INTERROGATION_INTERVAL_SECONDS: 60
+[2025-06-03 00:20:18,938] SCADAClient - INFO - PRE_DEFINE_POINTS (from config): {1009: 'M_ME_NC_1'}
+[2025-06-03 00:20:18,939] SCADAClient - INFO - LOG_LEVEL: INFO
+[2025-06-03 00:20:18,939] SCADAClient - INFO - LOG_FILE_PATH: logs/scada_client.log
+[2025-06-03 00:20:18,940] SCADAClient - INFO - TARGET_IOA_FOR_UPLOAD: 1009
+[2025-06-03 00:20:18,941] SCADAClient - INFO - API_UPLOAD_URL: http://backend:5000/actual_power/
+[2025-06-03 00:20:18,941] SCADAClient - INFO - --- End Configuration ---
+[2025-06-03 00:20:18,942] SCADAClient - INFO - Starting IEC 104 Client main function...
+[2025-06-03 00:20:18,947] SCADAClient - INFO - Client event handlers assigned.
+[2025-06-03 00:20:18,950] SCADAClient - INFO - Added connection to 192.168.42.218:2404 with init=MUTED
+[2025-06-03 00:20:18,951] SCADAClient - INFO - Assigned on_state_change handler for connection 192.168.42.218:2404
+[2025-06-03 00:20:18,952] SCADAClient - INFO - Manually added/ensured station CA: 1 ...
+[2025-06-03 00:20:18,953] SCADAClient - INFO - MAIN: Created interrogation event for primary Station CA 1
+[2025-06-03 00:20:18,954] SCADAClient - INFO - MAIN: Ensuring point IOA 1009 (Type: M_ME_NC_1) for station CA 1
+[2025-06-03 00:20:18,955] SCADAClient - INFO - MAIN: Assigned on_receive handler for point IOA 1009 on CA 1
+[2025-06-03 00:20:18,956] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_OPEN
+[2025-06-03 00:20:18,956] SCADAClient - INFO - Client started. Attempting to connect...
+[2025-06-03 00:20:18,957] SCADAClient - WARNING - PERIODIC TASK: Client not running or no active connections. Skipping.
+[2025-06-03 00:20:18,957] SCADAClient - INFO - Periodic interrogation task started. Interval: 60 seconds.
+[2025-06-03 00:20:21,001] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_RECONNECT
+[2025-06-03 00:20:22,001] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_OPEN
+[2025-06-03 00:20:24,049] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_RECONNECT
+[2025-06-03 00:20:25,049] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_OPEN
+[2025-06-03 00:20:27,100] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_RECONNECT
+[2025-06-03 00:20:28,101] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_OPEN
+[2025-06-03 00:20:30,149] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_RECONNECT
+[2025-06-03 00:20:31,149] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_OPEN
+[2025-06-03 00:20:33,199] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_RECONNECT
+[2025-06-03 00:20:34,199] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_OPEN
+[2025-06-03 00:20:36,250] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_RECONNECT
+[2025-06-03 00:20:37,251] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_OPEN
+[2025-06-03 00:20:39,302] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_RECONNECT
+[2025-06-03 00:20:40,301] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_OPEN
+[2025-06-03 00:20:42,346] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_RECONNECT
+[2025-06-03 00:20:43,347] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_OPEN
+[2025-06-03 00:20:45,391] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_RECONNECT
+[2025-06-03 00:20:46,391] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_OPEN
+[2025-06-03 00:20:48,439] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_RECONNECT
+[2025-06-03 00:20:49,439] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_OPEN
+[2025-06-03 00:20:51,487] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_RECONNECT
+[2025-06-03 00:20:52,487] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_OPEN
+[2025-06-03 00:20:54,534] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_RECONNECT
+[2025-06-03 00:20:55,534] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_OPEN
+[2025-06-03 00:20:57,583] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_RECONNECT
+[2025-06-03 00:20:58,583] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_OPEN
+[2025-06-03 00:21:00,620] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_RECONNECT
+[2025-06-03 00:21:01,621] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_OPEN
+[2025-06-03 00:21:03,681] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_RECONNECT
+[2025-06-03 00:21:04,681] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_OPEN
+[2025-06-03 00:21:06,735] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_RECONNECT
+[2025-06-03 00:21:07,736] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_OPEN
+[2025-06-03 00:21:09,790] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_RECONNECT
+[2025-06-03 00:21:10,789] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_OPEN
+[2025-06-03 00:21:12,847] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_RECONNECT
+[2025-06-03 00:21:13,847] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_OPEN
+[2025-06-03 00:21:13,849] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is OPEN_MUTED
+[2025-06-03 00:21:13,849] SCADAClient - INFO - CONNECTION CB: Called unmute() on connection 192.168.42.218:2404.
+[2025-06-03 00:21:13,855] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is OPEN
+[2025-06-03 00:21:13,856] SCADAClient - INFO - CONNECTION CB: Connection 192.168.42.218:2404 is OPEN and unmuted. Scheduling initial GI for its stations.
+[2025-06-03 00:21:13,857] SCADAClient - INFO - CLIENT CB: Station CA 1 INITIALIZED ... Cause: LOCAL_POWER_ON ...
+[2025-06-03 00:21:13,857] SCADAClient - INFO - CONNECTION CB: Scheduling initial GI for station CA: 1 as OPEN & unmuted.
+[2025-06-03 00:21:13,858] SCADAClient - INFO - CLIENT CB: Scheduling initial GI for station CA: 1 from on_station_initialized.
+[2025-06-03 00:21:13,859] SCADAClient - INFO - INITIAL ASYNC TASK: Performing General Interrogation for station CA: 1 on connection 192.168.42.218:2404
+[2025-06-03 00:21:13,860] SCADAClient - INFO - INITIAL ASYNC TASK: Performing General Interrogation for station CA: 1 on connection 192.168.42.218:2404
+[2025-06-03 00:21:13,864] SCADAClient - WARNING - INITIAL ASYNC TASK: Failed to send GI for CA 1, command already running.
+[2025-06-03 00:21:13,931] SCADAClient - INFO - POINT CB: Update for Point - Station CA: 1, IOA: 1009, Type: M_ME_NC_1
+[2025-06-03 00:21:13,932] SCADAClient - INFO - POINT CB:   New Value: 21.0, Quality: GOOD, ServerTS(Beijing): None, ClientRcvTS(Beijing): 2025-06-03T00:21:13.931713+08:00
+[2025-06-03 00:21:13,933] SCADAClient - INFO - Stored latest data for upload target IOA 1009: Value=21.0, StoredTS(Beijing)=2025-06-03T00:21:13.931713+08:00
+[2025-06-03 00:21:13,961] SCADAClient - INFO - INITIAL ASYNC TASK: General Interrogation command sent successfully for station CA: 1
+[2025-06-03 00:21:13,962] SCADAClient - INFO - INITIAL ASYNC TASK: Event set for CA 1 after successful initial interrogation.
+[2025-06-03 00:21:13,963] SCADAClient - INFO - INITIAL ASYNC TASK: GI successful for CA 1. Checking for quarter upload.
+[2025-06-03 00:21:13,964] SCADAClient - INFO - UPLOAD CHECK: Entered function. Last Upload Quarter: -1, Target IOA: 1009, API URL configured: True
+[2025-06-03 00:21:13,964] SCADAClient - INFO - UPLOAD CHECK: Current Beijing Time: 2025-06-03 00:21:13, Minute: 21, Calculated Target Quarter Minute (Beijing): 15
+[2025-06-03 00:21:13,965] SCADAClient - INFO - UPLOAD CHECK: Data for IOA 1009: Value=21.0, QualityGood=True, StoredDataTS_UTC=2025-06-02T16:21:13.931713+00:00
+[2025-06-03 00:21:13,966] SCADAClient - INFO - UPLOAD CHECK: Quality is GOOD. Comparing Target Quarter Minute (15) with Last Upload Quarter Minute (-1).
+[2025-06-03 00:21:13,967] SCADAClient - INFO - UPLOAD CHECK: Condition MET (Target Quarter Minute != Last Upload Quarter Minute). Proceeding with upload.
+[2025-06-03 00:21:13,967] SCADAClient - INFO - QUARTER UPLOAD DEBUG: 当前北京时间: 2025-06-03 00:21:13.964934+08:00
+[2025-06-03 00:21:13,968] SCADAClient - INFO - QUARTER UPLOAD DEBUG: 北京时间刻钟起始点: 2025-06-03 00:15:00+08:00
+[2025-06-03 00:21:13,969] SCADAClient - INFO - QUARTER UPLOAD DEBUG: 将发送的时间字符串(无时区): 2025-06-03T00:15:00
+[2025-06-03 00:21:13,969] SCADAClient - INFO - QUARTER UPLOAD: 发送北京时间字符串到API. IOA: 1009, Value: 21.0
+[2025-06-03 00:21:13,970] SCADAClient - INFO - QUARTER UPLOAD: 时间字符串: 2025-06-03T00:15:00 (北京时间刻钟起始点)
+[2025-06-03 00:21:13,971] SCADAClient - INFO - UPLOAD API DEBUG: 接收到时间字符串: 2025-06-03T00:15:00
+[2025-06-03 00:21:13,971] SCADAClient - INFO - 准备上传数据到 API http://backend:5000/actual_power/: {'Timestamp': '2025-06-03T00:15:00', 'wp_true': 21.0}
+[2025-06-03 00:21:14,008] SCADAClient - INFO - 数据成功上传到 API: 201 - {
+  "action": "created",
+  "id": 77982,
+  "timestamp": "2025-06-03T00:15:00",
+  "wp_true": 21.0
+}
+
+[2025-06-03 00:21:14,009] SCADAClient - INFO - QUARTER UPLOAD: Successfully uploaded. Updated last_upload_quarter_minute to 15.
+[2025-06-03 00:21:18,955] SCADAClient - INFO - PERIODIC TASK: Performing periodic GI for station CA: 1 ...
+[2025-06-03 00:21:19,010] SCADAClient - INFO - POINT CB: Update for Point - Station CA: 1, IOA: 1009, Type: M_ME_NC_1
+[2025-06-03 00:21:19,011] SCADAClient - INFO - POINT CB:   New Value: 21.0, Quality: GOOD, ServerTS(Beijing): None, ClientRcvTS(Beijing): 2025-06-03T00:21:19.010528+08:00
+[2025-06-03 00:21:19,012] SCADAClient - INFO - Stored latest data for upload target IOA 1009: Value=21.0, StoredTS(Beijing)=2025-06-03T00:21:19.010528+08:00
+[2025-06-03 00:21:19,041] SCADAClient - INFO - PERIODIC TASK: Periodic GI successful for CA: 1.
+[2025-06-03 00:21:19,042] SCADAClient - INFO - PERIODIC TASK: GI successful for CA 1. Checking for quarter upload.
+[2025-06-03 00:21:19,043] SCADAClient - INFO - UPLOAD CHECK: Entered function. Last Upload Quarter: 15, Target IOA: 1009, API URL configured: True
+[2025-06-03 00:21:19,044] SCADAClient - INFO - UPLOAD CHECK: Current Beijing Time: 2025-06-03 00:21:19, Minute: 21, Calculated Target Quarter Minute (Beijing): 15
+[2025-06-03 00:21:19,045] SCADAClient - INFO - UPLOAD CHECK: Data for IOA 1009: Value=21.0, QualityGood=True, StoredDataTS_UTC=2025-06-02T16:21:19.010528+00:00
+[2025-06-03 00:21:19,046] SCADAClient - INFO - UPLOAD CHECK: Quality is GOOD. Comparing Target Quarter Minute (15) with Last Upload Quarter Minute (15).
+[2025-06-03 00:21:19,047] SCADAClient - INFO - UPLOAD CHECK: Condition NOT MET. Target Quarter Minute (15) IS THE SAME as Last Upload Quarter Minute (15). No upload triggered.
+[2025-06-03 00:22:19,045] SCADAClient - INFO - PERIODIC TASK: Performing periodic GI for station CA: 1 ...
+[2025-06-03 00:22:19,106] SCADAClient - INFO - POINT CB: Update for Point - Station CA: 1, IOA: 1009, Type: M_ME_NC_1
+[2025-06-03 00:22:19,107] SCADAClient - INFO - POINT CB:   New Value: 21.0, Quality: GOOD, ServerTS(Beijing): None, ClientRcvTS(Beijing): 2025-06-03T00:22:19.106493+08:00
+[2025-06-03 00:22:19,108] SCADAClient - INFO - Stored latest data for upload target IOA 1009: Value=21.0, StoredTS(Beijing)=2025-06-03T00:22:19.106493+08:00
+[2025-06-03 00:22:19,137] SCADAClient - INFO - PERIODIC TASK: Periodic GI successful for CA: 1.
+[2025-06-03 00:22:19,138] SCADAClient - INFO - PERIODIC TASK: GI successful for CA 1. Checking for quarter upload.
+[2025-06-03 00:22:19,139] SCADAClient - INFO - UPLOAD CHECK: Entered function. Last Upload Quarter: 15, Target IOA: 1009, API URL configured: True
+[2025-06-03 00:22:19,140] SCADAClient - INFO - UPLOAD CHECK: Current Beijing Time: 2025-06-03 00:22:19, Minute: 22, Calculated Target Quarter Minute (Beijing): 15
+[2025-06-03 00:22:19,141] SCADAClient - INFO - UPLOAD CHECK: Data for IOA 1009: Value=21.0, QualityGood=True, StoredDataTS_UTC=2025-06-02T16:22:19.106493+00:00
+[2025-06-03 00:22:19,141] SCADAClient - INFO - UPLOAD CHECK: Quality is GOOD. Comparing Target Quarter Minute (15) with Last Upload Quarter Minute (15).
+[2025-06-03 00:22:19,142] SCADAClient - INFO - UPLOAD CHECK: Condition NOT MET. Target Quarter Minute (15) IS THE SAME as Last Upload Quarter Minute (15). No upload triggered.
+[2025-06-03 00:22:24,266] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_RECONNECT
+[2025-06-03 00:22:25,266] SCADAClient - INFO - CONNECTION CB: Connection to 192.168.42.218:2404 new state is CLOSED_AWAIT_OPEN

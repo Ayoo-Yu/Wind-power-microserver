@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  kingbase:
+    image: kingbase_v009r001c002b0014_single_x86:v1  # 请替换为实际导入的金仓数据库镜像名称和标签
+    container_name: wind-power-kingbase
+    environment:
+      KINGBASE_USER: system
+      KINGBASE_PASSWORD: yzz0216yh
+      KINGBASE_DB: windpower
+    volumes:
+      - kingbase_data:/opt/kingbase/data  # 根据金仓数据库的数据存储路径可能需要调整
+    ports:
+      - "54321:54321"  # 金仓数据库默认端口为54321
+    restart: unless-stopped
+    networks:
+      - wind-power-network
+
+  minio:
+    image: minio/minio
+    container_name: wind-power-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data  # 使用命名卷
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    restart: unless-stopped
+    networks:
+      - wind-power-network
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: wind-power-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - kingbase
+    restart: unless-stopped
+    networks:
+      - wind-power-network
+
+volumes:  # 声明命名卷
+  kingbase_data:
+  minio_data:
+
+networks:
+  wind-power-network:
+    driver: bridge

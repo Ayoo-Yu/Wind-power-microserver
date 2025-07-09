@@ -1,0 +1,41 @@
+/*
+Write your variables here. All available variables can be
+found in element-plus/packages/theme-chalk/src/common/var.scss.
+For example, to overwrite the theme color:
+*/
+$--color-primary: #409EFF;
+$--color-success: #67C23A;
+$--color-warning: #E6A23C;
+$--color-danger: #F56C6C;
+$--color-info: #909399;
+
+/* icon font path, required */
+$--font-path: '~element-plus/lib/theme-chalk/fonts';
+$--font-size-base: 14px;
+
+/* 导入Element Plus样式 */
+@import "element-plus/theme-chalk/index.css";
+
+/* 自定义全局样式 */
+// :root {
+//   --card-dark: rgba(30, 30, 30, 0.7);
+//   --border-color: rgba(255, 255, 255, 0.1);
+//   --text-primary: #ffffff;
+//   --text-secondary: rgba(255, 255, 255, 0.7);
+// }
+
+// /* 全局样式覆盖 */
+// .el-card {
+//   background-color: rgba(255, 255, 255, 0.9) !important;
+//   border: none !important;
+//   border-radius: 8px !important;
+//   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+// }
+
+// .el-button {
+//   border-radius: 4px !important;
+// }
+
+// .el-input__inner {
+//   border-radius: 4px !important;
+// }
