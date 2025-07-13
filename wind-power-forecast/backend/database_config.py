@@ -109,13 +109,31 @@ def cleanup_idle_connections(engine, idle_timeout=120):
         return
         
     try:
-        for connection in engine.pool._pool:
-            if hasattr(connection, 'info') and 'last_use_time' in connection.info:
-                if time.time() - connection.info['last_use_time'] > idle_timeout:
-                    # 标记连接为无效，这样它将被丢弃
-                    connection.invalidate()
+        # 对于QueuePool，我们不应该直接迭代_pool
+        # 而是使用连接池的内置方法来进行清理
+        pool = engine.pool
+        
+        # 检查连接池是否有dispose方法，如果有就调用它来清理连接
+        if hasattr(pool, 'dispose'):
+            # 记录当前连接池状态
+            current_size = getattr(pool, 'size', lambda: 0)()
+            checked_in = getattr(pool, 'checkedin', lambda: 0)()
+            checked_out = getattr(pool, 'checkedout', lambda: 0)()
+            
+            print(f"连接池状态: 当前大小={current_size}, 已签入={checked_in}, 已签出={checked_out}")
+            
+            # 如果有太多空闲连接，进行部分清理
+            if checked_in > 5:  # 如果有超过5个空闲连接
+                print("检测到过多空闲连接，进行部分清理...")
+                # 重新创建连接池来清理空闲连接
+                pool.dispose()
+                print("✅ 已清理空闲连接")
+        
     except Exception as e:
         print(f"清理空闲连接时发生错误: {e}")
+        # 记录更详细的错误信息，但不要让它影响应用运行
+        import traceback
+        print(f"错误详情: {traceback.format_exc()}")
 
 # 在engine创建之后检查迁移
 def check_migrations():

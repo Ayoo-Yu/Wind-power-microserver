@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-# 检查PM2安装状态
-python check_pm2.py
+# 移除PM2检查，因为backend容器不需要PM2
+# python check_pm2.py
 
 # 创建utils目录（如果不存在）
 mkdir -p /app/backend/utils
