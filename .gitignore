@@ -91,3 +91,7 @@ Thumbs.db
 *.swp
 *.tmp
 
+*.flag
+*.2025-06-06
+wind-power-forecast/backend-autopredict/auto_scripts/scripts/short/logs/scheduler/scheduler.log.2025-07-06
+wind-power-forecast/backend-autopredict/auto_scripts/scripts/supershort/logs/scheduler_supershort/scheduler_supershort.log.2025-07-06

@@ -587,8 +587,6 @@ def train_multiple_datasets(data, months_list, train_ratio, lags, window_size, m
             
             # --- BEGIN MODIFICATION ---
             logger.info(f"[短效] 即将为模型 {model_name} (数据源: {months_desc}) 开始训练。")
-            logger.info(f"[短效] 最后10行 X_train_selected (特征数据) 预览:\\n{pd.DataFrame(X_train_selected).tail(10).to_string()}")
-            logger.info(f"[短效] 最后10行 y_train_windows (目标数据) 预览:\\n{pd.Series(y_train_windows).tail(10).to_string()}")
             # --- END MODIFICATION ---
             
             # 训练单个模型

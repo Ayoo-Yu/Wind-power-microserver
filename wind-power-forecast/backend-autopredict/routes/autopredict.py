@@ -421,8 +421,8 @@ def start_prediction():
         record_task_history(prediction_type, 'start', 'failed', error_msg)
         return jsonify({'error': error_msg}), 400
     
-    # 使用 os.path.basename 得到脚本文件的基本名称作为进程名称
-    process_name = os.path.basename(script_path)
+    # 使用 os.path.splitext 得到脚本文件的基本名称，去掉.py后缀作为进程名称
+    process_name = os.path.splitext(os.path.basename(script_path))[0]
     
     # 先检查进程是否已经运行
     if query_pm2_state(script_path):
@@ -480,7 +480,7 @@ def stop_prediction():
     try:
         # 正常停止单个脚本
         script_path = scripts[prediction_type]
-        script_name = os.path.basename(script_path)
+        script_name = os.path.splitext(os.path.basename(script_path))[0]  # 去掉.py后缀
         
         success, result = safe_pm2_command(['stop', script_name])
             
@@ -533,8 +533,8 @@ def schedule_restart():
         return jsonify({'error': error_msg}), 400
 
     script_path = scripts[prediction_type]
-    # 使用 os.path.basename 获取脚本文件名作为进程名称
-    process_name = os.path.basename(script_path)
+    # 使用 os.path.splitext 获取脚本文件名，去掉.py后缀作为进程名称
+    process_name = os.path.splitext(os.path.basename(script_path))[0]
     
     # 先停止现有进程
     stop_success, _ = safe_pm2_command(['stop', process_name])
@@ -572,7 +572,7 @@ def delete_prediction():
     
     try:
         script_path = scripts[prediction_type]
-        script_name = os.path.basename(script_path)
+        script_name = os.path.splitext(os.path.basename(script_path))[0]  # 去掉.py后缀
         
         success, result = safe_pm2_command(['delete', script_name])
         
@@ -639,8 +639,8 @@ def get_script_info():
         return jsonify({'error': '无效的预测类型'}), 400
 
     try:
-        # 获取进程名称（保留.py后缀）
-        process_name = os.path.basename(scripts[prediction_type])
+        # 获取进程名称（去掉.py后缀）
+        process_name = os.path.splitext(os.path.basename(scripts[prediction_type]))[0]
         print(f"正在查询进程: {process_name}")  # 调试日志
         
         # 先检查进程是否存在
@@ -730,7 +730,7 @@ def get_logs():
         # 如果是通过PM2查询主日志
         if log_type == 'main':
             script_path = scripts[prediction_type]
-            process_name = os.path.basename(script_path)
+            process_name = os.path.splitext(os.path.basename(script_path))[0]  # 去掉.py后缀
             
             success, result = safe_pm2_command(['logs', '--nostream', '--lines', str(lines), process_name])
             

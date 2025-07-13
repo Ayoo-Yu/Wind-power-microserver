@@ -66,6 +66,20 @@ done
 # 确保工作目录存在
 mkdir -p /app/data
 
+# 自动启动预测脚本
+echo "正在启动预测脚本..."
+
+# 启动短期预测脚本
+pm2 start /app/auto_scripts/scripts/short/scheduler_short.py --interpreter python
+
+# 启动中期预测脚本  
+pm2 start /app/auto_scripts/scripts/middle/scheduler_middle.py --interpreter python
+
+# 启动超短期预测脚本
+pm2 start /app/auto_scripts/scripts/supershort/scheduler_supershort.py --interpreter python
+
+echo "预测脚本启动完成"
+
 # 启动应用
 echo "启动自动预测应用..."
 pm2-runtime start ecosystem.config.js 

@@ -830,7 +830,6 @@ def predict(input_file, models_dir, output_file, window_size=16, lags=4, model_t
         print_separator("模型预测")
         logger.info(f"使用模型进行预测 ({determined_model_type} - 来自 {model_file_path})")
         logger.info(f"即将为模型 {determined_model_type} 开始预测。")
-        logger.info(f"最后10行 X_new_flat_selected (最终预测输入特征) 预览:\\n{pd.DataFrame(X_new_flat_selected).tail(10).to_string()}")
         predictions = model.predict(X_new_flat_selected)
         logger.info(f"生成了 {len(predictions)} 个预测值。")
         
