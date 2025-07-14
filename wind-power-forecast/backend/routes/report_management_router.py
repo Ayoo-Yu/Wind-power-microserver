@@ -1293,6 +1293,7 @@ def check_and_execute_scheduled_reports():
     此函数通过为每个任务使用独立的、短暂的事务和数据库锁来确保健壮性.
     """
     now = datetime.now()
+    current_time_str = now.strftime('%H:%M')
     logging.info(f"Cron job triggered at {now.strftime('%Y-%m-%d %H:%M:%S')}. Finding unique tasks.")
 
     unique_tasks = []
@@ -1302,15 +1303,27 @@ def check_and_execute_scheduled_reports():
             all_enabled_configs = db.query(
                 ReportConfig.id,
                 ReportConfig.farm_id,
-                ReportConfig.report_type
+                ReportConfig.report_type,
+                ReportConfig.report_time
             ).filter(ReportConfig.is_enabled == True).order_by(ReportConfig.created_at).all()
 
             processed_keys = set()
-            for config_id, farm_id, report_type in all_enabled_configs:
+            for config_id, farm_id, report_type, report_time in all_enabled_configs:
                 key = (farm_id, report_type)
                 if key not in processed_keys:
                     processed_keys.add(key)
-                    unique_tasks.append(config_id)
+                    
+                    # 对于长期预测，检查当前时间是否匹配配置的report_time
+                    if report_type == 'forecast_long':
+                        if report_time and report_time == current_time_str:
+                            unique_tasks.append(config_id)
+                            logging.info(f"Long-term forecast task {config_id} scheduled at {report_time} matches current time {current_time_str}")
+                        else:
+                            logging.debug(f"Long-term forecast task {config_id} scheduled at {report_time} does not match current time {current_time_str}")
+                    else:
+                        # 其他类型保持现有逻辑（15分钟间隔）
+                        unique_tasks.append(config_id)
+                        
         logging.info(f"Found {len(unique_tasks)} unique tasks to process.")
     except Exception as e:
         logging.error(f"Error while fetching tasks for scheduler: {e}")
@@ -1337,7 +1350,7 @@ def check_and_execute_scheduled_reports():
                 # 步骤5: 执行上报
                 farm = db.query(WindFarm).filter(WindFarm.id == config.farm_id).first()
                 if farm:
-                    logging.info(f"Processing report for farm '{farm.farm_name}' (config_id: {config.id})")
+                    logging.info(f"Processing report for farm '{farm.farm_name}' (config_id: {config.id}, type: {config.report_type})")
                     execute_report(db, config)
                 else:
                     logging.error(f"Could not find farm for config_id {config.id}")
@@ -1357,11 +1370,11 @@ def start_report_scheduler():
             logging.info("上报调度器已在运行，跳过启动")
             return
             
-        # 使用CRON模式精确调度
+        # 使用CRON模式精确调度 - 每分钟检查一次以支持长期预测定点上报
         report_scheduler.add_job(
             check_and_execute_scheduled_reports,
             'cron',
-            minute='14,29,44,59',
+            minute='*',
             second='45',
             id='report_scheduler_cron',
             max_instances=1,
@@ -1371,7 +1384,7 @@ def start_report_scheduler():
         
         report_scheduler.start()
         logging.info("上报调度器启动成功 - 使用CRON模式")
-        logging.info("上报时间点: XX:14:45, XX:29:45, XX:44:45, XX:59:45")
+        logging.info("调度策略: 每分钟XX:45秒检查，长期预测按定时时间执行，其他类型保持15分钟间隔")
         
         # 注册程序退出时的清理函数
         atexit.register(lambda: report_scheduler.shutdown())
@@ -1426,36 +1439,23 @@ def get_scheduler_status():
         return jsonify({'error': '获取调度器状态失败'}), 500
 
 def get_next_report_times():
-    """获取接下来的上报时间点"""
+    """获取接下来的调度检查时间点"""
     now = datetime.now()
     
-    # 15分钟整点提前15秒的时间点
-    report_minutes = [14, 29, 44, 59]
-    next_times = []
+    # 调度器每分钟的45秒检查
+    if now.second < 45:
+        # 当前分钟的45秒还没到
+        next_time = now.replace(second=45, microsecond=0)
+    else:
+        # 当前分钟的45秒已过，取下一分钟的45秒
+        if now.minute == 59:
+            # 跨小时
+            next_hour = now.hour + 1 if now.hour < 23 else 0
+            next_time = now.replace(hour=next_hour, minute=0, second=45, microsecond=0)
+        else:
+            next_time = now.replace(minute=now.minute + 1, second=45, microsecond=0)
     
-    for minute in report_minutes:
-        if minute > now.minute or (minute == now.minute and now.second < 45):
-            # 当前小时的时间
-            next_time = now.replace(minute=minute, second=45, microsecond=0)
-            next_times.append(next_time.strftime('%H:%M:%S'))
-    
-    # 如果当前小时没有找到合适的时间点，则取下一小时的时间点
-    if not next_times:
-        next_hour = now.hour + 1 if now.hour < 23 else 0
-        # 添加下一小时的第一个时间点
-        next_time = now.replace(hour=next_hour, minute=14, second=45, microsecond=0)
-        next_times.append(next_time.strftime('%H:%M:%S'))
-        # 如果需要第二个时间点
-        if len(next_times) < 2:
-            next_time = now.replace(hour=next_hour, minute=29, second=45, microsecond=0)
-            next_times.append(next_time.strftime('%H:%M:%S'))
-    elif len(next_times) == 1:
-        # 如果当前小时只找到一个时间点，补充下一小时的第一个时间点
-        next_hour = now.hour + 1 if now.hour < 23 else 0
-        next_time = now.replace(hour=next_hour, minute=14, second=45, microsecond=0)
-        next_times.append(next_time.strftime('%H:%M:%S'))
-    
-    return next_times[:1]  # 只返回最近的一个时间点
+    return [next_time.strftime('%H:%M:%S')]
 
 def get_data_structure_info(report_type):
     """获取不同上报类型的数据结构信息"""

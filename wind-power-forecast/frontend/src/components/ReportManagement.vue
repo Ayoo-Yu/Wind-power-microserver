@@ -47,14 +47,14 @@
       <div class="scheduler-info">
         <div class="info-item">
           <span class="info-label">上报策略:</span>
-          <span class="info-value">每15分钟整点提前15秒自动上报</span>
+          <span class="info-value">每分钟检查，长期预测按定时时间执行，其他类型保持15分钟间隔</span>
         </div>
         <div class="info-item">
-          <span class="info-label">上报时间:</span>
-          <span class="info-value">提前15s</span>
+          <span class="info-label">检查时间:</span>
+          <span class="info-value">每分钟第45秒</span>
         </div>
         <div class="info-item" v-if="schedulerStatus.next_report_times.length > 0">
-          <span class="info-label">下次上报:</span>
+          <span class="info-label">下次检查:</span>
           <span class="info-value">{{ schedulerStatus.next_report_times[0] }}</span>
         </div>
         <div class="info-item">
