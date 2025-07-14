@@ -5,7 +5,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    image: wind-power-frontend:v250707_1.0
+    image: wind-power-frontend:v250714_1.0
     ports:
       - "8080:80"
     networks:
@@ -20,7 +20,7 @@ services:
     build:
       context: ..  # 修改构建上下文为项目根目录
       dockerfile: wind-power-forecast/backend/Dockerfile  # 使用相对于项目根目录的Dockerfile路径
-    image: wind-power-backend:v250707_1.0
+    image: wind-power-backend:v250714_1.0
     ports:
       - "5000:5000"
     environment:
@@ -53,7 +53,7 @@ services:
     build:
       context: ..  # 构建上下文为项目根目录
       dockerfile: wind-power-forecast/backend-autopredict/Dockerfile
-    image: wind-power-backend-autopredict:v250707_1.0
+    image: wind-power-backend-autopredict:v250714_1.0
     ports:
       - "5001:5001"
     environment:
@@ -110,7 +110,7 @@ services:
     build:
       context: ../C104_SCADA
       dockerfile: Dockerfile
-    image: c104-scada-client:v250707_1.0
+    image: c104-scada-client:v250714_1.0
     container_name: c104-scada-client
     environment:
       - TZ=Asia/Shanghai
