@@ -4,12 +4,12 @@ import logging
 import threading
 import configparser
 import os
-import datetime
+from datetime import datetime, timezone, timedelta
 import requests
 import csv
 
 # --- 北京时区常量和转换函数 ---
-BEIJING_TZ = datetime.timezone(datetime.timedelta(hours=8), name='Asia/Shanghai')
+BEIJING_TZ = timezone(timedelta(hours=8), name='Asia/Shanghai')
 
 def to_beijing_time(dt):
     """将datetime对象转换为北京时间"""
@@ -17,16 +17,16 @@ def to_beijing_time(dt):
         return None
     if dt.tzinfo is None:
         # 假设naive datetime是UTC时间
-        dt = dt.replace(tzinfo=datetime.timezone.utc)
+        dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(BEIJING_TZ)
 
 def now_beijing():
     """获取当前北京时间"""
-    return datetime.datetime.now(BEIJING_TZ)
+    return datetime.now(BEIJING_TZ)
 
 def now_utc():
     """获取当前UTC时间"""
-    return datetime.datetime.now(datetime.timezone.utc)
+    return datetime.now(timezone.utc)
 
 # --- 默认配置参数 ---
 DEFAULT_SCADA_SERVER_IP = "127.0.0.1"
@@ -439,7 +439,7 @@ def check_and_perform_pre_quarter_approximation_upload(persistence=None):
             elif current_minute == 44:
                 target_api_timestamp_beijing = current_beijing_time.replace(minute=45, second=0, microsecond=0)
             elif current_minute == 59: # Handles hour rollover correctly
-                target_api_timestamp_beijing = (current_beijing_time + datetime.timedelta(minutes=1)).replace(second=0, microsecond=0)
+                target_api_timestamp_beijing = (current_beijing_time + timedelta(minutes=1)).replace(second=0, microsecond=0)
 
 
             if target_api_timestamp_beijing:
