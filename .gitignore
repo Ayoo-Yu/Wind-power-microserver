@@ -103,3 +103,5 @@ logs/
 **/*_done.flag
 **/*_train.flag
 **/*.lock
+*.flag
+

@@ -6,7 +6,7 @@
     
     <div class="login-card">
       <div class="logo-container">
-        <img src="@/assets/Hust_logo.png" alt="Logo" class="logo" />
+        <img src="@/assets/Sanxia_logo_black.png" alt="Logo" class="logo" />
         <h1 class="system-title">风电功率预测平台</h1>
       </div>
       
@@ -50,7 +50,7 @@
       </el-form>
       
       <div class="login-footer">
-        <p>© 2025 华中科技大学. 版权所有.</p>
+        <p>© 2025 中国三峡集团. 版权所有.</p>
       </div>
     </div>
     

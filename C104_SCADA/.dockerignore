@@ -1,0 +1,45 @@
+# 备份文件
+*.backup
+*.bak
+
+# Python 字节码
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 日志文件
+logs/
+*.log
+
+# 状态和数据目录 (这些会通过volume挂载)
+data/
+state/
+
+# CSV数据目录
+csv_data/
+
+# IDE文件
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 临时文件
+*.tmp
+*.temp
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# Git相关
+.git/
+.gitignore
+
+# 文档
+README.md
+*.md
+
+# 测试文件
+test_*
+*_test.py 
