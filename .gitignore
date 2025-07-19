@@ -91,17 +91,15 @@ Thumbs.db
 *.swp
 *.tmp
 
-*.flag
-*.2025-06-06
-wind-power-forecast/backend-autopredict/auto_scripts/scripts/short/logs/scheduler/scheduler.log.2025-07-06
-wind-power-forecast/backend-autopredict/auto_scripts/scripts/supershort/logs/scheduler_supershort/scheduler_supershort.log.2025-07-06
-C104_SCADA/logs/scada_client.log.2025-07-13
-wind-power-forecast/backend-autopredict/auto_scripts/scripts/middle/logs/scheduler/scheduler.log.2025-07-13
-wind-power-forecast/backend-autopredict/auto_scripts/scripts/short/logs/scheduler/scheduler.log.2025-07-13
-wind-power-forecast/backend-autopredict/auto_scripts/scripts/supershort/logs/scheduler_supershort/scheduler_supershort.log.2025-07-13
-wind-power-forecast/backend-autopredict/auto_scripts/scripts/supershort/logs/supershort_train_flags/20250714_supershort_train.lock
-*.flag
-*.flag
-*.flag
-wind-power-forecast/backend-autopredict/logs/app.log.2025-07-13
-wind-power-forecast/backend/logs/app.log.2025-07-13
+# 8. 增强的日志和标志文件忽略规则
+# =================================================
+# 日志目录
+logs/
+# 带日期的日志文件
+*.log.*
+# 递归匹配所有目录下的日志文件
+**/*.log.*
+# 标志文件模式
+**/*_done.flag
+**/*_train.flag
+**/*.lock
