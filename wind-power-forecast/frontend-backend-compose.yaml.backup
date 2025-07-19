@@ -5,7 +5,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    image: wind-power-frontend:v250715_1.0
+    image: wind-power-frontend:v250714_1.0
     ports:
       - "8080:80"
     networks:
@@ -110,7 +110,7 @@ services:
     build:
       context: ../C104_SCADA
       dockerfile: Dockerfile
-    image: c104-scada-client:v250715.1.0
+    image: c104-scada-client:v250714_1.0
     container_name: c104-scada-client
     environment:
       - TZ=Asia/Shanghai
@@ -120,14 +120,6 @@ services:
     volumes:
       - ../C104_SCADA/config.ini:/app/config.ini
       - ../C104_SCADA/logs:/app/logs
-      - ../C104_SCADA/data:/app/data
-      - ../C104_SCADA/state:/app/state
-    healthcheck:
-      test: ["CMD", "python", "health_check.py"]
-      interval: 2m
-      timeout: 10s
-      retries: 3
-      start_period: 30s
 
   kingbase:
     image: kingbase_v009r001c002b0014_single_x86:v1
