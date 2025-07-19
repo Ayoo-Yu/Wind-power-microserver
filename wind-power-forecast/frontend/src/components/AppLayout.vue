@@ -23,7 +23,7 @@
       <div class="brand" @click="toggleCollapse">
         <img
           v-if="!isCollapsed"
-          src="@/assets/Hust_logo.png"
+          src="@/assets/Sanxia_logo.png"
           alt="Logo"
           class="brand-logo"
         />
@@ -101,7 +101,7 @@
             <Fold v-if="!isCollapsed" />
             <Expand v-else />
           </el-icon>
-          <h1 class="header-title">华中科技大学风电功率预测平台</h1>
+          <h1 class="header-title">中国三峡集团风电功率预测平台</h1>
         </div>
         <div class="header-right">
           <el-dropdown @command="handleCommand">

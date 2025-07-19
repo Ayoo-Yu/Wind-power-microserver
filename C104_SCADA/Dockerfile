@@ -15,18 +15,28 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 复制你的脚本到工作目录
 COPY scada_c104.py .
 
+# 复制数据持久化模块
+COPY data_persistence.py .
+
+# 复制健康检查脚本
+COPY health_check.py .
+
 # 复制配置文件到工作目录
-#COPY config.ini .
+COPY config.ini .
 
 # 复制日志配置模块到工作目录
 COPY logging_config.py .
 
-# 创建日志目录
-RUN mkdir -p logs
+# 创建必要的目录
+RUN mkdir -p logs data state data/csv_data state/backup
 
 # 设置默认时区 (可选, 但对于日志时间戳可能有用)
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# 添加健康检查
+HEALTHCHECK --interval=2m --timeout=10s --start-period=30s --retries=3 \
+    CMD python health_check.py || exit 1
 
 # 运行你的 Python 脚本
 CMD ["python", "scada_c104.py"]
