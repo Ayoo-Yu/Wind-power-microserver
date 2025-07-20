@@ -406,122 +406,13 @@ def split_data(X, y, train_ratio=0.9):
     return X_train, X_val, y_train, y_val
 
 def feature_engineering(X, lags):
-    """
-    特征工程：为单个DataFrame创建特征组合、滞后特征等。
-
-    参数:
-        X (pd.DataFrame): 输入的特征DataFrame。
-        lags (int): 需要创建的滞后特征的最大阶数 (例如 lags=3 会创建 lag1, lag2, lag3)。
-
-    返回:
-        pd.DataFrame: 包含原始特征和工程特征的DataFrame。
-        pd.Index: 由于滞后特征产生的NaN值的索引。
-    """
-    print(f"开始特征工程，输入维度: {X.shape}, lags: {lags}")
-    logging.info(f"开始特征工程，输入维度: {X.shape}, lags: {lags}")
     X_processed = X.copy() # 使用副本进行操作
 
-    # 动态确定风速点数量 (基于传入的 X)
-    # 使用 setdefault 避免 KeyErrror，如果列不存在则 n_points 为 0
-    n_points = len([col for col in X_processed.columns if col.startswith('ws10_')])
-    if n_points == 0:
-         print("警告: 未在输入数据中找到 'ws10_' 开头的列，无法生成风速相关特征工程。")
-         logging.warning("警告: 未在输入数据中找到 'ws10_' 开头的列，无法生成风速相关特征工程。")
-         # 如果没有风速特征，可能无法生成滞后和差异特征，需要决定如何处理
-         # 这里选择继续，但后面依赖 wind_speeds_* 的代码可能不会执行
-
-    wind_speeds_10 = [f'ws10_{i}' for i in range(1, n_points + 1)]
-    wind_speeds_100 = [f'ws100_{i}' for i in range(1, n_points + 1)]
-    wind_speeds_200 = [f'ws200_{i}' for i in range(1, n_points + 1)]
-
-    # 检查需要的列是否存在
-    required_cols_100 = [col for col in wind_speeds_100 if col not in X_processed.columns]
-    required_cols_200 = [col for col in wind_speeds_200 if col not in X_processed.columns]
-    required_cols_10 = [col for col in wind_speeds_10 if col not in X_processed.columns]
-
-    if required_cols_100 or required_cols_200 or required_cols_10:
-        missing_str = f"缺少风速列: {required_cols_100 + required_cols_200 + required_cols_10}"
-        print(f"警告: {missing_str}。部分特征工程可能无法执行。")
-        logging.warning(f"警告: {missing_str}。部分特征工程可能无法执行。")
-
-    # -- 生成差异特征 --
-    combined_features = {}
-
-    # 高度100和200之间的差异
-    valid_ws_100 = [col for col in wind_speeds_100 if col in X_processed.columns]
-    valid_ws_200 = [col for col in wind_speeds_200 if col in X_processed.columns]
-    valid_ws_10 = [col for col in wind_speeds_10 if col in X_processed.columns]
-
-    if len(valid_ws_100) >= 2:
-        for i in range(len(valid_ws_100)):
-            for j in range(i + 1, len(valid_ws_100)):
-                col1 = valid_ws_100[i]
-                col2 = valid_ws_100[j]
-                combined_features[f'{col1}_{col2}_diff1'] = X_processed[col1] - X_processed[col2]
-
-    if len(valid_ws_200) >= 2:
-         for i in range(len(valid_ws_200)):
-            for j in range(i + 1, len(valid_ws_200)):
-                col1 = valid_ws_200[i]
-                col2 = valid_ws_200[j]
-                combined_features[f'{col1}_{col2}_diff1'] = X_processed[col1] - X_processed[col2]
-
-    # 高度10和200之间的差异
-    if valid_ws_10 and valid_ws_200:
-        for col10 in valid_ws_10:
-            for col200 in valid_ws_200:
-                 combined_features[f'{col10}_{col200}_diff2'] = X_processed[col10] - X_processed[col200]
-
-    # -- 生成滞后特征 --
-    lag_features = {}
-    cols_for_lag = valid_ws_10 + valid_ws_100 + valid_ws_200
-    # 如果还有其他特征需要滞后，添加到 cols_for_lag 列表中
-
-    if cols_for_lag: # 只有在有可用于滞后的列时才执行
-        # lags 参数指的是最大滞后阶数，所以循环到 lags (包含)
-        for lag in range(1, lags + 1): # 注意这里是 lags + 1
-            for col in cols_for_lag:
-                # 检查列是否存在以防万一
-                if col in X_processed.columns:
-                     lag_features[f'{col}_lag{lag}'] = X_processed[col].shift(lag)
-                else:
-                     print(f"警告: 尝试为不存在的列 {col} 创建 lag{lag} 特征")
-                     logging.warning(f"警告: 尝试为不存在的列 {col} 创建 lag{lag} 特征")
-
-    # -- 合并特征 --
-    # 只有在生成了特征时才合并
-    if combined_features:
-        combined_features_df = pd.DataFrame(combined_features, index=X_processed.index)
-        X_processed = pd.concat([X_processed, combined_features_df], axis=1)
-        del combined_features_df # 清理内存
-        gc.collect()
-
-    if lag_features:
-        lag_features_df = pd.DataFrame(lag_features, index=X_processed.index)
-        X_processed = pd.concat([X_processed, lag_features_df], axis=1)
-        del lag_features_df # 清理内存
-        gc.collect()
-
-    # 确保新生成的特征也是float32类型
     for col in X_processed.select_dtypes(include=['float64']).columns:
         X_processed[col] = X_processed[col].astype(np.float32)
 
-    # 处理因 Lag 特征引入的 NaN
     nan_indices = X_processed[X_processed.isnull().any(axis=1)].index
-    # 注意：这里不再 dropna，让调用者决定如何处理
 
-    print(f"特征工程完成，输出维度: {X_processed.shape}, 发现 {len(nan_indices)} 行含NaN")
-    logging.info(f"特征工程完成，输出维度: {X_processed.shape}, 发现 {len(nan_indices)} 行含NaN")
-    logging.info("--- Auto Script: Engineered Columns (Before Return) ---")
-    auto_engineered_cols = X_processed.columns.tolist()
-    logging.info(f"Total columns: {len(auto_engineered_cols)}")
-    # 可选：保存到文件以便比较
-    # with open('auto_cols.txt', 'w') as f:
-    #     for col in auto_engineered_cols:
-    #         f.write(f"{col}\n")
-    logging.info(auto_engineered_cols[:20]) # 打印前20个看看
-    logging.info(auto_engineered_cols[-20:])# 打印后20个看看
-    # 返回处理后的 DataFrame 和 NaN 索引
     return X_processed, nan_indices
 
 def scale_data(X_train, X_val, pre_fitted_scaler=None):
