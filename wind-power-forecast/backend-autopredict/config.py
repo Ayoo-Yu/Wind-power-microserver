@@ -221,3 +221,8 @@ def set_bucket_policy(client, bucket_name, policy):
         except Exception as e:
             print(f"[ERROR] 为存储桶 '{bucket_name}' (策略: '{policy}') 设置策略失败: {e}")
     # else: policy_json_str is None, so we do nothing (already warned)
+
+# 数据库连接池大小
+DB_POOL_SIZE = 30
+# 数据库连接池溢出大小
+DB_MAX_OVERFLOW = 40

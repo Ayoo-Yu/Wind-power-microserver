@@ -154,3 +154,8 @@ def set_bucket_policy(client, bucket_name, policy):
             }]
         })
     client.set_bucket_policy(bucket_name, policy_json)
+
+# 数据库连接池大小
+DB_POOL_SIZE = 10
+# 数据库连接池溢出大小
+DB_MAX_OVERFLOW = 15
