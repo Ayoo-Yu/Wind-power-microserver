@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  report-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wind-farm-report-service
+    ports:
+      - "8004:8004"
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - DATABASE_URL=postgresql+asyncpg://postgres:password@report-db:5432/reportdb
+      - REDIS_URL=redis://report-redis:6379/0
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - POWER_PREDICTION_API_URL=http://power-prediction-service:8003
+      - WEATHER_API_URL=http://meteorological-service:8001
+      - SCADA_API_URL=http://scada-service:8002
+      - WIND_FARM_API_URL=http://windfarm-service:8006
+      - REPORT_TEMPLATES_PATH=/app/templates
+      - REPORT_OUTPUT_PATH=/app/reports
+      - CHART_CACHE_PATH=/app/charts
+      - LOG_LEVEL=INFO
+      - JWT_SECRET_KEY=your-jwt-secret-key-here
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:8080
+    volumes:
+      - ./reports:/app/reports
+      - ./templates:/app/templates
+      - ./charts:/app/charts
+      - ./logs:/app/logs
+    depends_on:
+      report-db:
+        condition: service_healthy
+      report-redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - wind-farm-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  report-db:
+    image: postgres:15-alpine
+    container_name: wind-farm-report-db
+    environment:
+      - POSTGRES_DB=reportdb
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - report-db-data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5435:5432"
+    networks:
+      - wind-farm-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  report-redis:
+    image: redis:7-alpine
+    container_name: wind-farm-report-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - report-redis-data:/data
+    ports:
+      - "6381:6379"
+    networks:
+      - wind-farm-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  report-db-data:
+  report-redis-data:
+
+networks:
+  wind-farm-network:
+    external: true

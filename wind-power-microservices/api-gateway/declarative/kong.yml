@@ -1,0 +1,603 @@
+_format_version: "3.0"
+_transform: true
+
+# Services configuration
+services:
+  # Meteorological Service
+  - name: meteorological-service
+    url: http://meteorological-service:8001
+    protocol: http
+    host: meteorological-service
+    port: 8001
+    path: /
+    connect_timeout: 60000
+    write_timeout: 60000
+    read_timeout: 60000
+    retries: 3
+    tags:
+      - weather
+      - meteorological
+
+  # SCADA Service
+  - name: scada-service
+    url: http://scada-service:8002
+    protocol: http
+    host: scada-service
+    port: 8002
+    path: /
+    connect_timeout: 60000
+    write_timeout: 60000
+    read_timeout: 60000
+    retries: 3
+    tags:
+      - scada
+      - data-collection
+
+  # Power Prediction Service
+  - name: power-prediction-service
+    url: http://power-prediction-service:8003
+    protocol: http
+    host: power-prediction-service
+    port: 8003
+    path: /
+    connect_timeout: 60000
+    write_timeout: 60000
+    read_timeout: 60000
+    retries: 3
+    tags:
+      - prediction
+      - ml
+      - power
+
+  # Report Service
+  - name: report-service
+    url: http://report-service:8004
+    protocol: http
+    host: report-service
+    port: 8004
+    path: /
+    connect_timeout: 60000
+    write_timeout: 60000
+    read_timeout: 60000
+    retries: 3
+    tags:
+      - reports
+      - charts
+      - analytics
+
+  # Tenant Service
+  - name: tenant-service
+    url: http://tenant-service:8007
+    protocol: http
+    host: tenant-service
+    port: 8007
+    path: /
+    connect_timeout: 60000
+    write_timeout: 60000
+    read_timeout: 60000
+    retries: 3
+    tags:
+      - auth
+      - tenant
+      - users
+
+  # Wind Farm Service
+  - name: wind-farm-service
+    url: http://windfarm-service:8006
+    protocol: http
+    host: windfarm-service
+    port: 8006
+    path: /
+    connect_timeout: 60000
+    write_timeout: 60000
+    read_timeout: 60000
+    retries: 3
+    tags:
+      - wind-farm
+      - farms
+      - turbines
+
+# Routes configuration
+routes:
+  # Meteorological Service Routes
+  - name: weather-stations
+    service: meteorological-service
+    paths:
+      - /api/v1/weather-stations
+    methods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+    strip_path: false
+    preserve_host: false
+    protocols:
+      - http
+      - https
+    tags:
+      - weather
+      - stations
+
+  - name: weather-data
+    service: meteorological-service
+    paths:
+      - /api/v1/weather-data
+    methods:
+      - GET
+      - POST
+    strip_path: false
+    preserve_host: false
+    protocols:
+      - http
+      - https
+    tags:
+      - weather
+      - data
+
+  - name: forecasts
+    service: meteorological-service
+    paths:
+      - /api/v1/forecasts
+    methods:
+      - GET
+      - POST
+    strip_path: false
+    preserve_host: false
+    protocols:
+      - http
+      - https
+    tags:
+      - weather
+      - forecasts
+
+  # SCADA Service Routes
+  - name: scada-data
+    service: scada-service
+    paths:
+      - /api/v1/scada-data
+    methods:
+      - GET
+      - POST
+    strip_path: false
+    preserve_host: false
+    protocols:
+      - http
+      - https
+    tags:
+      - scada
+      - data
+
+  - name: scada-alerts
+    service: scada-service
+    paths:
+      - /api/v1/scada-alerts
+    methods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+    strip_path: false
+    preserve_host: false
+    protocols:
+      - http
+      - https
+    tags:
+      - scada
+      - alerts
+
+  # Power Prediction Service Routes
+  - name: predictions
+    service: power-prediction-service
+    paths:
+      - /api/v1/predictions
+    methods:
+      - GET
+      - POST
+    strip_path: false
+    preserve_host: false
+    protocols:
+      - http
+      - https
+    tags:
+      - prediction
+      - power
+
+  - name: ml-models
+    service: power-prediction-service
+    paths:
+      - /api/v1/ml-models
+    methods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+    strip_path: false
+    preserve_host: false
+    protocols:
+      - http
+      - https
+    tags:
+      - ml
+      - models
+
+  # Report Service Routes
+  - name: reports
+    service: report-service
+    paths:
+      - /api/v1/reports
+    methods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+    strip_path: false
+    preserve_host: false
+    protocols:
+      - http
+      - https
+    tags:
+      - reports
+
+  - name: charts
+    service: report-service
+    paths:
+      - /api/v1/charts
+    methods:
+      - GET
+      - POST
+      - DELETE
+    strip_path: false
+    preserve_host: false
+    protocols:
+      - http
+      - https
+    tags:
+      - charts
+
+  - name: templates
+    service: report-service
+    paths:
+      - /api/v1/templates
+    methods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+    strip_path: false
+    preserve_host: false
+    protocols:
+      - http
+      - https
+    tags:
+      - templates
+
+  # Tenant Service Routes
+  - name: auth
+    service: tenant-service
+    paths:
+      - /api/v1/auth
+    methods:
+      - POST
+    strip_path: false
+    preserve_host: false
+    protocols:
+      - http
+      - https
+    tags:
+      - auth
+
+  - name: users
+    service: tenant-service
+    paths:
+      - /api/v1/users
+    methods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+    strip_path: false
+    preserve_host: false
+    protocols:
+      - http
+      - https
+    tags:
+      - users
+
+  - name: tenants
+    service: tenant-service
+    paths:
+      - /api/v1/tenants
+    methods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+    strip_path: false
+    preserve_host: false
+    protocols:
+      - http
+      - https
+    tags:
+      - tenants
+
+  # Wind Farm Service Routes
+  - name: wind-farms
+    service: wind-farm-service
+    paths:
+      - /api/v1/wind-farms
+    methods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+    strip_path: false
+    preserve_host: false
+    protocols:
+      - http
+      - https
+    tags:
+      - wind-farms
+
+  - name: turbines
+    service: wind-farm-service
+    paths:
+      - /api/v1/turbines
+    methods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+    strip_path: false
+    preserve_host: false
+    protocols:
+      - http
+      - https
+    tags:
+      - turbines
+
+# Upstreams configuration for load balancing
+upstreams:
+  - name: meteorological-service-upstream
+    algorithm: consistent-hashing
+    hash_on: header
+    hash_on_header: X-Consumer-ID
+    hash_fallback: none
+    slots: 1000
+    healthchecks:
+      active:
+        type: http
+        timeout: 10
+        concurrency: 10
+        tcp_failures: 3
+        tcp_successes: 2
+        http_failures: 3
+        http_successes: 2
+        tcp: false
+        http: true
+        https_verify_certificate: true
+        https_sni: null
+        headers:
+          - Host:kong-health-check
+        interval: 30
+        http_path: /health
+        https: false
+      passive:
+        type: http
+        tcp_failures: 3
+        tcp_successes: 2
+        http_failures: 3
+        http_successes: 2
+        tcp: false
+        http: true
+        timeouts: 3
+        unhealthy:
+          tcp_failures: 3
+          http_failures: 3
+          timeouts: 3
+          http_statuses:
+            - 429
+            - 500
+            - 503
+        healthy:
+          tcp_successes: 2
+          http_successes: 2
+          http_statuses:
+            - 200
+            - 201
+            - 202
+            - 203
+            - 204
+            - 205
+            - 206
+            - 207
+            - 208
+            - 226
+            - 300
+            - 301
+            - 302
+            - 303
+            - 304
+            - 305
+            - 306
+            - 307
+            - 308
+    tags:
+      - weather
+      - upstream
+
+# Targets for meteorological service
+  - name: meteorological-service-targets
+    upstream: meteorological-service-upstream
+    weight: 100
+    tags:
+      - weather
+      - target
+
+# Similar configurations for other services...
+# (SCADA, Power Prediction, Report, Tenant, Wind Farm services)
+
+# Global plugins configuration
+plugins:
+  # CORS plugin for cross-origin requests
+  - name: cors
+    config:
+      origins:
+        - "http://localhost:3000"
+        - "http://localhost:8080"
+        - "http://localhost:8000"
+        - "https://wind-farm-ui.com"
+      methods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - OPTIONS
+      headers:
+        - Accept
+        - Accept-Version
+        - Content-Length
+        - Content-MD5
+        - Content-Type
+        - Date
+        - Authorization
+        - Access-Control-Allow-Origin
+        - X-Requested-With
+        - X-Consumer-ID
+        - X-Consumer-Username
+      exposed_headers:
+        - X-Auth-Token
+        - X-Consumer-ID
+        - X-Consumer-Username
+      credentials: true
+      max_age: 3600
+    enabled: true
+    protocols:
+      - http
+      - https
+
+  # Rate limiting plugin
+  - name: rate-limiting
+    config:
+      minute: 1000
+      hour: 10000
+      day: 100000
+      month: 1000000
+      year: 10000000
+      limit_by: consumer
+      policy: local
+      redis_host: redis
+      redis_port: 6379
+      redis_timeout: 2000
+      redis_database: 1
+      hide_client_headers: false
+      fault_tolerant: true
+    enabled: true
+    protocols:
+      - http
+      - https
+
+  # Prometheus metrics plugin
+  - name: prometheus
+    config:
+      per_consumer: true
+      status_code_metrics: true
+      latency_metrics: true
+      bandwidth_metrics: true
+      upstream_health_metrics: true
+    enabled: true
+
+  # Request transformer plugin
+  - name: request-transformer
+    config:
+      add:
+        headers:
+          - "X-Kong-Proxy:true"
+          - "X-Kong-Version:3.5.0"
+      remove:
+        headers:
+          - "Authorization"
+      replace:
+        headers:
+          - "X-Forwarded-For:$remote_addr"
+    enabled: true
+
+  # Response transformer plugin
+  - name: response-transformer
+    config:
+      add:
+        headers:
+          - "X-Kong-Response-Time:$request_time"
+      remove:
+        headers:
+          - "Server"
+          - "X-Powered-By"
+    enabled: true
+
+# Consumers (API clients)
+consumers:
+  - username: wind-farm-web-ui
+    custom_id: wind-farm-web-ui-001
+    tags:
+      - web-ui
+      - frontend
+
+  - username: wind-farm-mobile-app
+    custom_id: wind-farm-mobile-app-001
+    tags:
+      - mobile
+      - app
+
+  - username: external-api-client
+    custom_id: external-api-client-001
+    tags:
+      - external
+      - api
+
+  - username: admin-client
+    custom_id: admin-client-001
+    tags:
+      - admin
+      - management
+
+# JWT credentials for consumers
+jwt_secrets:
+  - consumer: wind-farm-web-ui
+    key: wind-farm-web-ui-key
+    secret: wind-farm-web-ui-secret-key-change-in-production
+    algorithm: HS256
+
+  - consumer: wind-farm-mobile-app
+    key: wind-farm-mobile-app-key
+    secret: wind-farm-mobile-app-secret-key-change-in-production
+    algorithm: HS256
+
+  - consumer: external-api-client
+    key: external-api-client-key
+    secret: external-api-client-secret-key-change-in-production
+    algorithm: HS256
+
+  - consumer: admin-client
+    key: admin-client-key
+    secret: admin-client-secret-key-change-in-production
+    algorithm: HS256
+
+# Certificates (for HTTPS in production)
+# certificates:
+#   - cert: |
+#       -----BEGIN CERTIFICATE-----
+#       # Your SSL certificate here
+#       -----END CERTIFICATE-----
+#     key: |
+#       -----BEGIN PRIVATE KEY-----
+#       # Your SSL private key here
+#       -----END PRIVATE KEY-----
+#     snis:
+#       - name: api.wind-farm.com
+#       - name: wind-farm-api.com
+
+# SNIs (Server Name Indication)
+# snis:
+#   - name: api.wind-farm.com
+#     certificate: # certificate id
+#   - name: wind-farm-api.com
+#     certificate: # certificate id

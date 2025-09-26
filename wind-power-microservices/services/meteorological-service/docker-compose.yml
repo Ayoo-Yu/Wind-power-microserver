@@ -1,0 +1,182 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  meteo-postgres:
+    image: postgres:15-alpine
+    container_name: meteo-postgres
+    environment:
+      POSTGRES_DB: meteorological_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5434:5432"
+    volumes:
+      - meteo-postgres-data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    networks:
+      - meteo-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  meteo-redis:
+    image: redis:7-alpine
+    container_name: meteo-redis
+    ports:
+      - "6381:6379"
+    volumes:
+      - meteo-redis-data:/data
+    networks:
+      - meteo-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Apache Kafka
+  meteo-kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: meteo-kafka
+    depends_on:
+      - meteo-zookeeper
+    ports:
+      - "9094:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: meteo-zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9094
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+    networks:
+      - meteo-network
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Zookeeper for Kafka
+  meteo-zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: meteo-zookeeper
+    ports:
+      - "2183:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - meteo-network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Meteorological Data Service
+  meteorological-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: meteorological-service
+    depends_on:
+      meteo-postgres:
+        condition: service_healthy
+      meteo-redis:
+        condition: service_healthy
+      meteo-kafka:
+        condition: service_healthy
+    ports:
+      - "8003:8003"
+    environment:
+      # Application settings
+      APP_NAME: "Meteorological Data Service"
+      APP_VERSION: "1.0.0"
+      HOST: "0.0.0.0"
+      PORT: "8003"
+      DEBUG: "false"
+
+      # Database settings
+      DATABASE_URL: "postgresql+asyncpg://postgres:password@meteo-postgres:5432/meteorological_db"
+
+      # Redis settings
+      REDIS_URL: "redis://meteo-redis:6379"
+
+      # Kafka settings
+      KAFKA_BOOTSTRAP_SERVERS: "meteo-kafka:9092"
+      KAFKA_TOPICS_WEATHER_DATA: "weather-data"
+      KAFKA_TOPICS_WEATHER_FORECAST: "weather-forecast"
+      KAFKA_TOPICS_WEATHER_ALERTS: "weather-alerts"
+
+      # Weather API settings
+      WEATHER_API_ENABLED: "true"
+      WEATHER_API_SOURCES: "openweathermap,weatherapi,noaa"
+      OPENWEATHERMAP_API_KEY: "your-openweathermap-api-key"
+      WEATHERAPI_KEY: "your-weatherapi-key"
+      NOAA_API_KEY: "your-noaa-api-key"
+
+      # Forecast settings
+      FORECAST_HOURS: "72"
+      FORECAST_UPDATE_INTERVAL: "3600"
+
+      # Data collection settings
+      WEATHER_DATA_COLLECTION_INTERVAL: "300"
+      HISTORICAL_DATA_RETENTION_DAYS: "365"
+
+      # Security settings
+      SECRET_KEY: "your-secret-key-here-change-in-production"
+      ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+      ALGORITHM: "HS256"
+
+      # CORS settings
+      CORS_ORIGINS: "http://localhost:3000,http://localhost:8080"
+
+      # Rate limiting
+      RATE_LIMIT_PER_MINUTE: "1000"
+      RATE_LIMIT_PER_HOUR: "10000"
+
+    volumes:
+      - ./logs:/app/logs
+      - ./config:/app/config
+    networks:
+      - meteo-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # Kafka UI for monitoring
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: meteo-kafka-ui
+    depends_on:
+      - meteo-kafka
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: meteo-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: meteo-kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: meteo-zookeeper:2181
+    networks:
+      - meteo-network
+
+volumes:
+  meteo-postgres-data:
+  meteo-redis-data:
+
+networks:
+  meteo-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
