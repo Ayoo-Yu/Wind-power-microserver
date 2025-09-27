@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: meteorological-service
+  namespace: wind-power
+  labels:
+    app.kubernetes.io/name: meteorological-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: wind-power
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8001
+    targetPort: 8001
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/name: meteorological-service
+    app.kubernetes.io/component: microservice
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: meteorological-service-headless
+  namespace: wind-power
+  labels:
+    app.kubernetes.io/name: meteorological-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: wind-power
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: 8001
+    targetPort: 8001
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/name: meteorological-service
+    app.kubernetes.io/component: microservice

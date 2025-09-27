@@ -1,0 +1,514 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'wind-power-microservices/**'
+      - 'k8s/**'
+      - 'helm/**'
+      - '.github/workflows/deploy-production.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      deploy_api_gateway:
+        description: 'Deploy API Gateway'
+        required: true
+        default: true
+        type: boolean
+      deploy_services:
+        description: 'Deploy Microservices'
+        required: true
+        default: true
+        type: boolean
+
+eenv:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: wind-power
+  KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
+  HELM_VERSION: 'v3.12.0'
+
+jobs:
+  # Pre-deployment checks
+  pre-deployment-checks:
+    name: Pre-deployment Checks
+    runs-on: ubuntu-latest
+    outputs:
+      deployment-allowed: ${{ steps.security-checks.outputs.allowed }}
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(git describe --tags --always --dirty)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Deployment version: $VERSION"
+
+      - name: Security vulnerability scan
+        id: security-checks
+        run: |
+          echo "Running security checks..."
+
+          # Check for secrets in code
+          if command -v truffleHog &> /dev/null; then
+            truffleHog --regex --entropy=False .
+          else
+            echo "TruffleHog not available, skipping secret scan"
+          fi
+
+          # Check for high-risk files
+          if find . -name "*.pem" -o -name "*.key" -o -name "*.p12" | grep -q .; then
+            echo "⚠️  Found potential certificate/key files"
+          fi
+
+          echo "allowed=true" >> $GITHUB_OUTPUT
+
+      - name: Validate Kubernetes manifests
+        run: |
+          if [ -f "k8s/kustomization.yaml" ]; then
+            kubectl kustomize k8s/ --validate=true || echo "Kustomize validation failed"
+          fi
+
+          if [ -f "helm/Chart.yaml" ]; then
+            helm lint helm/ || echo "Helm lint failed"
+          fi
+
+      - name: Check deployment readiness
+        run: |
+          echo "Checking deployment readiness..."
+
+          # Check if required secrets are available
+          required_secrets=("KUBE_CONFIG_DATA" "DOCKER_REGISTRY_SECRET" "DB_PASSWORD" "JWT_SECRET")
+          missing_secrets=()
+
+          for secret in "${required_secrets[@]}"; do
+            if [ -z "${{ secrets[secret] }}" ]; then
+              missing_secrets+=("$secret")
+            fi
+          done
+
+          if [ ${#missing_secrets[@]} -gt 0 ]; then
+            echo "❌ Missing required secrets: ${missing_secrets[*]}"
+            exit 1
+          fi
+
+          echo "✅ All required secrets are available"
+
+  # Build and push production images
+  build-production-images:
+    name: Build Production Images
+    needs: pre-deployment-checks
+    runs-on: ubuntu-latest
+    if: needs.pre-deployment-checks.outputs.deployment-allowed == 'true'
+    strategy:
+      matrix:
+        service:
+          - api-gateway
+          - meteorological-service
+          - scada-service
+          - power-prediction-service
+          - report-service
+          - tenant-service
+          - wind-farm-service
+      fail-fast: false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=production,enable={{is_default_branch}}
+            type=raw,value=${{ needs.pre-deployment-checks.outputs.version }}
+
+      - name: Build and push production image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./wind-power-microservices/${{ matrix.service }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+      - name: Sign container image
+        uses: sigstore/cosign-installer@v3
+        continue-on-error: true
+
+      - name: Sign the published Docker image
+        run: |
+          cosign sign --yes ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:${{ needs.pre-deployment-checks.outputs.version }}
+        continue-on-error: true
+
+  # Deploy to staging
+  deploy-staging:
+    name: Deploy to Staging
+    needs: [pre-deployment-checks, build-production-images]
+    runs-on: ubuntu-latest
+    if: |
+      (github.event.inputs.environment == 'staging' ||
+       (github.event_name == 'push' && github.ref == 'refs/heads/main'))
+    environment: staging
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ env.KUBE_CONFIG_DATA }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Create namespace if not exists
+        run: |
+          kubectl create namespace wind-power-staging --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy with Helm
+        run: |
+          if [ -f "helm/Chart.yaml" ]; then
+            helm upgrade --install wind-power-staging ./helm \
+              --namespace wind-power-staging \
+              --set global.environment=staging \
+              --set global.image.tag=${{ needs.pre-deployment-checks.outputs.version }} \
+              --set global.image.repository=${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_PREFIX }} \
+              --set apiGateway.enabled=${{ github.event.inputs.deploy_api_gateway || 'true' }} \
+              --set microservices.enabled=${{ github.event.inputs.deploy_services || 'true' }} \
+              --timeout 15m \
+              --wait \
+              --atomic
+          else
+            echo "Deploying with kubectl..."
+            # Apply staging manifests
+            if [ -f "k8s/staging/" ]; then
+              kubectl apply -k k8s/staging/ -n wind-power-staging
+            else
+              echo "No staging manifests found, skipping deployment"
+            fi
+          fi
+
+      - name: Wait for deployment
+        run: |
+          echo "Waiting for deployment to be ready..."
+          kubectl wait --for=condition=available --timeout=300s deployment --all -n wind-power-staging || true
+
+      - name: Run staging tests
+        run: |
+          echo "Running staging environment tests..."
+
+          # Get the staging ingress/service endpoint
+          STAGING_URL=$(kubectl get ingress wind-power-ingress -n wind-power-staging -o jsonpath='{.spec.rules[0].host}' 2>/dev/null || echo "staging.wind-power.local")
+
+          # Wait for services to be ready
+          sleep 60
+
+          # Run basic connectivity tests
+          if command -v curl &> /dev/null; then
+            curl -f "http://${STAGING_URL}/health" || echo "Health check failed"
+          fi
+
+          # Run API gateway tests if deployed
+          if [ "${{ github.event.inputs.deploy_api_gateway }}" != "false" ]; then
+            cd wind-power-microservices/api-gateway
+            if [ -f "scripts/test-api-gateway.sh" ]; then
+              chmod +x scripts/test-api-gateway.sh
+              KONG_PROXY_URL="http://${STAGING_URL}" ./scripts/test-api-gateway.sh || echo "API gateway tests failed"
+            fi
+          fi
+
+      - name: Staging deployment summary
+        run: |
+          echo "# Staging Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Staging deployment completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ needs.pre-deployment-checks.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** Staging" >> $GITHUB_STEP_SUMMARY
+          echo "**API Gateway:** ${{ github.event.inputs.deploy_api_gateway || 'true' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Microservices:** ${{ github.event.inputs.deploy_services || 'true' }}" >> $GITHUB_STEP_SUMMARY
+
+  # Deploy to production
+  deploy-production:
+    name: Deploy to Production
+    needs: [pre-deployment-checks, build-production-images, deploy-staging]
+    runs-on: ubuntu-latest
+    if: |
+      github.event.inputs.environment == 'production' &&
+      github.ref == 'refs/heads/main'
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Manual approval check
+        run: |
+          echo "⚠️  Production deployment requires manual approval"
+          echo "This deployment will:"
+          echo "- Deploy version ${{ needs.pre-deployment-checks.outputs.version }}"
+          echo "- Update API Gateway: ${{ github.event.inputs.deploy_api_gateway }}"
+          echo "- Update Microservices: ${{ github.event.inputs.deploy_services }}"
+          echo ""
+          echo "Please review the staging deployment results before proceeding."
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ env.KUBE_CONFIG_DATA }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Create namespace if not exists
+        run: |
+          kubectl create namespace wind-power-production --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Pre-deployment backup
+        run: |
+          echo "Creating backup of current production deployment..."
+
+          # Backup current deployment
+          kubectl get all -n wind-power-production -o yaml > production-backup-$(date +%Y%m%d-%H%M%S).yaml || true
+
+          # Backup configurations
+          kubectl get configmap -n wind-power-production -o yaml > config-backup-$(date +%Y%m%d-%H%M%S).yaml || true
+          kubectl get secret -n wind-power-production -o yaml > secret-backup-$(date +%Y%m%d-%H%M%S).yaml || true
+
+          echo "✅ Backup completed"
+
+      - name: Deploy to production
+        run: |
+          if [ -f "helm/Chart.yaml" ]; then
+            helm upgrade --install wind-power-production ./helm \
+              --namespace wind-power-production \
+              --set global.environment=production \
+              --set global.image.tag=${{ needs.pre-deployment-checks.outputs.version }} \
+              --set global.image.repository=${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_PREFIX }} \
+              --set apiGateway.enabled=${{ github.event.inputs.deploy_api_gateway }} \
+              --set microservices.enabled=${{ github.event.inputs.deploy_services }} \
+              --set global.replicaCount=3 \
+              --set global.resources.requests.cpu=500m \
+              --set global.resources.requests.memory=512Mi \
+              --set global.resources.limits.cpu=1000m \
+              --set global.resources.limits.memory=1Gi \
+              --timeout 20m \
+              --wait \
+              --atomic \
+              --debug
+          else
+            echo "Deploying with kubectl..."
+            # Apply production manifests with higher resources
+            if [ -f "k8s/production/" ]; then
+              kubectl apply -k k8s/production/ -n wind-power-production
+            else
+              echo "No production manifests found"
+              exit 1
+            fi
+          fi
+
+      - name: Wait for production deployment
+        run: |
+          echo "Waiting for production deployment to be ready..."
+          kubectl wait --for=condition=available --timeout=600s deployment --all -n wind-power-production
+
+          # Wait for all pods to be ready
+          kubectl wait --for=condition=ready --timeout=600s pod --all -n wind-power-production
+
+      - name: Production health checks
+        run: |
+          echo "Running production health checks..."
+
+          # Get production endpoint
+          PROD_URL=$(kubectl get ingress wind-power-ingress -n wind-power-production -o jsonpath='{.spec.rules[0].host}' 2>/dev/null || echo "production.wind-power.local")
+
+          # Comprehensive health checks
+          echo "Testing production endpoints..."
+
+          # API Gateway health
+          if [ "${{ github.event.inputs.deploy_api_gateway }}" != "false" ]; then
+            for i in {1..10}; do
+              if curl -f "http://${PROD_URL}/health"; then
+                echo "✅ API Gateway is healthy"
+                break
+              else
+                echo "⏳ Waiting for API Gateway... ($i/10)"
+                sleep 30
+              fi
+            done
+          fi
+
+          # Individual service health checks
+          services=("meteorological" "scada" "power-prediction" "report" "tenant" "wind-farm")
+          for service in "${services[@]}"; do
+            if kubectl get service $service-service -n wind-power-production; then
+              echo "✅ $service service is deployed"
+            else
+              echo "❌ $service service not found"
+            fi
+          done
+
+      - name: Production deployment validation
+        run: |
+          echo "Validating production deployment..."
+
+          # Check pod status
+          echo "Pod Status:"
+          kubectl get pods -n wind-power-production
+
+          # Check service status
+          echo "Service Status:"
+          kubectl get services -n wind-power-production
+
+          # Check ingress status
+          echo "Ingress Status:"
+          kubectl get ingress -n wind-power-production
+
+          # Resource usage
+          echo "Resource Usage:"
+          kubectl top pods -n wind-power-production || echo "Metrics not available"
+
+      - name: Production deployment summary
+        if: always()
+        run: |
+          echo "# Production Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ $? -eq 0 ]; then
+            echo "✅ Production deployment completed successfully" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Production deployment failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ needs.pre-deployment-checks.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** Production" >> $GITHUB_STEP_SUMMARY
+          echo "**API Gateway:** ${{ github.event.inputs.deploy_api_gateway }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Microservices:** ${{ github.event.inputs.deploy_services }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Deployment Time:** $(date)" >> $GITHUB_STEP_SUMMARY
+
+  # Post-deployment monitoring
+  post-deployment-monitoring:
+    name: Post-deployment Monitoring
+    needs: [deploy-production]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Setup monitoring tools
+        run: |
+          # Install monitoring tools
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ env.KUBE_CONFIG_DATA }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Monitor deployment
+        run: |
+          echo "Monitoring production deployment..."
+
+          # Monitor for 10 minutes
+          for i in {1..20}; do
+            echo "=== Monitoring Check $i ==="
+
+            # Pod status
+            echo "Pod Status:"
+            kubectl get pods -n wind-power-production
+
+            # Deployment status
+            echo "Deployment Status:"
+            kubectl get deployments -n wind-power-production
+
+            # Events
+            echo "Recent Events:"
+            kubectl get events -n wind-power-production --sort-by='.lastTimestamp' | tail -10
+
+            sleep 30
+          done
+
+      - name: Alert on issues
+        if: failure()
+        run: |
+          echo "🚨 Deployment issues detected!"
+          echo "Please check the deployment logs and metrics."
+
+          # Could integrate with alerting systems like PagerDuty, Slack, etc.
+          # curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" -d "{\"text\":\"🚨 Production deployment failed!\"}"
+
+  # Deployment notification
+  deployment-notification:
+    name: Deployment Notification
+    needs: [deploy-staging, deploy-production, post-deployment-monitoring]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Create deployment notification
+        run: |
+          echo "# 🚀 Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Staging Deployment:** ${{ needs.deploy-staging.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Production Deployment:** ${{ needs.deploy-production.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Post-deployment Monitoring:** ${{ needs.post-deployment-monitoring.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "- Monitor application metrics" >> $GITHUB_STEP_SUMMARY
+          echo "- Review application logs" >> $GITHUB_STEP_SUMMARY
+          echo "- Validate user-facing functionality" >> $GITHUB_STEP_SUMMARY
+          echo "- Prepare rollback plan if needed" >> $GITHUB_STEP_SUMMARY

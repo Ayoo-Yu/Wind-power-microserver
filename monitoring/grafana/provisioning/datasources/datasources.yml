@@ -1,0 +1,125 @@
+# Grafana datasources configuration for wind power monitoring
+apiVersion: 1
+
+datasources:
+  # Prometheus datasource
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      timeInterval: 15s
+      queryTimeout: 60s
+      httpMethod: POST
+      manageAlerts: true
+      alertmanagerUid: alertmanager
+
+  # Elasticsearch datasource
+  - name: Elasticsearch
+    type: elasticsearch
+    access: proxy
+    url: http://elasticsearch:9200
+    database: "wind-power-logs-*"
+    editable: true
+    jsonData:
+      interval: Daily
+      timeField: "@timestamp"
+      esVersion: "8.11.0"
+      maxConcurrentShardRequests: 5
+      logMessageField: message
+      logLevelField: log_level
+      includeFrozen: false
+      xpack: false
+
+  # Jaeger datasource
+  - name: Jaeger
+    type: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    editable: true
+    jsonData:
+      tracesToLogs:
+        datasourceUid: elasticsearch
+        tags: ['job', 'instance', 'pod', 'namespace']
+        mappedTags: [{ key: 'service.name', value: 'service' }]
+        mapTagNamesEnabled: false
+        spanStartTimeShift: 1h
+        spanEndTimeShift: 1h
+        filterByTraceID: false
+        filterBySpanID: false
+
+  # Loki datasource
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: true
+    jsonData:
+      maxLines: 1000
+      derivedFields:
+        - datasourceUid: jaeger
+          matcherRegex: "trace_id=(\\w+)"
+          name: TraceID
+          url: "$${__value.raw}"
+
+  # AlertManager datasource
+  - name: AlertManager
+    type: alertmanager
+    access: proxy
+    url: http://alertmanager:9093
+    editable: true
+    jsonData:
+      implementation: prometheus
+
+  # PostgreSQL datasource
+  - name: PostgreSQL
+    type: postgres
+    access: proxy
+    url: postgres-service:5432
+    database: wind_power
+    user: grafana_user
+    editable: true
+    secureJsonData:
+      password: 'grafana_password'
+    jsonData:
+      sslmode: disable
+      maxOpenConns: 10
+      maxIdleConns: 10
+      connMaxLifetime: 14400
+      postgresVersion: "1500"
+      timescaledb: false
+
+  # Redis datasource
+  - name: Redis
+    type: redis-datasource
+    access: proxy
+    url: redis-service:6379
+    editable: true
+    jsonData:
+      client: standalone
+      poolSize: 5
+      timeout: 10
+      pingInterval: 0
+
+  # JSON API datasource for external APIs
+  - name: WeatherAPI
+    type: json-api
+    access: proxy
+    url: http://api-gateway:8000/api/v1/weather-stations
+    editable: true
+    jsonData:
+      queryParams: ""
+      headers: "{\"Authorization\": \"Bearer ${__token}\"}"
+      header_name: "Authorization"
+
+  # Infinity datasource for flexible data sources
+  - name: Infinity
+    type: yesoreyeram-infinity-datasource
+    access: proxy
+    url: ""
+    editable: true
+    jsonData:
+      auth_method: none
+      allowed_hosts: ['elasticsearch:9200', 'prometheus:9090']

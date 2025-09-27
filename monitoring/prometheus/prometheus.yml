@@ -1,0 +1,261 @@
+# Prometheus configuration for wind power monitoring system
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'wind-power'
+    environment: 'production'
+    datacenter: 'primary'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+      timeout: 10s
+      api_version: v2
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - "alerts.yml"
+  - "rules/*.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    honor_labels: true
+
+  # Node exporter for system metrics
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 15s
+    metrics_path: /metrics
+
+  # cAdvisor for container metrics
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 15s
+    metrics_path: /metrics
+
+  # Kong API Gateway metrics
+  - job_name: 'kong'
+    static_configs:
+      - targets: ['api-gateway:8001']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    params:
+      format: ['prometheus']
+
+  # Wind Power Microservices metrics
+  - job_name: 'meteorological-service'
+    static_configs:
+      - targets: ['meteorological-service:8001']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    honor_labels: true
+
+  - job_name: 'scada-service'
+    static_configs:
+      - targets: ['scada-service:8002']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    honor_labels: true
+
+  - job_name: 'power-prediction-service'
+    static_configs:
+      - targets: ['power-prediction-service:8003']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    honor_labels: true
+
+  - job_name: 'report-service'
+    static_configs:
+      - targets: ['report-service:8004']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    honor_labels: true
+
+  - job_name: 'tenant-service'
+    static_configs:
+      - targets: ['tenant-service:8007']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    honor_labels: true
+
+  - job_name: 'wind-farm-service'
+    static_configs:
+      - targets: ['wind-farm-service:8006']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    honor_labels: true
+
+  # PostgreSQL metrics (if postgres_exporter is running)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    honor_labels: true
+
+  # Redis metrics (if redis_exporter is running)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    honor_labels: true
+
+  # RabbitMQ metrics (if rabbitmq_exporter is running)
+  - job_name: 'rabbitmq'
+    static_configs:
+      - targets: ['rabbitmq-exporter:9419']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    honor_labels: true
+
+  # Elasticsearch metrics
+  - job_name: 'elasticsearch'
+    static_configs:
+      - targets: ['elasticsearch:9200']
+    scrape_interval: 15s
+    metrics_path: /_prometheus/metrics
+    honor_labels: true
+
+  # Logstash metrics
+  - job_name: 'logstash'
+    static_configs:
+      - targets: ['logstash:9600']
+    scrape_interval: 15s
+    metrics_path: /_node/stats/prometheus
+    honor_labels: true
+
+  # Kibana metrics
+  - job_name: 'kibana'
+    static_configs:
+      - targets: ['kibana:5601']
+    scrape_interval: 15s
+    metrics_path: /api/stats/prometheus
+    honor_labels: true
+
+  # Jaeger metrics
+  - job_name: 'jaeger'
+    static_configs:
+      - targets: ['jaeger:14269']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    honor_labels: true
+
+  # AlertManager metrics
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['alertmanager:9093']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    honor_labels: true
+
+  # OpenTelemetry Collector metrics
+  - job_name: 'otel-collector'
+    static_configs:
+      - targets: ['otel-collector:8888']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    honor_labels: true
+
+  # Custom application metrics
+  - job_name: 'wind-power-custom'
+    static_configs:
+      - targets:
+          - 'meteorological-service:8001'
+          - 'scada-service:8002'
+          - 'power-prediction-service:8003'
+          - 'report-service:8004'
+          - 'tenant-service:8007'
+          - 'wind-farm-service:8006'
+    scrape_interval: 15s
+    metrics_path: /custom-metrics
+    honor_labels: true
+
+  # Blackbox exporter for endpoint monitoring
+  - job_name: 'blackbox'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - http://api-gateway:8000/health
+          - http://meteorological-service:8001/health
+          - http://scada-service:8002/health
+          - http://power-prediction-service:8003/health
+          - http://report-service:8004/health
+          - http://tenant-service:8007/health
+          - http://wind-farm-service:8006/health
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+# Remote write configuration for long-term storage
+remote_write:
+  - url: "http://cortex:9009/api/prom/push"
+    queue_config:
+      max_samples_per_send: 1000
+      max_shards: 200
+      capacity: 2500
+    write_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'wind_power_.*'
+        action: keep
+
+# Remote read configuration
+remote_read:
+  - url: "http://cortex:9009/api/prom/api/v1/read"
+    read_recent: true
+
+# Storage configuration
+storage:
+  tsdb:
+    path: /prometheus
+    retention.time: 30d
+    retention.size: 50GB
+    wal-compression: true
+
+# Query configuration
+query:
+  timeout: 2m
+  max-concurrency: 20
+  max-samples: 50000000
+
+# Web configuration
+web:
+  page-title: "Wind Power Monitoring System"
+  external-url: http://localhost:9090
+  enable-lifecycle: true
+  enable-admin-api: true
+  enable-prometheus-api-v2: true
+
+# Rule management
+rule_manager:
+  alertmanager-urls:
+    - http://alertmanager:9093
+  external-url: http://localhost:9090
+  evaluation-interval: 15s
+  poll-interval: 1m
+
+# Feature flags
+enable-feature:
+  - remote-write-receiver
+  - exemplar-storage
+  - memory-snapshot-on-shutdown
+  - promql-at-modifier
+  - promql-negative-offset

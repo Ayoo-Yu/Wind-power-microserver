@@ -1,0 +1,70 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: wind-power-production
+
+resources:
+  - ../base
+
+namePrefix: production-
+nameSuffix: -prod
+
+commonLabels:
+  environment: production
+  version: production
+  critical-tier: "true"
+
+patchesStrategicMerge:
+  - deployment-patch.yaml
+  - service-patch.yaml
+  - ingress-patch.yaml
+  - pdb-patch.yaml
+  - network-policy-patch.yaml
+
+configMapGenerator:
+  - name: production-config
+    literals:
+      - NODE_ENV=production
+      - LOG_LEVEL=warn
+      - METRICS_ENABLED=true
+      - ENABLE_TRACING=true
+      - ENABLE_PROFILING=false
+
+secretGenerator:
+  - name: production-secrets
+    literals:
+      - DB_PASSWORD=production-secure-db-password
+      - JWT_SECRET=production-secure-jwt-secret-key
+    type: Opaque
+
+images:
+  - name: api-gateway
+    newTag: production
+  - name: meteorological-service
+    newTag: production
+  - name: scada-service
+    newTag: production
+  - name: power-prediction-service
+    newTag: production
+  - name: report-service
+    newTag: production
+  - name: tenant-service
+    newTag: production
+  - name: wind-farm-service
+    newTag: production
+
+replicas:
+  - name: api-gateway
+    count: 5
+  - name: meteorological-service
+    count: 5
+  - name: scada-service
+    count: 5
+  - name: power-prediction-service
+    count: 5
+  - name: report-service
+    count: 3
+  - name: tenant-service
+    count: 3
+  - name: wind-farm-service
+    count: 5

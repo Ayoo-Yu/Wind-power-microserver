@@ -1,0 +1,345 @@
+{{- if and .Values.monitoring.enabled .Values.monitoring.prometheus.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "wind-power.fullname" . }}-alerts
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wind-power.labels" . | nindent 4 }}
+    app.kubernetes.io/component: monitoring
+    prometheus: kube-prometheus
+spec:
+  groups:
+  - name: wind-power-api-gateway
+    rules:
+    - alert: APIGatewayHighErrorRate
+      expr: |
+        (
+          rate(kong_http_requests_total{job="api-gateway",code=~"5.."}[5m]) /
+          rate(kong_http_requests_total{job="api-gateway"}[5m])
+        ) > 0.1
+      for: 5m
+      labels:
+        severity: warning
+        component: api-gateway
+      annotations:
+        summary: "API Gateway high error rate"
+        description: "API Gateway error rate is above 10% for more than 5 minutes"
+        runbook_url: "https://wiki.windpower.com/runbooks/api-gateway-high-error-rate"
+
+    - alert: APIGatewayHighLatency
+      expr: |
+        histogram_quantile(0.95,
+          rate(kong_request_latency_ms_bucket{job="api-gateway"}[5m])
+        ) > 2000
+      for: 5m
+      labels:
+        severity: warning
+        component: api-gateway
+      annotations:
+        summary: "API Gateway high latency"
+        description: "95th percentile latency is above 2 seconds for more than 5 minutes"
+        runbook_url: "https://wiki.windpower.com/runbooks/api-gateway-high-latency"
+
+    - alert: APIGatewayDown
+      expr: |
+        up{job="api-gateway"} == 0
+      for: 2m
+      labels:
+        severity: critical
+        component: api-gateway
+      annotations:
+        summary: "API Gateway is down"
+        description: "API Gateway has been down for more than 2 minutes"
+        runbook_url: "https://wiki.windpower.com/runbooks/api-gateway-down"
+
+    - alert: APIGatewayHighMemoryUsage
+      expr: |
+        (
+          container_memory_usage_bytes{pod=~"api-gateway-.*"} /
+          container_spec_memory_limit_bytes{pod=~"api-gateway-.*"}
+        ) > 0.9
+      for: 5m
+      labels:
+        severity: warning
+        component: api-gateway
+      annotations:
+        summary: "API Gateway high memory usage"
+        description: "API Gateway memory usage is above 90% for more than 5 minutes"
+        runbook_url: "https://wiki.windpower.com/runbooks/api-gateway-high-memory"
+
+  - name: wind-power-microservices
+    rules:
+    - alert: MicroserviceHighErrorRate
+      expr: |
+        (
+          rate(http_requests_total{job=~"meteorological-service|scada-service|power-prediction-service|report-service|tenant-service|wind-farm-service",code=~"5.."}[5m]) /
+          rate(http_requests_total{job=~"meteorological-service|scada-service|power-prediction-service|report-service|tenant-service|wind-farm-service"}[5m])
+        ) > 0.05
+      for: 5m
+      labels:
+        severity: warning
+        component: microservices
+      annotations:
+        summary: "Microservice high error rate"
+        description: "Microservice {{ $labels.job }} error rate is above 5% for more than 5 minutes"
+        runbook_url: "https://wiki.windpower.com/runbooks/microservice-high-error-rate"
+
+    - alert: MicroserviceHighLatency
+      expr: |
+        histogram_quantile(0.95,
+          rate(http_request_duration_seconds_bucket{job=~"meteorological-service|scada-service|power-prediction-service|report-service|tenant-service|wind-farm-service"}[5m])
+        ) > 5
+      for: 5m
+      labels:
+        severity: warning
+        component: microservices
+      annotations:
+        summary: "Microservice high latency"
+        description: "Microservice {{ $labels.job }} 95th percentile latency is above 5 seconds for more than 5 minutes"
+        runbook_url: "https://wiki.windpower.com/runbooks/microservice-high-latency"
+
+    - alert: MicroserviceDown
+      expr: |
+        up{job=~"meteorological-service|scada-service|power-prediction-service|report-service|tenant-service|wind-farm-service"} == 0
+      for: 2m
+      labels:
+        severity: critical
+        component: microservices
+      annotations:
+        summary: "Microservice {{ $labels.job }} is down"
+        description: "Microservice {{ $labels.job }} has been down for more than 2 minutes"
+        runbook_url: "https://wiki.windpower.com/runbooks/microservice-down"
+
+    - alert: MicroserviceHighMemoryUsage
+      expr: |
+        (
+          container_memory_usage_bytes{pod=~"(meteorological-service|scada-service|power-prediction-service|report-service|tenant-service|wind-farm-service)-.*"} /
+          container_spec_memory_limit_bytes{pod=~"(meteorological-service|scada-service|power-prediction-service|report-service|tenant-service|wind-farm-service)-.*"}
+        ) > 0.9
+      for: 5m
+      labels:
+        severity: warning
+        component: microservices
+      annotations:
+        summary: "Microservice high memory usage"
+        description: "Microservice {{ $labels.pod }} memory usage is above 90% for more than 5 minutes"
+        runbook_url: "https://wiki.windpower.com/runbooks/microservice-high-memory"
+
+  - name: wind-power-database
+    rules:
+    - alert: DatabaseHighConnections
+      expr: |
+        pg_stat_activity_count > 80
+      for: 5m
+      labels:
+        severity: warning
+        component: database
+      annotations:
+        summary: "Database high connection count"
+        description: "PostgreSQL has more than 80 active connections for more than 5 minutes"
+        runbook_url: "https://wiki.windpower.com/runbooks/database-high-connections"
+
+    - alert: DatabaseHighCPUUsage
+      expr: |
+        rate(postgresql_stat_user_tables_seq_scan{datname="wind_power"}[5m]) > 100
+      for: 5m
+      labels:
+        severity: warning
+        component: database
+      annotations:
+        summary: "Database high CPU usage"
+        description: "PostgreSQL is performing too many sequential scans"
+        runbook_url: "https://wiki.windpower.com/runbooks/database-high-cpu"
+
+    - alert: DatabaseReplicationLag
+      expr: |
+        pg_replication_lag > 60
+      for: 5m
+      labels:
+        severity: warning
+        component: database
+      annotations:
+        summary: "Database replication lag"
+        description: "PostgreSQL replication lag is above 60 seconds for more than 5 minutes"
+        runbook_url: "https://wiki.windpower.com/runbooks/database-replication-lag"
+
+  - name: wind-power-infrastructure
+    rules:
+    - alert: HighCPUUsage
+      expr: |
+        100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+      for: 5m
+      labels:
+        severity: warning
+        component: infrastructure
+      annotations:
+        summary: "High CPU usage"
+        description: "CPU usage is above 80% for more than 5 minutes"
+        runbook_url: "https://wiki.windpower.com/runbooks/high-cpu-usage"
+
+    - alert: HighMemoryUsage
+      expr: |
+        (
+          1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)
+        ) * 100 > 85
+      for: 5m
+      labels:
+        severity: warning
+        component: infrastructure
+      annotations:
+        summary: "High memory usage"
+        description: "Memory usage is above 85% for more than 5 minutes"
+        runbook_url: "https://wiki.windpower.com/runbooks/high-memory-usage"
+
+    - alert: DiskSpaceUsage
+      expr: |
+        (
+          node_filesystem_size_bytes{mountpoint="/"} - node_filesystem_free_bytes{mountpoint="/"}
+        ) / node_filesystem_size_bytes{mountpoint="/"} * 100 > 80
+      for: 5m
+      labels:
+        severity: warning
+        component: infrastructure
+      annotations:
+        summary: "High disk space usage"
+        description: "Disk space usage is above 80% for more than 5 minutes"
+        runbook_url: "https://wiki.windpower.com/runbooks/high-disk-usage"
+
+    - alert: PodCrashLooping
+      expr: |
+        rate(kube_pod_container_status_restarts_total[15m]) > 0
+      for: 5m
+      labels:
+        severity: critical
+        component: infrastructure
+      annotations:
+        summary: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is crash looping"
+        description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has restarted {{ $value }} times in the last 15 minutes"
+        runbook_url: "https://wiki.windpower.com/runbooks/pod-crash-looping"
+
+  - name: wind-power-business-logic
+    rules:
+    - alert: LowPredictionAccuracy
+      expr: |
+        avg(wind_power_prediction_accuracy) < 0.85
+      for: 10m
+      labels:
+        severity: warning
+        component: business-logic
+      annotations:
+        summary: "Low prediction accuracy"
+        description: "Wind power prediction accuracy is below 85% for more than 10 minutes"
+        runbook_url: "https://wiki.windpower.com/runbooks/low-prediction-accuracy"
+
+    - alert: HighWindFarmOffline
+      expr: |
+        (
+          sum(wind_farm_turbines_offline) / sum(wind_farm_turbines_total)
+        ) > 0.2
+      for: 5m
+      labels:
+        severity: warning
+        component: business-logic
+      annotations:
+        summary: "High number of turbines offline"
+        description: "More than 20% of wind turbines are offline for more than 5 minutes"
+        runbook_url: "https://wiki.windpower.com/runbooks/high-turbines-offline"
+
+    - alert: DataIngestionLag
+      expr: |
+        (
+          time() - max(wind_power_last_data_timestamp)
+        ) > 300
+      for: 5m
+      labels:
+        severity: warning
+        component: business-logic
+      annotations:
+        summary: "Data ingestion lag"
+        description: "No new data has been ingested for more than 5 minutes"
+        runbook_url: "https://wiki.windpower.com/runbooks/data-ingestion-lag"
+
+  - name: wind-power-security
+    rules:
+    - alert: HighAuthFailureRate
+      expr: |
+        (
+          rate(kong_http_requests_total{job="api-gateway",code="401"}[5m]) /
+          rate(kong_http_requests_total{job="api-gateway"}[5m])
+        ) > 0.1
+      for: 5m
+      labels:
+        severity: warning
+        component: security
+      annotations:
+        summary: "High authentication failure rate"
+        description: "Authentication failure rate is above 10% for more than 5 minutes"
+        runbook_url: "https://wiki.windpower.com/runbooks/high-auth-failure-rate"
+
+    - alert: SuspiciousAPICalls
+      expr: |
+        rate(kong_http_requests_total{job="api-gateway",code="429"}[5m]) > 10
+      for: 2m
+      labels:
+        severity: warning
+        component: security
+      annotations:
+        summary: "High rate of rate-limited requests"
+        description: "Rate limiting is being triggered more than 10 times per second"
+        runbook_url: "https://wiki.windpower.com/runbooks/suspicious-api-calls"
+
+  - name: wind-power-performance
+    rules:
+    - alert: SlowQueries
+      expr: |
+        avg_over_time(postgresql_query_duration_seconds{datname="wind_power"}[5m]) > 1
+      for: 5m
+      labels:
+        severity: warning
+        component: performance
+      annotations:
+        summary: "Slow database queries"
+        description: "Average query duration is above 1 second for more than 5 minutes"
+        runbook_url: "https://wiki.windpower.com/runbooks/slow-queries"
+
+    - alert: MessageQueueBacklog
+      expr: |
+        rabbitmq_queue_messages{queue=~"wind-power-.*"} > 1000
+      for: 5m
+      labels:
+        severity: warning
+        component: performance
+      annotations:
+        summary: "Message queue backlog"
+        description: "Message queue {{ $labels.queue }} has more than 1000 messages"
+        runbook_url: "https://wiki.windpower.com/runbooks/message-queue-backlog"
+
+  - name: wind-power-capacity
+    rules:
+    - alert: HighRequestRate
+      expr: |
+        rate(kong_http_requests_total{job="api-gateway"}[5m]) > 1000
+      for: 5m
+      labels:
+        severity: info
+        component: capacity
+      annotations:
+        summary: "High request rate"
+        description: "API Gateway is receiving more than 1000 requests per second"
+        runbook_url: "https://wiki.windpower.com/runbooks/high-request-rate"
+
+    - alert: DatabaseConnectionPoolExhaustion
+      expr: |
+        (
+          pg_stat_activity_count / pg_settings_max_connections
+        ) > 0.8
+      for: 5m
+      labels:
+        severity: warning
+        component: capacity
+      annotations:
+        summary: "Database connection pool exhaustion"
+        description: "Database is using more than 80% of available connections"
+        runbook_url: "https://wiki.windpower.com/runbooks/db-connection-pool-exhaustion"
+{{- end }}

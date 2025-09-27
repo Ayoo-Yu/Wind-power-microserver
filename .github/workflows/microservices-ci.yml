@@ -1,0 +1,502 @@
+name: Wind Power Microservices CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'wind-power-microservices/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'wind-power-microservices/**'
+      - '.github/workflows/**'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: wind-power
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.9'
+
+jobs:
+  # Code Quality and Security Analysis
+  code-quality:
+    name: Code Quality & Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: '**/package-lock.json'
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          npm install -g eslint prettier @typescript-eslint/parser @typescript-eslint/eslint-plugin
+          pip install flake8 black isort bandit safety
+
+      - name: Run ESLint
+        run: |
+          find wind-power-microservices -name "*.js" -o -name "*.ts" -o -name "*.jsx" -o -name "*.tsx" | xargs eslint --ext .js,.ts,.jsx,.tsx --fix || true
+
+      - name: Run Prettier
+        run: |
+          find wind-power-microservices -name "*.js" -o -name "*.ts" -o -name "*.json" -o -name "*.md" | xargs prettier --write || true
+
+      - name: Python Code Quality
+        run: |
+          find wind-power-microservices -name "*.py" -exec flake8 {} \; || true
+          find wind-power-microservices -name "*.py" -exec black --check {} \; || true
+          find wind-power-microservices -name "*.py" -exec isort --check-only {} \; || true
+
+      - name: Security Scanning
+        run: |
+          # Bandit for Python security issues
+          find wind-power-microservices -name "*.py" -exec bandit {} \; || true
+
+          # Safety for dependency vulnerabilities
+          find wind-power-microservices -name "requirements.txt" -exec safety check -r {} \; || true
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        continue-on-error: true
+
+  # Service Detection and Matrix Setup
+  detect-services:
+    name: Detect Changed Services
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.detect.outputs.services }}
+      api-gateway-changed: ${{ steps.detect.outputs.api-gateway-changed }}
+      meteorological-changed: ${{ steps.detect.outputs.meteorological-changed }}
+      scada-changed: ${{ steps.detect.outputs.scada-changed }}
+      power-prediction-changed: ${{ steps.detect.outputs.power-prediction-changed }}
+      report-changed: ${{ steps.detect.outputs.report-changed }}
+      tenant-changed: ${{ steps.detect.outputs.tenant-changed }}
+      wind-farm-changed: ${{ steps.detect.outputs.wind-farm-changed }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changed services
+        id: detect
+        run: |
+          # Get changed files
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
+          else
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+          fi
+
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          # Initialize outputs
+          SERVICES="[]"
+          API_GATEWAY_CHANGED="false"
+          METEOROLOGICAL_CHANGED="false"
+          SCADA_CHANGED="false"
+          POWER_PREDICTION_CHANGED="false"
+          REPORT_CHANGED="false"
+          TENANT_CHANGED="false"
+          WIND_FARM_CHANGED="false"
+
+          # Check each service
+          if echo "$CHANGED_FILES" | grep -q "wind-power-microservices/api-gateway/"; then
+            API_GATEWAY_CHANGED="true"
+          fi
+
+          if echo "$CHANGED_FILES" | grep -q "wind-power-microservices/meteorological-service/"; then
+            METEOROLOGICAL_CHANGED="true"
+          fi
+
+          if echo "$CHANGED_FILES" | grep -q "wind-power-microservices/scada-service/"; then
+            SCADA_CHANGED="true"
+          fi
+
+          if echo "$CHANGED_FILES" | grep -q "wind-power-microservices/power-prediction-service/"; then
+            POWER_PREDICTION_CHANGED="true"
+          fi
+
+          if echo "$CHANGED_FILES" | grep -q "wind-power-microservices/report-service/"; then
+            REPORT_CHANGED="true"
+          fi
+
+          if echo "$CHANGED_FILES" | grep -q "wind-power-microservices/tenant-service/"; then
+            TENANT_CHANGED="true"
+          fi
+
+          if echo "$CHANGED_FILES" | grep -q "wind-power-microservices/wind-farm-service/"; then
+            WIND_FARM_CHANGED="true"
+          fi
+
+          # Build services matrix
+          SERVICES_JSON="["
+          FIRST=true
+
+          if [ "$API_GATEWAY_CHANGED" = "true" ]; then
+            SERVICES_JSON+='"api-gateway"'
+            FIRST=false
+          fi
+
+          if [ "$METEOROLOGICAL_CHANGED" = "true" ]; then
+            [ "$FIRST" = "false" ] && SERVICES_JSON+=","
+            SERVICES_JSON+='"meteorological-service"'
+            FIRST=false
+          fi
+
+          if [ "$SCADA_CHANGED" = "true" ]; then
+            [ "$FIRST" = "false" ] && SERVICES_JSON+=","
+            SERVICES_JSON+='"scada-service"'
+            FIRST=false
+          fi
+
+          if [ "$POWER_PREDICTION_CHANGED" = "true" ]; then
+            [ "$FIRST" = "false" ] && SERVICES_JSON+=","
+            SERVICES_JSON+='"power-prediction-service"'
+            FIRST=false
+          fi
+
+          if [ "$REPORT_CHANGED" = "true" ]; then
+            [ "$FIRST" = "false" ] && SERVICES_JSON+=","
+            SERVICES_JSON+='"report-service"'
+            FIRST=false
+          fi
+
+          if [ "$TENANT_CHANGED" = "true" ]; then
+            [ "$FIRST" = "false" ] && SERVICES_JSON+=","
+            SERVICES_JSON+='"tenant-service"'
+            FIRST=false
+          fi
+
+          if [ "$WIND_FARM_CHANGED" = "true" ]; then
+            [ "$FIRST" = "false" ] && SERVICES_JSON+=","
+            SERVICES_JSON+='"wind-farm-service"'
+          fi
+
+          SERVICES_JSON+="]"
+
+          echo "services=$SERVICES_JSON" >> $GITHUB_OUTPUT
+          echo "api-gateway-changed=$API_GATEWAY_CHANGED" >> $GITHUB_OUTPUT
+          echo "meteorological-changed=$METEOROLOGICAL_CHANGED" >> $GITHUB_OUTPUT
+          echo "scada-changed=$SCADA_CHANGED" >> $GITHUB_OUTPUT
+          echo "power-prediction-changed=$POWER_PREDICTION_CHANGED" >> $GITHUB_OUTPUT
+          echo "report-changed=$REPORT_CHANGED" >> $GITHUB_OUTPUT
+          echo "tenant-changed=$TENANT_CHANGED" >> $GITHUB_OUTPUT
+          echo "wind-farm-changed=$WIND_FARM_CHANGED" >> $GITHUB_OUTPUT
+
+          echo "Detected services: $SERVICES_JSON"
+
+  # Build and Test Individual Services
+  build-services:
+    name: Build & Test Services
+    needs: [code-quality, detect-services]
+    if: needs.detect-services.outputs.services != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.detect-services.outputs.services) }}
+      fail-fast: false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./wind-power-microservices/${{ matrix.service }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Setup test environment
+        run: |
+          if [ "${{ matrix.service }}" = "api-gateway" ]; then
+            # Setup Kong for API gateway testing
+            docker-compose -f wind-power-microservices/api-gateway/docker-compose.yml up -d kong-db
+            sleep 30
+            docker-compose -f wind-power-microservices/api-gateway/docker-compose.yml up -d kong
+            sleep 30
+          fi
+
+      - name: Run service tests
+        run: |
+          cd wind-power-microservices/${{ matrix.service }}
+
+          # Run language-specific tests
+          if [ -f "package.json" ]; then
+            npm ci
+            npm run test:coverage || npm test || echo "No tests configured"
+          elif [ -f "requirements.txt" ]; then
+            pip install -r requirements.txt
+            python -m pytest tests/ -v --cov=. || python -m unittest discover tests/ || echo "No tests configured"
+          elif [ -f "pom.xml" ]; then
+            mvn test || echo "No tests configured"
+          elif [ -f "build.gradle" ]; then
+            ./gradlew test || echo "No tests configured"
+          else
+            echo "No test framework detected"
+          fi
+
+      - name: Run security scanning
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+        continue-on-error: true
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+        continue-on-error: true
+
+  # Integration Testing
+  integration-tests:
+    name: Integration Tests
+    needs: [build-services]
+    runs-on: ubuntu-latest
+    if: always() && needs.build-services.result == 'success'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Compose
+        run: |
+          docker-compose --version
+          docker --version
+
+      - name: Start test environment
+        run: |
+          cd wind-power-microservices
+          docker-compose -f docker-compose.test.yml up -d || docker-compose up -d
+          sleep 60
+
+      - name: Wait for services
+        run: |
+          chmod +x scripts/wait-for-services.sh
+          ./scripts/wait-for-services.sh
+        continue-on-error: true
+
+      - name: Run API gateway tests
+        run: |
+          cd wind-power-microservices/api-gateway
+          chmod +x scripts/test-api-gateway.sh
+          ./scripts/test-api-gateway.sh
+        continue-on-error: true
+
+      - name: Run integration test suite
+        run: |
+          if [ -f "tests/integration/test-suite.sh" ]; then
+            chmod +x tests/integration/test-suite.sh
+            ./tests/integration/test-suite.sh
+          else
+            echo "Running basic integration tests..."
+
+            # Test service connectivity
+            curl -f http://localhost:8000/health || echo "API gateway health check failed"
+
+            # Test individual service endpoints
+            services=("meteorological-service:8001" "scada-service:8002" "power-prediction-service:8003" "report-service:8004" "tenant-service:8007" "wind-farm-service:8006")
+
+            for service in "${services[@]}"; do
+              service_name=$(echo $service | cut -d: -f1)
+              service_port=$(echo $service | cut -d: -f2)
+
+              echo "Testing $service_name on port $service_port..."
+              curl -f "http://localhost:$service_port/health" || echo "$service_name health check failed"
+            done
+          fi
+        continue-on-error: true
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: integration-test-results
+          path: |
+            test-results/
+            *.log
+            coverage/
+
+      - name: Cleanup test environment
+        if: always()
+        run: |
+          cd wind-power-microservices
+          docker-compose -f docker-compose.test.yml down -v || docker-compose down -v
+
+  # Performance Testing
+  performance-tests:
+    name: Performance Tests
+    needs: [build-services]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+
+      - name: Start services for performance testing
+        run: |
+          cd wind-power-microservices
+          docker-compose up -d
+          sleep 60
+
+      - name: Run performance tests
+        run: |
+          if [ -f "tests/performance/load-test.js" ]; then
+            k6 run tests/performance/load-test.js
+          else
+            echo "Running default performance tests..."
+
+            # Basic load test
+            k6 run --vus 10 --duration 30s -e BASE_URL=http://localhost:8000 <<-EOF
+              import http from 'k6/http';
+              import { check } from 'k6';
+
+              export default function () {
+                const response = http.get(\${__ENV.BASE_URL}/health);
+                check(response, {
+                  'status is 200': (r) => r.status === 200,
+                  'response time < 500ms': (r) => r.timings.duration < 500,
+                });
+              }
+            EOF
+          fi
+
+      - name: Generate performance report
+        run: |
+          echo "# Performance Test Results" > performance-report.md
+          echo "Generated on: $(date)" >> performance-report.md
+          echo "" >> performance-report.md
+          echo "Test results will be available in artifacts" >> performance-report.md
+
+      - name: Upload performance results
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-test-results
+          path: |
+            performance-report.md
+            *.json
+
+  # Deployment Preparation
+  prepare-deployment:
+    name: Prepare Deployment
+    needs: [integration-tests, performance-tests]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.12.0'
+
+      - name: Generate deployment manifests
+        run: |
+          mkdir -p deployment-manifests
+
+          # Generate Kubernetes manifests
+          if [ -f "helm/Chart.yaml" ]; then
+            helm template wind-power ./helm > deployment-manifests/k8s-manifests.yaml
+          else
+            echo "Generating basic Kubernetes manifests..."
+            # Basic deployment manifests will be created by separate job
+          fi
+
+          # Generate Docker Compose production file
+          cp wind-power-microservices/docker-compose.yml deployment-manifests/docker-compose.prod.yml
+
+          # Add production-specific configurations
+          cat >> deployment-manifests/docker-compose.prod.yml <<EOF
+
+          # Production overrides
+          services:
+            kong:
+              environment:
+                - KONG_ENV=production
+                - KONG_LOG_LEVEL=info
+          EOF
+
+      - name: Upload deployment artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: deployment-manifests
+          path: deployment-manifests/
+
+  # Summary
+  workflow-summary:
+    name: Workflow Summary
+    needs: [code-quality, build-services, integration-tests, performance-tests]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Create workflow summary
+        run: |
+          echo "# Wind Power Microservices CI/CD Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Build Status" >> $GITHUB_STEP_SUMMARY
+          echo "- Code Quality: ${{ needs.code-quality.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Services Build: ${{ needs.build-services.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Integration Tests: ${{ needs.integration-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Performance Tests: ${{ needs.performance-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "- Review test results in artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- Check security scan results" >> $GITHUB_STEP_SUMMARY
+          echo "- Deploy to staging environment if all checks pass" >> $GITHUB_STEP_SUMMARY

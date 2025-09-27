@@ -1,0 +1,369 @@
+# AlertManager configuration for wind power monitoring system
+global:
+  resolve_timeout: 5m
+  slack_api_url: 'SLACK_WEBHOOK_URL'  # Replace with actual Slack webhook
+  smtp_smarthost: 'smtp.gmail.com:587'
+  smtp_from: 'alerts@windpower.com'
+  smtp_auth_username: 'alerts@windpower.com'
+  smtp_auth_password: 'SMTP_PASSWORD'  # Replace with actual SMTP password
+  smtp_require_tls: true
+  http_config:
+    follow_redirects: true
+
+# Templates for alert notifications
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# Routing configuration
+route:
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 10s
+  group_interval: 5m
+  repeat_interval: 12h
+  receiver: 'default'
+  routes:
+  # Critical alerts - immediate notification
+  - match:
+      severity: critical
+    receiver: 'critical-alerts'
+    group_wait: 0s
+    group_interval: 30s
+    repeat_interval: 5m
+    continue: true
+
+  # Warning alerts - standard notification
+  - match:
+      severity: warning
+    receiver: 'warning-alerts'
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 1h
+    continue: true
+
+  # Info alerts - minimal notification
+  - match:
+      severity: info
+    receiver: 'info-alerts'
+    group_wait: 1m
+    group_interval: 15m
+    repeat_interval: 4h
+    continue: true
+
+  # API Gateway specific alerts
+  - match:
+      component: api-gateway
+    receiver: 'platform-team'
+    group_wait: 10s
+    group_interval: 2m
+    repeat_interval: 30m
+    continue: true
+
+  # Microservices alerts
+  - match:
+      component: microservices
+    receiver: 'backend-team'
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 1h
+    continue: true
+
+  # Database alerts
+  - match:
+      component: database
+    receiver: 'database-team'
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 1h
+    continue: true
+
+  # Security alerts
+  - match:
+      component: security
+    receiver: 'security-team'
+    group_wait: 0s
+    group_interval: 1m
+    repeat_interval: 15m
+    continue: true
+
+  # Business logic alerts
+  - match:
+      component: business-logic
+    receiver: 'business-team'
+    group_wait: 1m
+    group_interval: 10m
+    repeat_interval: 2h
+    continue: true
+
+# Inhibition rules
+inhibit_rules:
+  # Inhibit warning alerts if critical alert is firing
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'cluster', 'service']
+
+  # Inhibit info alerts if warning alert is firing
+  - source_match:
+      severity: 'warning'
+    target_match:
+      severity: 'info'
+    equal: ['alertname', 'cluster', 'service']
+
+  # Inhibit high memory alerts if pod is crash looping
+  - source_match:
+      alertname: 'PodCrashLooping'
+    target_match:
+      alertname: 'MicroserviceHighMemoryUsage'
+    equal: ['pod', 'namespace']
+
+# Receivers configuration
+receivers:
+  - name: 'default'
+    webhook_configs:
+      - url: 'http://webhook-receiver:8080/alerts'
+        send_resolved: true
+        http_config:
+          basic_auth:
+            username: 'alertmanager'
+            password: 'webhook-password'
+
+  - name: 'critical-alerts'
+    slack_configs:
+      - send_resolved: true
+        channel: '#wind-power-critical'
+        title: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Component:* {{ .Labels.component }}
+          *Severity:* {{ .Labels.severity }}
+          *Runbook:* {{ .Annotations.runbook_url }}
+          *Dashboard:* {{ .Annotations.dashboard_url }}
+          *Action:* {{ .Annotations.action }}
+          {{ end }}
+        color: 'danger'
+        footer: 'Wind Power Monitoring System'
+        icon_emoji: ':rotating_light:'
+        username: 'WindPowerAlerts'
+
+    email_configs:
+      - to: 'oncall@windpower.com'
+        from: 'alerts@windpower.com'
+        subject: '🚨 CRITICAL: {{ .GroupLabels.alertname }} - Wind Power System'
+        body: |
+          Critical Alert Fired!
+
+          Alert: {{ .GroupLabels.alertname }}
+          Component: {{ .Labels.component }}
+          Severity: {{ .Labels.severity }}
+
+          {{ range .Alerts }}
+          Summary: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Runbook: {{ .Annotations.runbook_url }}
+          Dashboard: {{ .Annotations.dashboard_url }}
+          Action Required: {{ .Annotations.action }}
+          {{ end }}
+
+          Time: {{ .StartsAt }}
+          Cluster: {{ .CommonLabels.cluster }}
+        html: |
+          <h2 style="color: #d32f2f;">🚨 CRITICAL ALERT</h2>
+          <p><strong>Alert:</strong> {{ .GroupLabels.alertname }}</p>
+          <p><strong>Component:</strong> {{ .Labels.component }}</p>
+          <p><strong>Severity:</strong> {{ .Labels.severity }}</p>
+
+          {{ range .Alerts }}
+          <hr>
+          <h3>{{ .Annotations.summary }}</h3>
+          <p><strong>Description:</strong> {{ .Annotations.description }}</p>
+          <p><strong>Runbook:</strong> <a href="{{ .Annotations.runbook_url }}">View Runbook</a></p>
+          <p><strong>Dashboard:</strong> <a href="{{ .Annotations.dashboard_url }}">View Dashboard</a></p>
+          <p><strong>Action Required:</strong> {{ .Annotations.action }}</p>
+          {{ end }}
+
+          <hr>
+          <p><strong>Time:</strong> {{ .StartsAt }}</p>
+          <p><strong>Cluster:</strong> {{ .CommonLabels.cluster }}</p>
+        headers:
+          Priority: 'urgent'
+          X-Priority: '1'
+
+    webhook_configs:
+      - url: 'http://sms-gateway:8080/send'
+        send_resolved: false
+        http_config:
+          basic_auth:
+            username: 'sms-user'
+            password: 'sms-password'
+
+  - name: 'warning-alerts'
+    slack_configs:
+      - send_resolved: true
+        channel: '#wind-power-alerts'
+        title: '⚠️ WARNING: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Component:* {{ .Labels.component }}
+          *Severity:* {{ .Labels.severity }}
+          *Runbook:* {{ .Annotations.runbook_url }}
+          *Dashboard:* {{ .Annotations.dashboard_url }}
+          *Action:* {{ .Annotations.action }}
+          {{ end }}
+        color: 'warning'
+        footer: 'Wind Power Monitoring System'
+        icon_emoji: ':warning:'
+        username: 'WindPowerAlerts'
+
+    email_configs:
+      - to: 'team@windpower.com'
+        from: 'alerts@windpower.com'
+        subject: '⚠️ WARNING: {{ .GroupLabels.alertname }} - Wind Power System'
+        body: |
+          Warning Alert!
+
+          Alert: {{ .GroupLabels.alertname }}
+          Component: {{ .Labels.component }}
+          Severity: {{ .Labels.severity }}
+
+          {{ range .Alerts }}
+          Summary: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Runbook: {{ .Annotations.runbook_url }}
+          Dashboard: {{ .Annotations.dashboard_url }}
+          Action Required: {{ .Annotations.action }}
+          {{ end }}
+        html: |
+          <h2 style="color: #ff9800;">⚠️ WARNING ALERT</h2>
+          <p><strong>Alert:</strong> {{ .GroupLabels.alertname }}</p>
+          <p><strong>Component:</strong> {{ .Labels.component }}</p>
+          <p><strong>Severity:</strong> {{ .Labels.severity }}</p>
+
+          {{ range .Alerts }}
+          <hr>
+          <h3>{{ .Annotations.summary }}</h3>
+          <p><strong>Description:</strong> {{ .Annotations.description }}</p>
+          <p><strong>Runbook:</strong> <a href="{{ .Annotations.runbook_url }}">View Runbook</a></p>
+          <p><strong>Dashboard:</strong> <a href="{{ .Annotations.dashboard_url }}">View Dashboard</a></p>
+          <p><strong>Action Required:</strong> {{ .Annotations.action }}</p>
+          {{ end }}
+
+          <hr>
+          <p><strong>Time:</strong> {{ .StartsAt }}</p>
+          <p><strong>Cluster:</strong> {{ .CommonLabels.cluster }}</p>
+
+  - name: 'info-alerts'
+    slack_configs:
+      - send_resolved: false
+        channel: '#wind-power-info'
+        title: 'ℹ️ INFO: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Component:* {{ .Labels.component }}
+          {{ end }}
+        color: 'good'
+        footer: 'Wind Power Monitoring System'
+        icon_emoji: ':information_source:'
+        username: 'WindPowerAlerts'
+
+  - name: 'platform-team'
+    slack_configs:
+      - send_resolved: true
+        channel: '#platform-team'
+        title: '🔧 Platform Alert: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Action:* {{ .Annotations.action }}
+          {{ end }}
+        color: '{{ if eq .CommonLabels.severity "critical" }}danger{{ else if eq .CommonLabels.severity "warning" }}warning{{ else }}good{{ end }}'
+        footer: 'Wind Power Platform Team'
+
+  - name: 'backend-team'
+    slack_configs:
+      - send_resolved: true
+        channel: '#backend-team'
+        title: '💻 Backend Alert: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Action:* {{ .Annotations.action }}
+          {{ end }}
+        color: '{{ if eq .CommonLabels.severity "critical" }}danger{{ else if eq .CommonLabels.severity "warning" }}warning{{ else }}good{{ end }}'
+        footer: 'Wind Power Backend Team'
+
+  - name: 'database-team'
+    slack_configs:
+      - send_resolved: true
+        channel: '#database-team'
+        title: '🗄️ Database Alert: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Action:* {{ .Annotations.action }}
+          {{ end }}
+        color: '{{ if eq .CommonLabels.severity "critical" }}danger{{ else if eq .CommonLabels.severity "warning" }}warning{{ else }}good{{ end }}'
+        footer: 'Wind Power Database Team'
+
+  - name: 'security-team'
+    slack_configs:
+      - send_resolved: true
+        channel: '#security-team'
+        title: '🔒 Security Alert: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Action:* {{ .Annotations.action }}
+          {{ end }}
+        color: 'danger'
+        footer: 'Wind Power Security Team'
+
+  - name: 'business-team'
+    slack_configs:
+      - send_resolved: true
+        channel: '#business-team'
+        title: '📊 Business Alert: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Action:* {{ .Annotations.action }}
+          {{ end }}
+        color: '{{ if eq .CommonLabels.severity "critical" }}danger{{ else if eq .CommonLabels.severity "warning" }}warning{{ else }}good{{ end }}'
+        footer: 'Wind Power Business Team'
+
+# Time intervals
+time_intervals:
+  - name: business_hours
+    time_intervals:
+      - weekdays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday']
+        times:
+          - start_time: '09:00'
+            end_time: '18:00'
+            location: 'America/New_York'
+
+  - name: weekend
+    time_intervals:
+      - weekdays: ['saturday', 'sunday']
+        times:
+          - start_time: '00:00'
+            end_time: '23:59'
+            location: 'America/New_York'
+
+  - name: maintenance_window
+    time_intervals:
+      - weekdays: ['sunday']
+        times:
+          - start_time: '02:00'
+            end_time: '04:00'
+            location: 'America/New_York'

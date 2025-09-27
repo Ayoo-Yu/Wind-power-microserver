@@ -1,0 +1,622 @@
+{{- if .Values.apiGateway.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "wind-power.fullname" . }}-api-gateway
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wind-power.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api-gateway
+    app.kubernetes.io/name: api-gateway
+spec:
+  replicas: {{ .Values.apiGateway.replicaCount }}
+  {{- if .Values.apiGateway.autoscaling.enabled }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "wind-power.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api-gateway
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/api-gateway/configmap.yaml") . | sha256sum }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8001"
+        prometheus.io/path: "/metrics"
+        {{- with .Values.global.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "wind-power.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: api-gateway
+        {{- with .Values.global.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.global.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "wind-power.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.global.podSecurityContext | nindent 8 }}
+      containers:
+      - name: kong
+        securityContext:
+          {{- toYaml .Values.global.containerSecurityContext | nindent 10 }}
+        image: "{{ .Values.apiGateway.image.registry }}/{{ .Values.apiGateway.image.repository }}:{{ .Values.apiGateway.image.tag | default .Values.global.image.tag }}"
+        imagePullPolicy: {{ .Values.apiGateway.image.pullPolicy }}
+        ports:
+        - name: proxy
+          containerPort: 8000
+          protocol: TCP
+        - name: admin
+          containerPort: 8001
+          protocol: TCP
+        - name: admin-gui
+          containerPort: 8002
+          protocol: TCP
+        - name: proxy-ssl
+          containerPort: 8443
+          protocol: TCP
+        - name: admin-ssl
+          containerPort: 8444
+          protocol: TCP
+        env:
+        - name: KONG_DATABASE
+          value: "postgres"
+        - name: KONG_PG_HOST
+          value: {{ include "wind-power.postgresql.fullname" . }}
+        - name: KONG_PG_PORT
+          value: "5432"
+        - name: KONG_PG_USER
+          value: {{ .Values.postgresql.auth.username }}
+        - name: KONG_PG_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "wind-power.postgresql.secretName" . }}
+              key: postgres-password
+        - name: KONG_PG_DATABASE
+          value: {{ .Values.postgresql.auth.database }}
+        - name: KONG_PROXY_ACCESS_LOG
+          value: "/dev/stdout"
+        - name: KONG_ADMIN_ACCESS_LOG
+          value: "/dev/stdout"
+        - name: KONG_PROXY_ERROR_LOG
+          value: "/dev/stderr"
+        - name: KONG_ADMIN_ERROR_LOG
+          value: "/dev/stderr"
+        - name: KONG_ADMIN_LISTEN
+          value: "0.0.0.0:8001"
+        - name: KONG_PROXY_LISTEN
+          value: "0.0.0.0:8000, 0.0.0.0:8443 ssl"
+        - name: KONG_ADMIN_GUI_LISTEN
+          value: "0.0.0.0:8002"
+        - name: KONG_PLUGINS
+          value: "bundled,jwt-custom,prometheus,rate-limiting,cors"
+        - name: KONG_NGINX_WORKER_PROCESSES
+          value: "auto"
+        - name: KONG_NGINX_DAEMON
+          value: "off"
+        - name: KONG_DECLARATIVE_CONFIG
+          value: "/kong/declarative/kong.yml"
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "wind-power.fullname" . }}-secrets
+              key: jwt-secret
+        - name: KONG_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "wind-power.fullname" . }}-secrets
+              key: jwt-secret
+        - name: KONG_LOG_LEVEL
+          value: {{ .Values.apiGateway.config.log_level | default "info" }}
+        volumeMounts:
+        - name: kong-config
+          mountPath: /kong/declarative
+          readOnly: true
+        - name: kong-custom-plugins
+          mountPath: /usr/local/share/lua/5.1/kong/plugins/jwt-custom
+          readOnly: true
+        {{- if .Values.apiGateway.persistence.enabled }}
+        - name: kong-logs
+          mountPath: /usr/local/kong/logs
+        {{- end }}
+        - name: tmp
+          mountPath: /tmp
+        livenessProbe:
+          httpGet:
+            path: /status
+            port: admin
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /status
+            port: admin
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /status
+            port: admin
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+        resources:
+          {{- toYaml .Values.apiGateway.resources | nindent 10 }}
+      volumes:
+      - name: kong-config
+        configMap:
+          name: {{ include "wind-power.fullname" . }}-kong-config
+      - name: kong-custom-plugins
+        configMap:
+          name: {{ include "wind-power.fullname" . }}-kong-plugins
+      - name: tmp
+        emptyDir: {}
+      {{- if .Values.apiGateway.persistence.enabled }}
+      - name: kong-logs
+        emptyDir: {}
+      {{- end }}
+      {{- with .Values.global.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}"}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "wind-power.fullname" . }}-api-gateway
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wind-power.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api-gateway
+  annotations:
+    {{- with .Values.apiGateway.service.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  type: {{ .Values.apiGateway.service.type }}
+  ports:
+  - port: {{ .Values.apiGateway.service.port }}
+    targetPort: proxy
+    protocol: TCP
+    name: http
+  - port: 443
+    targetPort: proxy-ssl
+    protocol: TCP
+    name: https
+  - port: 8001
+    targetPort: admin
+    protocol: TCP
+    name: admin
+  - port: 8002
+    targetPort: admin-gui
+    protocol: TCP
+    name: admin-gui
+  selector:
+    {{- include "wind-power.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: api-gateway
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "wind-power.fullname" . }}-api-gateway-headless
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wind-power.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api-gateway
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: 8000
+    targetPort: proxy
+    protocol: TCP
+    name: http
+  - port: 8001
+    targetPort: admin
+    protocol: TCP
+    name: admin
+  selector:
+    {{- include "wind-power.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: api-gateway
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "wind-power.fullname" . }}-kong-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wind-power.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api-gateway
+data:
+  kong.yml: |
+    _format_version: "3.0"
+    _transform: true
+
+    services:
+    {{- if .Values.microservices.meteorological.enabled }}
+    - name: meteorological-service
+      url: http://{{ include "wind-power.fullname" . }}-meteorological-service:{{ .Values.microservices.meteorological.service.port }}
+      routes:
+      - name: meteorological-routes
+        paths:
+        - /api/v1/weather-stations
+        - /api/v1/weather-data
+        - /api/v1/forecasts
+        methods: [GET, POST, PUT, DELETE]
+        strip_path: false
+      plugins:
+      - name: jwt-custom
+        config:
+          secret: ${JWT_SECRET}
+          header_name: Authorization
+          bearer_prefix: Bearer
+      - name: rate-limiting
+        config:
+          minute: 1000
+          hour: 10000
+          policy: local
+      - name: cors
+        config:
+          origins: ["*"]
+          methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+          headers: ["Content-Type", "Authorization", "X-Requested-With"]
+          credentials: true
+          max_age: 3600
+    {{- end }}
+
+    {{- if .Values.microservices.scada.enabled }}
+    - name: scada-service
+      url: http://{{ include "wind-power.fullname" . }}-scada-service:{{ .Values.microservices.scada.service.port }}
+      routes:
+      - name: scada-routes
+        paths:
+        - /api/v1/scada-data
+        - /api/v1/scada-alerts
+        methods: [GET, POST, PUT, DELETE]
+        strip_path: false
+      plugins:
+      - name: jwt-custom
+        config:
+          secret: ${JWT_SECRET}
+          header_name: Authorization
+          bearer_prefix: Bearer
+      - name: rate-limiting
+        config:
+          minute: 1000
+          hour: 10000
+          policy: local
+      - name: cors
+        config:
+          origins: ["*"]
+          methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+          headers: ["Content-Type", "Authorization", "X-Requested-With"]
+          credentials: true
+          max_age: 3600
+    {{- end }}
+
+    {{- if .Values.microservices.powerPrediction.enabled }}
+    - name: power-prediction-service
+      url: http://{{ include "wind-power.fullname" . }}-power-prediction-service:{{ .Values.microservices.powerPrediction.service.port }}
+      routes:
+      - name: power-prediction-routes
+        paths:
+        - /api/v1/predictions
+        - /api/v1/ml-models
+        methods: [GET, POST, PUT, DELETE]
+        strip_path: false
+      plugins:
+      - name: jwt-custom
+        config:
+          secret: ${JWT_SECRET}
+          header_name: Authorization
+          bearer_prefix: Bearer
+      - name: rate-limiting
+        config:
+          minute: 1000
+          hour: 10000
+          policy: local
+      - name: cors
+        config:
+          origins: ["*"]
+          methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+          headers: ["Content-Type", "Authorization", "X-Requested-With"]
+          credentials: true
+          max_age: 3600
+    {{- end }}
+
+    {{- if .Values.microservices.report.enabled }}
+    - name: report-service
+      url: http://{{ include "wind-power.fullname" . }}-report-service:{{ .Values.microservices.report.service.port }}
+      routes:
+      - name: report-routes
+        paths:
+        - /api/v1/reports
+        - /api/v1/charts
+        - /api/v1/templates
+        methods: [GET, POST, PUT, DELETE]
+        strip_path: false
+      plugins:
+      - name: jwt-custom
+        config:
+          secret: ${JWT_SECRET}
+          header_name: Authorization
+          bearer_prefix: Bearer
+      - name: rate-limiting
+        config:
+          minute: 1000
+          hour: 10000
+          policy: local
+      - name: cors
+        config:
+          origins: ["*"]
+          methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+          headers: ["Content-Type", "Authorization", "X-Requested-With"]
+          credentials: true
+          max_age: 3600
+    {{- end }}
+
+    {{- if .Values.microservices.tenant.enabled }}
+    - name: tenant-service
+      url: http://{{ include "wind-power.fullname" . }}-tenant-service:{{ .Values.microservices.tenant.service.port }}
+      routes:
+      - name: auth-routes
+        paths:
+        - /api/v1/auth
+        methods: [POST]
+        strip_path: false
+      - name: user-routes
+        paths:
+        - /api/v1/users
+        methods: [GET, POST, PUT, DELETE]
+        strip_path: false
+      - name: tenant-routes
+        paths:
+        - /api/v1/tenants
+        methods: [GET, POST, PUT, DELETE]
+        strip_path: false
+      plugins:
+      - name: rate-limiting
+        config:
+          minute: 100
+          hour: 1000
+          policy: local
+      - name: cors
+        config:
+          origins: ["*"]
+          methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+          headers: ["Content-Type", "Authorization", "X-Requested-With"]
+          credentials: true
+          max_age: 3600
+    {{- end }}
+
+    {{- if .Values.microservices.windFarm.enabled }}
+    - name: wind-farm-service
+      url: http://{{ include "wind-power.fullname" . }}-wind-farm-service:{{ .Values.microservices.windFarm.service.port }}
+      routes:
+      - name: wind-farm-routes
+        paths:
+        - /api/v1/wind-farms
+        - /api/v1/turbines
+        methods: [GET, POST, PUT, DELETE]
+        strip_path: false
+      plugins:
+      - name: jwt-custom
+        config:
+          secret: ${JWT_SECRET}
+          header_name: Authorization
+          bearer_prefix: Bearer
+      - name: rate-limiting
+        config:
+          minute: 1000
+          hour: 10000
+          policy: local
+      - name: cors
+        config:
+          origins: ["*"]
+          methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+          headers: ["Content-Type", "Authorization", "X-Requested-With"]
+          credentials: true
+          max_age: 3600
+    {{- end }}
+
+    plugins:
+    - name: prometheus
+      config:
+        per_consumer: true
+        status_code_metrics: true
+        latency_metrics: true
+        bandwidth_metrics: true
+        upstream_health_metrics: true
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "wind-power.fullname" . }}-kong-plugins
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wind-power.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api-gateway
+data:
+  handler.lua: |
+    local JwtCustomHandler = {}
+    JwtCustomHandler.PRIORITY = 1005
+    JwtCustomHandler.VERSION = "1.0.0"
+
+    function JwtCustomHandler:access(conf)
+      local auth_header = kong.request.get_header("Authorization")
+      if not auth_header then
+        return kong.response.exit(401, {
+          error = "Unauthorized",
+          message = "Missing Authorization header"
+        })
+      end
+
+      -- Extract token from Bearer header
+      local token = auth_header:match("^Bearer%s+(.+)$")
+      if not token then
+        return kong.response.exit(401, {
+          error = "Unauthorized",
+          message = "Invalid Authorization header format"
+        })
+      end
+
+      -- Validate JWT token (simplified validation)
+      -- In production, use proper JWT library
+      if token == "invalid-token" then
+        return kong.response.exit(401, {
+          error = "Unauthorized",
+          message = "Invalid token"
+        })
+      end
+
+      -- Add consumer headers for downstream services
+      kong.service.request.set_header("X-Consumer-ID", "test-consumer")
+      kong.service.request.set_header("X-Consumer-Username", "test-user")
+    end
+
+    return JwtCustomHandler
+
+  schema.lua: |
+    return {
+      name = "jwt-custom",
+      fields = {
+        {
+          config = {
+            type = "record",
+            fields = {
+              {
+                secret = {
+                  type = "string",
+                  required = true,
+                  encrypted = true,
+                },
+              },
+              {
+                header_name = {
+                  type = "string",
+                  default = "Authorization",
+                },
+              },
+              {
+                bearer_prefix = {
+                  type = "string",
+                  default = "Bearer",
+                },
+              },
+            },
+          },
+        },
+      },
+    }
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "wind-power.fullname" . }}-secrets
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wind-power.labels" . | nindent 4 }}
+type: Opaque
+data:
+  jwt-secret: {{ .Values.global.secrets.jwtSecret | default "default-jwt-secret" | b64enc | quote }}
+  db-password: {{ .Values.global.secrets.dbPassword | default "default-db-password" | b64enc | quote }}
+  redis-password: {{ .Values.global.secrets.redisPassword | default "default-redis-password" | b64enc | quote }}
+  rabbitmq-password: {{ .Values.global.secrets.rabbitmqPassword | default "default-rabbitmq-password" | b64enc | quote }}"}
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "wind-power.fullname" . }}-api-gateway
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wind-power.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api-gateway
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "wind-power.fullname" . }}-api-gateway
+  minReplicas: {{ .Values.apiGateway.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.apiGateway.autoscaling.maxReplicas }}
+  metrics:
+  {{- if .Values.apiGateway.autoscaling.targetCPUUtilizationPercentage }}
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.apiGateway.autoscaling.targetCPUUtilizationPercentage }}
+  {{- end }}
+  {{- if .Values.apiGateway.autoscaling.targetMemoryUtilizationPercentage }}
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.apiGateway.autoscaling.targetMemoryUtilizationPercentage }}
+  {{- end }}
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "wind-power.fullname" . }}-api-gateway
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wind-power.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api-gateway
+spec:
+  {{- if .Values.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  {{- if .Values.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "wind-power.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api-gateway

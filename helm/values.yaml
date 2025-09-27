@@ -1,0 +1,529 @@
+# Global configuration
+global:
+  image:
+    registry: ghcr.io
+    repository: wind-power
+    tag: latest
+    pullPolicy: IfNotPresent
+    pullSecrets: []
+
+  environment: production
+
+  replicaCount: 3
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  podSecurityContext:
+    fsGroup: 1000
+    runAsNonRoot: true
+    runAsUser: 1000
+
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    runAsUser: 1000
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+      - ALL
+
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+  serviceAccount:
+    create: true
+    annotations: {}
+    name: ""
+
+  podAnnotations: {}
+  podLabels: {}
+
+  priorityClassName: ""
+
+# Database configuration
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: "wind-power-postgres-password"
+    database: wind_power
+    username: wind_power_user
+    password: "wind-power-db-password"
+  primary:
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: standard
+
+# Redis configuration
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: "wind-power-redis-password"
+  master:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
+    persistence:
+      enabled: true
+      size: 8Gi
+      storageClass: standard
+
+# RabbitMQ configuration
+rabbitmq:
+  enabled: true
+  auth:
+    username: wind_power_user
+    password: "wind-power-rabbitmq-password"
+    erlangCookie: "wind-power-rabbitmq-cookie"
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: standard
+
+# Kong API Gateway configuration
+kong:
+  enabled: false  # We're using our custom Kong deployment
+
+# API Gateway configuration
+apiGateway:
+  enabled: true
+  replicaCount: 3
+
+  image:
+    registry: ghcr.io
+    repository: wind-power/api-gateway
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: LoadBalancer
+    port: 80
+    targetPort: 8000
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-type: nlb
+      service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+  config:
+    database: postgres
+    pg_host: wind-power-postgresql
+    pg_port: 5432
+    log_level: info
+    plugins:
+      - bundled
+      - jwt-custom
+      - prometheus
+      - rate-limiting
+      - cors
+
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    hosts:
+      - host: api.windpower.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: wind-power-tls-secret
+        hosts:
+          - api.windpower.com
+
+# Microservices configuration
+microservices:
+  enabled: true
+
+  meteorological:
+    enabled: true
+    replicaCount: 3
+
+    image:
+      registry: ghcr.io
+      repository: wind-power/meteorological-service
+      tag: latest
+      pullPolicy: IfNotPresent
+
+    service:
+      type: ClusterIP
+      port: 8001
+      targetPort: 8001
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
+
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+
+    persistence:
+      enabled: true
+      size: 5Gi
+      storageClass: standard
+
+    config:
+      weather_api_key: ""
+      cache_ttl: 300
+      max_requests_per_minute: 1000
+
+  scada:
+    enabled: true
+    replicaCount: 3
+
+    image:
+      registry: ghcr.io
+      repository: wind-power/scada-service
+      tag: latest
+      pullPolicy: IfNotPresent
+
+    service:
+      type: ClusterIP
+      port: 8002
+      targetPort: 8002
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
+
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+
+    config:
+      sensor_data_retention_days: 90
+      alert_threshold_wind_speed: 25
+      max_alerts_per_minute: 100
+
+  powerPrediction:
+    enabled: true
+    replicaCount: 3
+
+    image:
+      registry: ghcr.io
+      repository: wind-power/power-prediction-service
+      tag: latest
+      pullPolicy: IfNotPresent
+
+    service:
+      type: ClusterIP
+      port: 8003
+      targetPort: 8003
+
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+
+    persistence:
+      enabled: true
+      size: 10Gi
+      storageClass: standard
+
+    config:
+      model_update_interval: 3600
+      prediction_horizon_hours: 72
+      max_predictions_per_minute: 500
+
+  report:
+    enabled: true
+    replicaCount: 2
+
+    image:
+      registry: ghcr.io
+      repository: wind-power/report-service
+      tag: latest
+      pullPolicy: IfNotPresent
+
+    service:
+      type: ClusterIP
+      port: 8004
+      targetPort: 8004
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
+
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: standard
+
+    config:
+      report_storage_days: 365
+      max_reports_per_hour: 100
+      chart_generation_timeout: 300
+
+  tenant:
+    enabled: true
+    replicaCount: 2
+
+    image:
+      registry: ghcr.io
+      repository: wind-power/tenant-service
+      tag: latest
+      pullPolicy: IfNotPresent
+
+    service:
+      type: ClusterIP
+      port: 8007
+      targetPort: 8007
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
+
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+
+    config:
+      session_timeout: 3600
+      max_login_attempts: 5
+      lockout_duration: 900
+
+  windFarm:
+    enabled: true
+    replicaCount: 3
+
+    image:
+      registry: ghcr.io
+      repository: wind-power/wind-farm-service
+      tag: latest
+      pullPolicy: IfNotPresent
+
+    service:
+      type: ClusterIP
+      port: 8006
+      targetPort: 8006
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
+
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+
+    config:
+      turbine_data_retention_days: 365
+      farm_monitoring_interval: 60
+      max_farms_per_user: 10
+
+# Monitoring configuration
+monitoring:
+  enabled: true
+
+  prometheus:
+    enabled: true
+    port: 9090
+    path: /metrics
+
+  grafana:
+    enabled: true
+    adminPassword: "admin123"
+
+  alerts:
+    enabled: true
+    slackWebhook: ""
+    emailRecipients: []
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/rate-limit: "1000"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: api.windpower.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: wind-power-tls-secret
+      hosts:
+        - api.windpower.com
+
+# Network policies
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: wind-power
+  egress:
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 5672
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+
+# Persistence configuration
+persistence:
+  enabled: true
+  storageClass: standard
+  accessMode: ReadWriteOnce
+  size: 10Gi
+
+# Pod Disruption Budgets
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+  maxUnavailable: 1
+
+# Service mesh (Istio) configuration
+serviceMesh:
+  enabled: false
+  istio:
+    enabled: false
+    injection: enabled
+
+# Tracing configuration
+tracing:
+  enabled: false
+  jaeger:
+    enabled: false
+    agent:
+      host: jaeger-agent
+      port: 6831
+
+# Feature flags
+features:
+  rateLimiting: true
+  metrics: true
+  tracing: false
+  profiling: false
+  circuitBreaker: true
+  retryPolicy: true
+  timeoutPolicy: true
+
+# Testing configuration
+testing:
+  enabled: false
+  image:
+    repository: busybox
+    tag: latest
+    pullPolicy: IfNotPresent

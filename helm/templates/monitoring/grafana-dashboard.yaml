@@ -1,0 +1,589 @@
+{{- if and .Values.monitoring.enabled .Values.monitoring.grafana.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "wind-power.fullname" . }}-grafana-dashboard
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wind-power.labels" . | nindent 4 }}
+    app.kubernetes.io/component: monitoring
+    grafana_dashboard: "1"
+data:
+  wind-power-dashboard.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Wind Power Microservices Dashboard",
+        "tags": ["wind-power", "microservices", "kubernetes"],
+        "style": "dark",
+        "timezone": "browser",
+        "refresh": "30s",
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        },
+        "panels": [
+          {
+            "id": 1,
+            "title": "API Gateway Overview",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "rate(kong_http_requests_total{job=\"api-gateway\"}[5m])",
+                "legendFormat": "Requests/sec"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "vis": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "reqps"
+              }
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 6,
+              "x": 0,
+              "y": 0
+            }
+          },
+          {
+            "id": 2,
+            "title": "API Gateway Error Rate",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "(\n                  rate(kong_http_requests_total{job=\"api-gateway\",code=~\"5..\"}[5m]) /\n                  rate(kong_http_requests_total{job=\"api-gateway\"}[5m])\n                ) * 100",
+                "legendFormat": "Error Rate (%)"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 5
+                    },
+                    {
+                      "color": "red",
+                      "value": 10
+                    }
+                  ]
+                },
+                "unit": "percent"
+              }
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 6,
+              "x": 6,
+              "y": 0
+            }
+          },
+          {
+            "id": 3,
+            "title": "API Gateway P95 Latency",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95,\n                  rate(kong_request_latency_ms_bucket{job=\"api-gateway\"}[5m])\n                )",
+                "legendFormat": "P95 Latency (ms)"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 1000
+                    },
+                    {
+                      "color": "red",
+                      "value": 2000
+                    }
+                  ]
+                },
+                "unit": "ms"
+              }
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 6,
+              "x": 12,
+              "y": 0
+            }
+          },
+          {
+            "id": 4,
+            "title": "Active Pods",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "sum(up{job=~\"api-gateway|meteorological-service|scada-service|power-prediction-service|report-service|tenant-service|wind-farm-service\"})",
+                "legendFormat": "Active Pods"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 6
+                    },
+                    {
+                      "color": "green",
+                      "value": 12
+                    }
+                  ]
+                },
+                "unit": "short"
+              }
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 6,
+              "x": 18,
+              "y": 0
+            }
+          },
+          {
+            "id": 5,
+            "title": "Request Rate by Service",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(kong_http_requests_total{job=\"api-gateway\"}[5m])",
+                "legendFormat": "{{ service }} - {{ route }}"
+              }
+            ],
+            "yAxes": [
+              {
+                "label": "Requests/sec",
+                "unit": "reqps"
+              }
+            ],
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 8
+            }
+          },
+          {
+            "id": 6,
+            "title": "Error Rate by Service",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "(\n                  rate(kong_http_requests_total{job=\"api-gateway\",code=~\"4..|5..\"}[5m]) /\n                  rate(kong_http_requests_total{job=\"api-gateway\"}[5m])\n                ) * 100",
+                "legendFormat": "{{ service }} - {{ route }}"
+              }
+            ],
+            "yAxes": [
+              {
+                "label": "Error Rate (%)",
+                "unit": "percent"
+              }
+            ],
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 8
+            }
+          },
+          {
+            "id": 7,
+            "title": "Microservices Health Status",
+            "type": "table",
+            "targets": [
+              {
+                "expr": "up{job=~\"meteorological-service|scada-service|power-prediction-service|report-service|tenant-service|wind-farm-service\"}",
+                "legendFormat": "{{ job }}"
+              }
+            ],
+            "transformations": [
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {},
+                  "indexByName": {},
+                  "renameByName": {
+                    "job": "Service",
+                    "Value": "Status"
+                  }
+                }
+              }
+            ],
+            "gridPos": {
+              "h": 8,
+              "w": 24,
+              "x": 0,
+              "y": 16
+            }
+          },
+          {
+            "id": 8,
+            "title": "Database Performance",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(postgresql_stat_database_xact_commit{datname=\"wind_power\"}[5m])",
+                "legendFormat": "Commits/sec"
+              },
+              {
+                "expr": "rate(postgresql_stat_database_xact_rollback{datname=\"wind_power\"}[5m])",
+                "legendFormat": "Rollbacks/sec"
+              }
+            ],
+            "yAxes": [
+              {
+                "label": "Transactions/sec",
+                "unit": "short"
+              }
+            ],
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 24
+            }
+          },
+          {
+            "id": 9,
+            "title": "Message Queue Status",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rabbitmq_queue_messages{queue=~\"wind-power-.*\"}",
+                "legendFormat": "{{ queue }}"
+              }
+            ],
+            "yAxes": [
+              {
+                "label": "Messages",
+                "unit": "short"
+              }
+            ],
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 24
+            }
+          },
+          {
+            "id": 10,
+            "title": "Wind Farm Performance",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "wind_farm_power_output_mw",
+                "legendFormat": "{{ farm_name }}"
+              }
+            ],
+            "yAxes": [
+              {
+                "label": "Power Output (MW)",
+                "unit": "megwatt"
+              }
+            ],
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 32
+            }
+          },
+          {
+            "id": 11,
+            "title": "Prediction Accuracy",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "wind_power_prediction_accuracy",
+                "legendFormat": "Accuracy (%)"
+              }
+            ],
+            "yAxes": [
+              {
+                "label": "Accuracy (%)",
+                "unit": "percent"
+              }
+            ],
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 32
+            }
+          },
+          {
+            "id": 12,
+            "title": "Infrastructure Metrics",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+                "legendFormat": "CPU Usage % - {{ instance }}"
+              }
+            ],
+            "yAxes": [
+              {
+                "label": "CPU Usage (%)",
+                "unit": "percent"
+              }
+            ],
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 40
+            }
+          },
+          {
+            "id": 13,
+            "title": "Memory Usage",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+                "legendFormat": "Memory Usage % - {{ instance }}"
+              }
+            ],
+            "yAxes": [
+              {
+                "label": "Memory Usage (%)",
+                "unit": "percent"
+              }
+            ],
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 40
+            }
+          }
+        ],
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        },
+        "timepicker": {
+          "refresh_intervals": [
+            "5s",
+            "10s",
+            "30s",
+            "1m",
+            "5m",
+            "15m",
+            "30m",
+            "1h",
+            "2h",
+            "1d"
+          ]
+        },
+        "refresh": "30s",
+        "schemaVersion": 27,
+        "version": 1,
+        "links": []
+      }
+    }
+  wind-power-service-dashboard.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Wind Power Service Detail Dashboard",
+        "tags": ["wind-power", "microservices", "service-detail"],
+        "style": "dark",
+        "timezone": "browser",
+        "refresh": "15s",
+        "time": {
+          "from": "now-30m",
+          "to": "now"
+        },
+        "panels": [
+          {
+            "id": 1,
+            "title": "Service Request Rate",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(http_requests_total{service=~\"$service\"}[5m])",
+                "legendFormat": "{{ method }} {{ route }}"
+              }
+            ],
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 0
+            }
+          },
+          {
+            "id": 2,
+            "title": "Service Error Rate",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "(\n                  rate(http_requests_total{service=~\"$service\",code=~\"4..|5..\"}[5m]) /\n                  rate(http_requests_total{service=~\"$service\"}[5m])\n                ) * 100",
+                "legendFormat": "{{ method }} {{ route }}"
+              }
+            ],
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 0
+            }
+          },
+          {
+            "id": 3,
+            "title": "Service Latency Distribution",
+            "type": "heatmap",
+            "targets": [
+              {
+                "expr": "rate(http_request_duration_seconds_bucket{service=~\"$service\"}[5m])",
+                "legendFormat": "{{ le }}"
+              }
+            ],
+            "gridPos": {
+              "h": 8,
+              "w": 24,
+              "x": 0,
+              "y": 8
+            }
+          },
+          {
+            "id": 4,
+            "title": "Database Query Performance",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95,\n                  rate(database_query_duration_seconds_bucket{service=~\"$service\"}[5m])\n                )",
+                "legendFormat": "P95 - {{ query_type }}"
+              },
+              {
+                "expr": "histogram_quantile(0.50,\n                  rate(database_query_duration_seconds_bucket{service=~\"$service\"}[5m])\n                )",
+                "legendFormat": "P50 - {{ query_type }}"
+              }
+            ],
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 16
+            }
+          },
+          {
+            "id": 5,
+            "title": "Cache Hit Rate",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "(\n                  rate(cache_hits_total{service=~\"$service\"}[5m]) /\n                  (rate(cache_hits_total{service=~\"$service\"}[5m]) + rate(cache_misses_total{service=~\"$service\"}[5m]))\n                ) * 100",
+                "legendFormat": "Cache Hit Rate (%)"
+              }
+            ],
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 16
+            }
+          }
+        ],
+        "templating": {
+          "list": [
+            {
+              "name": "service",
+              "type": "query",
+              "query": "label_values(http_requests_total, service)",
+              "current": {},
+              "hide": 0
+            }
+          ]
+        },
+        "time": {
+          "from": "now-30m",
+          "to": "now"
+        },
+        "refresh": "15s",
+        "schemaVersion": 27,
+        "version": 1
+      }
+    }
+{{- end }}

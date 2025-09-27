@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Error Alert - Wind Power System</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            border-left: 5px solid #dc3545;
+        }
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #dc3545;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .logo {
+            width: 60px;
+            height: 60px;
+            margin-bottom: 10px;
+        }
+        h1 {
+            color: #dc3545;
+            margin: 0;
+            font-size: 24px;
+        }
+        .subtitle {
+            color: #666;
+            font-size: 16px;
+            margin-top: 5px;
+        }
+        .alert-banner {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+            color: #721c24;
+        }
+        .alert-banner h3 {
+            color: #721c24;
+            margin-top: 0;
+            font-size: 20px;
+        }
+        .error-details {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+        .error-details h3 {
+            color: #495057;
+            margin-top: 0;
+            border-bottom: 2px solid #dee2e6;
+            padding-bottom: 10px;
+        }
+        .error-item {
+            background-color: #fff;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .error-message {
+            color: #721c24;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        .error-stack {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #495057;
+            white-space: pre-wrap;
+            overflow-x: auto;
+        }
+        .system-info {
+            background-color: #e2e3e5;
+            border: 1px solid #ced4da;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+        .system-info h3 {
+            color: #495057;
+            margin-top: 0;
+            border-bottom: 2px solid #ced4da;
+            padding-bottom: 10px;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .info-label {
+            font-weight: 600;
+            color: #495057;
+        }
+        .info-value {
+            color: #6c757d;
+        }
+        .actions {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .button {
+            display: inline-block;
+            background-color: #dc3545;
+            color: white;
+            padding: 12px 25px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: 600;
+            transition: background-color 0.3s ease;
+        }
+        .button:hover {
+            background-color: #c82333;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e9ecef;
+            color: #6c757d;
+            font-size: 14px;
+        }
+        .footer a {
+            color: #dc3545;
+            text-decoration: none;
+        }
+        .priority-indicator {
+            display: inline-block;
+            background-color: #dc3545;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <svg class="logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="50" r="45" fill="#dc3545" opacity="0.2"/>
+                <path d="M50 10 L60 40 L90 40 L65 60 L75 90 L50 70 L25 90 L35 60 L10 40 L40 40 Z" fill="#dc3545"/>
+                <circle cx="50" cy="50" r="8" fill="#fff"/>
+            </svg>
+            <h1>🚨 System Error Alert</h1>
+            <div class="subtitle">Wind Power Forecasting System</div>
+        </div>
+
+        <div class="alert-banner">
+            <h3>⚠️ Critical System Error Detected</h3>
+            <p>An error has occurred in the Wind Power system that requires immediate attention. Please review the details below and take appropriate action.</p>
+            <span class="priority-indicator">{{error.severity}}</span>
+        </div>
+
+        <div class="error-details">
+            <h3>Error Details</h3>
+            <div class="error-item">
+                <div class="error-message">{{error.error}}</div>
+                <div class="error-stack">{{error.stack}}</div>
+            </div>
+        </div>
+
+        <div class="system-info">
+            <h3>System Information</h3>
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">Timestamp:</span>
+                    <span class="info-value">{{error.timestamp}}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Environment:</span>
+                    <span class="info-value">{{systemInfo.environment}}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Version:</span>
+                    <span class="info-value">{{systemInfo.version}}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Hostname:</span>
+                    <span class="info-value">{{systemInfo.hostname}}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="actions">
+            <a href="http://monitoring.windpower.com" class="button">📊 View Monitoring Dashboard</a>
+            <a href="http://logs.windpower.com" class="button">📋 Check System Logs</a>
+        </div>
+
+        <div class="footer">
+            <p>This is an automated error notification from the Wind Power Forecasting System.</p>
+            <p>© 2024 Wind Power Systems. All rights reserved.</p>
+            <p>
+                <a href="http://windpower.com">Visit our website</a> |
+                <a href="mailto:support@windpower.com">Contact Support</a> |
+                <a href="http://windpower.com/privacy">Privacy Policy</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>

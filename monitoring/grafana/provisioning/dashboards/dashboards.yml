@@ -1,0 +1,69 @@
+# Grafana dashboards configuration for wind power monitoring
+apiVersion: 1
+
+providers:
+  # Main system dashboards
+  - name: 'wind-power-main'
+    orgId: 1
+    folder: 'Wind Power - Main'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards/main
+
+  # Microservices dashboards
+  - name: 'wind-power-microservices'
+    orgId: 1
+    folder: 'Wind Power - Microservices'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards/microservices
+
+  # Infrastructure dashboards
+  - name: 'wind-power-infrastructure'
+    orgId: 1
+    folder: 'Wind Power - Infrastructure'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards/infrastructure
+
+  # Business dashboards
+  - name: 'wind-power-business'
+    orgId: 1
+    folder: 'Wind Power - Business'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards/business
+
+  # Security dashboards
+  - name: 'wind-power-security'
+    orgId: 1
+    folder: 'Wind Power - Security'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards/security
+
+  # Custom dashboards
+  - name: 'wind-power-custom'
+    orgId: 1
+    folder: 'Wind Power - Custom'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards/custom

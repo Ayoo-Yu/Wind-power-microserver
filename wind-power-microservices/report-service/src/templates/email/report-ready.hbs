@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Report Ready - Wind Power System</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #2E8B57;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .logo {
+            width: 60px;
+            height: 60px;
+            margin-bottom: 10px;
+        }
+        h1 {
+            color: #2E8B57;
+            margin: 0;
+            font-size: 24px;
+        }
+        .subtitle {
+            color: #666;
+            font-size: 16px;
+            margin-top: 5px;
+        }
+        .message {
+            background-color: #e8f5e8;
+            border: 1px solid #2E8B57;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+        .message h3 {
+            color: #2E8B57;
+            margin-top: 0;
+            font-size: 18px;
+        }
+        .report-info {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            border-left: 4px solid #2E8B57;
+        }
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 5px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .info-label {
+            font-weight: 600;
+            color: #495057;
+        }
+        .info-value {
+            color: #6c757d;
+        }
+        .actions {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .button {
+            display: inline-block;
+            background-color: #2E8B57;
+            color: white;
+            padding: 12px 25px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: 600;
+            margin: 10px;
+            transition: background-color 0.3s ease;
+        }
+        .button:hover {
+            background-color: #228B22;
+        }
+        .button-secondary {
+            background-color: #6c757d;
+        }
+        .button-secondary:hover {
+            background-color: #5a6268;
+        }
+        .expiration-notice {
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .expiration-notice h4 {
+            color: #856404;
+            margin-top: 0;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e9ecef;
+            color: #6c757d;
+            font-size: 14px;
+        }
+        .footer a {
+            color: #2E8B57;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <svg class="logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="50" r="45" fill="#2E8B57" opacity="0.2"/>
+                <path d="M50 10 L60 40 L90 40 L65 60 L75 90 L50 70 L25 90 L35 60 L10 40 L40 40 Z" fill="#2E8B57"/>
+                <circle cx="50" cy="50" r="8" fill="#fff"/>
+            </svg>
+            <h1>Wind Power System</h1>
+            <div class="subtitle">Report Distribution</div>
+        </div>
+
+        <div class="message">
+            <h3>✅ Your Report is Ready</h3>
+            <p>Great news! Your requested report has been successfully generated and is now available for download.</p>
+        </div>
+
+        <div class="report-info">
+            <h3>Report Details</h3>
+            <div class="info-item">
+                <span class="info-label">Report Name:</span>
+                <span class="info-value">{{reportName}}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Type:</span>
+                <span class="info-value">{{reportType}}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Description:</span>
+                <span class="info-value">{{reportDescription}}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Generated At:</span>
+                <span class="info-value">{{generatedAt}}</span>
+            </div>
+        </div>
+
+        <div class="actions">
+            <a href="{{downloadUrl}}" class="button">📥 Download Report</a>
+            <a href="{{viewUrl}}" class="button button-secondary">👁️ View Online</a>
+        </div>
+
+        <div class="expiration-notice">
+            <h4>⏰ Important: Report Expiration</h4>
+            <p>This report will be available for download until <strong>{{expiresAt}}</strong>. Please download it before the expiration date to ensure you have access to the data.</p>
+        </div>
+
+        <div class="footer">
+            <p>This is an automated message from the Wind Power Forecasting System.</p>
+            <p>© 2024 Wind Power Systems. All rights reserved.</p>
+            <p>
+                <a href="http://windpower.com">Visit our website</a> |
+                <a href="mailto:support@windpower.com">Contact Support</a> |
+                <a href="http://windpower.com/privacy">Privacy Policy</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>

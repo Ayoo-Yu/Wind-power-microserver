@@ -1,0 +1,87 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: wind-power-microservices
+  namespace: wind-power
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.yaml
+  - postgres-deployment.yaml
+  - postgres-service.yaml
+  - redis-deployment.yaml
+  - redis-service.yaml
+  - rabbitmq-deployment.yaml
+  - rabbitmq-service.yaml
+  - api-gateway-deployment.yaml
+  - api-gateway-service.yaml
+  - meteorological-service-deployment.yaml
+  - meteorological-service-service.yaml
+  - scada-service-deployment.yaml
+  - scada-service-service.yaml
+  - power-prediction-service-deployment.yaml
+  - power-prediction-service-service.yaml
+  - report-service-deployment.yaml
+  - report-service-service.yaml
+  - tenant-service-deployment.yaml
+  - tenant-service-service.yaml
+  - wind-farm-service-deployment.yaml
+  - wind-farm-service-service.yaml
+  - ingress.yaml
+
+commonLabels:
+  app.kubernetes.io/name: wind-power
+  app.kubernetes.io/component: microservices
+  app.kubernetes.io/managed-by: kustomize
+
+images:
+  - name: api-gateway
+    newName: ghcr.io/wind-power/api-gateway
+    newTag: latest
+  - name: meteorological-service
+    newName: ghcr.io/wind-power/meteorological-service
+    newTag: latest
+  - name: scada-service
+    newName: ghcr.io/wind-power/scada-service
+    newTag: latest
+  - name: power-prediction-service
+    newName: ghcr.io/wind-power/power-prediction-service
+    newTag: latest
+  - name: report-service
+    newName: ghcr.io/wind-power/report-service
+    newTag: latest
+  - name: tenant-service
+    newName: ghcr.io/wind-power/tenant-service
+    newTag: latest
+  - name: wind-farm-service
+    newName: ghcr.io/wind-power/wind-farm-service
+    newTag: latest
+
+configMapGenerator:
+  - name: wind-power-config
+    literals:
+      - NODE_ENV=production
+      - DB_HOST=postgres-service
+      - DB_PORT=5432
+      - DB_NAME=wind_power
+      - REDIS_HOST=redis-service
+      - REDIS_PORT=6379
+      - RABBITMQ_HOST=rabbitmq-service
+      - RABBITMQ_PORT=5672
+      - JWT_SECRET=production-jwt-secret
+      - JWT_EXPIRES_IN=24h
+      - LOG_LEVEL=info
+      - METRICS_ENABLED=true
+
+secretGenerator:
+  - name: wind-power-secrets
+    literals:
+      - DB_PASSWORD=production-db-password
+      - DB_USER=wind_power_user
+      - REDIS_PASSWORD=production-redis-password
+      - RABBITMQ_USER=wind_power_user
+      - RABBITMQ_PASSWORD=production-rabbitmq-password
+      - JWT_SECRET=production-jwt-secret-key
+    type: Opaque
