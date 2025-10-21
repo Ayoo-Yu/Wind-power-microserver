@@ -379,12 +379,15 @@ def train_model(data_file_path, model_folder_today):
 
 def monitor_training(today_date):
     """监视训练过程，并在训练前更新 CSV 文件"""
-    print_section("启动训练监视线程")
-    logging.info("启动训练监视线程")
-    # Define CSV file path (Use a constant name)
-    # csv_file = os.path.join(DATASET_FOLDER, f'{today_date}.csv') # Old way
-    csv_file = os.path.join(DATASET_FOLDER, 'training_data_short.csv') # New constant name
-    model_folder_today = os.path.join(MODEL_FOLDER, today_date)
+    # 获取场站代码
+    farm_code = os.environ.get('FARM_CODE', 'DEFAULT_FARM')
+
+    print_section(f"启动训练监视线程 (场站: {farm_code})")
+    logging.info(f"启动训练监视线程 (场站: {farm_code})")
+
+    # Define CSV file path with farm code
+    csv_file = os.path.join(DATASET_FOLDER, f'training_data_short_{farm_code}.csv')
+    model_folder_today = os.path.join(MODEL_FOLDER, f'{today_date}_{farm_code}')
     
     # 确保模型文件夹存在
     os.makedirs(model_folder_today, exist_ok=True)
@@ -455,19 +458,22 @@ def monitor_prediction(today_date):
     """
     监控预测过程，确保预测任务完成
     **修改：现在查找并使用明天的预测输入文件**
-    
+
     参数:
     today_date: 当前日期，格式为YYYYMMDD
     """
-    print(f"开始监控预测过程，日期: {today_date} (将预测 {today_date} 的下一天)")
-    logging.info(f"开始监控预测过程，日期: {today_date} (将预测 {today_date} 的下一天)")
-    
+    # 获取场站代码
+    farm_code = os.environ.get('FARM_CODE', 'DEFAULT_FARM')
+
+    print(f"开始监控预测过程，日期: {today_date} (将预测 {today_date} 的下一天), 场站: {farm_code}")
+    logging.info(f"开始监控预测过程，日期: {today_date} (将预测 {today_date} 的下一天), 场站: {farm_code}")
+
     # 检查今天的预测 *运行* 是否已完成 (使用今天的标志)
     if is_predict_done(today_date):
-        print(f"今天 ({today_date}) 的预测任务已运行完成，无需再次执行")
-        logging.info(f"今天 ({today_date}) 的预测任务已运行完成，无需再次执行")
+        print(f"今天 ({today_date}) 的预测任务已运行完成，无需再次执行 (场站: {farm_code})")
+        logging.info(f"今天 ({today_date}) 的预测任务已运行完成，无需再次执行 (场站: {farm_code})")
         return
-    
+
     # 计算明天的日期字符串
     try:
         today_dt = datetime.strptime(today_date, '%Y%m%d')
@@ -479,8 +485,8 @@ def monitor_prediction(today_date):
         logging.error(f"无法解析日期: {today_date}，无法确定明天的输入文件名。")
         return
 
-    # 等待模型可用 (使用今天的模型)
-    model_folder_today = os.path.join(MODEL_FOLDER, today_date)
+    # 等待模型可用 (使用今天的模型，包含场站信息)
+    model_folder_today = os.path.join(MODEL_FOLDER, f'{today_date}_{farm_code}')
     max_wait_time = 7200  # 最大等待时间，单位秒
     wait_interval = 60  # 检查间隔，单位秒
     start_time = time.time()
@@ -515,22 +521,22 @@ def monitor_prediction(today_date):
             time.sleep(wait_interval)
             continue
         
-        # 检查是否有 *明天* 的预测输入文件
-        csv_file = os.path.join(PREC_SV_FOLDER, f"predict_input_{tomorrow_date_str}.csv")
+        # 检查是否有 *明天* 的预测输入文件（添加场站标识）
+        csv_file = os.path.join(PREC_SV_FOLDER, f"predict_input_{tomorrow_date_str}_{farm_code}.csv")
         if not os.path.exists(csv_file):
-            print(f"明天的预测输入文件 ({tomorrow_date_str}) 不存在，等待 {wait_interval} 秒后重试: {csv_file}")
-            logging.info(f"明天的预测输入文件 ({tomorrow_date_str}) 不存在，等待 {wait_interval} 秒后重试: {csv_file}")
+            print(f"明天的预测输入文件 ({tomorrow_date_str}_{farm_code}) 不存在，等待 {wait_interval} 秒后重试: {csv_file}")
+            logging.info(f"明天的预测输入文件 ({tomorrow_date_str}_{farm_code}) 不存在，等待 {wait_interval} 秒后重试: {csv_file}")
             time.sleep(wait_interval)
             continue
-        
+
         # 执行预测
-        print(f"✅ 发现明天的预测文件：{csv_file}，使用今天的模型执行预测...")
-        logging.info(f"✅ 发现明天的预测文件：{csv_file}，使用今天的模型执行预测...")
-        
+        print(f"✅ 发现明天的预测文件：{csv_file}，使用今天的模型执行预测 (场站: {farm_code})...")
+        logging.info(f"✅ 发现明天的预测文件：{csv_file}，使用今天的模型执行预测 (场站: {farm_code})...")
+
         # --- 新增：检查生产模型和类型文件 ---
         production_model_path = os.path.join(model_folder_today, 'best_models', 'production_model.joblib')
         best_model_type_path = os.path.join(model_folder_today, 'best_model_type.txt')
-        
+
         prod_model_exists = os.path.exists(production_model_path)
         type_file_content = None
         if os.path.exists(best_model_type_path):
@@ -554,11 +560,11 @@ def monitor_prediction(today_date):
             logging.info(f"ℹ️ 未检测到生产模型，或类型文件标记为 '{type_file_content}'。预测将尝试使用评估阶段的最佳模型。")
         # --- 检查结束 ---
 
-        # 创建输出目录 (使用今天的日期)
-        output_dir = os.path.join(OUTPUT_DIR_PRE, today_date)
+        # 创建输出目录 (使用今天的日期和场站信息)
+        output_dir = os.path.join(OUTPUT_DIR_PRE, f'{today_date}_{farm_code}')
         os.makedirs(output_dir, exist_ok=True)
-        # 输出文件名仍然使用今天的日期，表示是今天运行的预测
-        output_file = os.path.join(output_dir, f"predict_output_{today_date}.csv") 
+        # 输出文件名包含场站标识
+        output_file = os.path.join(output_dir, f"predict_output_{today_date}_{farm_code}.csv") 
         
         print(f"输出文件将保存到: {output_file}")
         logging.info(f"输出文件将保存到: {output_file}")
@@ -610,13 +616,27 @@ def main():
     parser = argparse.ArgumentParser(description="Auto Pre-Train script for short/middle term models.")
     parser.add_argument("--mode", type=str, choices=['train', 'predict', 'all'], default='all',
                         help="Run mode: 'train' for training only, 'predict' for prediction only, 'all' for both.")
+    parser.add_argument("--farm_code", type=str, default='DEFAULT_FARM',
+                        help="Farm code for multi-farm support (DEFAULT_FARM, zyx01, zyx02, etc.)")
     args = parser.parse_args()
 
-    print_section(f"自动训练预测系统启动 - 模式: {args.mode.upper()}")
-    logging.info(f"自动训练预测系统启动 - 模式: {args.mode.upper()}")
+    # 验证场站代码
+    valid_farm_codes = ['DEFAULT_FARM', 'zyx01', 'zyx02']
+    if args.farm_code not in valid_farm_codes:
+        print(f"无效的场站代码: {args.farm_code}，有效场站: {valid_farm_codes}")
+        logging.error(f"无效的场站代码: {args.farm_code}，有效场站: {valid_farm_codes}")
+        return
+
+    print_section(f"自动训练预测系统启动 - 模式: {args.mode.upper()}, 场站: {args.farm_code}")
+    logging.info(f"自动训练预测系统启动 - 模式: {args.mode.upper()}, 场站: {args.farm_code}")
     today_date = Today # Today is defined in config_short or equivalent
     print(f"今天的日期是: {today_date}")
     logging.info(f"今天的日期是: {today_date}")
+
+    # 设置环境变量供子进程使用
+    os.environ['FARM_CODE'] = args.farm_code
+    print(f"设置环境变量 FARM_CODE = {args.farm_code}")
+    logging.info(f"设置环境变量 FARM_CODE = {args.farm_code}")
 
     train_thread = None
     predict_thread = None

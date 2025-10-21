@@ -101,17 +101,18 @@ def map_csv_to_operational_model(row_dict, model_class):
 @operational_data_upload_bp.route('/api/upload_operational_csv', methods=['POST'])
 def upload_operational_csv():
     """
-    处理运营数据CSV文件上传，支持分块处理和批量upsert操作
+    处理运营数据CSV文件上传，支持分块处理和批量upsert操作（支持多场站）
     """
     if 'file' not in request.files:
         return jsonify({"error": "请提供文件"}), 400
-    
+
     file = request.files['file']
     table_name = request.form.get('table_name')
+    farm_code = request.form.get('farm_code', 'DEFAULT_FARM')  # 新增场站参数
 
     if file.filename == '':
         return jsonify({"error": "未选择文件"}), 400
-        
+
     if not table_name or table_name not in OPERATIONAL_TABLE_MODEL_MAP:
         return jsonify({
             "error": f"无效或缺失的 'table_name'。必须是以下之一: {list(OPERATIONAL_TABLE_MODEL_MAP.keys())}"
@@ -121,7 +122,18 @@ def upload_operational_csv():
         return jsonify({"error": "无效的文件类型。仅支持CSV文件。"}), 400
 
     TargetModel = OPERATIONAL_TABLE_MODEL_MAP[table_name]
-    
+
+    # 验证场站代码
+    from db_models.report_config import WindFarm
+    try:
+        with db_session() as session:
+            farm = session.query(WindFarm).filter(WindFarm.farm_code == farm_code).first()
+            if not farm:
+                return jsonify({"error": f"指定的场站代码 '{farm_code}' 不存在"}), 400
+    except Exception as e:
+        logger.warning(f"验证场站代码失败: {e}，使用默认场站")
+        farm_code = 'DEFAULT_FARM'
+
     total_inserted_count = 0
     total_updated_count = 0
     total_error_count = 0
@@ -152,19 +164,22 @@ def upload_operational_csv():
                 for index, row in chunk_df.iterrows():
                     original_row_dict = row.to_dict()
                     global_row_index = (processed_chunks - 1) * CHUNK_SIZE + index + 1
-                    
+
                     try:
                         model_data = map_csv_to_operational_model(original_row_dict, TargetModel)
-                        
+
+                        # 添加场站信息
+                        model_data['farm_code'] = farm_code
+
                         # 验证时间戳
                         target_timestamp = model_data.get('timestamp')
                         if target_timestamp is None or pd.isna(target_timestamp):
                             raise ValueError(f"无法解析时间戳或时间戳缺失")
-                        
+
                         # 过滤出有效的模型属性
                         valid_model_keys = {k for k in model_data if hasattr(TargetModel, k)}
                         filtered_model_data = {k: model_data[k] for k in valid_model_keys}
-                        
+
                         chunk_timestamps_valid.append(target_timestamp)
                         update_candidates[target_timestamp] = filtered_model_data
 
@@ -174,15 +189,16 @@ def upload_operational_csv():
                         all_errors.append(err_msg)
                         current_app.logger.error(f"处理第 {global_row_index} 行时出错，表 {table_name}: {e}")
 
-                # 检查数据库中是否存在相同时间戳的记录
+                # 检查数据库中是否存在相同时间戳的记录（考虑场站）
                 existing_records_dict = {}
                 if chunk_timestamps_valid:
                     try:
                         existing_records = session.query(TargetModel).filter(
-                            TargetModel.timestamp.in_(chunk_timestamps_valid)
+                            TargetModel.timestamp.in_(chunk_timestamps_valid),
+                            TargetModel.farm_code == farm_code  # 添加场站过滤条件
                         ).all()
                         existing_records_dict = {record.timestamp: record for record in existing_records}
-                        current_app.logger.info(f"第 {processed_chunks} 块: 在 {len(chunk_timestamps_valid)} 个有效时间戳中找到 {len(existing_records_dict)} 个现有记录")
+                        current_app.logger.info(f"第 {processed_chunks} 块: 在场站 {farm_code} 的 {len(chunk_timestamps_valid)} 个有效时间戳中找到 {len(existing_records_dict)} 个现有记录")
                     except Exception as db_query_error:
                         current_app.logger.error(f"第 {processed_chunks} 块: 数据库查询失败: {db_query_error}", exc_info=True)
 
@@ -220,20 +236,22 @@ def upload_operational_csv():
                         session.rollback()
 
             # 最终提交所有更改
-            current_app.logger.info(f"完成处理表 {table_name} 的所有块。总插入: {total_inserted_count}, 总更新: {total_updated_count}, 总错误: {total_error_count}")
+            current_app.logger.info(f"完成处理表 {table_name} 的所有块（场站: {farm_code}）。总插入: {total_inserted_count}, 总更新: {total_updated_count}, 总错误: {total_error_count}")
             try:
                 session.commit()
                 current_app.logger.info(f"表 {table_name} 最终提交成功")
-                
+
                 if total_error_count == 0:
                     return jsonify({
                         "message": f"成功处理表 {table_name} 的CSV数据",
+                        "farm_code": farm_code,
                         "inserted_count": total_inserted_count,
                         "updated_count": total_updated_count
                     }), 200
                 else:
                     return jsonify({
                         "warning": f"处理表 {table_name} 的CSV数据时遇到 {total_error_count} 个错误",
+                        "farm_code": farm_code,
                         "inserted_count": total_inserted_count,
                         "updated_count": total_updated_count,
                         "error_count": total_error_count,

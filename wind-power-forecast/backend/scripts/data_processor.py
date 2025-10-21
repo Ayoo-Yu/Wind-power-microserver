@@ -28,9 +28,16 @@ def preprocess_data(data):
     
     return X, y
 
-def preprocess_data_pre(data):
+def preprocess_data_pre(data, farm_code='DEFAULT_FARM'):
     """
-    数据预处理：转换时间戳，提取时间特征，分离特征和目标变量
+    数据预处理：转换时间戳，提取时间特征，分离特征和目标变量（支持多场站）
+
+    Args:
+        data: 输入数据DataFrame
+        farm_code: 场站代码
+
+    Returns:
+        tuple: (特征数据, 时间戳)
     """
     data['Timestamp'] = pd.to_datetime(data['Timestamp'])
     data['Year'] = data['Timestamp'].dt.year
@@ -51,9 +58,18 @@ def split_data(X, y, train_ratio=0.9):
     y_train, y_val = y[:split_index], y[split_index:]
     return X_train, X_val, y_train, y_val
 
-def feature_engineering(X_train, X_val, lags):
+def feature_engineering(X_train, X_val, lags, farm_code='DEFAULT_FARM'):
     """
-    特征工程：特征组合、滞后特征等
+    特征工程：特征组合、滞后特征等（支持多场站）
+
+    Args:
+        X_train: 训练集特征
+        X_val: 验证集特征
+        lags: 滞后期数
+        farm_code: 场站代码
+
+    Returns:
+        tuple: (处理后的训练集特征, 处理后的验证集特征)
     """
     # Attempt to identify wind speed columns, default to empty lists if not found
     ws10_cols = [col for col in X_train.columns if col.startswith('ws10_')]

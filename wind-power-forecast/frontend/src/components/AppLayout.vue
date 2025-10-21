@@ -104,6 +104,10 @@
           <h1 class="header-title">中国三峡集团风电功率预测平台</h1>
         </div>
         <div class="header-right">
+          <!-- 场站选择器 -->
+          <FarmSelector @farm-changed="handleFarmChanged" />
+
+          <!-- 用户菜单 -->
           <el-dropdown @command="handleCommand">
             <span class="user-profile">
               <el-avatar :size="32" class="avatar">{{ userInitial }}</el-avatar>
@@ -150,6 +154,10 @@ import {
   Cloudy
 } from '@element-plus/icons-vue'
 
+// 导入场站选择器组件
+import FarmSelector from './FarmSelector.vue'
+import farmService from '../utils/farmService'
+
 export default {
   name: 'AppLayout',
   components: {
@@ -166,6 +174,7 @@ export default {
     Upload,
     Histogram,
     Cloudy,
+    FarmSelector,
   },
   setup() {
     const isCollapsed = ref(false)
@@ -358,6 +367,24 @@ export default {
       }
     }
     
+    // 处理场站切换
+    const handleFarmChanged = (farmCode) => {
+      console.log(`场站已切换到: ${farmCode}`)
+
+      // 使用farmService进行全局状态管理
+      farmService.setCurrentFarm(farmCode)
+
+      // 可以在这里添加其他全局逻辑
+      // 例如：更新Axios请求头、触发全局事件等
+
+      // 当前页面的刷新逻辑可以通过子组件处理
+      // 或者在这里触发路由重新加载
+      if (router.currentRoute.value.path !== '/') {
+        // 如果不在首页，可以选择刷新当前页面数据
+        // 这里可以添加具体的业务逻辑
+      }
+    }
+
     // 处理退出登录
     const handleLogout = () => {
       ElMessageBox.confirm('确定要退出登录吗?', '提示', {
@@ -367,12 +394,12 @@ export default {
       }).then(() => {
         // 清除localStorage中的所有用户相关信息
         localStorage.removeItem('user')
-        
+
         // 清除访问令牌 (关键修改)
         localStorage.removeItem('accessToken')
-        
+
         ElMessage.success('已成功退出登录')
-        
+
         // 重定向到登录页
         router.push('/login')
       }).catch(() => {
@@ -396,6 +423,7 @@ export default {
       userInitial,
       userName,
       handleCommand,
+      handleFarmChanged,
       hasPermission,
       isAuthReady, // 暴露认证状态
       isAuthLoading // 暴露认证加载状态
@@ -562,6 +590,7 @@ export default {
 .header-right {
   display: flex;
   align-items: center;
+  gap: 16px;
 }
 
 .user-profile {

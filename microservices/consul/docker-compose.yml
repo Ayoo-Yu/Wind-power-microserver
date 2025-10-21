@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  consul-server:
+    image: hashicorp/consul:1.15
+    container_name: consul-server
+    ports:
+      - "8500:8500"   # HTTP UI and API
+      - "8600:8600/udp" # DNS interface
+    volumes:
+      - ./config:/consul/config
+      - ./data:/consul/data
+    command: >
+      consul agent -server -bootstrap-expect=1 -data-dir=/consul/data
+      -config-dir=/consul/config -client=0.0.0.0 -ui
+    environment:
+      - CONSUL_BIND_INTERFACE=eth0
+    networks:
+      - microservices-network
+
+  consul-client:
+    image: hashicorp/consul:1.15
+    container_name: consul-client
+    depends_on:
+      - consul-server
+    volumes:
+      - ./client-config:/consul/config
+    command: >
+      consul agent -data-dir=/consul/data -config-dir=/consul/config
+      -retry-join=consul-server -client=0.0.0.0
+    environment:
+      - CONSUL_BIND_INTERFACE=eth0
+    networks:
+      - microservices-network
+
+networks:
+  microservices-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

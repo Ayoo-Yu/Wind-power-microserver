@@ -10,10 +10,11 @@ from db_session import db_session
 logger = logging.getLogger(__name__)
 
 class WeatherDataService:
-    """气象数据处理服务类"""
-    
+    """气象数据处理服务类（支持多场站）"""
+
     def __init__(self):
         self.supported_formats = ['.csv', '.txt', '.data']
+        self.default_farm_code = 'DEFAULT_FARM'
         
     def process_weather_file_local(self, file_path: str, 
                                  processing_options: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -56,30 +57,34 @@ class WeatherDataService:
                 "error": str(e)
             }
     
-    def process_weather_file(self, file_path: str, target_table: str, 
+    def process_weather_file(self, file_path: str, target_table: str,
                            processing_options: Dict[str, Any] = None) -> Dict[str, Any]:
-        """处理气象数据文件"""
+        """处理气象数据文件（支持多场站）"""
         try:
+            # 获取场站代码
+            farm_code = processing_options.get('farm_code', self.default_farm_code) if processing_options else self.default_farm_code
+
             # 1. 文件格式检查
             if not self._is_supported_format(file_path):
                 raise Exception(f"不支持的文件格式: {file_path}")
-            
+
             # 2. 读取数据
             df = self._read_weather_data(file_path, processing_options)
-            
+
             # 3. 数据验证
             validation_result = self._validate_data(df)
             if not validation_result['valid']:
                 raise Exception(f"数据验证失败: {validation_result['errors']}")
-            
-            # 4. 数据处理
-            processed_df = self._process_data(df, processing_options)
-            
-            # 5. 插入数据库
-            insert_result = self._insert_to_database(processed_df, target_table)
-            
+
+            # 4. 数据处理（添加场站信息）
+            processed_df = self._process_data(df, processing_options, farm_code)
+
+            # 5. 插入数据库（包含场站信息）
+            insert_result = self._insert_to_database(processed_df, target_table, farm_code)
+
             return {
                 "success": True,
+                "farm_code": farm_code,
                 "records_processed": len(df),
                 "records_inserted": insert_result['inserted_count'],
                 "processing_summary": {
@@ -88,7 +93,7 @@ class WeatherDataService:
                     "inserted_records": insert_result['inserted_count']
                 }
             }
-            
+
         except Exception as e:
             logger.error(f"处理气象数据文件失败: {e}")
             return {
@@ -165,15 +170,20 @@ class WeatherDataService:
     
 
     
-    def _process_data(self, df: pd.DataFrame, options: Dict[str, Any] = None) -> pd.DataFrame:
-        """数据处理（插值、单位转换等）"""
+    def _process_data(self, df: pd.DataFrame, options: Dict[str, Any] = None, farm_code: str = None) -> pd.DataFrame:
+        """数据处理（插值、单位转换等，支持多场站）"""
         processed_df = df.copy()
-        
+
+        # 添加场站信息
+        if farm_code:
+            processed_df['farm_code'] = farm_code
+            logger.info(f"为数据添加场站标识: {farm_code}")
+
         if not options:
             return processed_df
-        
+
         # 基础时间列处理（如果存在）
-        time_cols = [col for col in processed_df.columns if any(keyword in col.lower() 
+        time_cols = [col for col in processed_df.columns if any(keyword in col.lower()
                     for keyword in ['time', 'date', 'datetime', '时间', '日期'])]
         if time_cols:
             try:
@@ -182,75 +192,141 @@ class WeatherDataService:
                 logger.info(f"时间列处理成功: {main_time_col}")
             except Exception as e:
                 logger.warning(f"时间列处理失败: {e}")
-        
+
         # 数据插值
         if options.get('interpolate', False):
             numeric_columns = processed_df.select_dtypes(include=[np.number]).columns
             processed_df[numeric_columns] = processed_df[numeric_columns].interpolate(method='linear')
-        
+
         # 基础缺失值处理（仅在插值选项启用时）
         if options.get('interpolate', False):
             # 对缺失值进行简单处理
             processed_df = processed_df.dropna()
-        
+
         return processed_df
     
 
     
-    def _insert_to_database(self, df: pd.DataFrame, target_table: str) -> Dict[str, Any]:
-        """插入数据到数据库"""
+    def _insert_to_database(self, df: pd.DataFrame, target_table: str, farm_code: str = None) -> Dict[str, Any]:
+        """插入数据到数据库（支持多场站）"""
         try:
             with db_session() as session:
                 # 检查目标表是否存在
                 table_check_sql = f"""
-                SELECT COUNT(*) as count 
-                FROM information_schema.tables 
+                SELECT COUNT(*) as count
+                FROM information_schema.tables
                 WHERE table_name = '{target_table}'
                 """
                 result = session.execute(text(table_check_sql)).fetchone()
-                
+
                 if result.count == 0:
                     raise Exception(f"目标表 {target_table} 不存在")
-                
+
                 # 准备插入数据
                 records_to_insert = df.to_dict('records')
                 inserted_count = 0
-                
+
+                # 确保每条记录都有场站信息
+                for record in records_to_insert:
+                    if 'farm_code' not in record:
+                        record['farm_code'] = farm_code or self.default_farm_code
+
                 # 根据目标表动态构建插入语句
                 if target_table in ['train_pre_middle', 'train_pre_short', 'train_pre_supershort']:
-                    # 风电预测特征表
+                    # 风电预测特征表（需要更新以支持farm_code）
                     for record in records_to_insert:
                         try:
-                            insert_sql = f"""
-                            INSERT INTO {target_table} (
-                                time, temperature, humidity, wind_speed, wind_direction,
-                                created_at
-                            ) VALUES (
-                                :time, :temperature, :humidity, :wind_speed, :wind_direction,
-                                :created_at
-                            )
-                            """
-                            
+                            # 检查表是否有farm_code字段
+                            has_farm_code = self._check_table_has_farm_code(session, target_table)
+
+                            if has_farm_code:
+                                insert_sql = f"""
+                                INSERT INTO {target_table} (
+                                    time, temperature, humidity, wind_speed, wind_direction,
+                                    farm_code, created_at
+                                ) VALUES (
+                                    :time, :temperature, :humidity, :wind_speed, :wind_direction,
+                                    :farm_code, :created_at
+                                )
+                                """
+                            else:
+                                insert_sql = f"""
+                                INSERT INTO {target_table} (
+                                    time, temperature, humidity, wind_speed, wind_direction,
+                                    created_at
+                                ) VALUES (
+                                    :time, :temperature, :humidity, :wind_speed, :wind_direction,
+                                    :created_at
+                                )
+                                """
+
                             # 添加创建时间
                             record['created_at'] = datetime.now()
-                            
+
                             session.execute(text(insert_sql), record)
                             inserted_count += 1
-                            
+
                         except Exception as e:
                             logger.warning(f"插入记录失败: {e}")
                             continue
-                
+
+                elif target_table == 'weather_data_records':
+                    # 天气数据记录表（支持farm_code）
+                    for record in records_to_insert:
+                        try:
+                            insert_sql = f"""
+                            INSERT INTO weather_data_records (
+                                timestamp, temperature, humidity, wind_speed, wind_direction,
+                                pressure, visibility, precipitation, air_density,
+                                farm_code, created_at
+                            ) VALUES (
+                                :timestamp, :temperature, :humidity, :wind_speed, :wind_direction,
+                                :pressure, :visibility, :precipitation, :air_density,
+                                :farm_code, :created_at
+                            )
+                            """
+
+                            # 确保字段映射正确
+                            if 'time' in record and 'timestamp' not in record:
+                                record['timestamp'] = record['time']
+
+                            # 添加创建时间
+                            record['created_at'] = datetime.now()
+
+                            session.execute(text(insert_sql), record)
+                            inserted_count += 1
+
+                        except Exception as e:
+                            logger.warning(f"插入天气记录失败: {e}")
+                            continue
+
+                else:
+                    logger.warning(f"不支持的目标表: {target_table}")
+
                 session.commit()
-                
+
+                logger.info(f"成功插入 {inserted_count} 条记录到表 {target_table}，场站: {farm_code}")
+
                 return {
                     "success": True,
                     "inserted_count": inserted_count
                 }
-                
+
         except Exception as e:
             logger.error(f"数据库插入失败: {e}")
             raise Exception(f"数据库插入失败: {str(e)}")
+
+    def _check_table_has_farm_code(self, session, table_name: str) -> bool:
+        """检查表是否有farm_code字段"""
+        try:
+            result = session.execute(text("""
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_name = :table AND column_name = 'farm_code'
+            """), {"table": table_name}).fetchone()
+            return result[0] > 0
+        except Exception as e:
+            logger.warning(f"检查表字段失败: {e}")
+            return False
     
     def get_table_columns(self, table_name: str) -> List[str]:
         """获取表的列信息"""

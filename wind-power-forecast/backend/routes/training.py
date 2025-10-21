@@ -11,27 +11,32 @@ training_bp = Blueprint('training', __name__)
 
 @training_bp.route('/train', methods=['POST'])
 def start_training():
+    """开始训练（支持多场站）"""
     data = request.json
-    
+
     try:
         with db_session() as db:
-            # 创建训练记录
+            # 获取场站信息
+            farm_code = data.get('farm_code', 'DEFAULT_FARM')
+
+            # 创建训练记录（支持场站）
             record = TrainingRecord(
                 model_name=data['model_name'],
                 status='running',
                 dataset_path=data['dataset_path'],
                 created_at=datetime.utcnow(),
-                log_path=data.get('log_path')
+                log_path=data.get('log_path'),
+                farm_code=farm_code  # 新增场站字段
             )
             db.add(record)
             db.commit()
-            
+
             # 模拟训练过程（实际应替换为真实训练逻辑）
             start_time = time.time()
             # ... 训练代码 ...
             training_time = time.time() - start_time
-            
-            # 保存模型信息
+
+            # 保存模型信息（支持场站）
             new_model = Model(
                 model_name=data['model_name'],
                 model_path=data['model_path'],
@@ -40,10 +45,11 @@ def start_training():
                 dataset_id=data['dataset_id'],
                 metrics_path=data['metrics_path'],
                 parameters=data['parameters'],
-                is_active=False
+                is_active=False,
+                farm_code=farm_code  # 新增场站字段
             )
             db.add(new_model)
-            
+
             # 保存评估指标
             metrics = EvaluationMetrics(
                 model_id=new_model.id,
@@ -53,18 +59,18 @@ def start_training():
                 r2=data['metrics']['r2']
             )
             db.add(metrics)
-            
+
             # 生成存储路径
             model_type = data['model_type']
-            model_path = get_model_path(model_type, data['model_name'])
-            scaler_path = get_scaler_path(model_type)
-            metrics_path = get_metrics_path(new_model.id)
-            
+            model_path = get_model_path(model_type, data['model_name'], farm_code=farm_code)
+            scaler_path = get_scaler_path(model_type, farm_code=farm_code)
+            metrics_path = get_metrics_path(new_model.id, farm_code=farm_code)
+
             # 更新模型信息
             new_model.model_path = model_path
             new_model.scaler_path = scaler_path
             new_model.metrics_path = metrics_path
-            
+
             # 实际训练中需要将文件保存到MinIO
             minio_client.put_object(
                 MINIO_CONFIG["buckets"]["models"],
@@ -72,18 +78,19 @@ def start_training():
                 trained_model_file
             )
             # ... 类似保存scaler和metrics ...
-            
+
             # 更新训练记录
             record.status = 'success'
             record.duration = training_time
-            
+
             db.commit()
             return jsonify({
                 'message': 'Training completed',
                 'model_id': new_model.id,
+                'farm_code': farm_code,
                 'metrics': data['metrics']
             })
-            
+
     except Exception as e:
         if 'db' in locals() and 'record' in locals():
             with db_session() as db:

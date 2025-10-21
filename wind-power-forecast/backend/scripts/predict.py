@@ -22,20 +22,28 @@ def load_models_and_scaler(model_path, scaler_path):
     print(f"已加载模型。")
     return model, scaler
 
-def preprocess_new_data(file_path, lags):
+def preprocess_new_data(file_path, lags, farm_code='DEFAULT_FARM'):
     """
-    对新数据进行预处理，包括特征工程和标准化
+    对新数据进行预处理，包括特征工程和标准化（支持多场站）
+
+    Args:
+        file_path: 数据文件路径
+        lags: 滞后期数
+        farm_code: 场站代码
+
+    Returns:
+        tuple: (特征数据, 时间戳)
     """
     # 加载数据
     data = pd.read_csv(file_path)
     data = data.dropna()
-    
-    # 预处理
-    X, timestamps = preprocess_data_pre(data)  # 获取时间戳
-    
-    # 特征工程
-    X_fe, _ = feature_engineering(X, X, lags)  # 对新数据，验证集可以忽略
-    
+
+    # 预处理（传递场站信息）
+    X, timestamps = preprocess_data_pre(data, farm_code=farm_code)  # 获取时间戳
+
+    # 特征工程（传递场站信息）
+    X_fe, _ = feature_engineering(X, X, lags, farm_code=farm_code)  # 对新数据，验证集可以忽略
+
     return X_fe, timestamps
 
 
@@ -104,41 +112,61 @@ def make_predictions(model, scaler, X_new, window_size, LAGS):
     print(f"✅ 成功生成 {len(preds)} 个预测")
     return preds
 
-def save_predictions_to_csv(predictions, timestamps, output_dir, MODEL_PATH):
+def save_predictions_to_csv(predictions, timestamps, output_dir, MODEL_PATH, farm_code='DEFAULT_FARM'):
     """
-    保存预测结果到 CSV 文件
+    保存预测结果到 CSV 文件（支持多场站）
+
+    Args:
+        predictions: 预测结果数组
+        timestamps: 时间戳数组
+        output_dir: 输出目录
+        MODEL_PATH: 模型路径（用于生成文件名）
+        farm_code: 场站代码
+
+    Returns:
+        str: 保存的CSV文件路径
     """
     os.makedirs(output_dir, exist_ok=True)
-    
+
     # 计算需要跳过的样本数（用于时间窗口和滞后特征）
     window_size = 16  # 与predict函数中的默认值保持一致
     lags = 3  # 与config中的LAGS保持一致
-    
+
     # 计算实际预测结果对应的时间戳
     start_idx = window_size + lags - 1  # 第一个预测结果对应的时间戳索引
     valid_timestamps = timestamps[start_idx:start_idx + len(predictions)]
-    
+
     # 创建DataFrame，确保时间戳和预测结果一一对应
     df = pd.DataFrame({
         'Timestamp': valid_timestamps,
         'Predicted Power': predictions
     })
-    
+
     # 确保列名清晰可见
     df.columns = ['Timestamp', 'Predicted Power']
-    
+
     model_name = MODEL_PATH.split('/')[-1].split('.')[0]
     print(model_name)
-    csv_filename = f'{model_name}_prediction.csv'
+    csv_filename = f'{farm_code}_{model_name}_prediction.csv'  # 添加场站前缀
     csv_filepath = os.path.join(output_dir, csv_filename)
     df.to_csv(csv_filepath, index=False)
-    print(f"{model_name} 的预测结果已保存到 {csv_filepath}")
-    
+    print(f"{model_name} 的预测结果已保存到 {csv_filepath}（场站：{farm_code}）")
+
     return csv_filepath
     
-def predict(CSV_FILE_PATH, MODEL_PATH, SCALER_PATH, WINDOW_SIZE=16):
+def predict(CSV_FILE_PATH, MODEL_PATH, SCALER_PATH, WINDOW_SIZE=16, farm_code='DEFAULT_FARM'):
     """
-    主预测函数，接收数据文件路径、模型文件路径和 scaler 文件路径
+    主预测函数，接收数据文件路径、模型文件路径和 scaler 文件路径（支持多场站）
+
+    Args:
+        CSV_FILE_PATH: 数据文件路径
+        MODEL_PATH: 模型文件路径
+        SCALER_PATH: 标准化器文件路径
+        WINDOW_SIZE: 窗口大小
+        farm_code: 场站代码
+
+    Returns:
+        str: 预测结果文件路径
     """
     # 配置
     new_data_file_path = CSV_FILE_PATH
@@ -146,21 +174,24 @@ def predict(CSV_FILE_PATH, MODEL_PATH, SCALER_PATH, WINDOW_SIZE=16):
     scaler_path = SCALER_PATH
     window_size = WINDOW_SIZE
     output_dir = OUTPUT_DIR
-    print(f"开始预测，使用的模型路径为：{MODEL_PATH}")
+    print(f"开始预测，使用的模型路径为：{MODEL_PATH}，场站代码：{farm_code}")
+
     # 加载模型和 scaler
     try:
         models, scaler = load_models_and_scaler(model_path, scaler_path)
     except FileNotFoundError as e:
         print(e)
         return None
-    
-    # 预处理新数据
-    X_new, timestamps = preprocess_new_data(new_data_file_path, LAGS)
+
+    # 预处理新数据（传递场站信息）
+    X_new, timestamps = preprocess_new_data(new_data_file_path, LAGS, farm_code=farm_code)
     print(f"新数据预处理完成，共 {len(X_new)} 个样本。")
+
     # 预测
     predictions = make_predictions(models, scaler, X_new, window_size, LAGS)
     print("预测完成。")
-    # 保存预测结果
-    predict_file_path = save_predictions_to_csv(predictions, timestamps, output_dir, MODEL_PATH)
+
+    # 保存预测结果（传递场站信息）
+    predict_file_path = save_predictions_to_csv(predictions, timestamps, output_dir, MODEL_PATH, farm_code=farm_code)
     print("预测结果已保存。")
     return predict_file_path

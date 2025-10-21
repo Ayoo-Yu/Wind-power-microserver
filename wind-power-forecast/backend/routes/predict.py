@@ -14,6 +14,7 @@ predict_bp = Blueprint('predict', __name__)
 
 @predict_bp.route('/predict', methods=['POST'])
 def predict():
+    """执行预测（支持多场站）"""
     data = request.get_json()
     current_app.logger.info(f"收到预测请求: {data}")
     if not data or 'csvfileId' not in data or 'modelfileId' not in data or 'scalerfileId' not in data:
@@ -23,7 +24,8 @@ def predict():
     csvfileId = data['csvfileId']
     modelfileId = data['modelfileId']
     scalerfileId = data['scalerfileId']
-    current_app.logger.info(f"预测数据选择: {csvfileId}, 预测模型选择: {modelfileId}, 归一化模型选择: {scalerfileId}")
+    farm_code = data.get('farm_code', 'DEFAULT_FARM')  # 新增场站参数
+    current_app.logger.info(f"预测数据选择: {csvfileId}, 预测模型选择: {modelfileId}, 归一化模型选择: {scalerfileId}, 场站代码: {farm_code}")
 
     csvupload_path = find_file_by_id(csvfileId, current_app.config['UPLOAD_FOLDER'])
     modelupload_path = find_file_by_id(modelfileId, current_app.config['UPLOAD_FOLDER'])
@@ -48,9 +50,9 @@ def predict():
         current_app.logger.error("找不到对应的数据集或模型记录")
         return jsonify({'error': '无效的数据集或模型ID'}), 400
 
-    # 运行预测与后处理
+    # 运行预测与后处理（传递场站信息）
     try:
-        forecast_file_path = run_predict(CSV_FILE_PATH=csvupload_path, MODEL_PATH=modelupload_path, SCALER_PATH=scalerupload_path)
+        forecast_file_path = run_predict(CSV_FILE_PATH=csvupload_path, MODEL_PATH=modelupload_path, SCALER_PATH=scalerupload_path, farm_code=farm_code)
     except Exception as e:
         current_app.logger.error(f"预测过程中出错: {e}")
         return jsonify({'error': '预测过程中出错', 'details': str(e)}), 500
@@ -84,7 +86,7 @@ def predict():
         )
         current_app.logger.info(f"文件已上传到MinIO: {bucket_name}/{object_name}")
         
-        # 创建预测记录时添加minio信息
+        # 创建预测记录时添加minio信息和场站信息
         prediction_record = PredictionRecord(
             model_id=modelfileId,
             input_data_id=csvfileId,
@@ -93,6 +95,7 @@ def predict():
             output_path=f"s3://{bucket_name}/{object_name}",
             prediction_type='batch',
             status='completed',
+            farm_code=farm_code  # 新增场站字段
         )
         db.add(prediction_record)
         db.commit()
@@ -103,7 +106,8 @@ def predict():
         return jsonify({
             'download_url': download_url,
             'prediction_id': prediction_record.id,
-            'predictions': predictions_data
+            'predictions': predictions_data,
+            'farm_code': farm_code
         }), 200
         
     except Exception as e:

@@ -1,0 +1,168 @@
+version: '3.8'
+
+services:
+  # Auth Database
+  postgres-auth:
+    image: postgres:13
+    container_name: postgres-auth
+    environment:
+      POSTGRES_DB: windpower_auth
+      POSTGRES_USER: auth_user
+      POSTGRES_PASSWORD: auth_password
+    volumes:
+      - postgres-auth-data:/var/lib/postgresql/data
+      - ./init/auth:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auth_user -d windpower_auth"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Data Database
+  postgres-data:
+    image: postgres:13
+    container_name: postgres-data
+    environment:
+      POSTGRES_DB: windpower_data
+      POSTGRES_USER: data_user
+      POSTGRES_PASSWORD: data_password
+    volumes:
+      - postgres-data-data:/var/lib/postgresql/data
+      - ./init/data:/docker-entrypoint-initdb.d
+    ports:
+      - "5433:5432"
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U data_user -d windpower_data"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Prediction Database
+  postgres-prediction:
+    image: postgres:13
+    container_name: postgres-prediction
+    environment:
+      POSTGRES_DB: windpower_prediction
+      POSTGRES_USER: prediction_user
+      POSTGRES_PASSWORD: prediction_password
+    volumes:
+      - postgres-prediction-data:/var/lib/postgresql/data
+      - ./init/prediction:/docker-entrypoint-initdb.d
+    ports:
+      - "5434:5432"
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U prediction_user -d windpower_prediction"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Report Database
+  postgres-report:
+    image: postgres:13
+    container_name: postgres-report
+    environment:
+      POSTGRES_DB: windpower_report
+      POSTGRES_USER: report_user
+      POSTGRES_PASSWORD: report_password
+    volumes:
+      - postgres-report-data:/var/lib/postgresql/data
+      - ./init/report:/docker-entrypoint-initdb.d
+    ports:
+      - "5435:5432"
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U report_user -d windpower_report"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Simulation Database
+  postgres-simulation:
+    image: postgres:13
+    container_name: postgres-simulation
+    environment:
+      POSTGRES_DB: windpower_simulation
+      POSTGRES_USER: simulation_user
+      POSTGRES_PASSWORD: simulation_password
+    volumes:
+      - postgres-simulation-data:/var/lib/postgresql/data
+      - ./init/simulation:/docker-entrypoint-initdb.d
+    ports:
+      - "5436:5432"
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U simulation_user -d windpower_simulation"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Database Administration
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@windpower.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "8080:80"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    networks:
+      - microservices-network
+    depends_on:
+      - postgres-auth
+      - postgres-data
+      - postgres-prediction
+      - postgres-report
+      - postgres-simulation
+
+  # Database Backup Service
+  db-backup:
+    image: postgres:13
+    container_name: db-backup
+    volumes:
+      - ./backup:/backup
+      - ./scripts/backup.sh:/backup.sh
+    environment:
+      - PGPASSWORD=backup_password
+    networks:
+      - microservices-network
+    command: >
+      bash -c "
+        echo '#!/bin/bash' > /backup.sh &&
+        echo 'BACKUP_DIR=/backup' >> /backup.sh &&
+        echo 'DATE=$(date +%Y%m%d_%H%M%S)' >> /backup.sh &&
+        echo 'mkdir -p $$BACKUP_DIR' >> /backup.sh &&
+        echo 'pg_dump -h postgres-auth -U auth_user -d windpower_auth > $$BACKUP_DIR/auth_$$DATE.sql' >> /backup.sh &&
+        echo 'pg_dump -h postgres-data -U data_user -d windpower_data > $$BACKUP_DIR/data_$$DATE.sql' >> /backup.sh &&
+        echo 'pg_dump -h postgres-prediction -U prediction_user -d windpower_prediction > $$BACKUP_DIR/prediction_$$DATE.sql' >> /backup.sh &&
+        echo 'pg_dump -h postgres-report -U report_user -d windpower_report > $$BACKUP_DIR/report_$$DATE.sql' >> /backup.sh &&
+        echo 'pg_dump -h postgres-simulation -U simulation_user -d windpower_simulation > $$BACKUP_DIR/simulation_$$DATE.sql' >> /backup.sh &&
+        echo 'find $$BACKUP_DIR -name \"*.sql\" -mtime +7 -delete' >> /backup.sh &&
+        chmod +x /backup.sh
+      "
+
+volumes:
+  postgres-auth-data:
+  postgres-data-data:
+  postgres-prediction-data:
+  postgres-report-data:
+  postgres-simulation-data:
+  pgadmin-data:
+
+networks:
+  microservices-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

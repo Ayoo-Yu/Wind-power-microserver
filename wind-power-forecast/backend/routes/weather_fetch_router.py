@@ -46,34 +46,34 @@ def get_connections():
 @weather_fetch_bp.route('/connections', methods=['POST'])
 @jwt_required()
 def create_connection():
-    """创建SSH连接"""
+    """创建SSH连接（支持多场站）"""
     try:
         data = request.get_json()
         current_user_id = get_jwt_identity()
-        
+
         # 验证必填字段
         required_fields = ['name', 'host', 'port', 'username', 'auth_type']
         for field in required_fields:
             if not data.get(field):
                 return jsonify({'message': f'缺少必填字段: {field}'}), 400
-        
+
         # 根据认证方式验证相应字段
         if data['auth_type'] == 'password' and not data.get('password'):
             return jsonify({'message': '密码认证需要提供密码'}), 400
         elif data['auth_type'] == 'key' and not data.get('private_key_path'):
             return jsonify({'message': '密钥认证需要提供私钥路径'}), 400
-        
+
         with db_session() as db:
             # 检查连接名称是否重复
             existing = db.query(WeatherConnection).filter(
                 WeatherConnection.name == data['name'],
                 WeatherConnection.deleted_at == None
             ).first()
-            
+
             if existing:
                 return jsonify({'message': '连接名称已存在'}), 400
-            
-            # 创建新连接
+
+            # 创建新连接（支持场站）
             connection = WeatherConnection(
                 name=data['name'],
                 host=data['host'],
@@ -83,17 +83,19 @@ def create_connection():
                 password=data.get('password', ''),
                 private_key_path=data.get('private_key_path', ''),
                 key_passphrase=data.get('key_passphrase', ''),
+                farm_code=data.get('farm_code', 'DEFAULT_FARM'),  # 新增场站字段
+                description=data.get('description', ''),  # 新增描述字段
                 created_by=current_user_id
             )
-            
+
             db.add(connection)
             db.commit()
-            
+
             return jsonify({
                 'message': '连接创建成功',
                 'id': connection.id
             }), 201
-            
+
     except Exception as e:
         logger.error(f"创建连接失败: {e}")
         return jsonify({'message': '创建连接失败'}), 500
@@ -269,46 +271,46 @@ def get_tasks():
 @weather_fetch_bp.route('/tasks', methods=['POST'])
 @jwt_required()
 def create_task():
-    """创建拉取任务"""
+    """创建拉取任务（支持多场站）"""
     try:
         data = request.get_json()
         current_user_id = get_jwt_identity()
-        
+
         # 验证必填字段
         required_fields = ['name', 'connection_id', 'remote_path', 'file_pattern', 'save_path', 'path_pattern', 'time_strategy']
         for field in required_fields:
             if not data.get(field):
                 return jsonify({'message': f'缺少必填字段: {field}'}), 400
-        
+
         with db_session() as db:
             # 验证连接存在
             connection = db.query(WeatherConnection).filter(
                 WeatherConnection.id == data['connection_id'],
                 WeatherConnection.deleted_at == None
             ).first()
-            
+
             if not connection:
                 return jsonify({'message': '指定的SSH连接不存在'}), 400
-            
+
             # 检查任务名称是否重复
             existing = db.query(WeatherTask).filter(
                 WeatherTask.name == data['name'],
                 WeatherTask.deleted_at == None
             ).first()
-            
+
             if existing:
                 return jsonify({'message': '任务名称已存在'}), 400
-            
+
             # 处理调度表达式
             schedule = data.get('schedule', '0 */6 * * *')
             if schedule == 'custom':
                 schedule = data.get('custom_schedule', '0 */6 * * *')
-            
+
             # 处理时间范围
             time_range_start = None
             time_range_end = None
             specific_time = None
-            
+
             if data['time_strategy'] == 'specific' and data.get('specific_time'):
                 specific_time = datetime.fromisoformat(data['specific_time'].replace('Z', '+00:00'))
             elif data['time_strategy'] == 'range' and data.get('time_range'):
@@ -316,8 +318,11 @@ def create_task():
                 if isinstance(time_range, list) and len(time_range) == 2:
                     time_range_start = datetime.fromisoformat(time_range[0].replace('Z', '+00:00'))
                     time_range_end = datetime.fromisoformat(time_range[1].replace('Z', '+00:00'))
-            
-            # 创建新任务
+
+            # 获取场站信息（优先使用任务的场站设置，否则使用连接的场站设置）
+            task_farm_code = data.get('farm_code', connection.farm_code)
+
+            # 创建新任务（支持场站）
             task = WeatherTask(
                 name=data['name'],
                 connection_id=data['connection_id'],
@@ -336,12 +341,14 @@ def create_task():
                 timeout=data.get('timeout', 300),
                 retry_count=data.get('retry_count', 3),
                 description=data.get('description', ''),
+                farm_code=task_farm_code,  # 新增场站字段
+                target_table=data.get('target_table', 'weather_data_records'),  # 新增目标表字段
                 created_by=current_user_id
             )
-            
+
             db.add(task)
             db.commit()
-            
+
             # 将任务添加到调度器
             try:
                 scheduler = get_scheduler()
@@ -349,12 +356,12 @@ def create_task():
                     scheduler.add_task_to_scheduler(task)
             except Exception as e:
                 logger.error(f"添加任务到调度器失败: {e}")
-            
+
             return jsonify({
                 'message': '任务创建成功',
                 'id': task.id
             }), 201
-            
+
     except Exception as e:
         logger.error(f"创建任务失败: {e}")
         return jsonify({'message': '创建任务失败'}), 500

@@ -82,6 +82,14 @@ configure_logging(app, socketio)
 # 注册数据库连接中间件
 register_middleware(app)
 
+# 初始化指标收集器
+try:
+    from utils.metrics import init_metrics
+    init_metrics()
+    app.logger.info("指标收集器初始化成功")
+except Exception as e:
+    app.logger.error(f"指标收集器初始化失败: {str(e)}")
+
 # 注册蓝图
 from routes.upload import upload_bp
 from routes.modeltrain import modeltrain_bp
@@ -108,6 +116,8 @@ from routes.report_management_router import report_management_bp
 from routes.weather_fetch_router import weather_fetch_bp
 # 新增：导入运营数据上传路由
 from routes.operational_data_upload import operational_data_upload_bp
+# 新增：导入场站管理路由
+from routes.farm_management import farm_management_bp
 
 # app.register_blueprint(upload_bp, url_prefix='/')
 app.register_blueprint(modeltrain_bp, url_prefix='/')
@@ -133,6 +143,8 @@ app.register_blueprint(report_management_bp, url_prefix='/report')
 app.register_blueprint(weather_fetch_bp, url_prefix='/weather-fetch')
 # 新增：注册运营数据上传路由
 app.register_blueprint(operational_data_upload_bp, url_prefix='/operational')
+# 新增：注册场站管理路由
+app.register_blueprint(farm_management_bp, url_prefix='/api')
 
 # 新增：初始化气象数据拉取调度器
 try:
@@ -198,6 +210,18 @@ def health_check():
         return jsonify(health_status), 503
     
     return jsonify(health_status)
+
+# 添加Prometheus指标接口
+@app.route('/metrics', methods=['GET'])
+def metrics():
+    """Prometheus指标接口"""
+    try:
+        from utils.metrics import get_metrics
+        metrics_data = get_metrics()
+        return metrics_data, 200, {'Content-Type': 'text/plain; version=0.0.4'}
+    except Exception as e:
+        current_app.logger.error(f"获取指标数据失败: {str(e)}")
+        return jsonify({"error": "获取指标数据失败"}), 500
 
 # 添加全局 OPTIONS 请求处理器
 @app.route('/', defaults={'path': ''}, methods=['OPTIONS'])

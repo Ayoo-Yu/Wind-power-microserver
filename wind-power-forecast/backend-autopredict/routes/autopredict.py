@@ -310,6 +310,35 @@ scheduler.add_job(update_pm2_status_periodically, 'interval', seconds=10, id='pm
 import atexit
 atexit.register(lambda: scheduler.shutdown())
 
+def _get_running_farm_code(prediction_type):
+    """获取正在运行的预测任务的场站代码"""
+    script_path = scripts[prediction_type]
+    success, result = safe_pm2_command(['jlist'])
+
+    if not success:
+        return None
+
+    try:
+        processes = json.loads(result.stdout) if result.stdout else []
+        script_basename = os.path.basename(script_path)
+
+        for proc in processes:
+            pm2_env = proc.get('pm2_env', {})
+            proc_name = pm2_env.get('name', '')
+            status = pm2_env.get('status', '')
+
+            # 从进程名称中提取场站代码
+            if status == "online" and script_basename in proc_name:
+                # 进程名称格式: farm_type_scriptname
+                if '_' in proc_name:
+                    farm_code = proc_name.split('_')[0]
+                    if farm_code in ['DEFAULT_FARM', 'zyx01', 'zyx02']:
+                        return farm_code
+    except:
+        pass
+
+    return None
+
 def query_pm2_state(script_path):
     """
     查询 pm2 中指定脚本的运行状态，
@@ -394,11 +423,29 @@ print(f"[{datetime.datetime.now()}] PM2状态监控后台任务已启动")
 @autopredict_bp.route('/status', methods=['GET'])
 def get_status():
     try:
+        # 查询指定场站的状态
+        farm_code = request.args.get('farm_code', 'DEFAULT_FARM')
+        prediction_type = request.args.get('type')
+
+        # 更新全局状态
+        _update_prediction_status()
+
         # 使用线程锁安全地获取当前状态的副本
         with status_lock:
             current_status = prediction_status.copy()
-        
-        # 直接返回缓存的状态，不再每次请求都执行pm2 jlist
+
+        # 如果指定了预测类型，只返回该类型的状态
+        if prediction_type:
+            if prediction_type in current_status:
+                return jsonify({
+                    prediction_type: current_status[prediction_type],
+                    'farm_code': farm_code
+                })
+            else:
+                return jsonify({'error': '无效的预测类型'}), 400
+
+        # 添加场站信息到返回结果
+        current_status['farm_code'] = farm_code
         return jsonify(current_status)
     except Exception as e:
         error_msg = f"获取状态时出错: {str(e)}\n{traceback.format_exc()}"
@@ -410,30 +457,55 @@ def get_status():
 def start_prediction():
     data = request.get_json() or {}
     prediction_type = data.get('type')
+    farm_code = data.get('farm_code', 'DEFAULT_FARM')  # 新增场站参数
+
     if prediction_type not in prediction_status:
         return jsonify({'error': '无效的预测类型'}), 400
 
+    # 验证场站代码
+    valid_farm_codes = ['DEFAULT_FARM', 'zyx01', 'zyx02']  # 可从配置获取
+    if farm_code not in valid_farm_codes:
+        return jsonify({'error': f'无效的场站代码: {farm_code}'}), 400
+
     script_path = scripts[prediction_type]
-    
+
     # 检查脚本是否存在
     if not os.path.exists(script_path):
         error_msg = f'脚本文件不存在: {script_path}'
         record_task_history(prediction_type, 'start', 'failed', error_msg)
         return jsonify({'error': error_msg}), 400
-    
-    # 使用 os.path.splitext 得到脚本文件的基本名称，去掉.py后缀作为进程名称
-    process_name = os.path.splitext(os.path.basename(script_path))[0]
-    
-    # 先检查进程是否已经运行
+
+    # 使用场站信息作为进程名称的一部分
+    process_name = f"{farm_code}_{os.path.splitext(os.path.basename(script_path))[0]}"
+
+    # 先检查进程是否已经运行（包括相同场站和类型）
     if query_pm2_state(script_path):
-        with status_lock:  # 获取锁
-            prediction_status[prediction_type] = True
-        record_task_history(prediction_type, 'start', 'success', f'进程已在运行中: {process_name}')
-        return jsonify({'message': f'{prediction_type} 预测任务已经在运行', 'status': True})
-    
-    # 使用动态确定的Python解释器路径
-    success, result = safe_pm2_command(['start', script_path, '--name', process_name, '--interpreter', python_interpreter])
-    
+        # 检查是否为相同场站的进程
+        existing_farm_status = _get_running_farm_code(prediction_type)
+        if existing_farm_status == farm_code:
+            with status_lock:  # 获取锁
+                prediction_status[prediction_type] = True
+            record_task_history(prediction_type, 'start', 'success', f'场站 {farm_code} 进程已在运行中: {process_name}')
+            return jsonify({'message': f'{prediction_type} 预测任务已经在运行 (场站: {farm_code})', 'status': True})
+        else:
+            return jsonify({
+                'error': f'{prediction_type} 预测任务正在为场站 {existing_farm_status} 运行，请先停止再启动新场站'
+            }), 400
+
+    # 为脚本传递场站参数
+    env_vars = {
+        'FARM_CODE': farm_code,
+        'PYTHONPATH': base_dir  # 确保模块路径正确
+    }
+
+    # 使用动态确定的Python解释器路径，并传递环境变量
+    success, result = safe_pm2_command([
+        'start', script_path,
+        '--name', process_name,
+        '--interpreter', python_interpreter,
+        '--merge-logs'  # 合并日志以便调试
+    ])
+
     if success:
         # 启动命令执行成功，但需要验证进程是否真的启动
         verify_success, _ = safe_pm2_command(['list'])
@@ -442,18 +514,20 @@ def start_prediction():
             if query_pm2_state(script_path):
                 with status_lock:  # 获取锁
                     prediction_status[prediction_type] = True
-                record_task_history(prediction_type, 'start', 'success', f'进程启动成功: {process_name}')
+                record_task_history(prediction_type, 'start', 'success', f'场站 {farm_code} 进程启动成功: {process_name}')
                 return jsonify({
-                    'message': f'{prediction_type} 预测任务已启动',
-                    'output': result.stdout if hasattr(result, 'stdout') else ''
+                    'message': f'{prediction_type} 预测任务已启动 (场站: {farm_code})',
+                    'output': result.stdout if hasattr(result, 'stdout') else '',
+                    'farm_code': farm_code  # 返回场站信息
                 })
             else:
                 # 命令成功但进程可能没有正常启动
-                warning_msg = f'{prediction_type} 启动命令成功，但进程可能未正常运行'
+                warning_msg = f'{prediction_type} 启动命令成功，但进程可能未正常运行 (场站: {farm_code})'
                 record_task_history(prediction_type, 'start', 'warning', warning_msg)
                 return jsonify({
                     'warning': warning_msg,
-                    'output': result.stdout if hasattr(result, 'stdout') else ''
+                    'output': result.stdout if hasattr(result, 'stdout') else '',
+                    'farm_code': farm_code
                 }), 202
         else:
             warning_msg = f'{prediction_type} 启动命令成功，但无法验证进程状态'

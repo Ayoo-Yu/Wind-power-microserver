@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # 获取环境变量，如果不存在则使用默认值
-DB_HOST = os.environ.get('DB_HOST', 'kingbase')
+DB_HOST = os.environ.get('DB_HOST', 'localhost')  # 改为localhost
 DB_PORT = os.environ.get('DB_PORT', '54321')
 DB_USER = os.environ.get('DB_USER', 'system')
 DB_PASSWORD = os.environ.get('DB_PASSWORD', '12345678ab')
