@@ -1,14 +1,16 @@
-from scripts.train_run import train_run
+from pathlib import Path
+
 from scripts.prediction_timestamp import post_process_predictions
+from windpower_core.training import run_training
+
 
 def run_modeltrain(upload_path, model, train_ratio=0.9, custom_params=None):
-    # 调用训练与预测函数
-    forecast_file_path_temp,model_filepath,scaler_filepath = train_run(
-        DATA_FILE_PATH=upload_path, 
-        MODEL=model, 
-        TRAIN_RATIO=train_ratio,
-        CUSTOM_PARAMS=custom_params
+    result = run_training(
+        data_file=Path(upload_path),
+        model=model,
+        train_ratio=train_ratio,
+        custom_params=custom_params,
     )
-    # 后处理预测结果
-    forecast_file_path = post_process_predictions(upload_path, forecast_file_path_temp)
-    return forecast_file_path,model_filepath,scaler_filepath
+
+    forecast_file_path = post_process_predictions(upload_path, str(result.forecast_file))
+    return forecast_file_path, str(result.model_file), str(result.scaler_file)

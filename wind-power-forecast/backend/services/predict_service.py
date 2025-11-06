@@ -1,9 +1,14 @@
-from scripts.predict import predict
+from pathlib import Path
+
+from windpower_core.training import run_prediction
 
 
-def run_predict(CSV_FILE_PATH, MODEL_PATH, SCALER_PATH):
-    # 调用训练与预测函数
-    print("开始预测,执行run_predict函数")
-    predcit_file_path_temp = predict(CSV_FILE_PATH=CSV_FILE_PATH, MODEL_PATH=MODEL_PATH, SCALER_PATH=SCALER_PATH,WINDOW_SIZE=16)
+def run_predict(csv_path, model_path, scaler_path, window_size=16):
+    result = run_prediction(
+        csv_path=Path(csv_path),
+        model_path=Path(model_path),
+        scaler_path=Path(scaler_path),
+        window_size=window_size,
+    )
 
-    return predcit_file_path_temp
+    return str(result.output_file)
