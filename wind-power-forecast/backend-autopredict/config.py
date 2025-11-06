@@ -21,9 +21,16 @@ MINIO_ACCESS_KEY = os.environ.get('MINIO_ACCESS_KEY', 'minioadmin')
 MINIO_SECRET_KEY = os.environ.get('MINIO_SECRET_KEY', 'minioadmin')
 MINIO_SECURE = os.environ.get('MINIO_SECURE', 'False').lower() == 'true'
 
+# Redis / Celery 配置
+REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', REDIS_URL)
+CELERY_TASK_DEFAULT_QUEUE = os.environ.get('CELERY_TASK_DEFAULT_QUEUE', 'windpower-default')
+CELERY_TIMEZONE = os.environ.get('CELERY_TIMEZONE', 'Asia/Shanghai')
+
 # 打印配置信息用于调试
 print(f"数据库连接配置: {DB_HOST}:{DB_PORT}/{DB_NAME}")
 print(f"MinIO连接配置: {'https' if MINIO_SECURE else 'http'}://{MINIO_ENDPOINT}:{MINIO_PORT}")
+print(f"任务队列配置: {REDIS_URL}")
 
 # Database Configuration
 # For local development, set DB_HOST_OVERRIDE and DB_PORT_OVERRIDE environment variables.
@@ -145,6 +152,10 @@ class Config:
     SESSION_TYPE = 'filesystem'
     SESSION_PERMANENT = False
     PERMANENT_SESSION_LIFETIME = 1800  # 30分钟
+    REDIS_URL = REDIS_URL
+    CELERY_RESULT_BACKEND = CELERY_RESULT_BACKEND
+    CELERY_TASK_DEFAULT_QUEUE = CELERY_TASK_DEFAULT_QUEUE
+    CELERY_TIMEZONE = CELERY_TIMEZONE
 
 def set_bucket_policy(client, bucket_name, policy):
     """更精确的策略配置"""

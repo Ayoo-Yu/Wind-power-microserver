@@ -11,7 +11,8 @@ SET MINIO_PORT=9900
 
 REM 设置conda环境中的Python路径
 SET PYTHON_PATH=D:\my-vue-project\wind-power-forecast\backend\wind-power-env\python.exe
-
+REDIS_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
 REM 切换到D盘
 d:
 
