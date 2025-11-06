@@ -21,6 +21,16 @@ def create_job(job_id: str, job_type: str, payload: Optional[dict] = None, user_
         return job
 
 
+def update_job_metadata(job_id: str, **kwargs):
+    with db_session() as session:
+        job = session.query(Job).filter(Job.job_id == job_id).first()
+        if not job:
+            return
+        for key, value in kwargs.items():
+            if hasattr(job, key):
+                setattr(job, key, value)
+
+
 def update_job_status(job_id: str, status: str, *, result_path: Optional[str] = None, error: Optional[str] = None):
     with db_session() as session:
         job = session.query(Job).filter(Job.job_id == job_id).first()

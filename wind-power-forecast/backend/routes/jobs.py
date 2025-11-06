@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 from celery import states
 
-from services.job_service import create_job, get_job, serialize_job
+from services.job_service import create_job, get_job, serialize_job, update_job_metadata
 from tasks.training_tasks import train_model_task
 from tasks.prediction_tasks import predict_task
 
@@ -34,6 +34,7 @@ def submit_train_job():
 
     async_result = train_model_task.apply_async(kwargs={'payload': data})
     create_job(async_result.id, 'train', payload=data)
+    update_job_metadata(async_result.id, payload=data)
     return jsonify({'job_id': async_result.id, 'status': states.PENDING}), 202
 
 
@@ -46,6 +47,7 @@ def submit_predict_job():
 
     async_result = predict_task.apply_async(kwargs={'payload': data})
     create_job(async_result.id, 'predict', payload=data)
+    update_job_metadata(async_result.id, payload=data)
     return jsonify({'job_id': async_result.id, 'status': states.PENDING}), 202
 
 

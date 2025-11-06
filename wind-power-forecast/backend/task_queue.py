@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 from celery import Celery
 
 from config import Config
+
+# 确保可以导入项目包（worker 直接运行此模块时不会经过 Flask app）
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 
 celery_app = Celery("windpower_backend")
@@ -34,6 +42,9 @@ def init_celery(app=None) -> Celery:
                     return super().__call__(*args, **kwargs)
 
         celery_app.Task = ContextTask
+
+        # 在绑定上下文后再导入任务，确保使用新的 Task 基类
+        import backend.tasks  # noqa: F401, E402
 
     return celery_app
 
