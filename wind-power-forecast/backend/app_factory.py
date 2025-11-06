@@ -28,6 +28,7 @@ from db_models import Dataset
 from db_session import db_session
 from logging_config import configure_logging
 from services.file_service import allowed_file, save_uploaded_file
+from task_queue import init_celery
 
 
 load_dotenv()
@@ -46,6 +47,10 @@ def create_app(config_object: type[Config] = Config) -> Flask:
     socketio.init_app(app, cors_allowed_origins="*")
     configure_logging(app, socketio)
     register_middleware(app)
+
+    # 初始化 Celery
+    app.celery_app = init_celery(app)
+    import backend.tasks  # noqa: F401 确保任务注册
 
     _register_blueprints(app)
     _register_internal_routes(app)
@@ -117,6 +122,7 @@ def _register_blueprints(app: Flask) -> None:
     from routes.weather_fetch_router import weather_fetch_bp
     from routes.physical_simulation_router import physical_simulation_bp
     from routes.example_route import example_bp
+    from routes.jobs import jobs_bp
 
     app.register_blueprint(modeltrain_bp, url_prefix="/")
     app.register_blueprint(training_bp, url_prefix="/")
@@ -138,6 +144,7 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(weather_fetch_bp, url_prefix="/weather-fetch")
     app.register_blueprint(physical_simulation_bp)
     app.register_blueprint(example_bp, url_prefix="/api/example")
+    app.register_blueprint(jobs_bp)
 
 
 def _register_internal_routes(app: Flask) -> None:

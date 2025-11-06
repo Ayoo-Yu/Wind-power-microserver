@@ -24,6 +24,7 @@ from .task import TaskHistory
 from .training_history import TrainingHistory
 from .user_roles import UserRole
 from .features import TrainPreShort, TrainPreMiddle
+from .job import Job
 
 # 导出所有模型，方便其他模块直接从models导入
 __all__ = [
@@ -44,5 +45,5 @@ __all__ = [
     'InstalledCapacityData', 'AvailableCapacityData', 
     'TheoreticalPowerData', 'AvailablePowerData',
     # 其他模型
-    'TaskHistory', 'TrainingHistory', 'UserRole',
+    'TaskHistory', 'TrainingHistory', 'UserRole', 'Job',
 ] 

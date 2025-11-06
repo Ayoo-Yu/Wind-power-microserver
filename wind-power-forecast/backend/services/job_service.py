@@ -1,0 +1,68 @@
+from typing import Optional
+from datetime import datetime
+
+from db_models import Job
+from db_session import db_session
+
+
+def create_job(job_id: str, job_type: str, payload: Optional[dict] = None, user_id: Optional[int] = None) -> Job:
+    with db_session() as session:
+        job = Job(
+            job_id=job_id,
+            job_type=job_type,
+            status="pending",
+            payload=payload,
+            user_id=user_id,
+            submit_time=datetime.utcnow(),
+        )
+        session.add(job)
+        session.flush()
+        session.refresh(job)
+        return job
+
+
+def update_job_status(job_id: str, status: str, *, result_path: Optional[str] = None, error: Optional[str] = None):
+    with db_session() as session:
+        job = session.query(Job).filter(Job.job_id == job_id).first()
+        if not job:
+            return
+
+        job.status = status
+        if result_path is not None:
+            job.result_path = result_path
+        if error is not None:
+            job.error = error
+        if status in {"success", "failed", "revoked"}:
+            job.end_time = datetime.utcnow()
+
+
+def mark_job_started(job_id: str):
+    with db_session() as session:
+        job = session.query(Job).filter(Job.job_id == job_id).first()
+        if not job:
+            return
+        job.status = "running"
+        job.start_time = datetime.utcnow()
+
+
+def get_job(job_id: str) -> Optional[Job]:
+    with db_session() as session:
+        job = session.query(Job).filter(Job.job_id == job_id).first()
+        if job:
+            session.expunge(job)
+        return job
+
+
+def serialize_job(job: Job) -> dict:
+    return {
+        "job_id": job.job_id,
+        "job_type": job.job_type,
+        "status": job.status,
+        "payload": job.payload,
+        "error": job.error,
+        "result_path": job.result_path,
+        "submit_time": job.submit_time.isoformat() if job.submit_time else None,
+        "start_time": job.start_time.isoformat() if job.start_time else None,
+        "end_time": job.end_time.isoformat() if job.end_time else None,
+        "user_id": job.user_id,
+    }
