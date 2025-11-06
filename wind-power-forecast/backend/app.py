@@ -1,3 +1,13 @@
+"""应用入口，使用工厂模式初始化。"""
+
+from app_factory import create_app, socketio
+
+
+app = create_app()
+
+
+if __name__ == "__main__":  # pragma: no cover - 手动运行
+    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
 # 确保在第一时间进行gevent monkey patch
 import gevent.monkey
 gevent.monkey.patch_all()
