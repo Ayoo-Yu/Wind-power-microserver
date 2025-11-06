@@ -9,16 +9,19 @@ SET DB_NAME=windpower
 SET MINIO_ENDPOINT=localhost
 SET MINIO_PORT=9900
 
+REM 设置conda环境中的Python路径
+SET PYTHON_PATH=D:\my-vue-project\wind-power-forecast\backend\wind-power-env\python.exe
+
 REM 切换到D盘
 d:
 
-REM 启动后端（在新窗口中运行）
-start cmd /k "chcp 65001 > nul && cd /d D:\my-vue-project\wind-power-forecast\backend && call conda activate wind-power-env && python app.py"
+REM 启动第一个后端 - 直接使用环境中的Python解释器
+start cmd /k "chcp 65001 > nul && cd /d D:\my-vue-project\wind-power-forecast\backend && "%PYTHON_PATH%" app.py"
 
-REM 启动后端（在新窗口中运行）
-start cmd /k "chcp 65001 > nul && cd /d D:\my-vue-project\wind-power-forecast\backend-autopredict && call conda activate wind-power-env && python app.py"
+REM 启动第二个后端
+start cmd /k "chcp 65001 > nul && cd /d D:\my-vue-project\wind-power-forecast\backend-autopredict && "%PYTHON_PATH%" app.py"
 
-REM 启动前端（在新窗口中运行）
+REM 启动前端
 start cmd /k "chcp 65001 > nul && cd /d D:\my-vue-project\wind-power-forecast\frontend && set NODE_OPTIONS=--trace-deprecation && npm run serve"
 
 REM 提示用户
@@ -28,4 +31,4 @@ echo 前端将在: http://localhost:8080
 echo.
 echo 按任意键关闭此窗口...
 pause > nul
-exit 
+exit
