@@ -13,6 +13,7 @@ from .features import TrainPreMiddle, TrainPreShort
 from .task import TaskHistory
 from .training_history import TrainingHistory
 from .user_roles import UserRole
+from .autopredict import AutopredictJobConfig
 
 # 导出所有模型，方便其他模块直接从models导入
 __all__ = [
@@ -25,5 +26,5 @@ __all__ = [
     # 新增模型到 __all__
     'TrainPreMiddle', 'TrainPreShort',
     # 其他模型
-    'TaskHistory', 'TrainingHistory', 'UserRole'
+    'TaskHistory', 'TrainingHistory', 'UserRole', 'AutopredictJobConfig'
 ] 
