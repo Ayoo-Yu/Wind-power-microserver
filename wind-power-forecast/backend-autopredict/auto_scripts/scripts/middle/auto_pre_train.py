@@ -9,6 +9,20 @@ import pandas as pd
 from datetime import datetime, timedelta
 import argparse
 
+
+def _extract_wind_farm_code(argv):
+    for idx, arg in enumerate(argv):
+        if arg == '--wind-farm-code' and idx + 1 < len(argv):
+            return argv[idx + 1]
+        if arg.startswith('--wind-farm-code='):
+            return arg.split('=', 1)[1]
+    return os.environ.get('WIND_FARM_CODE')
+
+
+wind_farm_code_arg = _extract_wind_farm_code(sys.argv)
+if wind_farm_code_arg:
+    os.environ['WIND_FARM_CODE'] = wind_farm_code_arg
+
 # --- Dynamically Add Project Root to sys.path ---
 # Calculate the path to the project root (/app) based on this file's location
 # This file is at /app/auto_scripts/scripts/middle/auto_pre_train.py
@@ -610,7 +624,13 @@ def main():
     parser = argparse.ArgumentParser(description="Auto Pre-Train script for short/middle term models.")
     parser.add_argument("--mode", type=str, choices=['train', 'predict', 'all'], default='all',
                         help="Run mode: 'train' for training only, 'predict' for prediction only, 'all' for both.")
+    parser.add_argument("--wind-farm-code", dest='wind_farm_code', default=os.environ.get('WIND_FARM_CODE'),
+                        help="Wind farm code for scoped data paths.")
     args = parser.parse_args()
+
+    if args.wind_farm_code:
+        os.environ['WIND_FARM_CODE'] = args.wind_farm_code
+        logging.info(f"使用风场编码: {args.wind_farm_code}")
 
     print_section(f"自动训练预测系统启动 - 模式: {args.mode.upper()} (中期)")
     logging.info(f"自动训练预测系统启动 - 模式: {args.mode.upper()} (中期)")

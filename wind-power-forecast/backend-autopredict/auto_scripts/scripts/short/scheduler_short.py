@@ -7,6 +7,7 @@ import sys
 import subprocess
 from datetime import datetime, timedelta, timezone
 import threading
+import argparse
 
 # 定义业务时区（北京时间，UTC+8）
 BUSINESS_TIMEZONE = timezone(timedelta(hours=8))
@@ -68,8 +69,29 @@ prediction_triggered_today = False # 记录当天预测任务是否已被触发
 prediction_launch_failures = 0
 MAX_RETRY_ATTEMPTS = 3
 
+DEFAULT_WIND_FARM_CODE = os.environ.get('DEFAULT_WIND_FARM_CODE', 'default-farm')
+
+
+def _normalize_wind_farm_code(value: str) -> str:
+    value = (value or '').strip()
+    return value or DEFAULT_WIND_FARM_CODE
+
+
+parser = argparse.ArgumentParser(description='Scheduler for short term auto prediction.')
+parser.add_argument('--wind-farm-code', dest='wind_farm_code', default=os.environ.get('WIND_FARM_CODE'))
+parser.add_argument('--run-train-now', action='store_true', help='立即执行训练任务')
+parser.add_argument('--run-predict-now', action='store_true', help='立即执行预测任务')
+parsed_args, remaining_argv = parser.parse_known_args()
+WIND_FARM_CODE = _normalize_wind_farm_code(parsed_args.wind_farm_code)
+os.environ['WIND_FARM_CODE'] = WIND_FARM_CODE
+
+# 重写 sys.argv，保留未解析的参数以兼容 schedule 库等
+sys.argv = [sys.argv[0]] + remaining_argv
+
 # 开发模式：添加命令行参数解析
-run_training_now = "--run-train-now" in sys.argv  # 检查是否有立即运行训练的参数
+run_training_now = parsed_args.run_train_now
+
+logging.info(f"scheduler_short 启动，风场编码: {WIND_FARM_CODE}")
 
 # 动态构建脚本路径，基于当前脚本的位置
 auto_pre_train_script = os.path.join(current_script_dir, "auto_pre_train.py")
@@ -288,7 +310,7 @@ def run_script(mode='train'): # Default to train
         logging.info(f"执行 auto_pre_train.py --mode {mode}")
         task_executed = True
         logging.info("标记当天训练任务为正在执行/已尝试执行...")
-        command = f"{python_cmd} {auto_pre_train_script} --mode {mode}"
+        command = f"{python_cmd} {auto_pre_train_script} --wind-farm-code {WIND_FARM_CODE} --mode {mode}"
         success, exit_code = run_command(command, async_run=True)
             
         if success:
@@ -317,7 +339,7 @@ def run_script(mode='train'): # Default to train
         logging.info(f"执行 auto_pre_train.py --mode {mode}")
         # We don't set prediction_triggered_today here, let the main loop control it
         # or the script itself will create a done flag.
-        command = f"{python_cmd} {auto_pre_train_script} --mode {mode}"
+        command = f"{python_cmd} {auto_pre_train_script} --wind-farm-code {WIND_FARM_CODE} --mode {mode}"
         success, exit_code = run_command(command, async_run=True)
 
         if success:
@@ -352,7 +374,7 @@ if run_training_now:
     run_script_in_background(mode='train') 
 
 # Add a new command-line argument for running prediction now
-run_prediction_now = "--run-predict-now" in sys.argv
+run_prediction_now = parsed_args.run_predict_now
 if run_prediction_now:
     logging.info("收到立即执行预测的命令，准备立即执行")
     run_script_in_background(mode='predict')

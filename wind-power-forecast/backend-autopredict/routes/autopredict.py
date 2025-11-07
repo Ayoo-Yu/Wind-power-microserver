@@ -9,6 +9,8 @@ import shutil
 import traceback
 import uuid
 import threading
+import base64
+from collections import defaultdict
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, create_engine
 from sqlalchemy.ext.declarative import declarative_base
@@ -18,12 +20,11 @@ from db_session import db_session  # 导入上下文管理器
 from db_models import TaskHistory
 from config import Config  # 导入Config类
 
-# 全局状态字典，其他代码依赖这个变量
-prediction_status = {
-    'short': False,
-    'medium': False,
-    'supershort': False
-}
+# 全局状态字典（按场站维度维护），其他代码依赖这个变量
+def _create_status_dict():
+    return {'supershort': False, 'short': False, 'medium': False}
+
+prediction_status = defaultdict(_create_status_dict)
 # 添加线程锁以确保线程安全
 status_lock = threading.Lock()
 
@@ -65,6 +66,122 @@ for name, path in scripts.items():
 
 # 使用配置中定义的日志目录路径
 log_dirs = Config.LOG_DIRS
+
+DEFAULT_WIND_FARM_CODE = Config.DEFAULT_WIND_FARM_CODE
+PROCESS_PREFIX = 'autopredict'
+
+
+def normalize_wind_farm_code(code: str) -> str:
+    """Normalize wind farm code with fallback to default."""
+    normalized = (code or '').strip()
+    return normalized or DEFAULT_WIND_FARM_CODE
+
+
+def resolve_request_wind_farm_code(explicit=None) -> str:
+    candidate = None
+    if isinstance(explicit, dict):
+        candidate = explicit.get('wind_farm_code') or explicit.get('windFarmCode')
+    else:
+        candidate = explicit
+    if not candidate:
+        candidate = request.headers.get('X-Windfarm-Code')
+    return normalize_wind_farm_code(candidate)
+
+
+def encode_wind_farm_code(code: str) -> str:
+    token = base64.urlsafe_b64encode(code.encode('utf-8')).decode('ascii')
+    return token.rstrip('=')
+
+
+def decode_wind_farm_code(token: str) -> str:
+    padding = '=' * (-len(token) % 4)
+    return base64.urlsafe_b64decode((token + padding).encode('ascii')).decode('utf-8')
+
+
+def build_process_name(prediction_type: str, wind_farm_code: str) -> str:
+    encoded = encode_wind_farm_code(wind_farm_code)
+    return f"{PROCESS_PREFIX}:{prediction_type}:{encoded}"
+
+
+def parse_process_name(process_name: str):
+    if not process_name or not process_name.startswith(f"{PROCESS_PREFIX}:"):
+        return None
+    parts = process_name.split(':')
+    if len(parts) != 3:
+        return None
+    _, prediction_type, encoded_code = parts
+    try:
+        wind_farm_code = decode_wind_farm_code(encoded_code)
+    except Exception:
+        return None
+    return prediction_type, wind_farm_code
+
+
+def ensure_status_entry(wind_farm_code: str):
+    with status_lock:
+        # defaultdict will create entry automatically when accessed
+        _ = prediction_status[wind_farm_code]
+
+
+def resolve_log_dir(prediction_type: str, log_key: str, wind_farm_code: str):
+    base_dir = log_dirs.get(prediction_type, {}).get(log_key)
+    if not base_dir:
+        return None
+    normalized_code = normalize_wind_farm_code(wind_farm_code)
+    if normalized_code != DEFAULT_WIND_FARM_CODE:
+        scoped_dir = os.path.join(base_dir, normalized_code)
+        os.makedirs(scoped_dir, exist_ok=True)
+        return scoped_dir
+    os.makedirs(base_dir, exist_ok=True)
+    return base_dir
+
+
+def collect_pm2_processes():
+    success, result = safe_pm2_command(['jlist'])
+    if not success:
+        print(f"查询PM2状态失败: {result}")
+        return []
+
+    output = result.stdout if hasattr(result, 'stdout') else ''
+    if not output:
+        return []
+
+    try:
+        processes = json.loads(output)
+        if isinstance(processes, list):
+            return processes
+    except json.JSONDecodeError as e:
+        print(f"解析PM2输出失败: {e}")
+    return []
+
+
+def calculate_prediction_status():
+    processes = collect_pm2_processes()
+    status_map = defaultdict(_create_status_dict)
+
+    for proc in processes:
+        pm2_env = proc.get('pm2_env', {})
+        name = pm2_env.get('name', '')
+        state = pm2_env.get('status', '')
+        parsed = parse_process_name(name)
+        if not parsed:
+            continue
+        prediction_type, wind_farm_code = parsed
+        entry = status_map[wind_farm_code]
+        if prediction_type in entry:
+            entry[prediction_type] = (state == 'online')
+
+    return status_map
+
+
+def is_process_online(process_name: str) -> bool:
+    if not process_name:
+        return False
+    for proc in collect_pm2_processes():
+        pm2_env = proc.get('pm2_env', {})
+        if pm2_env.get('name') == process_name and pm2_env.get('status') == 'online':
+            return True
+    return False
 
 # 确保所有日志目录都存在
 for type_dirs in log_dirs.values():
@@ -264,43 +381,12 @@ def safe_pm2_command(cmd_args, timeout=30, capture_output=True):
 def update_pm2_status_periodically():
     """周期性查询PM2并更新全局状态字典"""
     print(f"[{datetime.datetime.now()}] 后台任务：正在更新PM2状态...")
-    local_status = {}  # 先操作局部变量
-    
-    success, result = safe_pm2_command(['jlist'])  # 调用一次jlist
-    processes = []
-    if success:
-        output = result.stdout.strip() if result.stdout else ''
-        if output:
-            try:
-                processes = json.loads(output)
-                if not isinstance(processes, list):
-                    print(f"警告: PM2 jlist 输出不是预期的列表格式")
-                    processes = []
-            except json.JSONDecodeError as e:
-                print(f"警告: 解析PM2 jlist输出失败: {e}")
-                processes = []
-    else:
-        print(f"后台任务：执行pm2 jlist失败: {result}")
-        # 如果命令失败，保留原状态
-        return
-    
-    # 根据找到的进程计算状态
-    for key, script_path in scripts.items():
-        script_basename = os.path.basename(script_path)
-        is_online = any(
-            (script_path in proc.get('pm2_env', {}).get('pm_exec_path', '') or 
-             script_basename == proc.get('pm2_env', {}).get('name', ''))
-            and proc.get('pm2_env', {}).get('status', '') == "online"
-            for proc in processes
-        )
-        local_status[key] = is_online
-    
-    # 安全地更新全局字典
-    with status_lock:  # 获取锁
-        global prediction_status
-        prediction_status.update(local_status)  # 更新全局状态
-    
-    print(f"[{datetime.datetime.now()}] 后台任务：PM2状态已更新: {prediction_status}")
+    snapshot = calculate_prediction_status()
+    with status_lock:
+        prediction_status.clear()
+        for code, state in snapshot.items():
+            prediction_status[code] = state
+    print(f"[{datetime.datetime.now()}] 后台任务：PM2状态已更新: {dict(prediction_status)}")
 
 # 初始化后台调度器
 scheduler = BackgroundScheduler(daemon=True)  # daemon=True确保主程序退出时调度器也退出
@@ -310,50 +396,13 @@ scheduler.add_job(update_pm2_status_periodically, 'interval', seconds=10, id='pm
 import atexit
 atexit.register(lambda: scheduler.shutdown())
 
-def query_pm2_state(script_path):
-    """
-    查询 pm2 中指定脚本的运行状态，
-    只有当进程的 pm_exec_path 包含指定脚本且状态为 "online" 时才返回 True
-    """
-    success, result = safe_pm2_command(['jlist'])
-    if not success:
-        print(f"查询PM2状态失败: {result}")
-        return False
-        
-    try:
-        output = result.stdout
-        if not output or output.strip() == '[]':
-            print("PM2列表为空或未返回有效数据")
-            return False
-            
-        processes = json.loads(output)
-        script_basename = os.path.basename(script_path)
-        
-        for proc in processes:
-            pm2_env = proc.get('pm2_env', {})
-            exec_path = pm2_env.get('pm_exec_path', '')
-            proc_name = pm2_env.get('name', '')
-            status = pm2_env.get('status', '')
-            
-            # 检查脚本路径或进程名是否匹配
-            path_match = script_path in exec_path
-            name_match = script_basename == proc_name
-            
-            if (path_match or name_match) and status == "online":
-                print(f"找到匹配的运行中进程: {proc_name}")
-                return True
-                
-        return False
-    except Exception as e:
-        print(f"解析PM2状态时出错: {e}")
-        return False
-
 # 记录操作历史的辅助函数
-def record_task_history(task_type, action, status, details=None, user=None):
+def record_task_history(task_type, wind_farm_code, action, status, details=None, user=None):
     """记录任务操作历史
     
     Args:
         task_type: 任务类型 (supershort, short, medium)
+        wind_farm_code: 场站编码
         action: 操作类型 (start, stop, delete, schedule, etc.)
         status: 操作状态 (success, failed)
         details: 操作详情，可选
@@ -368,6 +417,7 @@ def record_task_history(task_type, action, status, details=None, user=None):
             task_history = TaskHistory(
                 task_id=task_id,
                 task_type=task_type,
+                wind_farm_code=wind_farm_code,
                 action=action,
                 status=status,
                 details=details,
@@ -394,12 +444,18 @@ print(f"[{datetime.datetime.now()}] PM2状态监控后台任务已启动")
 @autopredict_bp.route('/status', methods=['GET'])
 def get_status():
     try:
-        # 使用线程锁安全地获取当前状态的副本
+        wind_farm_code = resolve_request_wind_farm_code(request.args.get('wind_farm_code'))
+
+        status_snapshot = calculate_prediction_status()
+
         with status_lock:
-            current_status = prediction_status.copy()
-        
-        # 直接返回缓存的状态，不再每次请求都执行pm2 jlist
-        return jsonify(current_status)
+            prediction_status.clear()
+            for code, state in status_snapshot.items():
+                prediction_status[code] = state
+            ensure_status_entry(wind_farm_code)
+            current_state = prediction_status[wind_farm_code]
+
+        return jsonify(current_state)
     except Exception as e:
         error_msg = f"获取状态时出错: {str(e)}\n{traceback.format_exc()}"
         print(error_msg)
@@ -409,40 +465,47 @@ def get_status():
 @autopredict_bp.route('/start', methods=['POST'])
 def start_prediction():
     data = request.get_json() or {}
+    wind_farm_code = resolve_request_wind_farm_code(data)
     prediction_type = data.get('type')
-    if prediction_type not in prediction_status:
+    if prediction_type not in scripts:
         return jsonify({'error': '无效的预测类型'}), 400
 
     script_path = scripts[prediction_type]
+    process_name = build_process_name(prediction_type, wind_farm_code)
     
     # 检查脚本是否存在
     if not os.path.exists(script_path):
         error_msg = f'脚本文件不存在: {script_path}'
-        record_task_history(prediction_type, 'start', 'failed', error_msg)
+        record_task_history(prediction_type, wind_farm_code, 'start', 'failed', error_msg)
         return jsonify({'error': error_msg}), 400
     
-    # 使用 os.path.splitext 得到脚本文件的基本名称，去掉.py后缀作为进程名称
-    process_name = os.path.splitext(os.path.basename(script_path))[0]
-    
     # 先检查进程是否已经运行
-    if query_pm2_state(script_path):
-        with status_lock:  # 获取锁
-            prediction_status[prediction_type] = True
-        record_task_history(prediction_type, 'start', 'success', f'进程已在运行中: {process_name}')
+    if is_process_online(process_name):
+        with status_lock:
+            ensure_status_entry(wind_farm_code)
+            prediction_status[wind_farm_code][prediction_type] = True
+        record_task_history(prediction_type, wind_farm_code, 'start', 'success', f'进程已在运行中: {process_name}')
         return jsonify({'message': f'{prediction_type} 预测任务已经在运行', 'status': True})
     
     # 使用动态确定的Python解释器路径
-    success, result = safe_pm2_command(['start', script_path, '--name', process_name, '--interpreter', python_interpreter])
+    success, result = safe_pm2_command([
+        'start', script_path,
+        '--name', process_name,
+        '--interpreter', python_interpreter,
+        '--',
+        '--wind-farm-code', wind_farm_code
+    ])
     
     if success:
         # 启动命令执行成功，但需要验证进程是否真的启动
         verify_success, _ = safe_pm2_command(['list'])
         if verify_success:
             # 再次检查进程状态
-            if query_pm2_state(script_path):
-                with status_lock:  # 获取锁
-                    prediction_status[prediction_type] = True
-                record_task_history(prediction_type, 'start', 'success', f'进程启动成功: {process_name}')
+            if is_process_online(process_name):
+                with status_lock:
+                    ensure_status_entry(wind_farm_code)
+                    prediction_status[wind_farm_code][prediction_type] = True
+                record_task_history(prediction_type, wind_farm_code, 'start', 'success', f'进程启动成功: {process_name}')
                 return jsonify({
                     'message': f'{prediction_type} 预测任务已启动',
                     'output': result.stdout if hasattr(result, 'stdout') else ''
@@ -450,14 +513,14 @@ def start_prediction():
             else:
                 # 命令成功但进程可能没有正常启动
                 warning_msg = f'{prediction_type} 启动命令成功，但进程可能未正常运行'
-                record_task_history(prediction_type, 'start', 'warning', warning_msg)
+                record_task_history(prediction_type, wind_farm_code, 'start', 'warning', warning_msg)
                 return jsonify({
                     'warning': warning_msg,
                     'output': result.stdout if hasattr(result, 'stdout') else ''
                 }), 202
         else:
             warning_msg = f'{prediction_type} 启动命令成功，但无法验证进程状态'
-            record_task_history(prediction_type, 'start', 'warning', warning_msg)
+            record_task_history(prediction_type, wind_farm_code, 'start', 'warning', warning_msg)
             return jsonify({
                 'warning': warning_msg,
                 'output': result.stdout if hasattr(result, 'stdout') else ''
@@ -465,40 +528,38 @@ def start_prediction():
     else:
         # 启动命令执行失败
         error_msg = f'启动任务失败: {result}'
-        record_task_history(prediction_type, 'start', 'failed', error_msg)
+        record_task_history(prediction_type, wind_farm_code, 'start', 'failed', error_msg)
         return jsonify({'error': error_msg}), 500
 
 # 停止预测任务
 @autopredict_bp.route('/stop', methods=['POST'])
 def stop_prediction():
     data = request.json
+    wind_farm_code = resolve_request_wind_farm_code(data)
     prediction_type = data.get('type')
     
-    if not prediction_type or prediction_type not in prediction_status:
+    if not prediction_type or prediction_type not in scripts:
         return jsonify({'error': '无效的预测类型'}), 400
     
     try:
-        # 正常停止单个脚本
-        script_path = scripts[prediction_type]
-        script_name = os.path.splitext(os.path.basename(script_path))[0]  # 去掉.py后缀
+        process_name = build_process_name(prediction_type, wind_farm_code)
         
-        success, result = safe_pm2_command(['stop', script_name])
+        success, result = safe_pm2_command(['stop', process_name])
             
         if success:
-            with status_lock:  # 获取锁
-                prediction_status[prediction_type] = False
-            # 更新全局状态
-            _update_prediction_status()
+            with status_lock:
+                ensure_status_entry(wind_farm_code)
+                prediction_status[wind_farm_code][prediction_type] = False
             
-            message = f'{script_name} 已停止'
-            record_task_history(prediction_type, 'stop', 'success', message)
+            message = f'{process_name} 已停止'
+            record_task_history(prediction_type, wind_farm_code, 'stop', 'success', message)
             
             return jsonify({
                 'message': f'{prediction_type}预测任务已停止'
             })
         else:
             error_msg = f'停止任务失败: {result}'
-            record_task_history(prediction_type, 'stop', 'failed', error_msg)
+            record_task_history(prediction_type, wind_farm_code, 'stop', 'failed', error_msg)
             
             return jsonify({
                 'error': '停止预测任务失败',
@@ -506,7 +567,7 @@ def stop_prediction():
             }), 500
     except Exception as e:
         error_msg = f'停止预测任务异常: {str(e)}'
-        record_task_history(prediction_type, 'stop', 'failed', error_msg)
+        record_task_history(prediction_type, wind_farm_code, 'stop', 'failed', error_msg)
         
         return jsonify({
             'error': '停止预测任务失败',
@@ -519,8 +580,9 @@ def schedule_restart():
     data = request.get_json() or {}
     prediction_type = data.get('type')
     schedule_time = data.get('time')  # 格式应为 HH:mm
+    wind_farm_code = resolve_request_wind_farm_code(data)
 
-    if prediction_type not in prediction_status:
+    if prediction_type not in scripts:
         return jsonify({'error': '无效的预测类型'}), 400
     if not schedule_time:
         return jsonify({'error': '缺少重启时间参数'}), 400
@@ -529,12 +591,11 @@ def schedule_restart():
         time_obj = datetime.datetime.strptime(schedule_time, '%H:%M')
     except ValueError:
         error_msg = '时间格式错误，要求 HH:mm'
-        record_task_history(prediction_type, 'schedule', 'failed', error_msg)
+        record_task_history(prediction_type, wind_farm_code, 'schedule', 'failed', error_msg)
         return jsonify({'error': error_msg}), 400
 
     script_path = scripts[prediction_type]
-    # 使用 os.path.splitext 获取脚本文件名，去掉.py后缀作为进程名称
-    process_name = os.path.splitext(os.path.basename(script_path))[0]
+    process_name = build_process_name(prediction_type, wind_farm_code)
     
     # 先停止现有进程
     stop_success, _ = safe_pm2_command(['stop', process_name])
@@ -545,13 +606,22 @@ def schedule_restart():
     
     # 启动带定时重启的任务
     cron_expression = f'0 {time_obj.minute} {time_obj.hour} * * *'
-    success, result = safe_pm2_command(['start', script_path, '--name', process_name, '--cron', cron_expression, '--interpreter', python_interpreter])
+    success, result = safe_pm2_command([
+        'start', script_path,
+        '--name', process_name,
+        '--cron', cron_expression,
+        '--interpreter', python_interpreter,
+        '--',
+        '--wind-farm-code', wind_farm_code
+    ])
     
     if success:
-        with status_lock:  # 获取锁
-            prediction_status[prediction_type] = True
+        with status_lock:
+            ensure_status_entry(wind_farm_code)
+            prediction_status[wind_farm_code][prediction_type] = True
         record_task_history(
-            prediction_type, 
+            prediction_type,
+            wind_farm_code,
             'schedule', 
             'success', 
             f'设置定时重启: {schedule_time}'
@@ -559,38 +629,37 @@ def schedule_restart():
         return jsonify({'message': f'为 {prediction_type} 设置了每日 {schedule_time} 的定时重启'})
     else:
         error_msg = f'设置定时重启失败: {result}'
-        record_task_history(prediction_type, 'schedule', 'failed', error_msg)
+        record_task_history(prediction_type, wind_farm_code, 'schedule', 'failed', error_msg)
         return jsonify({'error': error_msg}), 500
 
 # 从 PM2 中删除任务
 @autopredict_bp.route('/delete', methods=['POST'])
 def delete_prediction():
     data = request.json
+    wind_farm_code = resolve_request_wind_farm_code(data)
     prediction_type = data.get('type')
-    if not prediction_type or prediction_type not in prediction_status:
+    if not prediction_type or prediction_type not in scripts:
         return jsonify({'error': '无效的预测类型'}), 400
     
     try:
-        script_path = scripts[prediction_type]
-        script_name = os.path.splitext(os.path.basename(script_path))[0]  # 去掉.py后缀
+        process_name = build_process_name(prediction_type, wind_farm_code)
         
-        success, result = safe_pm2_command(['delete', script_name])
+        success, result = safe_pm2_command(['delete', process_name])
         
         if success:
-            with status_lock:  # 获取锁
-                prediction_status[prediction_type] = False
-            # 更新全局状态
-            _update_prediction_status()
+            with status_lock:
+                ensure_status_entry(wind_farm_code)
+                prediction_status[wind_farm_code][prediction_type] = False
             
-            message = f'{script_name} 已从PM2删除'
-            record_task_history(prediction_type, 'delete', 'success', message)
+            message = f'{process_name} 已从PM2删除'
+            record_task_history(prediction_type, wind_farm_code, 'delete', 'success', message)
             
             return jsonify({
                 'message': f'{prediction_type}预测任务已从PM2删除'
             })
         else:
             error_msg = f'删除任务失败: {result}'
-            record_task_history(prediction_type, 'delete', 'failed', error_msg)
+            record_task_history(prediction_type, wind_farm_code, 'delete', 'failed', error_msg)
             
             return jsonify({
                 'error': '从PM2删除预测任务失败',
@@ -598,7 +667,7 @@ def delete_prediction():
             }), 500
     except Exception as e:
         error_msg = f'删除预测任务异常: {str(e)}'
-        record_task_history(prediction_type, 'delete', 'failed', error_msg)
+        record_task_history(prediction_type, wind_farm_code, 'delete', 'failed', error_msg)
         
         return jsonify({
             'error': '从PM2删除预测任务失败',
@@ -611,11 +680,11 @@ def save_pm2_config():
     success, result = safe_pm2_command(['save'])
     
     if success:
-        record_task_history('all', 'save', 'success', '保存PM2配置')
+        record_task_history('all', DEFAULT_WIND_FARM_CODE, 'save', 'success', '保存PM2配置')
         return jsonify({'message': 'PM2 任务配置已保存'})
     else:
         error_msg = f'保存配置失败: {result}'
-        record_task_history('all', 'save', 'failed', error_msg)
+        record_task_history('all', DEFAULT_WIND_FARM_CODE, 'save', 'failed', error_msg)
         return jsonify({'error': error_msg}), 500
 
 # 删除PM2保存的配置文件（新增）
@@ -624,23 +693,23 @@ def clear_pm2_save():
     success, result = safe_pm2_command(['cleardump'])
     
     if success:
-        record_task_history('all', 'clearsave', 'success', '删除PM2保存的配置')
+        record_task_history('all', DEFAULT_WIND_FARM_CODE, 'clearsave', 'success', '删除PM2保存的配置')
         return jsonify({'message': 'PM2 保存的配置已删除'})
     else:
         error_msg = f'删除保存配置失败: {result}'
-        record_task_history('all', 'clearsave', 'failed', error_msg)
+        record_task_history('all', DEFAULT_WIND_FARM_CODE, 'clearsave', 'failed', error_msg)
         return jsonify({'error': error_msg}), 500
 
 # 查询指定脚本的详细 PM2 信息
 @autopredict_bp.route('/script_info', methods=['GET'])
 def get_script_info():
     prediction_type = request.args.get('type')
-    if not prediction_type or prediction_type not in prediction_status:
+    wind_farm_code = resolve_request_wind_farm_code(request.args.get('wind_farm_code'))
+    if not prediction_type or prediction_type not in scripts:
         return jsonify({'error': '无效的预测类型'}), 400
 
     try:
-        # 获取进程名称（去掉.py后缀）
-        process_name = os.path.splitext(os.path.basename(scripts[prediction_type]))[0]
+        process_name = build_process_name(prediction_type, wind_farm_code)
         print(f"正在查询进程: {process_name}")  # 调试日志
         
         # 先检查进程是否存在
@@ -648,7 +717,7 @@ def get_script_info():
         
         if not list_success:
             error_msg = '无法获取PM2进程列表'
-            record_task_history(prediction_type, 'script_info', 'failed', error_msg)
+            record_task_history(prediction_type, wind_farm_code, 'script_info', 'failed', error_msg)
             return jsonify({
                 'error': error_msg,
                 'details': str(list_result)
@@ -664,7 +733,7 @@ def get_script_info():
             
             if describe_success:
                 # 即使进程名不在列表中，describe命令可能仍然返回信息
-                record_task_history(prediction_type, 'script_info', 'warning', '进程未在PM2列表中找到，但describe命令返回了信息')
+                record_task_history(prediction_type, wind_farm_code, 'script_info', 'warning', '进程未在PM2列表中找到，但describe命令返回了信息')
                 return jsonify({
                     'info': describe_result.stdout,
                     'process_name': process_name,
@@ -672,7 +741,7 @@ def get_script_info():
                 })
             else:
                 error_msg = f'进程 {process_name} 未运行'
-                record_task_history(prediction_type, 'script_info', 'failed', error_msg)
+                record_task_history(prediction_type, wind_farm_code, 'script_info', 'failed', error_msg)
                 return jsonify({
                     'error': error_msg,
                     'pm2_list': list_output,
@@ -684,7 +753,7 @@ def get_script_info():
         
         if not describe_success:
             error_msg = '查询进程详情失败'
-            record_task_history(prediction_type, 'script_info', 'failed', error_msg)
+            record_task_history(prediction_type, wind_farm_code, 'script_info', 'failed', error_msg)
             return jsonify({
                 'error': error_msg,
                 'details': str(describe_result)
@@ -694,13 +763,13 @@ def get_script_info():
         
         if not describe_output.strip():
             error_msg = '进程信息为空'
-            record_task_history(prediction_type, 'script_info', 'failed', error_msg)
+            record_task_history(prediction_type, wind_farm_code, 'script_info', 'failed', error_msg)
             return jsonify({
                 'error': error_msg,
                 'process_name': process_name
             }), 404
             
-        record_task_history(prediction_type, 'script_info', 'success', '查询进程详情成功')
+        record_task_history(prediction_type, wind_farm_code, 'script_info', 'success', '查询进程详情成功')
         return jsonify({
             'info': describe_output,
             'process_name': process_name
@@ -709,7 +778,7 @@ def get_script_info():
     except Exception as e:
         error_msg = f"获取脚本详情出错: {str(e)}\n{traceback.format_exc()}"
         print(error_msg)
-        record_task_history(prediction_type, 'script_info', 'failed', error_msg)
+        record_task_history(prediction_type, wind_farm_code, 'script_info', 'failed', error_msg)
         return jsonify({
             'error': '查询脚本详情失败',
             'details': error_msg
@@ -722,27 +791,27 @@ def get_logs():
     log_type = request.args.get('logType', 'train') # train, main, predict, param
     date_str = request.args.get('date', datetime.datetime.now().strftime('%Y%m%d'))
     lines = request.args.get('lines', 500, type=int)
+    wind_farm_code = resolve_request_wind_farm_code(request.args.get('wind_farm_code'))
     
-    if not prediction_type or prediction_type not in prediction_status:
+    if not prediction_type or prediction_type not in scripts:
         return jsonify({'error': '无效的预测类型'}), 400
     
     try:
         # 如果是通过PM2查询主日志
         if log_type == 'main':
-            script_path = scripts[prediction_type]
-            process_name = os.path.splitext(os.path.basename(script_path))[0]  # 去掉.py后缀
+            process_name = build_process_name(prediction_type, wind_farm_code)
             
             success, result = safe_pm2_command(['logs', '--nostream', '--lines', str(lines), process_name])
             
             if success:
-                record_task_history(prediction_type, 'logs', 'success', f'获取主日志 ({lines} 行)')
+                record_task_history(prediction_type, wind_farm_code, 'logs', 'success', f'获取主日志 ({lines} 行)')
                 return jsonify({'logs': result.stdout if hasattr(result, 'stdout') else '没有日志输出'})
             else:
                 # 尝试只获取错误日志
                 error_success, error_result = safe_pm2_command(['logs', '--nostream', '--err', '--lines', str(lines), process_name])
                 if error_success:
                     warning_msg = '无法获取完整日志，仅显示错误日志'
-                    record_task_history(prediction_type, 'logs', 'warning', warning_msg)
+                    record_task_history(prediction_type, wind_farm_code, 'logs', 'warning', warning_msg)
                     return jsonify({
                         'logs': f"警告: {warning_msg}:\n{error_result.stdout if hasattr(error_result, 'stdout') else '没有错误日志'}"
                     })
@@ -752,7 +821,7 @@ def get_logs():
                         'details': str(result),
                         'error_log_details': str(error_result) if 'error_result' in locals() else '未尝试获取错误日志'
                     }
-                    record_task_history(prediction_type, 'logs', 'failed', json.dumps(details))
+                    record_task_history(prediction_type, wind_farm_code, 'logs', 'failed', json.dumps(details))
                     return jsonify({
                         'error': error_msg, 
                         'details': str(result),
@@ -760,7 +829,7 @@ def get_logs():
                     }), 500
         else:
             # 从对应的日志目录读取文件
-            log_dir = log_dirs[prediction_type].get(log_type)
+            log_dir = resolve_log_dir(prediction_type, log_type, wind_farm_code)
             if not log_dir:
                 return jsonify({'error': f'无效的日志类型: {log_type}'}), 400
             
@@ -781,7 +850,6 @@ def get_logs():
                 log_files = glob.glob(os.path.join(log_dir, f"{date_str}*.log"))
                 # For short/medium, also consider the _train_done.flag logic if needed for disambiguation
                 # The existing logic for train_flag_path for short/medium seems okay to keep as is.
-                train_flag_path = os.path.join(log_dir, f"{date_str}_train_done.flag")
             elif log_type == 'predict':
                 # 预测日志格式
                 log_files = glob.glob(os.path.join(log_dir, f"{date_str}*.log"))
@@ -868,7 +936,7 @@ def get_logs():
                 #     return jsonify({'error': f'日期格式无效: {date_str}'}), 400
             
             if not log_files:
-                record_task_history(prediction_type, 'logs', 'failed', f'未找到{date_str}的{log_type}类型日志文件')
+                record_task_history(prediction_type, wind_farm_code, 'logs', 'failed', f'未找到{date_str}的{log_type}类型日志文件')
                 return jsonify({'logs': f'未找到{date_str}的{log_type}日志文件'})
             
             # 读取最新的日志文件
@@ -883,15 +951,15 @@ def get_logs():
                 file_info = f"文件: {os.path.basename(latest_log)}\n日期: {datetime.datetime.fromtimestamp(os.path.getmtime(latest_log)).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
                 log_content = file_info + log_content
                 
-                record_task_history(prediction_type, 'logs', 'success', f'获取{log_type}日志 ({lines} 行)')
+                record_task_history(prediction_type, wind_farm_code, 'logs', 'success', f'获取{log_type}日志 ({lines} 行)')
                 return jsonify({'logs': log_content})
             except Exception as e:
                 error_msg = f'读取日志文件失败: {str(e)}'
-                record_task_history(prediction_type, 'logs', 'failed', error_msg)
+                record_task_history(prediction_type, wind_farm_code, 'logs', 'failed', error_msg)
                 return jsonify({'error': error_msg}), 500
     except Exception as e:
         error_msg = f'获取日志失败: {str(e)}'
-        record_task_history(prediction_type, 'logs', 'failed', error_msg)
+        record_task_history(prediction_type, wind_farm_code, 'logs', 'failed', error_msg)
         return jsonify({'error': error_msg}), 500
 
 # 加载已保存的 PM2 配置（基于 pm2 resurrect）
@@ -904,52 +972,28 @@ def resurrect():
         try:
             # 获取PM2状态并更新全局字典，但不返回响应
             _update_prediction_status()
-            record_task_history('all', 'resurrect', 'success', '恢复PM2配置')
+            record_task_history('all', DEFAULT_WIND_FARM_CODE, 'resurrect', 'success', '恢复PM2配置')
             return jsonify({"message": "成功恢复PM2配置"}), 200
         except Exception as e:
             error_msg = f"恢复配置后更新状态失败: {str(e)}\n{traceback.format_exc()}"
             print(error_msg)
-            record_task_history('all', 'resurrect', 'warning', error_msg)
+            record_task_history('all', DEFAULT_WIND_FARM_CODE, 'resurrect', 'warning', error_msg)
             # 尽管更新状态失败，但resurrect命令已经成功执行，所以仍然返回成功
             return jsonify({"message": "PM2配置已恢复，但更新状态失败", "warning": "状态可能不准确，请刷新页面"}), 200
     else:
         error_msg = f"恢复PM2配置失败: {result}"
-        record_task_history('all', 'resurrect', 'failed', error_msg)
+        record_task_history('all', DEFAULT_WIND_FARM_CODE, 'resurrect', 'failed', error_msg)
         return jsonify({"error": error_msg}), 500
 
 # 添加一个内部函数用于更新状态，但不返回HTTP响应
 def _update_prediction_status():
     """更新全局prediction_status字典，但不返回响应"""
     try:
-        success, result = safe_pm2_command(['jlist'])
-        if not success:
-            print(f"更新状态失败: {result}")
-            return False
-            
-        output = result.stdout
-        if not output or output.strip() == '[]':
-            # PM2可能没有运行任何进程，但不一定是错误
-            processes = []
-        else:
-            processes = json.loads(output)
-            
-        # 更新每个预测任务的状态
-        local_status = {}
-        for key, script_path in scripts.items():
-            script_basename = os.path.basename(script_path)
-            is_online = any(
-                (script_path in proc.get('pm2_env', {}).get('pm_exec_path', '') or 
-                 script_basename == proc.get('pm2_env', {}).get('name', ''))
-                and proc.get('pm2_env', {}).get('status', '') == "online"
-                for proc in processes
-            )
-            local_status[key] = is_online
-        
-        # 安全地更新全局字典
-        with status_lock:  # 获取锁
-            global prediction_status
-            prediction_status.update(local_status)
-        
+        snapshot = calculate_prediction_status()
+        with status_lock:
+            prediction_status.clear()
+            for code, state in snapshot.items():
+                prediction_status[code] = state
         return True
     except Exception as e:
         error_msg = f"更新状态时出错: {str(e)}\n{traceback.format_exc()}"
@@ -963,6 +1007,7 @@ def get_task_history():
     action = request.args.get('action')   # 可选，筛选特定操作
     limit = request.args.get('limit', 50, type=int)  # 默认返回最近50条记录
     offset = request.args.get('offset', 0, type=int)  # 分页偏移量
+    wind_farm_code = request.args.get('wind_farm_code') or request.headers.get('X-Windfarm-Code')
     
     try:
         with db_session() as db:
@@ -973,6 +1018,8 @@ def get_task_history():
                 query = query.filter(TaskHistory.task_type == task_type)
             if action:
                 query = query.filter(TaskHistory.action == action)
+            if wind_farm_code:
+                query = query.filter(TaskHistory.wind_farm_code == wind_farm_code)
                 
             # 应用分页
             total = query.count()
@@ -985,6 +1032,7 @@ def get_task_history():
                     'id': item.id,
                     'task_id': item.task_id,
                     'task_type': item.task_type,
+                    'wind_farm_code': item.wind_farm_code,
                     'action': item.action,
                     'status': item.status,
                     'created_at': item.created_at.strftime('%Y-%m-%d %H:%M:%S'),
@@ -1011,6 +1059,7 @@ def get_task_status():
     date_str = request.args.get('date', datetime.datetime.now().strftime('%Y%m%d'))
     # 获取参数优化执行日（0-6 表示周一到周日）
     param_opt_day = request.args.get('param_opt_day', None)
+    wind_farm_code = resolve_request_wind_farm_code(request.args.get('wind_farm_code'))
     if param_opt_day is not None:
         param_opt_day = int(param_opt_day)
     else:
@@ -1022,7 +1071,7 @@ def get_task_status():
         }
         param_opt_day = param_opt_day_map.get(prediction_type, 5)
     
-    if not prediction_type or prediction_type not in prediction_status:
+    if not prediction_type or prediction_type not in scripts:
         return jsonify({'error': '无效的预测类型'}), 400
     
     # 初始化状态对象
@@ -1037,6 +1086,11 @@ def get_task_status():
         'predictionCompleted': False # 新增字段，用于区分 short/medium 的完成与运行中
     }
     
+    base_log_dir = resolve_log_dir(prediction_type, 'base', wind_farm_code)
+    train_log_dir = resolve_log_dir(prediction_type, 'train', wind_farm_code) or log_dirs.get(prediction_type, {}).get('train')
+    predict_log_dir = resolve_log_dir(prediction_type, 'predict', wind_farm_code) or log_dirs.get(prediction_type, {}).get('predict')
+    param_log_dir = resolve_log_dir(prediction_type, 'param', wind_farm_code) or log_dirs.get(prediction_type, {}).get('param')
+
     try:
         # 解析日期
         try:
@@ -1048,10 +1102,11 @@ def get_task_status():
         is_current_week = (datetime.datetime.now() - selected_date).days < 7
         
         # 检查训练任务状态（通过flag文件）
-        train_flag_path = os.path.join(log_dirs[prediction_type]['train'], f"{date_str}_train_done.flag")
-        if os.path.exists(train_flag_path):
-            status['training'] = True
-            status['trainingTime'] = datetime.datetime.fromtimestamp(os.path.getmtime(train_flag_path)).strftime('%Y-%m-%d %H:%M:%S')
+        if train_log_dir:
+            train_flag_path = os.path.join(train_log_dir, f"{date_str}_train_done.flag")
+            if os.path.exists(train_flag_path):
+                status['training'] = True
+                status['trainingTime'] = datetime.datetime.fromtimestamp(os.path.getmtime(train_flag_path)).strftime('%Y-%m-%d %H:%M:%S')
         
         # 检查参数优化任务状态 - 修改为根据参数优化日计算周期
         # 计算所选日期在其所在周的星期几（0-6表示周一到周日）
@@ -1073,36 +1128,35 @@ def get_task_status():
         param_opt_date_str = param_opt_date.strftime('%Y%m%d')
         
         # 查找参数优化完成标志
-        param_flag_path = os.path.join(log_dirs[prediction_type]['param'], f"{param_opt_date_str}_param_opt_done.flag")
-        
-        # 如果找不到精确日期的标志文件，尝试查找当周的标志文件（兼容现有逻辑）
-        if not os.path.exists(param_flag_path):
-            # 计算该参数优化日所在周的周一
-            param_opt_monday = param_opt_date - datetime.timedelta(days=param_opt_date.weekday())
-            monday_str = param_opt_monday.strftime('%Y%m%d')
-            param_flag_path = os.path.join(log_dirs[prediction_type]['param'], f"{monday_str}_param_opt_done.flag")
-        
-        if os.path.exists(param_flag_path):
-            status['paramOpt'] = True
-            status['paramOptTime'] = datetime.datetime.fromtimestamp(os.path.getmtime(param_flag_path)).strftime('%Y-%m-%d %H:%M:%S')
+        if param_log_dir:
+            param_flag_path = os.path.join(param_log_dir, f"{param_opt_date_str}_param_opt_done.flag")
+
+            if not os.path.exists(param_flag_path):
+                param_opt_monday = param_opt_date - datetime.timedelta(days=param_opt_date.weekday())
+                monday_str = param_opt_monday.strftime('%Y%m%d')
+                param_flag_path = os.path.join(param_log_dir, f"{monday_str}_param_opt_done.flag")
+
+            if os.path.exists(param_flag_path):
+                status['paramOpt'] = True
+                status['paramOptTime'] = datetime.datetime.fromtimestamp(os.path.getmtime(param_flag_path)).strftime('%Y-%m-%d %H:%M:%S')
         
         # 检查预测任务状态
         if prediction_type == 'supershort':
             # 超短期预测需要检查预测日志
-            predict_log_dir = log_dirs[prediction_type]['predict']
+            predict_log_dir_current = predict_log_dir
             
-            # 查找指定日期的所有日志文件 (用于获取最新时间)
-            date_logs = glob.glob(os.path.join(predict_log_dir, f"{date_str}*.log"))
+            date_logs = []
+            if predict_log_dir_current:
+                date_logs = glob.glob(os.path.join(predict_log_dir_current, f"{date_str}*.log"))
 
-            # 通过检查auto_predict目录下的flag文件来计算预测完成次数和状态
-            predict_flag_dir = os.path.join(log_dirs[prediction_type]['base'], 'auto_predict')
+            predict_flag_dir = predict_log_dir_current or (os.path.join(base_log_dir, 'auto_predict') if base_log_dir else None)
             predict_done_flags = []
-            if os.path.exists(predict_flag_dir):
+            if predict_flag_dir and os.path.exists(predict_flag_dir):
                 # 查找指定日期的所有预测完成标志文件
-                 predict_done_flags = glob.glob(os.path.join(predict_flag_dir, f"predict_{date_str}*.flag"))
-                 status['predictionCount'] = len(predict_done_flags)
+                predict_done_flags = glob.glob(os.path.join(predict_flag_dir, f"predict_{date_str}*.flag"))
+                status['predictionCount'] = len(predict_done_flags)
             else:
-                 status['predictionCount'] = 0 # Default to 0 if flag dir doesn't exist
+                status['predictionCount'] = 0 # Default to 0 if flag dir doesn't exist
 
             # 超短期的 'prediction' 状态表示任务是否 *应该* 在运行或已完成当天次数
             # 如果当天完成次数 >= 96，则标记为 True (完成)
@@ -1113,26 +1167,27 @@ def get_task_status():
                  # If any prediction was done, get the time of the latest flag
                  latest_flag = max(predict_done_flags, key=os.path.getmtime)
                  status['predictionTime'] = datetime.datetime.fromtimestamp(os.path.getmtime(latest_flag)).strftime('%Y-%m-%d %H:%M:%S')
-            elif date_logs: # Fallback to log time if no flags but logs exist
-                 latest_log = max(date_logs, key=os.path.getmtime)
-                 status['predictionTime'] = datetime.datetime.fromtimestamp(os.path.getmtime(latest_log)).strftime('%Y-%m-%d %H:%M:%S')
+            elif date_logs:
+                latest_log = max(date_logs, key=os.path.getmtime)
+                status['predictionTime'] = datetime.datetime.fromtimestamp(os.path.getmtime(latest_log)).strftime('%Y-%m-%d %H:%M:%S')
 
             # 只有当天才检查PM2进程状态，并用来判断是否 "运行中"
             if is_today:
-                predict_online = query_pm2_state(scripts[prediction_type])
+                process_name = build_process_name(prediction_type, wind_farm_code)
+                predict_online = is_process_online(process_name)
                 if predict_online and status['predictionCount'] < 96:
                     status['prediction'] = True # Mark as 'running'
         elif prediction_type == 'supershort':
             # 超短超期预测需要检查预测日志
-            predict_log_dir = log_dirs[prediction_type]['predict']
+            predict_log_dir_current = predict_log_dir
             
-            # 查找指定日期的所有日志文件 (用于获取最新时间)
-            date_logs = glob.glob(os.path.join(predict_log_dir, f"{date_str}*.log"))
+            date_logs = []
+            if predict_log_dir_current:
+                date_logs = glob.glob(os.path.join(predict_log_dir_current, f"{date_str}*.log"))
 
-            # 通过检查auto_predict目录下的flag文件来计算预测完成次数和状态
-            predict_flag_dir = os.path.join(log_dirs[prediction_type]['base'], 'auto_predict')
+            predict_flag_dir = predict_log_dir_current or (os.path.join(base_log_dir, 'auto_predict') if base_log_dir else None)
             predict_done_flags = []
-            if os.path.exists(predict_flag_dir):
+            if predict_flag_dir and os.path.exists(predict_flag_dir):
                 # 查找指定日期的所有预测完成标志文件
                 predict_done_flags = glob.glob(os.path.join(predict_flag_dir, f"predict_{date_str}*.flag"))
                 status['predictionCount'] = len(predict_done_flags)
@@ -1146,20 +1201,21 @@ def get_task_status():
                 # If any prediction was done, get the time of the latest flag
                 latest_flag = max(predict_done_flags, key=os.path.getmtime)
                 status['predictionTime'] = datetime.datetime.fromtimestamp(os.path.getmtime(latest_flag)).strftime('%Y-%m-%d %H:%M:%S')
-            elif date_logs: # Fallback to log time if no flags but logs exist
+            elif date_logs:
                 latest_log = max(date_logs, key=os.path.getmtime)
                 status['predictionTime'] = datetime.datetime.fromtimestamp(os.path.getmtime(latest_log)).strftime('%Y-%m-%d %H:%M:%S')
                 
             # 只有当天才检查PM2进程状态，并用来判断是否 "运行中"
             if is_today:
-                predict_online = query_pm2_state(scripts[prediction_type])
+                process_name = build_process_name(prediction_type, wind_farm_code)
+                predict_online = is_process_online(process_name)
                 if predict_online and status['predictionCount'] < 96:
                     status['prediction'] = True # Mark as 'running'
         else: # short and medium
             # 短期和中期预测查找完成标志文件
             # predict_flag_dir = os.path.join(log_dirs[prediction_type]['base'], 'predictions') # 旧逻辑：错误的目录假设
             # 使用训练日志目录查找标志文件，因为标志文件似乎在此处生成
-            predict_flag_dir = log_dirs[prediction_type].get('train') # 获取训练日志目录路径
+            predict_flag_dir = train_log_dir  # 获取训练日志目录路径
             
             if not predict_flag_dir:
                 # 如果找不到训练日志目录配置，记录错误并跳过检查
@@ -1187,7 +1243,8 @@ def get_task_status():
                 # 只有当天才检查PM2进程状态作为补充（但主要依赖flag）
                 # 如果flag不存在，但PM2进程在运行（仅限今天），可能表示正在运行但未完成
                 if is_today and not status['predictionCompleted']: # 仅在今天且未完成时检查PM2
-                    script_online = query_pm2_state(scripts[prediction_type])
+                    process_name = build_process_name(prediction_type, wind_farm_code)
+                    script_online = is_process_online(process_name)
                     if script_online:
                          status['prediction'] = True # 任务状态是存在的 (运行中)
                          # predictionCompleted 保持 False

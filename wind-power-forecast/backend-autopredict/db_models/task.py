@@ -9,6 +9,7 @@ class TaskHistory(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     task_id = Column(String(50), nullable=False, index=True)  # UUID
     task_type = Column(String(20), nullable=False, index=True)  # ultra_short, short, medium
+    wind_farm_code = Column(String(64), nullable=True, index=True)
     action = Column(String(20), nullable=False)  # start, stop, delete, schedule, etc.
     status = Column(String(20), nullable=False)  # success, failed
     created_at = Column(DateTime, default=datetime.now)

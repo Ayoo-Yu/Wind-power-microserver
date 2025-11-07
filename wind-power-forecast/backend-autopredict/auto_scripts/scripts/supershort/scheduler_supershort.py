@@ -53,13 +53,32 @@ console_handler.setLevel(logging.INFO)
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
+# 风场编码处理
+DEFAULT_WIND_FARM_CODE = os.environ.get('DEFAULT_WIND_FARM_CODE', 'default-farm')
+
+
+def _normalize_wind_farm_code(value: str) -> str:
+    value = (value or '').strip()
+    return value or DEFAULT_WIND_FARM_CODE
+
+
+parser = argparse.ArgumentParser(description='Scheduler for supershort auto prediction.')
+parser.add_argument('--wind-farm-code', dest='wind_farm_code', default=os.environ.get('WIND_FARM_CODE'))
+parser.add_argument('--run-supershort-train-now', action='store_true')
+parser.add_argument('--run-predict-now', action='store_true')
+parsed_args, remaining_argv = parser.parse_known_args()
+WIND_FARM_CODE = _normalize_wind_farm_code(parsed_args.wind_farm_code)
+os.environ['WIND_FARM_CODE'] = WIND_FARM_CODE
+
+sys.argv = [sys.argv[0]] + remaining_argv
+
 # 任务状态和线程跟踪
 task_supershort_train_executed_today = False # 记录当天 "超短期" 训练任务是否执行 (对应 train_supershort.py)
 current_training_thread = None  # 跟踪当前训练线程
 training_lock = threading.Lock()  # 线程锁，防止并发启动训练
 
 # 开发模式：添加命令行参数解析
-run_supershort_training_now = "--run-supershort-train-now" in sys.argv # 指的是超短期训练 (train_supershort.py)
+run_supershort_training_now = parsed_args.run_supershort_train_now
 
 # 定义日志目录路径
 log_dir_base = os.path.join(current_script_dir, "logs") # 主日志目录
@@ -491,7 +510,7 @@ def run_supershort_train_script():
         mark_supershort_train_running_today()
         
         # 构建训练命令
-        command_to_run = f'{python_cmd} "{train_supershort_script_path}"'
+        command_to_run = f'{python_cmd} "{train_supershort_script_path}" --wind-farm-code {WIND_FARM_CODE}'
         
         # 执行训练
         success, exit_code = run_command(command_to_run)
@@ -517,7 +536,7 @@ def run_supershort_predict_script():
     """执行超短期预测脚本 predict_supershort.py (每15分钟)"""
     logging.info("开始执行超短期预测任务 (predict_supershort.py)")
     # 使用动态构建的脚本路径和Python命令
-    command = f'{python_cmd} "{predict_supershort_script_path}"' # Add quotes for paths with spaces
+    command = f'{python_cmd} "{predict_supershort_script_path}" --wind-farm-code {WIND_FARM_CODE}'  # Add quotes for paths with spaces
 
     success, exit_code = run_command(command)
     if success:
