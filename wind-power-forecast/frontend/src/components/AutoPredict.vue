@@ -270,7 +270,7 @@ apiClient.interceptors.response.use(
 const fetchStatus = async () => {
   loading.value = true
   try {
-    const res = await apiClient.get('/api/status')
+    const res = await apiClient.get('status')
     predictions.forEach(p => {
       p.status = res.data[p.name] || false
     })
@@ -311,7 +311,7 @@ const handleControl = async (name, action) => {
   console.log('handleControl invoked', name, action)
   loading.value = true
   try {
-    const res = await apiClient.post(`/api/${action}`, { type: name })
+    const res = await apiClient.post(`${action}`, { type: name })
     if (res.data.warning) {
       ElMessage.warning(res.data.warning)
     } else {
@@ -362,7 +362,7 @@ const fetchLogsByFilter = async () => {
       // If param logs are specific to a day derived from task type, adjust or remove this logic
       // For now, removing it if getParamOptDay is fully removed
     }
-    const res = await apiClient.get('/api/logs', { params })
+    const res = await apiClient.get('logs', { params })
     logsContent.value = res.data.logs || '暂无日志信息'
   } catch (error) {
     console.error('获取日志失败:', error)

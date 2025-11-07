@@ -1,8 +1,5 @@
-import axios from 'axios'
+import axiosInstance from './axios'
 
 export function resurrectService() {
-  return axios({
-    url: '/api/resurrect',
-    method: 'post'
-  })
+  return axiosInstance.post('resurrect')
 } 

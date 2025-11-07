@@ -2,13 +2,14 @@
 import axios from 'axios';
 
 // 确定API基础URL
-let backendBaseUrl;
+let backendBaseUrl = process.env.VUE_APP_BASE_API;
 
-// 如果不是localhost，使用当前域名+端口
-if (window.location.hostname !== 'localhost') {
-  backendBaseUrl = `http://${window.location.hostname}:5000`; // 明确指定后端端口为5000
-} else {
-  backendBaseUrl = 'http://localhost:5000'; // 本地开发环境
+if (!backendBaseUrl) {
+  if (window.location.hostname !== 'localhost') {
+    backendBaseUrl = `${window.location.origin}/api`;
+  } else {
+    backendBaseUrl = '/api';
+  }
 }
 
 console.log('apiService使用API基础URL:', backendBaseUrl);

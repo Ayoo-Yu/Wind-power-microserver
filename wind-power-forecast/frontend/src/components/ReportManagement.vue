@@ -1178,7 +1178,7 @@ export default {
       farmsLoading.value = true
       try {
         console.log('开始获取风电场站列表...')
-        const response = await axios.get('/api/report/farms')
+        const response = await axios.get('/report/farms')
         console.log('风电场站列表响应:', response.data)
         windFarms.value = response.data
       } catch (error) {
@@ -1204,7 +1204,7 @@ export default {
           params.farm_id = selectedFarmId.value
         }
         
-        const response = await axios.get('/api/report/configs', {
+        const response = await axios.get('/report/configs', {
           params
         })
         reportConfigs.value = response.data.map(config => ({
@@ -1222,7 +1222,7 @@ export default {
     // 获取调度器状态
     const fetchSchedulerStatus = async () => {
       try {
-        const response = await axios.get('/api/report/scheduler/status')
+        const response = await axios.get('/report/scheduler/status')
         schedulerStatus.value = response.data
       } catch (error) {
         console.error('获取调度器状态失败:', error)
@@ -1234,7 +1234,7 @@ export default {
     const startScheduler = async () => {
       schedulerLoading.value = true
       try {
-        const response = await axios.post('/api/report/scheduler/start')
+        const response = await axios.post('/report/scheduler/start')
         ElMessage.success(response.data.message)
         await fetchSchedulerStatus()
       } catch (error) {
@@ -1249,7 +1249,7 @@ export default {
     const stopScheduler = async () => {
       schedulerLoading.value = true
       try {
-        const response = await axios.post('/api/report/scheduler/stop')
+        const response = await axios.post('/report/scheduler/stop')
         ElMessage.success(response.data.message)
         await fetchSchedulerStatus()
       } catch (error) {
@@ -1291,7 +1291,7 @@ export default {
           params.end_date = logQuery.dateRange[1]
         }
         
-        const response = await axios.get('/api/report/logs', {
+        const response = await axios.get('/report/logs', {
           params
         })
         
@@ -1323,11 +1323,11 @@ export default {
       try {
         if (farmForm.id) {
           // 更新
-          await axios.put(`/api/report/farms/${farmForm.id}`, farmForm)
+          await axios.put(`/report/farms/${farmForm.id}`, farmForm)
           ElMessage.success('场站更新成功')
         } else {
           // 创建
-          await axios.post('/api/report/farms', farmForm)
+          await axios.post('/report/farms', farmForm)
           ElMessage.success('场站创建成功')
         }
         farmDialogVisible.value = false
@@ -1415,11 +1415,11 @@ export default {
         
         if (configForm.id) {
           // 更新
-          await axios.put(`/api/report/configs/${configForm.id}`, saveData)
+          await axios.put(`/report/configs/${configForm.id}`, saveData)
           ElMessage.success('配置更新成功')
         } else {
           // 创建
-          await axios.post('/api/report/configs', saveData)
+          await axios.post('/report/configs', saveData)
           ElMessage.success('配置创建成功')
         }
         configDialogVisible.value = false
@@ -1471,7 +1471,7 @@ export default {
     // 切换配置启用状态
     const toggleConfig = async (config) => {
       try {
-        await axios.put(`/api/report/configs/${config.id}`, {
+        await axios.put(`/report/configs/${config.id}`, {
           is_enabled: config.is_enabled
         })
         ElMessage.success(config.is_enabled ? '配置已启用' : '配置已禁用')
@@ -1489,7 +1489,7 @@ export default {
           type: 'warning'
         })
         
-        await axios.delete(`/api/report/configs/${config.id}`)
+        await axios.delete(`/report/configs/${config.id}`)
         
         ElMessage.success('配置删除成功')
         await fetchConfigs()
@@ -1505,7 +1505,7 @@ export default {
     const previewReport = async (config) => {
       previewLoading.value = true
       try {
-        const response = await axios.post('/api/report/preview-report', {
+        const response = await axios.post('/report/preview-report', {
           config_id: config.id
         })
         
@@ -1879,7 +1879,7 @@ export default {
           payload.data = getAllDataForSubmit()
         }
         
-        await axios.post('/api/report/manual-report', payload)
+        await axios.post('/report/manual-report', payload)
         
         ElMessage.success(`手动上报执行成功${useCustomData ? '（使用自定义数据）' : ''}`)
         previewDialogVisible.value = false
@@ -2172,7 +2172,7 @@ export default {
           params.month = statsQuery.month
         }
 
-        const response = await axios.get('/api/report/statistics', { params })
+        const response = await axios.get('/report/statistics', { params })
         
         // 设置今日统计
         dailyStats.value = response.data.today_stats || { completeness_rate: null, timeliness_rate: null }

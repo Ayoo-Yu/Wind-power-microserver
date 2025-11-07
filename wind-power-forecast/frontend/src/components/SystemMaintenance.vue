@@ -289,7 +289,7 @@ export default {
     const refreshHardwareInfo = async () => {
       loadingHardware.value = true
       try {
-        const response = await axiosInstance.get('/api/system/hardware')
+        const response = await axiosInstance.get('/system/hardware')
         hardwareInfo.value = response.data
         ElMessage.success('硬件信息已更新')
       } catch (error) {
@@ -304,7 +304,7 @@ export default {
     const refreshSoftwareInfo = async () => {
       loadingSoftware.value = true
       try {
-        const response = await axiosInstance.get('/api/system/software')
+        const response = await axiosInstance.get('/system/software')
         softwareInfo.value = response.data
         ElMessage.success('软件信息已更新')
       } catch (error) {
@@ -319,7 +319,7 @@ export default {
     const refreshRuntimeInfo = async () => {
       loadingRuntime.value = true
       try {
-        const response = await axiosInstance.get('/api/system/runtime')
+        const response = await axiosInstance.get('/system/runtime')
         runtimeInfo.value = response.data
         ElMessage.success('运行参数已更新')
       } catch (error) {
@@ -334,7 +334,7 @@ export default {
     const refreshLogs = async () => {
       loadingLogs.value = true
       try {
-        const response = await axiosInstance.get('/api/system/logs')
+        const response = await axiosInstance.get('/system/logs')
         logs.value = response.data
         ElMessage.success('日志已更新')
       } catch (error) {

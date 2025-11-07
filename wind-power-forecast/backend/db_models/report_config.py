@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, Float
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, Float, JSON
 from datetime import datetime
 from .base import Base
 
@@ -12,8 +12,19 @@ class WindFarm(Base):
     capacity = Column(Float, nullable=True)  # 装机容量(MW)
     location = Column(String(200), nullable=True)  # 地理位置
     is_active = Column(Boolean, default=True)  # 是否启用
+    timezone = Column(String(64), nullable=True)
+    config = Column(JSON, nullable=True)
+    description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    @property
+    def code(self):
+        return self.farm_code
+
+    @property
+    def name(self):
+        return self.farm_name
 
 class ReportConfig(Base):
     """上报配置模型"""

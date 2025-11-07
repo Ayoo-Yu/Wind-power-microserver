@@ -18,8 +18,11 @@ class Job(Base):
     end_time = Column(DateTime, nullable=True)
     result_path = Column(String(255), nullable=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)
+    wind_farm_id = Column(Integer, ForeignKey('wind_farms.id'), nullable=True, index=True)
+    wind_farm_code = Column(String(64), nullable=True)
 
     user = relationship("User")
+    wind_farm = relationship("WindFarm")
 
     def __repr__(self):
         return f"<Job {self.job_type} status={self.status}>"

@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey, Text, JSON
 from sqlalchemy.orm import relationship
+
 from . import Base, TimeStampMixin
 
 class TrainingHistory(Base, TimeStampMixin):
@@ -16,10 +17,13 @@ class TrainingHistory(Base, TimeStampMixin):
     report_file = Column(String(255), nullable=True, comment='评估报告文件路径')
     file_id = Column(String(255), nullable=False, comment='关联的文件ID', index=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=True, comment='关联的用户ID', index=True)
+    wind_farm_id = Column(Integer, ForeignKey('wind_farms.id'), nullable=True, comment='所属场站ID', index=True)
+    wind_farm_code = Column(String(64), nullable=True, comment='所属场站编码')
     status = Column(String(20), server_default="'completed'", nullable=True, comment='训练状态')
     
     # 关系
     user = relationship("User")
+    wind_farm = relationship("WindFarm")
     
     def __repr__(self):
         return f"<TrainingHistory {self.model_type} for {self.dataset_name}>" 

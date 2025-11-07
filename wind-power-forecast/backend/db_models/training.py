@@ -1,7 +1,9 @@
 from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey, Boolean, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime
+
 from .base import Base, TimeStampMixin
+
 
 class Model(Base):
     """模型定义"""
@@ -19,9 +21,12 @@ class Model(Base):
     is_active = Column(Boolean, default=False)
     version = Column(String(50), default="1.0")
     is_production = Column(Boolean, default=False)
-    
+    wind_farm_id = Column(Integer, ForeignKey('wind_farms.id'), nullable=True, index=True)
+    wind_farm_code = Column(String(64), nullable=True)
+
     dataset = relationship("Dataset")
     evaluation_metrics = relationship("EvaluationMetrics", back_populates="model")
+    wind_farm = relationship("WindFarm")
     
     def __repr__(self):
         return f"<Model {self.model_name} ({self.model_type})>"
@@ -37,6 +42,10 @@ class TrainingRecord(Base):
     created_at = Column(DateTime, default=datetime.now())
     duration = Column(Float)
     log_path = Column(String(512))
+    wind_farm_id = Column(Integer, ForeignKey('wind_farms.id'), nullable=True, index=True)
+    wind_farm_code = Column(String(64), nullable=True)
+
+    wind_farm = relationship("WindFarm")
     
     def __repr__(self):
         return f"<TrainingRecord {self.model_name} ({self.status})>"
@@ -53,10 +62,13 @@ class PredictionRecord(Base):
     output_path = Column(String(512))
     prediction_type = Column(String(20))
     status = Column(String(20))
-    
+    wind_farm_id = Column(Integer, ForeignKey('wind_farms.id'), nullable=True, index=True)
+    wind_farm_code = Column(String(64), nullable=True)
+
     model = relationship("Dataset", foreign_keys=[model_id])
     input_data = relationship("Dataset", foreign_keys=[input_data_id])
     scaler = relationship("Dataset", foreign_keys=[scaler_id])
+    wind_farm = relationship("WindFarm")
     
     def __repr__(self):
         return f"<PredictionRecord {self.prediction_type} ({self.status})>"
@@ -72,6 +84,10 @@ class AutoPredictionTask(Base):
     next_run = Column(DateTime)
     output_dir = Column(String(512))
     is_active = Column(Boolean, default=True)
+    wind_farm_id = Column(Integer, ForeignKey('wind_farms.id'), nullable=True, index=True)
+    wind_farm_code = Column(String(64), nullable=True)
+
+    wind_farm = relationship("WindFarm")
     
     def __repr__(self):
         return f"<AutoPredictionTask {self.task_type}>"
@@ -90,9 +106,12 @@ class EvaluationMetrics(Base):
     k = Column(Float)
     pe = Column(Float)
     created_at = Column(DateTime, default=datetime.now())
-    
+    wind_farm_id = Column(Integer, ForeignKey('wind_farms.id'), nullable=True, index=True)
+    wind_farm_code = Column(String(64), nullable=True)
+
     model = relationship("Model", back_populates="evaluation_metrics")
     dataset = relationship("Dataset")
+    wind_farm = relationship("WindFarm")
     
     def __repr__(self):
         return f"<EvaluationMetrics for model_id={self.model_id}>"
@@ -111,6 +130,10 @@ class DailyMetrics(Base):
     pe = Column(Float)
     sample_count = Column(Integer)
     metric_type = Column(String(20))
+    wind_farm_id = Column(Integer, ForeignKey('wind_farms.id'), nullable=True, index=True)
+    wind_farm_code = Column(String(64), nullable=True)
+
+    wind_farm = relationship("WindFarm")
     
     def __repr__(self):
         return f"<DailyMetrics {self.date.strftime('%Y-%m-%d')} ({self.metric_type})>" 

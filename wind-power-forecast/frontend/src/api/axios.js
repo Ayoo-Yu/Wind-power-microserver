@@ -4,13 +4,14 @@ import router from '../router';
 import { isAuthReady, isAuthLoading } from '../store/authReady'; // 导入认证状态
 
 // 确定API基础URL
-let API_BASE_URL;
+let API_BASE_URL = process.env.VUE_APP_BASE_API;
 
-// 如果不是localhost，使用当前域名+端口
-if (window.location.hostname !== 'localhost') {
-  API_BASE_URL = `http://${window.location.hostname}:8080`; // 通过Nginx反向代理
-} else {
-  API_BASE_URL = 'http://localhost:8080'; // 本地开发环境也通过Nginx
+if (!API_BASE_URL) {
+  if (window.location.hostname !== 'localhost') {
+    API_BASE_URL = `${window.location.origin}/api`;
+  } else {
+    API_BASE_URL = '/api';
+  }
 }
 
 console.log('使用API基础URL:', API_BASE_URL);

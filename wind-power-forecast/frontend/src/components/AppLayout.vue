@@ -254,16 +254,16 @@ export default {
           
           // 如果Token和用户信息都存在，尝试验证Token有效性
           if (token && currentUser.value) {
-            console.log('本地有Token和用户，尝试调用/api/auth/me验证...');
+            console.log('本地有Token和用户，尝试调用/auth/me验证...');
             try {
-              await axiosInstance.get('/api/auth/me');
-              console.log('Token验证成功 (通过/api/auth/me)');
+              await axiosInstance.get('/auth/me');
+              console.log('Token验证成功 (通过/auth/me)');
               isAuthenticated = true; // 验证成功！
             } catch (apiError) {
-              console.error('/api/auth/me验证失败:', apiError.message);
+              console.error('/auth/me验证失败:', apiError.message);
               // 401错误会被响应拦截器处理（清除Token, 跳转）
               if (apiError.response && apiError.response.status !== 401) {
-                console.log('/api/auth/me返回非401错误，视为未认证');
+                console.log('/auth/me返回非401错误，视为未认证');
               }
               // isAuthenticated保持false
             }
