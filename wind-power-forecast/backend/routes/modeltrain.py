@@ -1,17 +1,24 @@
 import os
-import pandas as pd
-from flask import Blueprint, request, jsonify, current_app, send_file
 import glob
 import datetime
 import shutil
+import uuid
+import tempfile
+from pathlib import Path
+
+import pandas as pd
+from flask import Blueprint, request, jsonify, current_app, send_file
+from werkzeug.utils import secure_filename
+
 from services.file_service import find_file_by_id
 from services.modeltrain_service import run_modeltrain
 from services.evaluation_service import run_evaluation
-from werkzeug.utils import secure_filename
+from services.storage_service import get_model_path, get_scaler_path, get_metrics_path
+from windpower_core.storage import normalize_wind_farm_code, sanitize_filename
 from database_config import minio_client, SessionLocal
-from models import Model, EvaluationMetrics, TrainingRecord
-import uuid
-import tempfile
+from config import MINIO_CONFIG
+from models import Model, EvaluationMetrics, TrainingRecord, Dataset
+
 # 预测蓝图
 modeltrain_bp = Blueprint('modeltrain', __name__)
 
@@ -70,8 +77,9 @@ def train_model():
         return jsonify({'error': '预测文件生成失败'}), 500
 
     # 保存预测结果到 DOWNLOAD_FOLDER
-    forecast_timestamp_str = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-    filename_wo_ext = os.path.splitext(os.path.basename(upload_path))[0]
+    forecast_timestamp_str = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    source_basename = sanitize_filename(os.path.basename(upload_path), fallback="dataset.csv")
+    filename_wo_ext = os.path.splitext(source_basename)[0]
     output_filename = f"forecast_{filename_wo_ext}_{forecast_timestamp_str}.csv"
     output_path = os.path.join(current_app.config['DOWNLOAD_FOLDER'], output_filename)
 
@@ -124,49 +132,85 @@ def train_model():
 
     # 在模型训练之后增加MinIO上传和数据库记录
     db = SessionLocal()
-    
+
     try:
+        dataset_record = db.query(Dataset).filter(Dataset.file_id == file_id).first()
+        default_wind_farm_code = MINIO_CONFIG.get("default_wind_farm_code", "default-farm")
+        raw_wind_farm_code = None
+        if dataset_record:
+            raw_wind_farm_code = dataset_record.wind_farm_code or dataset_record.wind_farm
+        if not raw_wind_farm_code:
+            raw_wind_farm_code = data.get('wind_farm_code')
+        wind_farm_code = normalize_wind_farm_code(raw_wind_farm_code, default_wind_farm_code)
+        wind_farm_id = dataset_record.wind_farm_id if dataset_record else None
+
         # 生成唯一标识
         model_version = f"{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
         
         # 上传模型文件到MinIO（wind-model桶）
-        model_object_name = f"{model_version}/model.joblib"
+        model_object_name = get_model_path(
+            model_type=model,
+            model_name=model_version,
+            wind_farm_code=wind_farm_code,
+            trained_at=datetime.datetime.utcnow(),
+        )
         minio_client.fput_object(
-            "wind-models", 
+            MINIO_CONFIG["buckets"]["models"],
             model_object_name,
             model_filepath
         )
         
         # 上传scaler文件到MinIO（wind-scaler桶）
-        scaler_object_name = f"{model_version}/scaler.joblib"
+        scaler_object_name = get_scaler_path(
+            model_type=model,
+            wind_farm_code=wind_farm_code,
+            created_at=datetime.datetime.utcnow(),
+        )
         minio_client.fput_object(
-            "wind-scalers", 
+            MINIO_CONFIG["buckets"]["scalers"],
             scaler_object_name,
             scaler_filepath
         )
         
         # 上传评估文件到MinIO（wind-metrics桶）
         metrics_files = []
+        metrics_object_prefix = None
+        metrics_timestamp = datetime.datetime.utcnow()
         for root, dirs, files in os.walk(evaluation_output_dir):
             for file in files:
                 local_path = os.path.join(root, file)
-                object_name = f"{model_version}/metrics/{file}"
+                sanitized_metrics_filename = sanitize_filename(file, fallback="metrics.json")
+                object_name = get_metrics_path(
+                    model_identifier=model_version,
+                    wind_farm_code=wind_farm_code,
+                    filename=sanitized_metrics_filename,
+                    computed_at=metrics_timestamp,
+                )
                 minio_client.fput_object(
-                    "wind-metrics",
+                    MINIO_CONFIG["buckets"]["metrics"],
                     object_name,
                     local_path
                 )
                 metrics_files.append(object_name)
+                if metrics_object_prefix is None:
+                    metrics_object_prefix = Path(object_name).parent.as_posix()
         
         # 如果有评估报告则上传
         if report_path and os.path.exists(report_path):
-            report_object_name = f"{model_version}/report.txt"
+            report_object_name = get_metrics_path(
+                model_identifier=model_version,
+                wind_farm_code=wind_farm_code,
+                filename=sanitize_filename("report.txt", fallback="report.txt"),
+                computed_at=metrics_timestamp,
+            )
             minio_client.fput_object(
-                "wind-metrics",
+                MINIO_CONFIG["buckets"]["metrics"],
                 report_object_name,
                 report_path
             )
             metrics_files.append(report_object_name)
+            if metrics_object_prefix is None:
+                metrics_object_prefix = Path(report_object_name).parent.as_posix()
 
         # 保存到数据库（修改model_path和scaler_path为MinIO路径）
         new_model = Model(
@@ -176,9 +220,11 @@ def train_model():
             model_path=model_object_name,  # 改为MinIO路径
             scaler_path=scaler_object_name,  # 改为MinIO路径
             accuracy=float(evaluation_result['overall_metrics'].get('ACC')),
-            train_time=datetime.datetime.now(),
-            metrics_path=f"{model_version}/metrics",  # 改为存储父目录
-            is_active=True
+            train_time=datetime.datetime.utcnow(),
+            metrics_path=metrics_object_prefix,
+            is_active=True,
+            wind_farm_id=wind_farm_id,
+            wind_farm_code=wind_farm_code,
         )
         db.add(new_model)
         db.commit()
@@ -192,7 +238,9 @@ def train_model():
             rmse=float(evaluation_result['overall_metrics'].get('RMSE')),
             acc=float(evaluation_result['overall_metrics'].get('ACC')),
             k=float(evaluation_result['overall_metrics'].get('K')),
-            pe=float(evaluation_result['overall_metrics'].get('PE'))
+            pe=float(evaluation_result['overall_metrics'].get('PE')),
+            wind_farm_id=wind_farm_id,
+            wind_farm_code=wind_farm_code,
         )
         db.add(evaluation_metrics)
 
@@ -201,8 +249,10 @@ def train_model():
             model_name=model_version,
             status='completed',
             dataset_path=upload_path,
-            duration=(datetime.datetime.now() - new_model.train_time).total_seconds(),
-            log_path=os.path.join(current_app.config['DOWNLOAD_FOLDER'], 'training_logs', f"{model_version}.log")
+            duration=(datetime.datetime.utcnow() - new_model.train_time).total_seconds(),
+            log_path=os.path.join(current_app.config['DOWNLOAD_FOLDER'], 'training_logs', f"{model_version}.log"),
+            wind_farm_id=wind_farm_id,
+            wind_farm_code=wind_farm_code,
         )
         db.add(training_record)
         
@@ -303,7 +353,7 @@ def download_model():
         
         # 下载模型文件到临时文件
         minio_client.fget_object(
-            "wind-models",
+            MINIO_CONFIG["buckets"]["models"],
             model_object_name,
             temp_file.name
         )
@@ -355,7 +405,7 @@ def download_scaler():
         
         # 下载scaler文件到临时文件
         minio_client.fget_object(
-            "wind-scalers",
+            MINIO_CONFIG["buckets"]["scalers"],
             scaler_object_name,
             temp_file.name
         )

@@ -21,6 +21,9 @@ MINIO_ACCESS_KEY = os.environ.get('MINIO_ACCESS_KEY', 'minioadmin')
 MINIO_SECRET_KEY = os.environ.get('MINIO_SECRET_KEY', 'minioadmin')
 MINIO_SECURE = os.environ.get('MINIO_SECURE', 'False').lower() == 'true'
 
+# 默认场站配置
+DEFAULT_WIND_FARM_CODE = os.environ.get('DEFAULT_WIND_FARM_CODE', 'default-farm')
+
 # Redis / Celery 配置
 REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', REDIS_URL)
@@ -57,6 +60,7 @@ MINIO_CONFIG = {
     'access_key': MINIO_ACCESS_KEY,
     'secret_key': MINIO_SECRET_KEY,
     'secure': MINIO_SECURE,
+    'default_wind_farm_code': DEFAULT_WIND_FARM_CODE,
     'buckets': {
         'models': os.environ.get('MINIO_BUCKET_MODELS', 'models'),
         'scalers': os.environ.get('MINIO_BUCKET_SCALERS', 'scalers'),
@@ -121,6 +125,7 @@ class Config:
         "access_key": MINIO_ACCESS_KEY,
         "secret_key": MINIO_SECRET_KEY,
         "secure": MINIO_SECURE,
+        "default_wind_farm_code": DEFAULT_WIND_FARM_CODE,
         "buckets": {
             "datasets": "wind-datasets",
             "models": "wind-models",
@@ -144,6 +149,8 @@ class Config:
         'scaler_dir': os.path.join(BASE_DIR, 'saved_scalers'),
         'metrics_dir': os.path.join(BASE_DIR, 'saved_metrics')
     }
+
+    DEFAULT_WIND_FARM_CODE = DEFAULT_WIND_FARM_CODE
 
     SECRET_KEY = os.environ.get('SECRET_KEY', 'your-secret-key')
     SQLALCHEMY_DATABASE_URI = f"postgresql+kingbase://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"

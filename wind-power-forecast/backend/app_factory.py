@@ -28,6 +28,7 @@ from db_models import Dataset
 from db_session import db_session
 from logging_config import configure_logging
 from services.file_service import allowed_file, save_uploaded_file
+from windpower_core.storage import dataset_object_key, normalize_wind_farm_code, sanitize_filename
 from task_queue import init_celery
 
 
@@ -202,11 +203,29 @@ def _register_file_upload_routes(app: Flask) -> None:
 
         file_id = datetime.now().strftime("%Y%m%d%H%M%S%f")
 
-        save_uploaded_file(file, file_id, current_app.config["UPLOAD_FOLDER"])
+        data_type = request.form.get("data_type", default_type)
+        uploaded_at = datetime.now()
+        default_wind_farm_code = MINIO_CONFIG.get("default_wind_farm_code", "default-farm")
+        raw_wind_farm_code = request.form.get("wind_farm_code") or request.form.get("wind_farm")
+        normalized_wind_farm_code = normalize_wind_farm_code(raw_wind_farm_code, default_wind_farm_code)
+        sanitized_filename = sanitize_filename(file.filename, fallback="dataset.csv")
+
+        local_path = save_uploaded_file(
+            file,
+            file_id,
+            current_app.config["UPLOAD_FOLDER"],
+            wind_farm_code=normalized_wind_farm_code,
+            default_wind_farm_code=default_wind_farm_code,
+            subdirs=("datasets", data_type, uploaded_at.strftime("%Y%m%d")),
+        )
         file.stream.seek(0)
 
-        data_type = request.form.get("data_type", default_type)
-        file_path = f"datasets/{data_type}/{datetime.now().strftime('%Y%m%d')}/{file.filename}"
+        file_path = dataset_object_key(
+            wind_farm_code=normalized_wind_farm_code,
+            data_type=data_type,
+            filename=sanitized_filename,
+            uploaded_at=uploaded_at,
+        )
 
         if minio_client is None:
             return jsonify({"error": "Object storage is unavailable"}), 503
@@ -226,20 +245,18 @@ def _register_file_upload_routes(app: Flask) -> None:
         current_app.logger.info("✅ MinIO验证 - 文件大小：%s", obj_info.size)
 
         with db_session() as db:
-            ext = os.path.splitext(file.filename)[1]
-            local_path = os.path.join(current_app.config["UPLOAD_FOLDER"], f"{file_id}{ext}")
-
             dataset = Dataset(
                 file_id=file_id,
                 filename=file.filename,
                 file_path=file_path,
-                upload_time=datetime.now(),
+                upload_time=uploaded_at,
                 file_size=file.content_length,
                 file_type=data_type,
-                local_path=local_path,
+                local_path=str(local_path),
                 description=request.form.get("description", ""),
                 data_type=data_type,
                 wind_farm=request.form.get("wind_farm", "unknown"),
+                wind_farm_code=normalized_wind_farm_code,
             )
             db.add(dataset)
             db.commit()

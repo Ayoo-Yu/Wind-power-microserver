@@ -1,13 +1,18 @@
 import os
-from flask import Blueprint, request, jsonify, current_app
 import datetime
 import shutil
+
+import pandas as pd
+from flask import Blueprint, request, jsonify, current_app
+from werkzeug.utils import secure_filename
+
 from services.file_service import find_file_by_id
 from services.predict_service import run_predict
-from werkzeug.utils import secure_filename
+from services.storage_service import get_prediction_path
+from windpower_core.storage import normalize_wind_farm_code, sanitize_filename
 from models import PredictionRecord, Model, Dataset
 from database_config import minio_client, SessionLocal
-import pandas as pd
+from config import MINIO_CONFIG
 
 # 预测蓝图
 predict_bp = Blueprint('predict', __name__)
@@ -43,10 +48,15 @@ def predict():
 
     # 获取关联的数据库记录
     dataset_record = db.query(Dataset).filter(Dataset.file_id == csvfileId).first()
-    
+
     if not dataset_record:
         current_app.logger.error("找不到对应的数据集或模型记录")
+        db.close()
         return jsonify({'error': '无效的数据集或模型ID'}), 400
+
+    default_wind_farm_code = MINIO_CONFIG.get("default_wind_farm_code", "default-farm")
+    raw_wind_farm_code = dataset_record.wind_farm_code or dataset_record.wind_farm
+    wind_farm_code = normalize_wind_farm_code(raw_wind_farm_code, default_wind_farm_code)
 
     # 运行预测与后处理
     try:
@@ -57,10 +67,12 @@ def predict():
         )
     except Exception as e:
         current_app.logger.error(f"预测过程中出错: {e}")
+        db.close()
         return jsonify({'error': '预测过程中出错', 'details': str(e)}), 500
 
     if not isinstance(forecast_file_path, str) or not os.path.isfile(forecast_file_path):
         current_app.logger.error("预测时没有返回可用的文件路径")
+        db.close()
         return jsonify({'error': '预测文件生成失败'}), 500
 
     # 读取预测结果
@@ -69,22 +81,29 @@ def predict():
         predictions_data = predictions_df.to_dict('records')
         
         # 保存预测结果到 DOWNLOAD_FOLDER
-        forecast_timestamp_str = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-        filename_wo_ext = os.path.splitext(os.path.basename(csvupload_path))[0]
-        output_filename = f"forecast_{filename_wo_ext}_{forecast_timestamp_str}.csv"
+        forecast_timestamp = datetime.datetime.utcnow()
+        source_basename = sanitize_filename(os.path.basename(csvupload_path), fallback="dataset.csv")
+        filename_wo_ext = os.path.splitext(source_basename)[0]
+        output_filename = f"forecast_{filename_wo_ext}_{forecast_timestamp.strftime('%Y%m%d%H%M%S')}.csv"
         output_path = os.path.join(current_app.config['DOWNLOAD_FOLDER'], output_filename)
 
         shutil.copy(forecast_file_path, output_path)
         current_app.logger.info(f"将原生预测文件复制到以下路径： {output_path}")
         
         # 使用minio_client直接上传
-        bucket_name = "wind-predictions"
-        object_name = output_filename
-        
+        bucket_name = MINIO_CONFIG["buckets"]["predictions"]
+        object_name = get_prediction_path(
+            prediction_type=data.get('prediction_type', 'batch'),
+            model_id=str(modelfileId),
+            wind_farm_code=wind_farm_code,
+            filename=output_filename,
+            generated_at=forecast_timestamp,
+        )
+
         minio_client.fput_object(
             bucket_name,
             object_name,
-            forecast_file_path
+            output_path
         )
         current_app.logger.info(f"文件已上传到MinIO: {bucket_name}/{object_name}")
         
@@ -97,13 +116,16 @@ def predict():
             output_path=f"s3://{bucket_name}/{object_name}",
             prediction_type='batch',
             status='completed',
+            wind_farm_id=dataset_record.wind_farm_id,
+            wind_farm_code=wind_farm_code,
         )
         db.add(prediction_record)
         db.commit()
         
         # 更新返回的下载URL为MinIO路径
         download_url = f"/download/{secure_filename(output_filename)}"
-        
+        db.close()
+
         return jsonify({
             'download_url': download_url,
             'prediction_id': prediction_record.id,
@@ -113,4 +135,5 @@ def predict():
     except Exception as e:
         db.rollback()
         current_app.logger.error(f"处理预测结果失败: {e}")
+        db.close()
         return jsonify({'error': '无法处理预测结果', 'details': str(e)}), 500
