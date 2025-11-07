@@ -1,12 +1,33 @@
 from flask import Blueprint, jsonify, request
 from celery import states
+from typing import Optional
 
 from services.job_service import create_job, get_job, serialize_job, update_job_metadata
 from tasks.training_tasks import train_model_task
 from tasks.prediction_tasks import predict_task
+from database_config import SessionLocal
+from db_models import Dataset
+from config import MINIO_CONFIG
+from windpower_core.storage import normalize_wind_farm_code
 
 
 jobs_bp = Blueprint('jobs', __name__)
+
+
+def _resolve_wind_farm_by_file_id(file_id: Optional[str]) -> tuple[Optional[int], str]:
+    default_code = MINIO_CONFIG.get("default_wind_farm_code", "default-farm")
+    if not file_id or SessionLocal is None:
+        return None, default_code
+
+    session = SessionLocal()
+    try:
+        dataset = session.query(Dataset).filter(Dataset.file_id == file_id).first()
+        if not dataset:
+            return None, default_code
+        code = normalize_wind_farm_code(dataset.wind_farm_code or dataset.wind_farm, default_code)
+        return dataset.wind_farm_id, code
+    finally:
+        session.close()
 
 
 def _validate_train_payload(data: dict):
@@ -32,9 +53,19 @@ def submit_train_job():
     if not is_valid:
         return jsonify({'error': error}), 400
 
+    wind_farm_id, wind_farm_code = _resolve_wind_farm_by_file_id(data.get('file_id'))
+    if 'wind_farm_code' not in data or not data.get('wind_farm_code'):
+        data['wind_farm_code'] = wind_farm_code
+
     async_result = train_model_task.apply_async(kwargs={'payload': data})
-    create_job(async_result.id, 'train', payload=data)
-    update_job_metadata(async_result.id, payload=data)
+    create_job(
+        async_result.id,
+        'train',
+        payload=data,
+        wind_farm_id=wind_farm_id,
+        wind_farm_code=wind_farm_code,
+    )
+    update_job_metadata(async_result.id, payload=data, wind_farm_id=wind_farm_id, wind_farm_code=wind_farm_code)
     return jsonify({'job_id': async_result.id, 'status': states.PENDING}), 202
 
 
@@ -45,9 +76,19 @@ def submit_predict_job():
     if not is_valid:
         return jsonify({'error': error}), 400
 
+    wind_farm_id, wind_farm_code = _resolve_wind_farm_by_file_id(data.get('csvfileId'))
+    if 'wind_farm_code' not in data or not data.get('wind_farm_code'):
+        data['wind_farm_code'] = wind_farm_code
+
     async_result = predict_task.apply_async(kwargs={'payload': data})
-    create_job(async_result.id, 'predict', payload=data)
-    update_job_metadata(async_result.id, payload=data)
+    create_job(
+        async_result.id,
+        'predict',
+        payload=data,
+        wind_farm_id=wind_farm_id,
+        wind_farm_code=wind_farm_code,
+    )
+    update_job_metadata(async_result.id, payload=data, wind_farm_id=wind_farm_id, wind_farm_code=wind_farm_code)
     return jsonify({'job_id': async_result.id, 'status': states.PENDING}), 202
 
 

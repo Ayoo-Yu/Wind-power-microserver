@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import Optional
 
@@ -7,7 +8,15 @@ from db_models import Job
 from db_session import db_session
 
 
-def create_job(job_id: str, job_type: str, payload: Optional[dict] = None, user_id: Optional[int] = None) -> Job:
+def create_job(
+    job_id: str,
+    job_type: str,
+    payload: Optional[dict] = None,
+    user_id: Optional[int] = None,
+    *,
+    wind_farm_id: Optional[int] = None,
+    wind_farm_code: Optional[str] = None,
+) -> Job:
     with db_session() as session:
         job = Job(
             job_id=job_id,
@@ -16,6 +25,8 @@ def create_job(job_id: str, job_type: str, payload: Optional[dict] = None, user_
             payload=payload,
             user_id=user_id,
             submit_time=datetime.utcnow(),
+            wind_farm_id=wind_farm_id,
+            wind_farm_code=wind_farm_code,
         )
         session.add(job)
         session.flush()
@@ -65,6 +76,15 @@ def get_job(job_id: str) -> Optional[Job]:
         return job
 
 
+def _parse_result(value: Optional[str]):
+    if not value:
+        return None
+    try:
+        return json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return value
+
+
 def serialize_job(job: Job) -> dict:
     return {
         "job_id": job.job_id,
@@ -72,9 +92,12 @@ def serialize_job(job: Job) -> dict:
         "status": job.status,
         "payload": job.payload,
         "error": job.error,
-        "result": job.result_path,
+        "result": _parse_result(job.result_path),
+        "result_raw": job.result_path,
         "submit_time": job.submit_time.isoformat() if job.submit_time else None,
         "start_time": job.start_time.isoformat() if job.start_time else None,
         "end_time": job.end_time.isoformat() if job.end_time else None,
         "user_id": job.user_id,
+        "wind_farm_id": job.wind_farm_id,
+        "wind_farm_code": job.wind_farm_code,
     }

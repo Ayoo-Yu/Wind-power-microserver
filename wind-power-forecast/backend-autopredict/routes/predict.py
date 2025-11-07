@@ -125,12 +125,15 @@ def predict():
 
         # 更新返回的下载URL为MinIO路径
         download_url = f"/download/{secure_filename(output_filename)}"
-        
-        return jsonify({
+        response_payload = {
             'download_url': download_url,
             'prediction_id': prediction_record.id,
-            'predictions': predictions_data
-        }), 200
+            'predictions': predictions_data,
+            'wind_farm_code': wind_farm_code,
+            's3_uri': f"s3://{bucket_name}/{object_name}",
+        }
+
+        return jsonify(response_payload), 200
         
     except Exception as e:
         db.rollback()

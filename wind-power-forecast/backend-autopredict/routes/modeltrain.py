@@ -136,6 +136,8 @@ def train_model():
         if dataset_record:
             raw_wind_farm_code = dataset_record.wind_farm_code or dataset_record.wind_farm
         raw_wind_farm_code = raw_wind_farm_code or data.get('wind_farm_code')
+        if not raw_wind_farm_code:
+            raw_wind_farm_code = default_wind_farm_code
         wind_farm_code = normalize_wind_farm_code(raw_wind_farm_code, default_wind_farm_code)
         wind_farm_id = dataset_record.wind_farm_id if dataset_record else None
 
@@ -260,13 +262,25 @@ def train_model():
     finally:
         db.close()
 
+    model_s3_uri = f"s3://{MINIO_CONFIG['buckets']['models']}/{model_object_name}"
+    scaler_s3_uri = f"s3://{MINIO_CONFIG['buckets']['scalers']}/{scaler_object_name}"
+    metrics_s3_prefix = None
+    if metrics_object_prefix:
+        metrics_s3_prefix = f"s3://{MINIO_CONFIG['buckets']['metrics']}/{metrics_object_prefix}"
+
     # 在训练成功完成后更新状态
     def update_success_status(forecast_filename, report_filename=None):
         status_info = {
             "status": "completed",
             "message": "训练已完成",
             "end_time": datetime.datetime.now().isoformat(),
-            "download_url": f"/download/{forecast_filename}"
+            "download_url": f"/download/{forecast_filename}",
+            "model_download_url": f"/download-model?model_version={model_version}",
+            "scaler_download_url": f"/download-scaler?model_version={model_version}",
+            "wind_farm_code": wind_farm_code,
+            "model_s3_uri": model_s3_uri,
+            "scaler_s3_uri": scaler_s3_uri,
+            "metrics_s3_prefix": metrics_s3_prefix,
         }
         
         if report_filename:
@@ -287,7 +301,13 @@ def train_model():
 
     return jsonify({
         'download_url': download_url,
-        'report_download_url': report_download_url
+        'report_download_url': report_download_url,
+        'model_download_url': f"/download-model?model_version={model_version}",
+        'scaler_download_url': f"/download-scaler?model_version={model_version}",
+        'wind_farm_code': wind_farm_code,
+        'model_s3_uri': model_s3_uri,
+        'scaler_s3_uri': scaler_s3_uri,
+        'metrics_s3_prefix': metrics_s3_prefix,
     }), 200
 
 # 新增接口：获取 daily_metrics.csv 文件
