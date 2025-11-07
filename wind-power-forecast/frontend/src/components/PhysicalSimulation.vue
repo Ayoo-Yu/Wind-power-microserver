@@ -164,12 +164,10 @@
 </template>
 
 <script>
-import axios from 'axios';
+import axiosInstance from '../api/axios';
 import Plotly from 'plotly.js-dist-min';
 import { ElMessage } from 'element-plus';
 import { InfoFilled, Download } from '@element-plus/icons-vue';
-
-const API_BASE_URL = process.env.VUE_APP_API_BASE_URL || 'http://localhost:5000';
 
 export default {
   name: 'PhysicalSimulation',
@@ -209,7 +207,7 @@ export default {
     async fetchFarmNames() {
       this.loadingFarms = true;
       try {
-        const response = await axios.get(`${API_BASE_URL}/physical_simulation/conditions`);
+        const response = await axiosInstance.get('physical_simulation/conditions');
         const uniqueFarms = [...new Set(response.data.map(item => item.farm_name))];
         this.farmNames = uniqueFarms;
       } catch (error) {
@@ -230,8 +228,12 @@ export default {
       this.loadingSimulation = true;
       try {
         const [conditionsRes, turbinesRes] = await Promise.all([
-          axios.get(`${API_BASE_URL}/physical_simulation/conditions?farm_name=${farmName}`),
-          axios.get(`${API_BASE_URL}/physical_simulation/turbines?farm_name=${farmName}`),
+          axiosInstance.get('physical_simulation/conditions', {
+            params: { farm_name: farmName }
+          }),
+          axiosInstance.get('physical_simulation/turbines', {
+            params: { farm_name: farmName }
+          }),
         ]);
         this.farmConditions = conditionsRes.data;
         this.farmTurbines = turbinesRes.data;
@@ -338,7 +340,9 @@ export default {
         // 获取所有需要的读数数据
         const uniqueConditions = [...new Set([Q11, Q12, Q21, Q22].map(q => q.condition_id))];
         const readingPromises = uniqueConditions.map(conditionId => 
-          axios.get(`${API_BASE_URL}/physical_simulation/readings?condition_id=${conditionId}`)
+          axiosInstance.get('physical_simulation/readings', {
+            params: { condition_id: conditionId }
+          })
         );
         const readingResponses = await Promise.all(readingPromises);
         

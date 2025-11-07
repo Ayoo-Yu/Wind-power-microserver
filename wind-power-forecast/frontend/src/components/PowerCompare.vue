@@ -189,7 +189,7 @@
 <script>
 import { Chart, CategoryScale, LinearScale, LineElement, PointElement, Title, Tooltip, Legend, LineController } from 'chart.js'
 import zoomPlugin from 'chartjs-plugin-zoom';
-import axios from 'axios'
+import axiosInstance from '../api/axios'
 
 Chart.register(
   CategoryScale,
@@ -211,10 +211,6 @@ export default {
   name: 'PowerCompare',
   data() {
     return {
-      // API地址设置
-      backendBaseUrl: window.location.hostname !== 'localhost' 
-        ? `http://${window.location.hostname}:5000` 
-        : 'http://localhost:5000',
       timeRange: [],
       selectedTypes: ['实测值', '超短期预测', '短期预测', '中期预测','短期风速预测','中期风速预测'],
       chartData: null,
@@ -319,7 +315,7 @@ export default {
           ...(this.selectedTypes.includes('超短期预测') && { supershort_horizon: 'average' })
         };
 
-        const response = await axios.post(`${this.backendBaseUrl}/power-compare/data`, payload);
+        const response = await axiosInstance.post('power-compare/data', payload);
         await this.processChartData(response.data); 
       } catch (error) {
         this.$message.error('数据获取失败');

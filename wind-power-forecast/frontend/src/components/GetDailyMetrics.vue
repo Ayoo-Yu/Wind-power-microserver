@@ -12,7 +12,7 @@
 
 <script>
 import Papa from 'papaparse';
-import axios from 'axios';
+import axiosInstance from '../api/axios';
 import { Chart, CategoryScale, LinearScale, LineElement, PointElement, Title, Tooltip, Legend, LineController } from 'chart.js';
 // 注册所需的组件，包括 LineController
 Chart.register(
@@ -48,6 +48,7 @@ export default {
     },
     backendBaseUrl: {
       type: String,
+      default: ''
     },
   },
   methods:{
@@ -58,8 +59,10 @@ export default {
         return;
       }
 
-      axios
-        .get(`${this.backendBaseUrl}/get-daily-metrics?file_id=${this.fileId}`)
+      axiosInstance
+        .get('get-daily-metrics', {
+          params: { file_id: this.fileId }
+        })
         .then(response => {
           console.log('Response data:', response.data);  // 打印返回的数据，查看是否为 CSV 格式
           if (!response.data) {

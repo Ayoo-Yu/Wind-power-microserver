@@ -213,8 +213,25 @@ import LoadingIndicator from './LoadingIndicator.vue';
 import UploadProgress from './UploadProgress.vue';
 import { InfoFilled, ArrowDown, Check, Refresh } from '@element-plus/icons-vue';
 import Papa from 'papaparse';
-import axios from 'axios';
+import axiosInstance from '../api/axios';
 import { Chart, CategoryScale, LinearScale, LineElement, PointElement, Title, Tooltip, Legend, LineController } from 'chart.js';
+const rawBaseURL = axiosInstance.defaults && axiosInstance.defaults.baseURL ? axiosInstance.defaults.baseURL : '';
+const API_BASE_PATH = rawBaseURL.replace(/\/$/, '');
+const SOCKET_BASE_URL = window.location.origin;
+const SOCKET_PATH = API_BASE_PATH ? `${API_BASE_PATH}/socket.io` : '/socket.io';
+
+function buildDownloadUrl(basePath, path) {
+  if (!path) {
+    return '';
+  }
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+  const normalizedBase = basePath || '';
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${normalizedBase}${normalizedPath}`;
+}
+
 Chart.register(
   CategoryScale,
   LinearScale,
@@ -243,9 +260,9 @@ export default {
   },
   data() {
     return {
-      backendBaseUrl: window.location.hostname !== 'localhost' 
-        ? `http://${window.location.hostname}:5000` 
-        : 'http://localhost:5000',
+      backendBaseUrl: API_BASE_PATH,
+      socketBaseUrl: SOCKET_BASE_URL,
+      socketPath: SOCKET_PATH,
       customUploadText_modeltrain: '点击上传训练数据集文件',
       fileId: null,
       selectedFile: null,
@@ -281,6 +298,9 @@ export default {
     }
   },
   methods: {
+    composeDownloadUrl(path) {
+      return buildDownloadUrl(this.backendBaseUrl, path);
+    },
     onFileSelected(file) {
       this.resetState();
       this.selectedFile = file;
@@ -307,19 +327,19 @@ export default {
         }, 500);
       }
       if (response.download_url) {
-        this.downloadUrl = `${this.backendBaseUrl}${response.download_url}`;
+        this.downloadUrl = this.composeDownloadUrl(response.download_url);
         this.$message.success('预测结果已生成，您可以下载预测结果。');
       }
       if (response.report_download_url) {
-        this.reportDownloadUrl = `${this.backendBaseUrl}${response.report_download_url}`;
+        this.reportDownloadUrl = this.composeDownloadUrl(response.report_download_url);
         this.$message.success('预测报告已生成，您可以下载评估报告。');
       }
       if (response.model_download_url) {
-        this.modelDownloadUrl = `${this.backendBaseUrl}${response.model_download_url}`;
+        this.modelDownloadUrl = this.composeDownloadUrl(response.model_download_url);
         this.$message.success('模型已保存，您可以下载模型文件。');
       }
       if (response.scaler_download_url) {
-        this.scalerDownloadUrl = `${this.backendBaseUrl}${response.scaler_download_url}`;
+        this.scalerDownloadUrl = this.composeDownloadUrl(response.scaler_download_url);
         this.$message.success('标准化器已保存，您可以下载标准化器文件。');
       }
       this.selectedFile = null;
@@ -467,24 +487,24 @@ export default {
           this.clearTimers();
           
           if (response.data.download_url) {
-            this.downloadUrl = `${this.backendBaseUrl}${response.data.download_url}`;
+            this.downloadUrl = this.composeDownloadUrl(response.data.download_url);
             this.$message.success('预测结果已生成，您可以下载预测结果。');
           } else {
             this.$message.error('预测完成，但未返回下载链接。');
           }
           
           if (response.data.report_download_url) {
-            this.reportDownloadUrl = `${this.backendBaseUrl}${response.data.report_download_url}`;
+            this.reportDownloadUrl = this.composeDownloadUrl(response.data.report_download_url);
             this.$message.success('预测报告已生成，您可以下载评估报告。');
           }
           
           if (response.data.model_download_url) {
-            this.modelDownloadUrl = `${this.backendBaseUrl}${response.data.model_download_url}`;
+            this.modelDownloadUrl = this.composeDownloadUrl(response.data.model_download_url);
             console.log('已更新模型下载链接:', this.modelDownloadUrl);
           }
           
           if (response.data.scaler_download_url) {
-            this.scalerDownloadUrl = `${this.backendBaseUrl}${response.data.scaler_download_url}`;
+            this.scalerDownloadUrl = this.composeDownloadUrl(response.data.scaler_download_url);
             console.log('已更新标准化器下载链接:', this.scalerDownloadUrl);
           }
           
@@ -507,7 +527,7 @@ export default {
     initializeSocket() {
       if (this.socket) return;
       
-      this.socket = useSocket(this.backendBaseUrl, { path: '/socket.io', transports: ['websocket'] });
+      this.socket = useSocket(this.socketBaseUrl, { path: this.socketPath, transports: ['websocket'] });
       
       this.socket.on('connect', () => {
         console.log('Socket连接成功');
@@ -598,28 +618,28 @@ export default {
       const predictUrlPattern = /预测文件下载url为:\s+([^\s]+)/;
       const predictMatch = message.match(predictUrlPattern);
       if (predictMatch && predictMatch[1]) {
-        this.downloadUrl = `${this.backendBaseUrl}${predictMatch[1]}`;
+        this.downloadUrl = this.composeDownloadUrl(predictMatch[1]);
         console.log('提取到预测文件下载链接:', this.downloadUrl);
       }
       
       const reportUrlPattern = /训练报告下载url为:\s+([^\s]+)/;
       const reportMatch = message.match(reportUrlPattern);
       if (reportMatch && reportMatch[1]) {
-        this.reportDownloadUrl = `${this.backendBaseUrl}${reportMatch[1]}`;
+        this.reportDownloadUrl = this.composeDownloadUrl(reportMatch[1]);
         console.log('提取到报告下载链接:', this.reportDownloadUrl);
       }
       
       const modelUrlPattern = /model_download_url=([^\s]+)/;
       const modelMatch = message.match(modelUrlPattern);
       if (modelMatch && modelMatch[1]) {
-        this.modelDownloadUrl = `${this.backendBaseUrl}${modelMatch[1]}`;
+        this.modelDownloadUrl = this.composeDownloadUrl(modelMatch[1]);
         console.log('提取到模型下载链接:', this.modelDownloadUrl);
       }
       
       const scalerUrlPattern = /scaler_download_url=([^\s]+)/;
       const scalerMatch = message.match(scalerUrlPattern);
       if (scalerMatch && scalerMatch[1]) {
-        this.scalerDownloadUrl = `${this.backendBaseUrl}${scalerMatch[1]}`;
+        this.scalerDownloadUrl = this.composeDownloadUrl(scalerMatch[1]);
         console.log('提取到标准化器下载链接:', this.scalerDownloadUrl);
       }
     },
@@ -652,22 +672,22 @@ export default {
           this.$message.success('模型训练已完成！');
           
           if (response.data.download_url) {
-            this.downloadUrl = `${this.backendBaseUrl}${response.data.download_url}`;
+            this.downloadUrl = this.composeDownloadUrl(response.data.download_url);
             console.log('已更新下载链接:', this.downloadUrl);
           }
           
           if (response.data.report_download_url) {
-            this.reportDownloadUrl = `${this.backendBaseUrl}${response.data.report_download_url}`;
+            this.reportDownloadUrl = this.composeDownloadUrl(response.data.report_download_url);
             console.log('已更新报告链接:', this.reportDownloadUrl);
           }
           
           if (response.data.model_download_url) {
-            this.modelDownloadUrl = `${this.backendBaseUrl}${response.data.model_download_url}`;
+            this.modelDownloadUrl = this.composeDownloadUrl(response.data.model_download_url);
             console.log('已更新模型下载链接:', this.modelDownloadUrl);
           }
           
           if (response.data.scaler_download_url) {
-            this.scalerDownloadUrl = `${this.backendBaseUrl}${response.data.scaler_download_url}`;
+            this.scalerDownloadUrl = this.composeDownloadUrl(response.data.scaler_download_url);
             console.log('已更新标准化器下载链接:', this.scalerDownloadUrl);
           }
           
@@ -754,12 +774,14 @@ export default {
     },
     async fetchDailyMetrics() {
       if (!this.fileId) {
-        this.$message.error('请先上传文件！');
+        this.$message.warning('请先完成模型训练或预测');
         return;
       }
 
       try {
-        const response = await axios.get(`${this.backendBaseUrl}/get-daily-metrics?file_id=${this.fileId}`);
+        const response = await axiosInstance.get('get-daily-metrics', {
+          params: { file_id: this.fileId }
+        });
         
         if (!response.data) {
           this.$message.error('未获取到日常指标数据');

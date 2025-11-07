@@ -224,6 +224,24 @@ import FileInfo from './FileInfo.vue';
 import LogViewer from './LogViewer.vue';
 import * as echarts from 'echarts';
 import { ArrowDown, InfoFilled, Download } from '@element-plus/icons-vue';
+import axiosInstance from '../api/axios';
+
+const rawBaseURL = axiosInstance.defaults && axiosInstance.defaults.baseURL ? axiosInstance.defaults.baseURL : '';
+const API_BASE_PATH = rawBaseURL.replace(/\/$/, '');
+const SOCKET_BASE_URL = window.location.origin;
+const SOCKET_PATH = API_BASE_PATH ? `${API_BASE_PATH}/socket.io` : '/socket.io';
+
+function buildDownloadUrl(basePath, path) {
+  if (!path) {
+    return '';
+  }
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+  const normalizedBase = basePath || '';
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${normalizedBase}${normalizedPath}`;
+}
 
 export default {
   name: 'PowerPredict',
@@ -238,10 +256,10 @@ export default {
   },
   data() {
     return {
-      // API地址设置
-      backendBaseUrl: window.location.hostname !== 'localhost' 
-        ? `http://${window.location.hostname}:5000` 
-        : 'http://localhost:5000',
+       // API地址设置
+      backendBaseUrl: API_BASE_PATH,
+      socketBaseUrl: SOCKET_BASE_URL,
+      socketPath: SOCKET_PATH,
       customUploadText_datacsv: '选择预测数据集',
       customUploadText_model: '请选择预测模型',
       customUploadText_scaler: '请选择归一化模型',
@@ -269,6 +287,9 @@ export default {
     };
   },
   methods: {
+    composeDownloadUrl(path) {
+      return buildDownloadUrl(this.backendBaseUrl, path);
+    },
     // 模型文件处理
     onModelFileSelected(file) {
       this.onFileSelected(file, 'Model');
@@ -417,7 +438,7 @@ export default {
         const response = await predict(this.csvfileId, this.modelfileId, this.scalerfileId);
         console.log('预测响应:', response.data);
         if (response.data.download_url) {
-          this.downloadUrl = `${this.backendBaseUrl}${response.data.download_url}`;
+          this.downloadUrl = this.composeDownloadUrl(response.data.download_url);
           this.predictions = response.data.predictions;
           console.log('预测数据加载成功，数据长度:', this.predictions.length);
           this.$message.success('预测完成！');
@@ -763,8 +784,11 @@ export default {
     // 初始化 WebSocket 连接
     initializeSocket() {
       if (this.socket) return;
-      this.socket = useSocket(this.backendBaseUrl, { path: '/socket.io', transports: ['websocket'] });
+ 
+      this.socket = useSocket(this.socketBaseUrl, { path: this.socketPath, transports: ['websocket'] });
+ 
       this.socket.on('connect', () => {
+        console.log('Socket 连接成功');
         // 连接成功逻辑
       });
       
