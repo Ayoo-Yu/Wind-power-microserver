@@ -1,5 +1,7 @@
-from typing import Optional
+from __future__ import annotations
+
 from datetime import datetime
+from typing import Optional
 
 from db_models import Job
 from db_session import db_session
@@ -21,7 +23,7 @@ def create_job(job_id: str, job_type: str, payload: Optional[dict] = None, user_
         return job
 
 
-def update_job_metadata(job_id: str, **kwargs):
+def update_job_metadata(job_id: str, **kwargs) -> None:
     with db_session() as session:
         job = session.query(Job).filter(Job.job_id == job_id).first()
         if not job:
@@ -31,7 +33,7 @@ def update_job_metadata(job_id: str, **kwargs):
                 setattr(job, key, value)
 
 
-def update_job_status(job_id: str, status: str, *, result_path: Optional[str] = None, error: Optional[str] = None):
+def update_job_status(job_id: str, status: str, *, result_path: Optional[str] = None, error: Optional[str] = None) -> None:
     with db_session() as session:
         job = session.query(Job).filter(Job.job_id == job_id).first()
         if not job:
@@ -46,7 +48,7 @@ def update_job_status(job_id: str, status: str, *, result_path: Optional[str] = 
             job.end_time = datetime.utcnow()
 
 
-def mark_job_started(job_id: str):
+def mark_job_started(job_id: str) -> None:
     with db_session() as session:
         job = session.query(Job).filter(Job.job_id == job_id).first()
         if not job:
@@ -70,7 +72,7 @@ def serialize_job(job: Job) -> dict:
         "status": job.status,
         "payload": job.payload,
         "error": job.error,
-        "result_path": job.result_path,
+        "result": job.result_path,
         "submit_time": job.submit_time.isoformat() if job.submit_time else None,
         "start_time": job.start_time.isoformat() if job.start_time else None,
         "end_time": job.end_time.isoformat() if job.end_time else None,

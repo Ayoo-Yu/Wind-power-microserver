@@ -134,12 +134,14 @@ def train_model():
 
     try:
         dataset_record = db.query(Dataset).filter(Dataset.file_id == file_id).first()
-        default_wind_farm_code = MINIO_CONFIG.get("default_wind_farm_code", "default-farm")
-        raw_wind_farm_code = None
-        if dataset_record:
-            raw_wind_farm_code = dataset_record.wind_farm_code or dataset_record.wind_farm
-        if not raw_wind_farm_code:
-            raw_wind_farm_code = data.get('wind_farm_code')
+    default_wind_farm_code = MINIO_CONFIG.get("default_wind_farm_code", "default-farm")
+    raw_wind_farm_code = None
+    if dataset_record:
+        raw_wind_farm_code = dataset_record.wind_farm_code or dataset_record.wind_farm
+    if not raw_wind_farm_code:
+        raw_wind_farm_code = data.get('wind_farm_code')
+    if not raw_wind_farm_code:
+        raw_wind_farm_code = default_wind_farm_code
         wind_farm_code = normalize_wind_farm_code(raw_wind_farm_code, default_wind_farm_code)
         wind_farm_id = dataset_record.wind_farm_id if dataset_record else None
 
