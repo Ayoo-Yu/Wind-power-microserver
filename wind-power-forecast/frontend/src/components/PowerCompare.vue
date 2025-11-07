@@ -20,6 +20,154 @@
       <el-tag type="success" effect="dark">当前场站：{{ currentWindFarmDisplay }}</el-tag>
     </div>
 
+    <el-card class="operational-upload-card" shadow="hover">
+      <template #header>
+        <div class="card-header">
+          <div class="card-header-title">
+            <span class="icon-bubble">
+              <el-icon><UploadFilled /></el-icon>
+            </span>
+            <div class="card-header-copy">
+              <span class="card-title">运营数据上传</span>
+              <span class="card-subtitle">将 CSV 文件直接导入当前场站的数据域</span>
+            </div>
+          </div>
+          <el-tag type="info" effect="dark" size="small">当前场站：{{ currentWindFarmDisplay }}</el-tag>
+        </div>
+      </template>
+      <div class="operational-upload-body">
+        <el-row class="operational-upload-grid" :gutter="24">
+          <el-col :xs="24" :lg="14">
+            <div class="upload-panel">
+              <div class="upload-steps">
+                <span class="tip-badge">操作提示</span>
+                <ul>
+                  <li>选择上传的数据类型，并在右侧查看字段要求</li>
+                  <li>拖拽或点击导入 CSV 文件，列名需与字段保持一致</li>
+                  <li>提交后系统将自动附带当前风场标识</li>
+                </ul>
+              </div>
+
+              <el-form label-position="top" class="operational-form">
+                <el-form-item label="数据类型">
+                  <el-select
+                    v-model="selectedOperationalTable"
+                    placeholder="选择要上传的数据表"
+                    clearable
+                    filterable
+                    :loading="operationalSchemaLoading && !operationalSchema"
+                    @change="handleOperationalTableChange"
+                  >
+                    <el-option
+                      v-for="table in operationalTables"
+                      :key="table"
+                      :label="operationalTableDescriptions[table] || table"
+                      :value="table"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-form>
+
+              <p class="table-description">{{ operationalTableDescription }}</p>
+
+              <div class="upload-drop-wrapper">
+                <el-upload
+                  class="operational-upload-dropzone"
+                  drag
+                  :limit="1"
+                  :auto-upload="false"
+                  :file-list="operationalUpload.fileList"
+                  :on-change="handleOperationalFileChange"
+                  :on-remove="handleOperationalFileRemove"
+                  accept=".csv"
+                >
+                  <div class="dropzone-inner">
+                    <el-icon class="dropzone-icon"><UploadFilled /></el-icon>
+                    <div class="dropzone-title">拖拽或点击上传 CSV 文件</div>
+                    <p class="dropzone-desc">系统将自动绑定「{{ currentWindFarmDisplay }}」</p>
+                  </div>
+                </el-upload>
+              </div>
+
+              <transition name="fade-slide">
+                <div v-if="operationalUpload.file" class="selected-file-chip">
+                  <span class="file-icon">
+                    <el-icon><Document /></el-icon>
+                  </span>
+                  <div class="file-meta">
+                    <span class="file-name">{{ operationalUpload.file.name }}</span>
+                    <span class="file-size">{{ formatFileSize(operationalUpload.file.size) }}</span>
+                  </div>
+                  <el-button type="text" size="small" @click="resetOperationalUploadState({ clearMessages: true })">更换文件</el-button>
+                </div>
+              </transition>
+
+              <div class="operational-upload-actions">
+                <el-button type="primary" size="large" :loading="operationalUpload.uploading" @click="uploadOperationalDataset">上传数据</el-button>
+                <el-button size="large" @click="resetOperationalUploadState({ clearMessages: true })">清空</el-button>
+              </div>
+
+              <transition name="fade-slide">
+                <el-alert
+                  v-if="operationalUploadResult"
+                  type="success"
+                  :title="operationalUploadResult.message || '上传成功'"
+                  show-icon
+                  closable
+                  @close="operationalUploadResult = null"
+                />
+              </transition>
+              <transition name="fade-slide">
+                <el-alert
+                  v-if="operationalUploadError"
+                  type="error"
+                  :title="operationalUploadError"
+                  show-icon
+                  closable
+                  @close="operationalUploadError = null"
+                />
+              </transition>
+            </div>
+          </el-col>
+          <el-col :xs="24" :lg="10">
+            <div class="schema-panel">
+              <div class="schema-panel-header">
+                <h3>字段要求</h3>
+                <span>确保 CSV 列与字段类型匹配</span>
+              </div>
+              <div class="schema-panel-body">
+                <div v-if="operationalSchemaLoading" class="schema-loading">
+                  <el-skeleton :rows="6" animated />
+                </div>
+                <el-table
+                  v-else-if="operationalSchemaRows.length"
+                  :data="operationalSchemaRows"
+                  class="schema-table"
+                  border
+                  size="small"
+                >
+                  <el-table-column prop="name" label="字段名" width="140" />
+                  <el-table-column label="字段说明">
+                    <template #default="{ row }">
+                      <div class="schema-info">
+                        <span class="schema-type">{{ row.meta?.type || '未知类型' }}</span>
+                        <span v-if="row.meta?.comment" class="schema-comment">{{ row.meta.comment }}</span>
+                        <span class="schema-required">
+                          {{ row.meta?.nullable ? '可为空' : '必填' }}
+                          <span v-if="row.meta?.primary_key" class="schema-primary">主键</span>
+                        </span>
+                      </div>
+                    </template>
+                  </el-table-column>
+                </el-table>
+                <el-empty v-else description="请选择数据类型以查看字段信息" />
+              </div>
+            </div>
+          </el-col>
+        </el-row>
+      </div>
+    </el-card>
+
     <!-- 时间选择与配置区域 -->
     <div class="config-panel">
       <el-card class="merged-config-card"> 
@@ -196,6 +344,7 @@ import zoomPlugin from 'chartjs-plugin-zoom';
 import axiosInstance from '../api/axios'
 import { ElMessage } from 'element-plus'
 import { useWindFarmStore } from '@/store/windFarm'
+import { UploadFilled, Document } from '@element-plus/icons-vue'
 
 Chart.register(
   CategoryScale,
@@ -217,6 +366,10 @@ const windFarmStore = useWindFarmStore();
 
 export default {
   name: 'PowerCompare',
+  components: {
+    UploadFilled,
+    Document,
+  },
   data() {
     return {
       timeRange: [],
@@ -242,6 +395,18 @@ export default {
         comparison: null,
         metrics: null
       },
+      operationalTables: [],
+      operationalTableDescriptions: {},
+      operationalSchema: null,
+      selectedOperationalTable: '',
+      operationalUpload: {
+        file: null,
+        fileList: [],
+        uploading: false,
+      },
+      operationalSchemaLoading: false,
+      operationalUploadResult: null,
+      operationalUploadError: null,
       qualifiedThresholds: {
         '超短期预测': 0.65,
         '短期预测': 0.6,
@@ -278,6 +443,21 @@ export default {
         return record.farm_name || record.farm_code || this.selectedWindFarm;
       }
       return this.selectedWindFarm;
+    },
+    operationalTableDescription() {
+      if (!this.selectedOperationalTable) {
+        return '请选择要上传的运营数据类型';
+      }
+      return this.operationalTableDescriptions[this.selectedOperationalTable] || this.selectedOperationalTable;
+    },
+    operationalSchemaRows() {
+      if (!this.operationalSchema) {
+        return [];
+      }
+      return Object.entries(this.operationalSchema).map(([name, meta]) => ({
+        name,
+        meta,
+      }));
     }
   },
   mounted() {
@@ -290,10 +470,11 @@ export default {
       `${year}-${month}-${day} 00:00:00`,
       `${year}-${month}-${day} 23:59:59`,
     ];
+    this.fetchOperationalTables();
     this.fetchComparisonData();
   },
   methods: {
-    handleWindFarmSelectionChange() {
+    async handleWindFarmSelectionChange() {
       ElMessage.info(`已切换到场站：${this.currentWindFarmDisplay}`);
       this.chartData = null;
       this.dailyMetrics = null;
@@ -302,8 +483,11 @@ export default {
       this.showDailyMetricsAnalysis = false;
       this.showQualificationRateAnalysis = false;
       this.chartKey += 1;
+      this.resetOperationalUploadState({ clearMessages: true });
+      this.operationalSchema = null;
+      await this.fetchOperationalTables();
       if (this.timeRange && this.timeRange.length === 2) {
-        this.fetchComparisonData();
+        await this.fetchComparisonData();
       }
     },
     refreshPage() {
@@ -327,6 +511,125 @@ export default {
       }
       
       return formatted;
+    },
+    async fetchOperationalTables() {
+      try {
+        const response = await axiosInstance.get('operational/api/operational_tables', {
+          params: { wind_farm_code: this.selectedWindFarm }
+        });
+        const data = response.data || {};
+        this.operationalTables = data.supported_tables || [];
+        this.operationalTableDescriptions = data.table_descriptions || {};
+
+        if (this.operationalTables.length === 0) {
+          this.selectedOperationalTable = '';
+          this.operationalSchema = null;
+          this.resetOperationalUploadState({ clearMessages: true });
+          return;
+        }
+
+        const maintainSelection = this.selectedOperationalTable && this.operationalTables.includes(this.selectedOperationalTable);
+        const nextSelection = maintainSelection ? this.selectedOperationalTable : this.operationalTables[0];
+        this.selectedOperationalTable = nextSelection;
+        await this.fetchOperationalTableSchema(nextSelection);
+      } catch (error) {
+        ElMessage.error('获取运营数据类型失败');
+        console.error('fetchOperationalTables error:', error);
+      }
+    },
+    async fetchOperationalTableSchema(tableName) {
+      if (!tableName) {
+        this.operationalSchema = null;
+        return;
+      }
+      this.operationalSchemaLoading = true;
+      try {
+        const response = await axiosInstance.get(`operational/api/operational_table_schema/${tableName}`, {
+          params: { wind_farm_code: this.selectedWindFarm }
+        });
+        this.operationalSchema = response.data?.columns || {};
+      } catch (error) {
+        ElMessage.error('获取表字段信息失败');
+        console.error('fetchOperationalTableSchema error:', error);
+        this.operationalSchema = null;
+      } finally {
+        this.operationalSchemaLoading = false;
+      }
+    },
+    async handleOperationalTableChange(value) {
+      this.selectedOperationalTable = value;
+      await this.fetchOperationalTableSchema(value);
+      this.resetOperationalUploadState({ clearMessages: true });
+    },
+    handleOperationalFileChange(file, fileList) {
+      this.operationalUpload.fileList = fileList.slice(-1);
+      this.operationalUpload.file = file?.raw || null;
+      this.operationalUploadResult = null;
+      this.operationalUploadError = null;
+    },
+    handleOperationalFileRemove() {
+      this.resetOperationalUploadState({ clearMessages: true });
+    },
+    resetOperationalUploadState(options = {}) {
+      const { clearMessages = false } = options;
+      this.operationalUpload.file = null;
+      this.operationalUpload.fileList = [];
+      if (clearMessages) {
+        this.operationalUploadResult = null;
+        this.operationalUploadError = null;
+      }
+    },
+    formatFileSize(size) {
+      if (size === undefined || size === null) {
+        return '--';
+      }
+      const units = ['B', 'KB', 'MB', 'GB'];
+      let value = size;
+      let unitIndex = 0;
+      while (value >= 1024 && unitIndex < units.length - 1) {
+        value /= 1024;
+        unitIndex += 1;
+      }
+      const precision = value < 10 && unitIndex > 0 ? 1 : 0;
+      return `${value.toFixed(precision)} ${units[unitIndex]}`;
+    },
+    async uploadOperationalDataset() {
+      if (!this.selectedOperationalTable) {
+        ElMessage.warning('请先选择数据类型');
+        return;
+      }
+      if (!this.operationalUpload.file) {
+        ElMessage.warning('请先选择要上传的CSV文件');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', this.operationalUpload.file);
+      formData.append('table_name', this.selectedOperationalTable);
+      if (this.selectedWindFarm) {
+        formData.append('wind_farm_code', this.selectedWindFarm);
+      }
+
+      this.operationalUpload.uploading = true;
+      try {
+        const response = await axiosInstance.post('operational/api/upload_operational_csv', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        this.operationalUploadResult = response.data;
+        this.operationalUploadError = null;
+        ElMessage.success(response.data?.message || '上传成功');
+        this.resetOperationalUploadState();
+        await Promise.all([
+          this.fetchComparisonData(),
+          this.fetchOperationalTableSchema(this.selectedOperationalTable)
+        ]);
+      } catch (error) {
+        console.error('uploadOperationalDataset error:', error);
+        this.operationalUploadError = error.response?.data?.error || error.message;
+        ElMessage.error(this.operationalUploadError || '上传失败');
+      } finally {
+        this.operationalUpload.uploading = false;
+      }
     },
     async fetchComparisonData() {
       if (this.isProcessingChart) {
@@ -1614,6 +1917,339 @@ export default {
   display: flex;
   justify-content: center;
   margin-bottom: 24px;
+}
+
+.operational-upload-card {
+  margin-bottom: 24px;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 18px;
+  box-shadow: 0 16px 40px rgba(0, 41, 102, 0.1);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.card-header-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.icon-bubble {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(33, 150, 243, 0.18), rgba(76, 175, 80, 0.18));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #2f80ed;
+  border: 1px solid rgba(47, 128, 237, 0.25);
+}
+
+.card-header-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2d3d;
+}
+
+.card-subtitle {
+  font-size: 12px;
+  color: rgba(31, 45, 61, 0.55);
+}
+
+.operational-upload-body {
+  padding: 8px 6px 20px;
+}
+
+.operational-upload-grid {
+  align-items: stretch;
+}
+
+.upload-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(243, 249, 255, 0.95) 100%);
+  border: 1px solid rgba(47, 128, 237, 0.08);
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.upload-steps {
+  background: rgba(79, 152, 255, 0.08);
+  border: 1px dashed rgba(79, 152, 255, 0.3);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.upload-steps ul {
+  margin: 8px 0 0;
+  padding-left: 16px;
+  color: rgba(31, 45, 61, 0.72);
+  line-height: 1.55;
+}
+
+.upload-steps li + li {
+  margin-top: 6px;
+}
+
+.tip-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  font-size: 12px;
+  border-radius: 999px;
+  background: rgba(47, 128, 237, 0.12);
+  color: #2f80ed;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+}
+
+.operational-form {
+  margin-top: -4px;
+}
+
+.operational-form :deep(.el-form-item) {
+  margin-bottom: 0;
+}
+
+.operational-form :deep(.el-select) {
+  width: 100%;
+}
+
+.table-description {
+  color: rgba(31, 45, 61, 0.65);
+  font-size: 13px;
+  background: rgba(47, 128, 237, 0.06);
+  border-radius: 12px;
+  padding: 10px 14px;
+}
+
+.upload-drop-wrapper {
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.operational-upload-dropzone {
+  width: 100%;
+}
+
+.operational-upload-dropzone :deep(.el-upload) {
+  width: 100%;
+}
+
+.operational-upload-dropzone :deep(.el-upload-dragger) {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px dashed rgba(47, 128, 237, 0.35);
+  border-radius: 14px;
+  padding: 26px;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.operational-upload-dropzone :deep(.el-upload-dragger:hover) {
+  border-color: rgba(47, 128, 237, 0.6);
+  box-shadow: 0 12px 28px rgba(47, 128, 237, 0.12);
+}
+
+.dropzone-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.dropzone-icon {
+  font-size: 28px;
+  color: #2f80ed;
+}
+
+.dropzone-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2d3d;
+}
+
+.dropzone-desc {
+  font-size: 12px;
+  color: rgba(31, 45, 61, 0.6);
+  margin: 0;
+}
+
+.selected-file-chip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(47, 128, 237, 0.07);
+  border: 1px solid rgba(47, 128, 237, 0.12);
+}
+
+.file-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(47, 128, 237, 0.12);
+  color: #2f80ed;
+}
+
+.file-meta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.file-name {
+  font-weight: 600;
+  color: #1f2d3d;
+  word-break: break-all;
+}
+
+.file-size {
+  font-size: 12px;
+  color: rgba(31, 45, 61, 0.55);
+}
+
+.operational-upload-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.operational-upload-actions .el-button {
+  min-width: 120px;
+}
+
+.schema-panel {
+  height: 100%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(239, 246, 255, 0.98) 100%);
+  border: 1px solid rgba(47, 128, 237, 0.12);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 12px 32px rgba(0, 41, 102, 0.08);
+}
+
+.schema-panel-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.schema-panel-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2d3d;
+}
+
+.schema-panel-header span {
+  font-size: 12px;
+  color: rgba(31, 45, 61, 0.55);
+}
+
+.schema-panel-body {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 14px;
+  border: 1px solid rgba(47, 128, 237, 0.08);
+  padding: 12px 10px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.schema-loading {
+  padding: 8px 0;
+}
+
+.schema-table {
+  max-height: 280px;
+  overflow-y: auto;
+  border-radius: 12px;
+  background: transparent;
+}
+
+.schema-table :deep(.el-table) {
+  background: transparent;
+}
+
+.schema-table :deep(.el-table__header-wrapper) {
+  border-radius: 10px 10px 0 0;
+  overflow: hidden;
+}
+
+.schema-table :deep(.el-table__header-wrapper th) {
+  background: rgba(47, 128, 237, 0.12) !important;
+  color: #1f2d3d;
+  font-weight: 600;
+}
+
+.schema-table :deep(.el-table__cell) {
+  padding: 12px 16px;
+  font-size: 13px;
+}
+
+.schema-table :deep(.el-table__body tr:nth-child(odd) td) {
+  background: rgba(47, 128, 237, 0.04) !important;
+}
+
+.schema-table :deep(.el-table__body tr:hover > td) {
+  background: rgba(47, 128, 237, 0.08) !important;
+}
+
+.schema-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.schema-type {
+  font-weight: 600;
+  color: #1f2d3d;
+}
+
+.schema-comment {
+  font-size: 12px;
+  color: rgba(31, 45, 61, 0.6);
+}
+
+.schema-required {
+  font-size: 12px;
+  color: rgba(31, 45, 61, 0.55);
+}
+
+.schema-primary {
+  color: #f56c6c;
+  margin-left: 4px;
+}
+
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.25s ease;
+}
+
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
 }
 
 .config-panel {

@@ -12,6 +12,7 @@ import PhysicalSimulation from '../components/PhysicalSimulation.vue' // 物理�
 import SystemMaintenance from '../components/SystemMaintenance.vue' // 系统维护组件
 import ReportManagement from '../components/ReportManagement.vue' // 上报管理组件
 import WeatherDataFetcher from '../components/WeatherDataFetcher.vue' // 气象数据拉取组件
+import WindFarmManagement from '../components/WindFarmManagement.vue' // 风电场管理组件
 
 const routes = [
   {
@@ -35,6 +36,12 @@ const routes = [
         name: 'ModelTrain',
         component: ModelTrain,
         meta: { requiredPermissions: ['train_models'] }
+      },
+      {
+        path: 'windfarm-management',
+        name: 'WindFarmManagement',
+        component: WindFarmManagement,
+        meta: { requiredPermissions: ['view_all_data'] }
       },
       {
         path: 'powerpredict',

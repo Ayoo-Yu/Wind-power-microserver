@@ -44,6 +44,11 @@
           <template #title>首页</template>
         </el-menu-item>
 
+        <el-menu-item index="/windfarm-management" v-if="hasPermission('view_all_data')">
+          <el-icon><OfficeBuilding /></el-icon>
+          <template #title>风电场管理</template>
+        </el-menu-item>
+
         <el-menu-item index="/modeltrain" v-if="hasPermission('train_models')">
           <el-icon><DataAnalysis /></el-icon>
           <template #title>模型训练</template>
@@ -168,7 +173,8 @@ import {
   Tools,
   Upload,
   Histogram,
-  Cloudy
+  Cloudy,
+  OfficeBuilding
 } from '@element-plus/icons-vue'
 
 export default {
@@ -187,6 +193,7 @@ export default {
     Upload,
     Histogram,
     Cloudy,
+    OfficeBuilding,
   },
   setup() {
     const isCollapsed = ref(false)
