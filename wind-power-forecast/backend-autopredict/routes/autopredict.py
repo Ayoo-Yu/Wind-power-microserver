@@ -30,6 +30,7 @@ from tasks.autopredict import (
     train_supershort,
 )
 
+
 autopredict_bp = Blueprint("autopredict", __name__)
 
 log_dirs = Config.LOG_DIRS
@@ -93,7 +94,7 @@ def trigger_initial_run(prediction_type: str, wind_farm_code: str) -> List[str]:
         task_ids.append(result_train.id)
         result_predict: AsyncResult = mapping["predict"].apply_async((wind_farm_code,))
         task_ids.append(result_predict.id)
-    elif prediction_type == "supershort":
+    else:  # supershort
         result_train = mapping["train"].apply_async((wind_farm_code,))
         result_predict = mapping["predict"].apply_async((wind_farm_code,))
         task_ids.extend([result_train.id, result_predict.id])
@@ -112,11 +113,11 @@ def serialize_jobs(jobs) -> Dict[str, Dict[str, Any]]:
     return data
 
 
-def collect_active_tasks() -> Dict[str, list[dict[str, Any]]]:
+def collect_active_tasks() -> Dict[str, List[dict[str, Any]]]:
     inspector = celery_app.control.inspect()
     active = inspector.active() or {}
     pending = inspector.scheduled() or {}
-    result: Dict[str, list[dict[str, Any]]] = {}
+    result: Dict[str, List[dict[str, Any]]] = {}
 
     for bucket in (active, pending):
         for _, tasks in bucket.items():
@@ -135,6 +136,7 @@ def collect_active_tasks() -> Dict[str, list[dict[str, Any]]]:
 def get_status():
     wind_farm_code = resolve_request_wind_farm_code(request.args.get("wind_farm_code"))
     jobs = list_jobs_for_wind_farm(wind_farm_code)
+
     response = {task_type: False for task_type in VALID_TASK_TYPES}
     meta = serialize_jobs(jobs)
     for task_type in VALID_TASK_TYPES:
@@ -163,14 +165,16 @@ def start_prediction():
     )
 
     task_ids = trigger_initial_run(prediction_type, wind_farm_code)
-                return jsonify({
-        "message": f"已启用 {prediction_type} 预测任务，并触发一次执行",
-        "task_ids": task_ids,
-        "job": {
-            "enabled": True,
-            "schedule_cron": job.schedule_cron,
-        },
-    })
+    return jsonify(
+        {
+            "message": f"已启用 {prediction_type} 预测任务，并触发一次执行",
+            "task_ids": task_ids,
+            "job": {
+                "enabled": True,
+                "schedule_cron": job.schedule_cron,
+            },
+        }
+    )
 
 
 @autopredict_bp.route("/stop", methods=["POST"])
@@ -182,7 +186,7 @@ def stop_prediction():
 
     wind_farm_code = resolve_request_wind_farm_code(data)
     set_job_enabled(prediction_type, wind_farm_code, enabled=False)
-        record_task_history(
+    record_task_history(
         task_type=prediction_type,
         wind_farm_code=wind_farm_code,
         action="stop",
@@ -230,106 +234,109 @@ def trigger_prediction():
 
 @autopredict_bp.route("/logs", methods=["GET"])
 def get_logs():
-    prediction_type = request.args.get('type')
-    log_type = request.args.get('logType', 'train')
-    date_str = request.args.get('date', datetime.datetime.now().strftime('%Y%m%d'))
-    lines = request.args.get('lines', 500, type=int)
-    wind_farm_code = resolve_request_wind_farm_code(request.args.get('wind_farm_code'))
-    
+    prediction_type = request.args.get("type")
+    log_type = request.args.get("logType", "train")
+    date_str = request.args.get("date", datetime.datetime.now().strftime("%Y%m%d"))
+    lines = request.args.get("lines", 500, type=int)
+    wind_farm_code = resolve_request_wind_farm_code(request.args.get("wind_farm_code"))
+
     if not prediction_type or prediction_type not in VALID_TASK_TYPES:
-        return jsonify({'error': '无效的预测类型'}), 400
-    
-        if log_type == 'main':
-        return jsonify({'error': '主日志不可用：PM2 已移除'}), 400
+        return jsonify({"error": "无效的预测类型"}), 400
+
+    if log_type == "main":
+        return jsonify({"error": "主日志不可用：Celery 模式下无需主日志"}), 400
 
     log_dir = resolve_log_dir(prediction_type, log_type, wind_farm_code)
-            if not log_dir:
-                return jsonify({'error': f'无效的日志类型: {log_type}'}), 400
-            
+    if not log_dir:
+        return jsonify({"error": f"无效的日志类型: {log_type}"}), 400
+
     log_files = glob.glob(str(log_dir / f"{date_str}*.log"))
-            if not log_files:
-                return jsonify({'logs': f'未找到{date_str}的{log_type}日志文件'})
-            
-            latest_log = max(log_files, key=os.path.getmtime)
-    with open(latest_log, 'r', encoding='utf-8', errors='replace') as fp:
+    if not log_files:
+        return jsonify({"logs": f"未找到{date_str}的{log_type}日志文件"})
+
+    latest_log = max(log_files, key=os.path.getmtime)
+    with open(latest_log, "r", encoding="utf-8", errors="replace") as fp:
         all_lines = fp.readlines()
-                    log_content = ''.join(all_lines[-lines:]) if len(all_lines) > lines else ''.join(all_lines)
-                
-                file_info = f"文件: {os.path.basename(latest_log)}\n日期: {datetime.datetime.fromtimestamp(os.path.getmtime(latest_log)).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-                log_content = file_info + log_content
-                
+        log_content = "".join(all_lines[-lines:]) if len(all_lines) > lines else "".join(all_lines)
+
+    file_info = (
+        f"文件: {os.path.basename(latest_log)}\n"
+        f"日期: {datetime.datetime.fromtimestamp(os.path.getmtime(latest_log)).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    )
+    log_content = file_info + log_content
+
     record_task_history(
         task_type=prediction_type,
         wind_farm_code=wind_farm_code,
-        action='logs',
-        status='success',
-        details=f'{log_type}::{latest_log}',
+        action="logs",
+        status="success",
+        details=f"{log_type}::{latest_log}",
     )
 
-    return jsonify({'logs': log_content})
+    return jsonify({"logs": log_content})
 
 
-@autopredict_bp.route('/history', methods=['GET'])
+@autopredict_bp.route("/history", methods=["GET"])
 def get_task_history():
     from db_models import TaskHistory  # Imported lazily to avoid circular imports
     from db_session import db_session
 
-    task_type = request.args.get('type')
-    action = request.args.get('action')
-    limit = request.args.get('limit', 50, type=int)
-    offset = request.args.get('offset', 0, type=int)
-    wind_farm_code = request.args.get('wind_farm_code')
+    task_type = request.args.get("type")
+    action = request.args.get("action")
+    limit = request.args.get("limit", 50, type=int)
+    offset = request.args.get("offset", 0, type=int)
+    wind_farm_code = request.args.get("wind_farm_code")
 
     with db_session() as session:
         query = session.query(TaskHistory).order_by(TaskHistory.created_at.desc())
-            if task_type:
-                query = query.filter(TaskHistory.task_type == task_type)
-            if action:
-                query = query.filter(TaskHistory.action == action)
+        if task_type:
+            query = query.filter(TaskHistory.task_type == task_type)
+        if action:
+            query = query.filter(TaskHistory.action == action)
         if wind_farm_code:
             query = query.filter(TaskHistory.wind_farm_code == wind_farm_code)
-                
-            total = query.count()
-            history = query.offset(offset).limit(limit).all()
-            
+
+        total = query.count()
+        history = query.offset(offset).limit(limit).all()
+
         data = [
             {
-                    'id': item.id,
-                    'task_id': item.task_id,
-                    'task_type': item.task_type,
-                'wind_farm_code': item.wind_farm_code,
-                    'action': item.action,
-                    'status': item.status,
-                    'details': item.details,
-                'user': item.user,
-                'created_at': item.created_at.strftime('%Y-%m-%d %H:%M:%S') if item.created_at else None,
+                "id": item.id,
+                "task_id": item.task_id,
+                "task_type": item.task_type,
+                "wind_farm_code": item.wind_farm_code,
+                "action": item.action,
+                "status": item.status,
+                "details": item.details,
+                "user": item.user,
+                "created_at": item.created_at.strftime("%Y-%m-%d %H:%M:%S") if item.created_at else None,
             }
             for item in history
         ]
-            
-            return jsonify({
-                'total': total,
-                'offset': offset,
-                'limit': limit,
-        'data': data,
-            })
-        
 
-@autopredict_bp.route('/task_status', methods=['GET'])
+    return jsonify({
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "data": data,
+    })
+
+
+@autopredict_bp.route("/task_status", methods=["GET"])
 def get_task_status():
-    prediction_type = request.args.get('type')
-    wind_farm_code = resolve_request_wind_farm_code(request.args.get('wind_farm_code'))
+    prediction_type = request.args.get("type")
+    wind_farm_code = resolve_request_wind_farm_code(request.args.get("wind_farm_code"))
     if prediction_type not in VALID_TASK_TYPES:
-        return jsonify({'error': '无效的预测类型'}), 400
-    
+        return jsonify({"error": "无效的预测类型"}), 400
+
     jobs_meta = serialize_jobs(list_jobs_for_wind_farm(wind_farm_code))
     active_tasks = collect_active_tasks()
 
-    predict_task_name = TASK_EXECUTION_MAP[prediction_type]['predict'].name
+    predict_task_name = TASK_EXECUTION_MAP[prediction_type]["predict"].name
     response = {
-        'enabled': jobs_meta.get(prediction_type, {}).get('enabled', False),
-        'last_triggered_at': jobs_meta.get(prediction_type, {}).get('last_triggered_at'),
-        'active_tasks': active_tasks.get(predict_task_name, []),
+        "enabled": jobs_meta.get(prediction_type, {}).get("enabled", False),
+        "last_triggered_at": jobs_meta.get(prediction_type, {}).get("last_triggered_at"),
+        "active_tasks": active_tasks.get(predict_task_name, []),
     }
     return jsonify(response)
 
