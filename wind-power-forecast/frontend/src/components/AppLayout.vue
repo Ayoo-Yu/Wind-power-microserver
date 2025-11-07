@@ -11,7 +11,9 @@
 
     <!-- 背景容器：内联样式根据开关动态控制动画播放状态 -->
     <div class="background-container">
-      <div :style="backgroundStyle"></div>
+      <div class="background-aurora" :style="backgroundStyle"></div>
+      <div class="background-grid"></div>
+      <div class="background-glow"></div>
     </div>
 
     <!-- 侧边栏 -->
@@ -106,7 +108,11 @@
             <Fold v-if="!isCollapsed" />
             <Expand v-else />
           </el-icon>
-          <h1 class="header-title">中国三峡集团风电功率预测平台</h1>
+          <div class="header-text">
+            <h1 class="header-title">中国三峡集团风电功率预测平台</h1>
+            <span class="header-subtitle">Wind Power Intelligence Console</span>
+          </div>
+          <span class="status-indicator header-status">系统在线</span>
         </div>
         <div class="header-right">
           <el-select
@@ -235,11 +241,12 @@ export default {
       left: '0',
       width: '100%',
       height: '100%',
-      background: 'linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab)',
-      backgroundSize: '400% 400%',
-      opacity: '1',
-      transition: 'opacity 0.5s ease',
-      animation: 'gradient 15s ease infinite',
+      background: 'linear-gradient(120deg, rgba(19, 66, 130, 0.55) 0%, rgba(7, 20, 45, 0.92) 40%, rgba(30, 115, 224, 0.45) 100%)',
+      backgroundSize: '220% 220%',
+      opacity: isAnimatedBackground.value ? '0.95' : '0.75',
+      filter: 'blur(0px)',
+      transition: 'opacity 0.6s ease',
+      animation: 'auroraFlow 20s ease infinite',
       animationPlayState: isAnimatedBackground.value ? 'running' : 'paused'
     }))
 
@@ -459,13 +466,13 @@ export default {
 </script>
 
 <style scoped>
-/* 主容器 */
 .app-container {
-  height: 100vh;
   position: relative;
+  height: 100vh;
+  overflow: hidden;
+  color: var(--text-primary);
 }
 
-/* 对话框样式 */
 .dialog-footer {
   text-align: right;
   margin-top: 20px;
@@ -476,18 +483,44 @@ export default {
   justify-content: flex-start;
 }
 
-/* 背景容器 */
 .background-container {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  inset: 0;
+  pointer-events: none;
   z-index: 0;
+  overflow: hidden;
 }
 
-/* 定义渐变动画 */
-@keyframes gradient {
+.background-aurora,
+.background-grid,
+.background-glow {
+  position: absolute;
+  inset: 0;
+}
+
+.background-aurora {
+  mix-blend-mode: screen;
+  opacity: 0.9;
+}
+
+.background-grid {
+  background-image:
+    linear-gradient(90deg, rgba(56, 196, 255, 0.08) 1px, transparent 0),
+    linear-gradient(0deg, rgba(56, 196, 255, 0.08) 1px, transparent 0);
+  background-size: 160px 160px;
+  opacity: 0.25;
+  animation: gridDrift 45s linear infinite;
+}
+
+.background-glow {
+  background: radial-gradient(circle at 28% 18%, rgba(34, 246, 170, 0.22), transparent 62%),
+              radial-gradient(circle at 70% 82%, rgba(56, 196, 255, 0.18), transparent 58%);
+  filter: blur(18px);
+  opacity: 0.7;
+  animation: glowPulse 14s ease-in-out infinite;
+}
+
+@keyframes auroraFlow {
   0% {
     background-position: 0% 50%;
   }
@@ -499,152 +532,316 @@ export default {
   }
 }
 
-/* 确保其他内容在背景之上 */
-.main-container, .sidebar {
+@keyframes gridDrift {
+  0% {
+    background-position: 0 0, 0 0;
+  }
+  100% {
+    background-position: 160px 160px, 160px 160px;
+  }
+}
+
+@keyframes glowPulse {
+  0%, 100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.86;
+  }
+}
+
+.main-container,
+.sidebar {
   position: relative;
   z-index: 1;
 }
 
-/* 调整主容器背景为透明 */
 .main-container {
   background: transparent !important;
 }
 
-/* 调整主内容区域背景为透明 */
 .main-content {
   background: transparent !important;
-  padding: 0;
+  padding: 32px 40px;
   overflow-y: auto;
 }
 
-/* 侧边栏和顶部导航栏 */
 .sidebar {
-  background: var(--card-dark);
-  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  background: rgba(6, 18, 36, 0.9);
+  border-right: 1px solid rgba(56, 196, 255, 0.24);
+  backdrop-filter: blur(22px);
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
-  z-index: 1000;
-  box-shadow: 4px 0 8px rgba(0, 0, 0, 0.05);
+  box-shadow: 8px 0 32px rgba(3, 13, 30, 0.45);
+}
+
+.sidebar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: -1px;
+  width: 1px;
+  height: 100%;
+  background: linear-gradient(180deg, transparent, rgba(56, 196, 255, 0.45), transparent);
+  opacity: 0.6;
 }
 
 .brand {
-  height: 64px;
+  position: relative;
+  height: 92px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
   cursor: pointer;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  border-bottom: 1px solid rgba(56, 196, 255, 0.18);
+}
+
+.brand::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(56, 196, 255, 0.25), transparent 65%);
+  opacity: 0.55;
 }
 
 .brand-logo {
-  height: 40px;
-  transition: all 0.3s ease;
+  height: 42px;
+  position: relative;
+  filter: drop-shadow(0 6px 12px rgba(0, 168, 255, 0.35));
+  transition: transform 0.3s ease;
+}
+
+.brand:hover .brand-logo {
+  transform: scale(1.04);
 }
 
 .collapse-icon {
   font-size: 24px;
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
-/* 菜单样式 */
 .el-menu-vertical {
+  flex: 1;
   border-right: none;
   background: transparent;
-  border: none;
+  padding: 12px 0 24px;
 }
 
-.el-menu {
+.el-menu-vertical :deep(.el-menu) {
+  border-right: none;
   background: transparent;
-  border: none;
 }
 
 .el-menu-item {
+  position: relative;
   color: var(--text-secondary);
-  height: 50px;
-  margin: 8px 0;
+  height: 52px;
+  margin: 6px 12px;
+  border-radius: 14px;
+  letter-spacing: 0.08em;
+  padding-left: 20px !important;
+  transition: all 0.28s ease;
 }
 
-.el-menu-item.is-active {
-  background: linear-gradient(90deg, rgba(52, 199, 89, 0.1), transparent);
-  color: #34C759;
-  border-left: 3px solid #34C759;
-}
-
-.el-menu-item:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: #ffffff;
+.el-menu-item::before {
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  width: 4px;
+  height: 0;
+  border-radius: 999px;
+  background: var(--accent-gradient);
+  transform: translateY(-50%);
+  transition: height 0.28s ease, opacity 0.28s ease;
+  opacity: 0;
 }
 
 .el-menu-item .el-icon {
   font-size: 20px;
+  margin-right: 12px;
 }
 
-/* 顶部导航栏 */
+.el-menu-item.is-active {
+  color: var(--text-primary);
+  background: rgba(56, 196, 255, 0.16);
+  box-shadow: 0 12px 28px rgba(8, 48, 92, 0.45);
+}
+
+.el-menu-item.is-active::before {
+  height: 70%;
+  opacity: 1;
+}
+
+.el-menu-item:hover {
+  color: var(--text-primary);
+  background: rgba(56, 196, 255, 0.12);
+}
+
 .header {
-  background: var(--card-dark);
-  backdrop-filter: blur(20px);
-  border-bottom: 1px solid var(--border-color);
-  z-index: 999;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 24px;
-  height: 64px;
+  gap: 24px;
+  padding: 0 36px;
+  height: 84px;
+  background: linear-gradient(120deg, rgba(6, 18, 36, 0.85) 0%, rgba(8, 24, 51, 0.92) 70%, rgba(8, 38, 73, 0.88) 100%);
+  border-bottom: 1px solid rgba(56, 196, 255, 0.22);
+  box-shadow: 0 12px 40px rgba(0, 12, 30, 0.5);
+  backdrop-filter: blur(22px);
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 20px;
 }
 
 .collapse-btn {
-  font-size: 20px;
-  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: rgba(5, 15, 34, 0.82);
+  border: 1px solid rgba(56, 196, 255, 0.24);
   color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.collapse-btn:hover {
+  border-color: rgba(56, 196, 255, 0.4);
+  box-shadow: 0 0 0 6px rgba(56, 196, 255, 0.12);
+}
+
+.header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .header-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--text-primary);
   margin: 0;
-  letter-spacing: -0.003em;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.header-subtitle {
+  font-size: 12px;
+  letter-spacing: 0.38em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.header-status {
+  font-size: 11px;
+  letter-spacing: 0.24em;
+  padding: 6px 16px;
+  background: rgba(34, 246, 170, 0.16);
+  border: 1px solid rgba(34, 246, 170, 0.45);
+  border-radius: 999px;
+  box-shadow: inset 0 0 12px rgba(34, 246, 170, 0.35);
 }
 
 .header-right {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 20px;
 }
 
 .wind-farm-select {
-  min-width: 220px;
+  min-width: 240px;
+}
+
+.wind-farm-select :deep(.el-input__wrapper) {
+  min-height: 42px;
+  background: rgba(5, 15, 34, 0.82) !important;
+  border-radius: 14px !important;
+}
+
+.wind-farm-select :deep(.el-select__caret) {
+  color: var(--text-secondary);
 }
 
 .user-profile {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  padding: 6px 12px;
-  border-radius: 20px;
-  transition: all 0.3s ease;
-  background: rgba(255, 255, 255, 0.05);
+  gap: 10px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(5, 16, 34, 0.8);
+  border: 1px solid rgba(56, 196, 255, 0.24);
+  box-shadow: 0 10px 30px rgba(4, 20, 40, 0.45);
+  transition: all 0.25s ease;
+}
+
+.user-profile::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  border: 1px solid rgba(56, 196, 255, 0.24);
+  opacity: 0;
+  transition: opacity 0.3s ease;
 }
 
 .user-profile:hover {
-  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(56, 196, 255, 0.42);
+  box-shadow: 0 18px 32px rgba(4, 20, 40, 0.6);
+}
+
+.user-profile:hover::before {
+  opacity: 1;
+}
+
+.avatar {
+  background: linear-gradient(135deg, #38C4FF, #1EFFA3);
+  color: #041022;
+  font-weight: 700;
 }
 
 .username {
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
   color: var(--text-primary);
 }
 
-/* 响应式 */
+@media (max-width: 1024px) {
+  .main-content {
+    padding: 24px 24px 32px;
+  }
+
+  .header {
+    padding: 0 24px;
+    height: 74px;
+  }
+
+  .header-title {
+    font-size: 18px;
+  }
+
+  .header-subtitle {
+    display: none;
+  }
+
+  .header-status {
+    display: none;
+  }
+}
+
 @media (max-width: 768px) {
   .sidebar {
     position: fixed;
@@ -653,49 +850,49 @@ export default {
     top: 0;
   }
 
-  .header-title {
-    font-size: 16px;
+  .username {
+    display: none;
   }
 
-  .username {
+  .wind-farm-select {
     display: none;
   }
 }
 
-/* 认证加载指示器样式 */
 .auth-loading-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  inset: 0;
+  background: rgba(3, 9, 22, 0.78);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 9999;
+  backdrop-filter: blur(12px);
 }
 
 .auth-loading-container {
-  background-color: white;
-  padding: 30px;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 16px;
+  padding: 32px 44px;
+  border-radius: 18px;
+  background: rgba(6, 16, 34, 0.92);
+  border: 1px solid rgba(56, 196, 255, 0.24);
+  box-shadow: 0 30px 80px rgba(0, 10, 24, 0.7);
 }
 
 .auth-loading-text {
-  margin-top: 15px;
-  font-size: 16px;
-  color: #333;
+  font-size: 15px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
 }
 
 .loading-icon {
-  font-size: 32px;
-  color: #409EFF;
-  animation: rotating 2s linear infinite;
+  font-size: 34px;
+  color: var(--accent-primary);
+  animation: rotating 1.8s linear infinite;
 }
 
 @keyframes rotating {

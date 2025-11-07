@@ -1,340 +1,341 @@
 <template>
   <div class="power-compare-container power-predict-container">
-    <!-- 添加背景动画层 -->
-    <div class="background-container">
-      <div class="animated-background"></div>
-    </div>
-
-    <!-- 刷新按钮 -->
-    <el-button 
-      icon="Refresh" 
-      circle 
-      class="refresh-button"
-      title="刷新页面"
-      @click="refreshPage"
-    ></el-button>
-
-    <h1 class="page-title">数据可视化与下载</h1>
-
-    <div class="wind-farm-banner">
-      <el-tag type="success" effect="dark">当前场站：{{ currentWindFarmDisplay }}</el-tag>
-    </div>
-
-    <el-card class="operational-upload-card" shadow="hover">
-      <template #header>
-        <div class="card-header">
-          <div class="card-header-title">
-            <span class="icon-bubble">
-              <el-icon><UploadFilled /></el-icon>
-            </span>
-            <div class="card-header-copy">
-              <span class="card-title">运营数据上传</span>
-              <span class="card-subtitle">将 CSV 文件直接导入当前场站的数据域</span>
-            </div>
-          </div>
-          <el-tag type="info" effect="dark" size="small">当前场站：{{ currentWindFarmDisplay }}</el-tag>
+    <div class="page-shell power-compare-content">
+      <div class="header-panel glass-panel">
+        <div class="header-text">
+          <h1 class="page-title">数据可视化与下载</h1>
+          <p class="page-subtitle">多维对比预测与实测，洞察模型表现与上报状态</p>
         </div>
-      </template>
-      <div class="operational-upload-body">
-        <el-row class="operational-upload-grid" :gutter="24">
-          <el-col :xs="24" :lg="14">
-            <div class="upload-panel">
-              <div class="upload-steps">
-                <span class="tip-badge">操作提示</span>
-                <ul>
-                  <li>选择上传的数据类型，并在右侧查看字段要求</li>
-                  <li>拖拽或点击导入 CSV 文件，列名需与字段保持一致</li>
-                  <li>提交后系统将自动附带当前风场标识</li>
-                </ul>
-              </div>
+        <div class="header-actions">
+          <span class="status-indicator wind-farm-chip">当前场站：{{ currentWindFarmDisplay || '未选择' }}</span>
+          <el-tooltip content="刷新页面" placement="top">
+            <el-button 
+              icon="Refresh" 
+              circle 
+              class="refresh-button"
+              @click="refreshPage"
+              :loading="loading"
+            />
+          </el-tooltip>
+        </div>
+      </div>
 
-              <el-form label-position="top" class="operational-form">
-                <el-form-item label="数据类型">
-                  <el-select
-                    v-model="selectedOperationalTable"
-                    placeholder="选择要上传的数据表"
-                    clearable
-                    filterable
-                    :loading="operationalSchemaLoading && !operationalSchema"
-                    @change="handleOperationalTableChange"
+      <el-card class="operational-upload-card glass-panel" shadow="never">
+        <template #header>
+          <div class="card-header">
+            <div class="card-header-title">
+              <span class="icon-bubble">
+                <el-icon><UploadFilled /></el-icon>
+              </span>
+              <div class="card-header-copy">
+                <span class="card-title">运营数据上传</span>
+                <span class="card-subtitle">将 CSV 文件直接导入当前场站的数据域</span>
+              </div>
+            </div>
+            <el-tag type="info" effect="dark" size="small">当前场站：{{ currentWindFarmDisplay }}</el-tag>
+          </div>
+        </template>
+        <div class="operational-upload-body">
+          <el-row class="operational-upload-grid" :gutter="24">
+            <el-col :xs="24" :lg="14">
+              <div class="upload-panel">
+                <div class="upload-steps">
+                  <span class="tip-badge">操作提示</span>
+                  <ul>
+                    <li>选择上传的数据类型，并在右侧查看字段要求</li>
+                    <li>拖拽或点击导入 CSV 文件，列名需与字段保持一致</li>
+                    <li>提交后系统将自动附带当前风场标识</li>
+                  </ul>
+                </div>
+
+                <el-form label-position="top" class="operational-form">
+                  <el-form-item label="数据类型">
+                    <el-select
+                      v-model="selectedOperationalTable"
+                      placeholder="选择要上传的数据表"
+                      clearable
+                      filterable
+                      :loading="operationalSchemaLoading && !operationalSchema"
+                      @change="handleOperationalTableChange"
+                    >
+                      <el-option
+                        v-for="table in operationalTables"
+                        :key="table"
+                        :label="operationalTableDescriptions[table] || table"
+                        :value="table"
+                      />
+                    </el-select>
+                  </el-form-item>
+                </el-form>
+
+                <p class="table-description">{{ operationalTableDescription }}</p>
+
+                <div class="upload-drop-wrapper">
+                  <el-upload
+                    class="operational-upload-dropzone"
+                    drag
+                    :limit="1"
+                    :auto-upload="false"
+                    :file-list="operationalUpload.fileList"
+                    :on-change="handleOperationalFileChange"
+                    :on-remove="handleOperationalFileRemove"
+                    accept=".csv"
                   >
-                    <el-option
-                      v-for="table in operationalTables"
-                      :key="table"
-                      :label="operationalTableDescriptions[table] || table"
-                      :value="table"
-                    />
-                  </el-select>
-                </el-form-item>
-              </el-form>
-
-              <p class="table-description">{{ operationalTableDescription }}</p>
-
-              <div class="upload-drop-wrapper">
-                <el-upload
-                  class="operational-upload-dropzone"
-                  drag
-                  :limit="1"
-                  :auto-upload="false"
-                  :file-list="operationalUpload.fileList"
-                  :on-change="handleOperationalFileChange"
-                  :on-remove="handleOperationalFileRemove"
-                  accept=".csv"
-                >
-                  <div class="dropzone-inner">
-                    <el-icon class="dropzone-icon"><UploadFilled /></el-icon>
-                    <div class="dropzone-title">拖拽或点击上传 CSV 文件</div>
-                    <p class="dropzone-desc">系统将自动绑定「{{ currentWindFarmDisplay }}」</p>
-                  </div>
-                </el-upload>
-              </div>
-
-              <transition name="fade-slide">
-                <div v-if="operationalUpload.file" class="selected-file-chip">
-                  <span class="file-icon">
-                    <el-icon><Document /></el-icon>
-                  </span>
-                  <div class="file-meta">
-                    <span class="file-name">{{ operationalUpload.file.name }}</span>
-                    <span class="file-size">{{ formatFileSize(operationalUpload.file.size) }}</span>
-                  </div>
-                  <el-button type="text" size="small" @click="resetOperationalUploadState({ clearMessages: true })">更换文件</el-button>
+                    <div class="dropzone-inner">
+                      <el-icon class="dropzone-icon"><UploadFilled /></el-icon>
+                      <div class="dropzone-title">拖拽或点击上传 CSV 文件</div>
+                      <p class="dropzone-desc">系统将自动绑定「{{ currentWindFarmDisplay }}」</p>
+                    </div>
+                  </el-upload>
                 </div>
-              </transition>
 
-              <div class="operational-upload-actions">
-                <el-button type="primary" size="large" :loading="operationalUpload.uploading" @click="uploadOperationalDataset">上传数据</el-button>
-                <el-button size="large" @click="resetOperationalUploadState({ clearMessages: true })">清空</el-button>
-              </div>
+                <transition name="fade-slide">
+                  <div v-if="operationalUpload.file" class="selected-file-chip">
+                    <span class="file-icon">
+                      <el-icon><Document /></el-icon>
+                    </span>
+                    <div class="file-meta">
+                      <span class="file-name">{{ operationalUpload.file.name }}</span>
+                      <span class="file-size">{{ formatFileSize(operationalUpload.file.size) }}</span>
+                    </div>
+                    <el-button type="text" size="small" @click="resetOperationalUploadState({ clearMessages: true })">更换文件</el-button>
+                  </div>
+                </transition>
 
-              <transition name="fade-slide">
-                <el-alert
-                  v-if="operationalUploadResult"
-                  type="success"
-                  :title="operationalUploadResult.message || '上传成功'"
-                  show-icon
-                  closable
-                  @close="operationalUploadResult = null"
-                />
-              </transition>
-              <transition name="fade-slide">
-                <el-alert
-                  v-if="operationalUploadError"
-                  type="error"
-                  :title="operationalUploadError"
-                  show-icon
-                  closable
-                  @close="operationalUploadError = null"
-                />
-              </transition>
-            </div>
-          </el-col>
-          <el-col :xs="24" :lg="10">
-            <div class="schema-panel">
-              <div class="schema-panel-header">
-                <h3>字段要求</h3>
-                <span>确保 CSV 列与字段类型匹配</span>
-              </div>
-              <div class="schema-panel-body">
-                <div v-if="operationalSchemaLoading" class="schema-loading">
-                  <el-skeleton :rows="6" animated />
+                <div class="operational-upload-actions">
+                  <el-button type="primary" size="large" :loading="operationalUpload.uploading" @click="uploadOperationalDataset">上传数据</el-button>
+                  <el-button size="large" @click="resetOperationalUploadState({ clearMessages: true })">清空</el-button>
                 </div>
-                <el-table
-                  v-else-if="operationalSchemaRows.length"
-                  :data="operationalSchemaRows"
-                  class="schema-table"
-                  border
-                  size="small"
-                >
-                  <el-table-column prop="name" label="字段名" width="140" />
-                  <el-table-column label="字段说明">
-                    <template #default="{ row }">
-                      <div class="schema-info">
-                        <span class="schema-type">{{ row.meta?.type || '未知类型' }}</span>
-                        <span v-if="row.meta?.comment" class="schema-comment">{{ row.meta.comment }}</span>
-                        <span class="schema-required">
-                          {{ row.meta?.nullable ? '可为空' : '必填' }}
-                          <span v-if="row.meta?.primary_key" class="schema-primary">主键</span>
-                        </span>
-                      </div>
-                    </template>
-                  </el-table-column>
-                </el-table>
-                <el-empty v-else description="请选择数据类型以查看字段信息" />
+
+                <transition name="fade-slide">
+                  <el-alert
+                    v-if="operationalUploadResult"
+                    type="success"
+                    :title="operationalUploadResult.message || '上传成功'"
+                    show-icon
+                    closable
+                    @close="operationalUploadResult = null"
+                  />
+                </transition>
+                <transition name="fade-slide">
+                  <el-alert
+                    v-if="operationalUploadError"
+                    type="error"
+                    :title="operationalUploadError"
+                    show-icon
+                    closable
+                    @close="operationalUploadError = null"
+                  />
+                </transition>
+              </div>
+            </el-col>
+            <el-col :xs="24" :lg="10">
+              <div class="schema-panel">
+                <div class="schema-panel-header">
+                  <h3>字段要求</h3>
+                  <span>确保 CSV 列与字段类型匹配</span>
+                </div>
+                <div class="schema-panel-body">
+                  <div v-if="operationalSchemaLoading" class="schema-loading">
+                    <el-skeleton :rows="6" animated />
+                  </div>
+                  <el-table
+                    v-else-if="operationalSchemaRows.length"
+                    :data="operationalSchemaRows"
+                    class="schema-table"
+                    border
+                    size="small"
+                  >
+                    <el-table-column prop="name" label="字段名" width="140" />
+                    <el-table-column label="字段说明">
+                      <template #default="{ row }">
+                        <div class="schema-info">
+                          <span class="schema-type">{{ row.meta?.type || '未知类型' }}</span>
+                          <span v-if="row.meta?.comment" class="schema-comment">{{ row.meta.comment }}</span>
+                          <span class="schema-required">
+                            {{ row.meta?.nullable ? '可为空' : '必填' }}
+                            <span v-if="row.meta?.primary_key" class="schema-primary">主键</span>
+                          </span>
+                        </div>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                  <el-empty v-else description="请选择数据类型以查看字段信息" />
+                </div>
+              </div>
+            </el-col>
+          </el-row>
+        </div>
+      </el-card>
+
+      <!-- 时间选择与配置区域 -->
+      <div class="config-panel">
+        <el-card class="merged-config-card"> 
+          <!-- Row 1: Time Picker, Query Button, Download Buttons -->
+          <div class="config-row config-row-1">
+            <div class="time-picker-wrapper-outer">
+              <span class="label">选择时间范围：</span>
+              <el-date-picker
+                v-model="timeRange"
+                type="datetimerange"
+                range-separator="至"
+                start-placeholder="开始时间"
+                end-placeholder="结束时间"
+                value-format="YYYY-MM-DD HH:mm:ss"
+                class="time-range-picker-element" 
+              />
+            </div>
+            <el-button-group class="quick-time-select-buttons" style="margin-left: 10px; margin-right: 10px;">
+              <el-button type="info" plain size="small" @click="setQuickTimeRange('today')" :disabled="isQuickTimeSwitching">今日</el-button>
+              <el-button type="info" plain size="small" @click="setQuickTimeRange('3d')" :disabled="isQuickTimeSwitching">近三天</el-button>
+              <el-button type="info" plain size="small" @click="setQuickTimeRange('1w')" :disabled="isQuickTimeSwitching">近一周</el-button>
+              <el-button type="info" plain size="small" @click="setQuickTimeRange('1m')" :disabled="isQuickTimeSwitching">近一个月</el-button>
+            </el-button-group>
+            <el-button 
+              type="primary" 
+              @click="fetchComparisonData"
+              :loading="loading"
+              class="query-button"
+            >
+              查询数据
+            </el-button>
+            <el-button-group class="download-buttons download-buttons-row1">
+              <el-button 
+                type="success" 
+                @click="downloadCSV"
+                :disabled="!exportData.comparison"
+              >
+                数据下载
+              </el-button>
+              <el-button 
+                type="success" 
+                @click="downloadMetricsCSV"
+                :disabled="!exportData.metrics"
+              >
+                指标下载
+              </el-button>
+              <el-button 
+                type="success" 
+                @click="downloadSVG"
+                :disabled="!chartData"
+              >
+                功率图下载
+              </el-button>
+              <el-button 
+                type="success" 
+                @click="downloadMetricSVG"
+                :disabled="!dailyMetrics"
+              >
+                指标图下载
+              </el-button>
+              <el-button
+                type="success"
+                @click="showDailyMetricsAnalysis = !showDailyMetricsAnalysis"
+              >
+                {{ showDailyMetricsAnalysis ? '隐藏' : '显示' }}每日指标
+              </el-button>
+              <el-button
+                type="success"
+                @click="showQualificationRateAnalysis = !showQualificationRateAnalysis"
+                :disabled="!qualificationRates || Object.keys(qualificationRates).length === 0"
+              >
+                {{ showQualificationRateAnalysis ? '隐藏' : '显示' }}合格率分析
+              </el-button>
+            </el-button-group>
+          </div>
+
+          <!-- Row 2: Type Select -->
+          <div class="config-row config-row-2">
+            <div class="type-checkbox-group type-checkbox-group-row2">
+              <span class="label">选择展示类型：</span>
+              <el-checkbox-group v-model="selectedTypes" class="type-selector-group">
+                <el-checkbox label="实测值" />
+                <el-checkbox label="超短期预测" />
+                <el-checkbox label="短期预测" />
+                <el-checkbox label="中期预测" />
+                <el-checkbox label="短期风速预测" />
+                <el-checkbox label="中期风速预测" />
+              </el-checkbox-group>
+            </div>
+          </div>
+        </el-card>
+      </div>
+
+      <!-- 图表展示区域 -->
+      <div class="chart-container" v-if="chartData">
+        <div class="chart-wrapper" :key="chartKey">
+          <canvas ref="chartCanvas" style="height: 70vh !important;"></canvas>
+        </div>
+      </div>
+
+      <!-- 每日指标区域 -->
+      <div class="daily-metrics-container" v-if="showDailyMetricsAnalysis && dailyMetrics">
+        <el-card class="metrics-card">
+          <div class="metrics-header">
+            <h3>每日评估指标</h3>
+            <div class="metric-buttons">
+              <el-radio-group v-model="currentMetric" @change="handleMetricChange">
+                <el-radio-button label="acc" :disabled="isMetricButtonCooling">ACC (%)</el-radio-button>
+                <el-radio-button label="mae" :disabled="isMetricButtonCooling">MAE (MW)</el-radio-button>
+                <el-radio-button label="mse" :disabled="isMetricButtonCooling">MSE (MW²)</el-radio-button>
+                <el-radio-button label="rmse" :disabled="isMetricButtonCooling">RMSE (MW)</el-radio-button>
+                <el-radio-button label="k" :disabled="isMetricButtonCooling">K值</el-radio-button>
+                <el-radio-button label="pe" :disabled="isMetricButtonCooling">Pe (MW)</el-radio-button>
+              </el-radio-group>
+            </div>
+          </div>
+          <div class="metrics-chart-wrapper">
+            <canvas 
+              ref="metricChart" 
+              style="width: 100%; height: 100%; display: block;"
+            ></canvas>
+          </div>
+        </el-card>
+      </div>
+
+      <!-- 数据提示区域 -->
+      <div class="empty-data-container" v-if="!chartData">
+        <el-card class="empty-data-card">
+          <div class="empty-data-content">
+            <el-icon class="empty-icon"><PieChart /></el-icon>
+            <h3>暂无数据</h3>
+            <p class="empty-text">请选择时间范围并点击查询数据按钮</p>
+          </div>
+        </el-card>
+      </div>
+
+      <!-- 合格率分析区域 -->
+      <div class="qualification-container" v-if="showQualificationRateAnalysis && qualificationRates && Object.keys(qualificationRates).length > 0">
+        <el-card class="qualification-card">
+          <div class="qualification-header">
+            <h3>预测合格率分析</h3>
+          </div>
+          <div class="qualification-content">
+            <div v-for="(data, type) in qualificationRates" :key="type" class="qualification-item">
+              <div class="qualification-type">
+                <span class="type-label">{{ type }}</span>
+                <span class="threshold-label">合格标准: K值 > {{ data.threshold }}</span>
+              </div>
+              <el-progress 
+                :percentage="data.rate" 
+                :color="getQualificationColor(data.rate)"
+                :format="percent => `${percent.toFixed(1)}%`"
+                :stroke-width="18"
+              />
+              <div class="qualification-details">
+                <span>合格天数: {{ data.qualifiedDays }}/{{ data.totalDays }}</span>
               </div>
             </div>
-          </el-col>
-        </el-row>
+          </div>
+        </el-card>
       </div>
-    </el-card>
 
-    <!-- 时间选择与配置区域 -->
-    <div class="config-panel">
-      <el-card class="merged-config-card"> 
-        <!-- Row 1: Time Picker, Query Button, Download Buttons -->
-        <div class="config-row config-row-1">
-          <div class="time-picker-wrapper-outer">
-            <span class="label">选择时间范围：</span>
-            <el-date-picker
-              v-model="timeRange"
-              type="datetimerange"
-              range-separator="至"
-              start-placeholder="开始时间"
-              end-placeholder="结束时间"
-              value-format="YYYY-MM-DD HH:mm:ss"
-              class="time-range-picker-element" 
-            />
-          </div>
-          <el-button-group class="quick-time-select-buttons" style="margin-left: 10px; margin-right: 10px;">
-            <el-button type="info" plain size="small" @click="setQuickTimeRange('today')" :disabled="isQuickTimeSwitching">今日</el-button>
-            <el-button type="info" plain size="small" @click="setQuickTimeRange('3d')" :disabled="isQuickTimeSwitching">近三天</el-button>
-            <el-button type="info" plain size="small" @click="setQuickTimeRange('1w')" :disabled="isQuickTimeSwitching">近一周</el-button>
-            <el-button type="info" plain size="small" @click="setQuickTimeRange('1m')" :disabled="isQuickTimeSwitching">近一个月</el-button>
-          </el-button-group>
-          <el-button 
-            type="primary" 
-            @click="fetchComparisonData"
-            :loading="loading"
-            class="query-button"
-          >
-            查询数据
-          </el-button>
-          <el-button-group class="download-buttons download-buttons-row1">
-            <el-button 
-              type="success" 
-              @click="downloadCSV"
-              :disabled="!exportData.comparison"
-            >
-              数据下载
-            </el-button>
-            <el-button 
-              type="success" 
-              @click="downloadMetricsCSV"
-              :disabled="!exportData.metrics"
-            >
-              指标下载
-            </el-button>
-            <el-button 
-              type="success" 
-              @click="downloadSVG"
-              :disabled="!chartData"
-            >
-              功率图下载
-            </el-button>
-            <el-button 
-              type="success" 
-              @click="downloadMetricSVG"
-              :disabled="!dailyMetrics"
-            >
-              指标图下载
-            </el-button>
-            <el-button
-              type="success"
-              @click="showDailyMetricsAnalysis = !showDailyMetricsAnalysis"
-            >
-              {{ showDailyMetricsAnalysis ? '隐藏' : '显示' }}每日指标
-            </el-button>
-            <el-button
-              type="success"
-              @click="showQualificationRateAnalysis = !showQualificationRateAnalysis"
-              :disabled="!qualificationRates || Object.keys(qualificationRates).length === 0"
-            >
-              {{ showQualificationRateAnalysis ? '隐藏' : '显示' }}合格率分析
-            </el-button>
-          </el-button-group>
-        </div>
-
-        <!-- Row 2: Type Select -->
-        <div class="config-row config-row-2">
-          <div class="type-checkbox-group type-checkbox-group-row2">
-            <span class="label">选择展示类型：</span>
-            <el-checkbox-group v-model="selectedTypes" class="type-selector-group">
-              <el-checkbox label="实测值" />
-              <el-checkbox label="超短期预测" />
-              <el-checkbox label="短期预测" />
-              <el-checkbox label="中期预测" />
-              <el-checkbox label="短期风速预测" />
-              <el-checkbox label="中期风速预测" />
-            </el-checkbox-group>
-          </div>
-        </div>
-      </el-card>
+      <!-- 加载状态 -->
+      <LoadingIndicator 
+        :visible="loading" 
+        message="数据加载中..."
+      />
     </div>
-
-    <!-- 图表展示区域 -->
-    <div class="chart-container" v-if="chartData">
-      <div class="chart-wrapper" :key="chartKey">
-        <canvas ref="chartCanvas" style="height: 70vh !important;"></canvas>
-      </div>
-    </div>
-
-    <!-- 每日指标区域 -->
-    <div class="daily-metrics-container" v-if="showDailyMetricsAnalysis && dailyMetrics">
-      <el-card class="metrics-card">
-        <div class="metrics-header">
-          <h3>每日评估指标</h3>
-          <div class="metric-buttons">
-            <el-radio-group v-model="currentMetric" @change="handleMetricChange">
-              <el-radio-button label="acc" :disabled="isMetricButtonCooling">ACC (%)</el-radio-button>
-              <el-radio-button label="mae" :disabled="isMetricButtonCooling">MAE (MW)</el-radio-button>
-              <el-radio-button label="mse" :disabled="isMetricButtonCooling">MSE (MW²)</el-radio-button>
-              <el-radio-button label="rmse" :disabled="isMetricButtonCooling">RMSE (MW)</el-radio-button>
-              <el-radio-button label="k" :disabled="isMetricButtonCooling">K值</el-radio-button>
-              <el-radio-button label="pe" :disabled="isMetricButtonCooling">Pe (MW)</el-radio-button>
-            </el-radio-group>
-          </div>
-        </div>
-        <div class="metrics-chart-wrapper">
-          <canvas 
-            ref="metricChart" 
-            style="width: 100%; height: 100%; display: block;"
-          ></canvas>
-        </div>
-      </el-card>
-    </div>
-
-    <!-- 数据提示区域 -->
-    <div class="empty-data-container" v-if="!chartData">
-      <el-card class="empty-data-card">
-        <div class="empty-data-content">
-          <el-icon class="empty-icon"><PieChart /></el-icon>
-          <h3>暂无数据</h3>
-          <p class="empty-text">请选择时间范围并点击查询数据按钮</p>
-        </div>
-      </el-card>
-    </div>
-
-    <!-- 合格率分析区域 -->
-    <div class="qualification-container" v-if="showQualificationRateAnalysis && qualificationRates && Object.keys(qualificationRates).length > 0">
-      <el-card class="qualification-card">
-        <div class="qualification-header">
-          <h3>预测合格率分析</h3>
-        </div>
-        <div class="qualification-content">
-          <div v-for="(data, type) in qualificationRates" :key="type" class="qualification-item">
-            <div class="qualification-type">
-              <span class="type-label">{{ type }}</span>
-              <span class="threshold-label">合格标准: K值 > {{ data.threshold }}</span>
-            </div>
-            <el-progress 
-              :percentage="data.rate" 
-              :color="getQualificationColor(data.rate)"
-              :format="percent => `${percent.toFixed(1)}%`"
-              :stroke-width="18"
-            />
-            <div class="qualification-details">
-              <span>合格天数: {{ data.qualifiedDays }}/{{ data.totalDays }}</span>
-            </div>
-          </div>
-        </div>
-      </el-card>
-    </div>
-
-    <!-- 加载状态 -->
-    <LoadingIndicator 
-      :visible="loading" 
-      message="数据加载中..."
-    />
   </div>
 </template>
 

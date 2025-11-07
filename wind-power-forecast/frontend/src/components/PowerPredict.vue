@@ -1,17 +1,20 @@
 <template>
   <div class="power-predict-container">
-    <div class="content-wrapper">
-      <h1 class="page-title">功率预测</h1>
-      <div class="wind-farm-banner">
-        <el-tag type="success" effect="dark">
-          当前场站：{{ currentWindFarmDisplay }}
-        </el-tag>
+    <div class="content-wrapper page-shell">
+      <div class="header-panel glass-panel">
+        <div class="header-text">
+          <h1 class="page-title">功率预测</h1>
+          <p class="page-subtitle">多源数据驱动的功率预测流程</p>
+        </div>
+        <span class="status-indicator wind-farm-chip">
+          当前场站：{{ currentWindFarmDisplay || '未选择' }}
+        </span>
       </div>
 
-      <div class="main-content">
-        <div class="upload-section">
+      <div class="workflow-layout">
+        <div class="upload-grid">
           <!-- 数据集上传区域 -->
-          <div class="upload-card">
+          <div class="upload-card glass-panel">
             <div class="card-header">
               <h2>选择预测数据集</h2>
               <div class="step-number">1</div>
@@ -32,7 +35,7 @@
           </div>
 
           <!-- 模型上传区域 -->
-          <div class="upload-card">
+          <div class="upload-card glass-panel">
             <div class="card-header">
               <h2>选择预测模型</h2>
               <div class="step-number">2</div>
@@ -54,7 +57,7 @@
           </div>
 
           <!-- 归一化模型上传区域 -->
-          <div class="upload-card">
+          <div class="upload-card glass-panel">
             <div class="card-header">
               <h2>选择归一化模型</h2>
               <div class="step-number">3</div>
@@ -76,9 +79,9 @@
           </div>
         </div>
 
-        <div class="right-panel">
+        <div class="workflow-sidebar">
           <!-- 步骤提示 -->
-          <div class="status-card">
+          <div class="status-card glass-panel">
             <h3>预测文件ID</h3>
             <div class="card-content">
               <StepHintBox 
@@ -102,7 +105,7 @@
           </div>
 
           <!-- 操作按钮 -->
-          <div class="action-card">
+          <div class="action-card glass-panel">
             <div v-if="!csvfileId || !modelfileId || !scalerfileId" class="empty-action-panel">
               <el-icon class="empty-icon"><InfoFilled /></el-icon>
               <p class="empty-text">请完成所有文件上传后开始预测</p>
@@ -130,7 +133,7 @@
       </div>
 
       <!-- 预测结果可视化区域 -->
-      <div v-if="predictions.length > 0" class="visualization-section">
+      <div v-if="predictions.length > 0" class="visualization-section glass-panel">
         <div class="visualization-header">
           <h3 class="section-title">预测结果可视化</h3>
           <div class="visualization-controls">
@@ -195,7 +198,7 @@
     </div>
 
     <!-- 日志查看器 -->
-    <div class="log-section" :class="{ 'log-expanded': logVisible }">
+    <div class="log-section glass-panel" :class="{ 'log-expanded': logVisible }">
       <div class="log-header" @click="toggleLogVisible">
         <h3 class="section-title">预测日志</h3>
         <el-button type="text" class="toggle-button">
@@ -1008,559 +1011,352 @@ export default {
 
 <style scoped>
 .power-predict-container {
-  min-height: 100vh;
-  padding: 40px 0;
-  background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
-  background-size: 400% 400%;
-  animation: gradient 15s ease infinite;
-  position: relative;
+  padding: 32px 0 140px;
+  background: transparent;
+  color: var(--text-primary);
 }
 
 .content-wrapper {
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: 0 40px;
-  box-sizing: border-box;
-  padding-bottom: 60px;
-}
-
-.card-content {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  gap: 32px;
 }
 
-@keyframes gradient {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-.page-title {
-  font-size: 42px !important;
-  font-weight: 600;
-  color: white;
-  text-align: center;
-  margin-bottom: 40px;
-  letter-spacing: -0.003em;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.wind-farm-banner {
+.header-panel {
   display: flex;
-  justify-content: center;
-  margin-bottom: 20px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 28px 32px;
+  box-shadow: 0 24px 68px rgba(4, 16, 40, 0.45);
 }
 
-.main-content {
+.header-text {
   display: flex;
-  gap: 25px;
-  margin-bottom: 30px;
-  position: relative;
-  align-items: stretch;
+  flex-direction: column;
+  gap: 8px;
 }
 
-/* 添加装饰元素 */
-.main-content::before {
-  content: "✨";
-  position: absolute;
-  top: -20px;
-  left: -10px;
-  font-size: 24px;
-  opacity: 0.5;
+.header-text .page-title {
+  margin: 0;
+  text-align: left;
 }
 
-.main-content::after {
-  content: "✨";
-  position: absolute;
-  bottom: -20px;
-  right: -10px;
-  font-size: 24px;
-  opacity: 0.5;
+.page-subtitle {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
 }
 
-.upload-section {
-  flex: 1;
+.wind-farm-chip {
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 10px 22px;
+  background: rgba(34, 246, 170, 0.16);
+  border: 1px solid rgba(34, 246, 170, 0.38);
+  box-shadow: inset 0 0 12px rgba(34, 246, 170, 0.32);
+}
+
+.workflow-layout {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+  gap: 28px;
+  align-items: start;
+}
+
+.upload-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
 }
 
 .upload-card {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(10px);
-  border-radius: 14px;
-  padding: 16px;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.04);
-  transition: all 0.3s ease;
-  border: 1px solid rgba(0, 0, 0, 0.03);
-  position: relative;
   display: flex;
   flex-direction: column;
-}
-
-/* 添加卡片装饰 */
-.upload-card::before {
-  content: "✦";
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  font-size: 14px;
-  color: #0077ED;
-  opacity: 0.5;
+  gap: 18px;
+  padding: 26px 24px;
+  min-height: 260px;
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 14px;
+  gap: 16px;
+}
+
+.card-header h2 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-primary);
 }
 
 .step-number {
-  width: 30px;
-  height: 30px;
-  border-radius: 15px;
-  background: linear-gradient(135deg, #0077ED 0%, #00A2FF 100%);
-  color: white;
+  width: 36px;
+  height: 36px;
+  border-radius: 18px;
+  background: var(--accent-gradient-strong);
+  color: #031320;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 600;
-  font-size: 14px;
-  box-shadow: 0 3px 8px rgba(0, 119, 237, 0.2);
-  flex-shrink: 0;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  box-shadow: var(--accent-shadow);
 }
 
-.upload-card h2 {
-  font-size: 18px;
-  font-weight: 600;
-  color: #1d1d1f;
-  margin: 0;
-  letter-spacing: -0.003em;
-}
-
-.right-panel {
-  width: 300px;
+.card-content {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  flex-shrink: 0;
+  gap: 16px;
 }
 
-.status-card, .action-card {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(10px);
-  border-radius: 14px;
-  padding: 16px;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.04);
-  border: 1px solid rgba(0, 0, 0, 0.03);
+.workflow-sidebar {
   display: flex;
   flex-direction: column;
+  gap: 24px;
+  position: sticky;
+  top: 120px;
 }
 
-.status-card {
-  flex: 1;
-  overflow: visible;
-}
-
-.status-card .card-content {
-  overflow: visible;
-  width: 100%;
-}
-
+.status-card,
 .action-card {
-  flex: 1;
-  justify-content: center;
+  padding: 26px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
 .status-card h3 {
-  font-size: 18px;
-  font-weight: 600;
-  color: #1d1d1f;
-  margin: 0 0 14px 0;
-  letter-spacing: -0.003em;
+  margin: 0;
+  font-size: 17px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.status-card .card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
 .action-buttons {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  width: 100%;
-  align-items: center;
+  gap: 14px;
 }
 
 .action-button {
-  height: 36px;
-  padding: 0 16px;
-  font-size: 14px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--surface-border);
+  background: rgba(6, 18, 36, 0.82);
+  color: var(--text-primary);
   font-weight: 600;
-  border-radius: 8px;
-  border: none;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
   cursor: pointer;
-  transition: all 0.3s ease;
-  width: 100%;
-  max-width: 240px;
-  letter-spacing: -0.01em;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.action-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: var(--surface-border-strong);
+  box-shadow: var(--accent-glow-soft);
+}
+
+.action-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .predict-button {
-  background: #0077ED;
-  color: #ffffff;
-}
-
-.predict-button:hover:not(:disabled) {
-  background: #0062CC;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 119, 237, 0.25);
+  background: var(--accent-gradient-strong);
+  border: none;
+  color: #031320;
+  box-shadow: var(--accent-shadow);
 }
 
 .download-button {
-  background: #34C759;
-  color: #ffffff;
-}
-
-.download-button:hover {
-  background: #30B753;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(52, 199, 89, 0.25);
-}
-
-.visualization-section {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(10px);
-  border-radius: 16px;
-  padding: 20px;
-  margin: 30px 0;
-}
-
-.visualization-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-}
-
-.visualization-controls {
-  display: flex;
-  gap: 15px;
-  align-items: center;
-}
-
-.chart-container {
-  background: white;
-  border-radius: 15px;
-  padding: 20px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  margin-bottom: 15px;
-}
-
-.metrics-container {
-  background: white;
-  border-radius: 15px;
-  padding: 15px 20px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-}
-
-.metrics-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-  border-bottom: 1px solid #f0f0f0;
-  padding-bottom: 10px;
-}
-
-.download-metrics {
-  display: flex;
-  align-items: center;
-}
-
-.metrics-container h4 {
-  font-size: 18px;
-  font-weight: 600;
-  color: #1d1d1f;
-  margin: 0;
-}
-
-.metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-}
-
-.metric-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 15px;
-  background: #f8f9fa;
-  border-radius: 10px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  transition: all 0.3s ease;
-}
-
-.metric-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-
-.metric-label {
-  font-weight: 600;
-  color: #1d1d1f;
-  font-size: 16px;
-}
-
-.metric-value {
-  font-size: 18px;
-  color: #0077ED;
-  font-weight: 600;
-}
-
-/* 上传按钮的特定样式 */
-.el-upload .el-button,
-.el-button.el-button--success,
-.el-button--success:hover,
-.el-button--success:focus,
-.el-button--success:active {
-  background-color: #34C759 !important;
-  border-color: transparent !important;
-  border: 0 !important;
-  color: white !important;
-  outline: none !important;
-}
-
-/* 覆盖Element Plus的默认样式 */
-:deep(.el-button) {
-  border: 0 !important;
-  outline: none !important;
-}
-
-:deep(.el-button--success) {
-  --el-button-border-color: transparent !important;
-  --el-button-bg-color: #34C759 !important;
-  border: none !important;
-}
-
-:deep(.el-upload) {
-  .el-button {
-    border: 0 !important;
-    background-color: #34C759 !important;
-  }
-}
-
-/* 删除按钮样式 */
-.el-button--danger {
-  background-color: #ff3b30 !important;
-  border: none !important;
-  color: white !important;
+  border-color: rgba(34, 246, 170, 0.4);
+  background: rgba(6, 30, 36, 0.82);
 }
 
 .one-click-upload {
-  margin-top: 16px;
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .one-click-button {
-  background: linear-gradient(135deg, #0077ED 0%, #00A2FF 100%);
-  color: #ffffff;
   width: 100%;
-  max-width: 240px;
-  margin-top: 8px;
-  animation: pulse 2s infinite;
+  max-width: 260px;
+  background: radial-gradient(circle at 0% 50%, rgba(56, 196, 255, 0.4), transparent 70%), var(--accent-gradient-strong);
+  border: none;
+  color: #031320;
+  box-shadow: 0 18px 46px rgba(34, 246, 170, 0.35);
+  letter-spacing: 0.16em;
 }
 
-.one-click-button:hover:not(:disabled) {
-  background: linear-gradient(135deg, #0062CC 0%, #0091E8 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 119, 237, 0.3);
+.one-click-button:disabled {
+  opacity: 0.6;
+  box-shadow: none;
 }
 
-@keyframes pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(0, 119, 237, 0.4);
-  }
-  70% {
-    box-shadow: 0 0 0 10px rgba(0, 119, 237, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(0, 119, 237, 0);
-  }
-}
-
-/* 响应式设计 */
-@media (max-width: 1400px) {
-  .main-content {
-    flex-direction: column;
-  }
-
-  .right-panel {
-    width: 100%;
-    flex-direction: row;
-    margin-top: 0;
-  }
-
-  .status-card, .action-card {
-    min-height: auto;
-    flex: 1;
-  }
-  
-  :deep(.step-item) {
-    margin-bottom: 6px;
-  }
-  
-  :deep(.step-status) {
-    max-width: 100%;
-    font-size: 12px;
-  }
-}
-
-@media (max-width: 1200px) {
-  .upload-section {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  .content-wrapper {
-    padding: 0 30px;
-  }
-  
-  .right-panel {
-    flex-direction: column;
-  }
-}
-
-@media (max-width: 768px) {
-  .content-wrapper {
-    padding: 0 16px;
-  }
-
-  .power-predict-container {
-    padding: 20px 0;
-  }
-
-  .upload-section {
-    grid-template-columns: 1fr;
-  }
-
-  .right-panel {
-    flex-direction: column;
-  }
-
-  .page-title {
-    font-size: 32px !important;
-    margin-bottom: 30px;
-  }
-  
-  .upload-card, .status-card, .action-card {
-    padding: 12px;
-  }
-  
-  :deep(.step-item) {
-    flex-direction: row;
-    align-items: flex-start;
-  }
-  
-  :deep(.step-number) {
-    margin-top: 2px;
-  }
-  
-  :deep(.step-status) {
-    word-break: break-all;
-    font-size: 11px;
-  }
-}
-
-.empty-action-panel, .empty-log-panel {
+.empty-action-panel,
+.empty-log-panel {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 16px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  border: 1px dashed #dcdfe6;
-  min-height: 80px;
-  width: 100%;
-  box-sizing: border-box;
+  gap: 8px;
+  padding: 20px;
+  border-radius: 14px;
+  background: rgba(6, 18, 36, 0.65);
+  border: 1px dashed rgba(56, 196, 255, 0.24);
+  color: var(--text-secondary);
+  text-align: center;
 }
 
 .empty-icon {
-  font-size: 22px;
-  color: #909399;
+  font-size: 24px;
+  color: var(--text-muted);
+}
+
+.visualization-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 28px 30px;
+}
+
+.visualization-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.visualization-controls {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.chart-container {
+  background: rgba(4, 16, 38, 0.72);
+  border: 1px solid rgba(56, 196, 255, 0.18);
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.metrics-container {
+  background: rgba(4, 16, 38, 0.72);
+  border: 1px solid rgba(56, 196, 255, 0.18);
+  border-radius: 18px;
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.metrics-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.metrics-header h4 {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.metrics-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.metric-item {
+  position: relative;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: linear-gradient(160deg, rgba(8, 22, 44, 0.95) 0%, rgba(5, 15, 32, 0.85) 100%);
+  border: 1px solid rgba(56, 196, 255, 0.18);
+  box-shadow: 0 16px 42px rgba(4, 16, 40, 0.4);
+}
+
+.metric-label {
+  display: block;
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-muted);
   margin-bottom: 8px;
 }
 
-.empty-text {
-  color: #909399;
-  font-size: 14px;
-  text-align: center;
-  margin: 0;
-}
-
-.section-title {
-  font-size: 20px;
+.metric-value {
+  font-family: 'Rajdhani', 'Inter', sans-serif;
+  font-size: 28px;
   font-weight: 600;
-  color: #1d1d1f;
-  margin: 0;
-  letter-spacing: -0.003em;
+  letter-spacing: 0.16em;
+  color: var(--accent-primary);
 }
 
-/* 日志面板样式 */
 .log-section {
   position: fixed;
-  bottom: 0;
-  right: 20px;
-  width: 400px;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border-radius: 12px 12px 0 0;
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  z-index: 1000;
-  max-height: 50px;
+  bottom: 32px;
+  right: 32px;
+  width: 360px;
+  max-height: 66px;
   overflow: hidden;
+  padding: 0;
+  transition: max-height 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.35s;
+  z-index: 1200;
 }
 
 .log-expanded {
-  max-height: 400px;
+  max-height: 420px;
 }
 
 .log-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 10px 20px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px;
   cursor: pointer;
-  background: linear-gradient(90deg, #0077ED, #00A2FF);
-  border-radius: 12px 12px 0 0;
+  background: rgba(6, 18, 36, 0.9);
+  border-bottom: 1px solid rgba(56, 196, 255, 0.18);
 }
 
 .log-header .section-title {
-  color: white;
   margin: 0;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
 }
 
 .toggle-button {
-  color: white !important;
-  font-size: 14px;
+  color: var(--text-secondary) !important;
   padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .toggle-icon {
-  margin-left: 5px;
   transition: transform 0.3s ease;
 }
 
@@ -1569,142 +1365,186 @@ export default {
 }
 
 .log-content-wrapper {
-  padding: 15px;
-  max-height: 330px;
+  padding: 18px 20px;
+  max-height: 340px;
   overflow-y: auto;
-  font-size: 13px;
-  line-height: 1.5;
-  color: #1d1d1f;
-  background-color: #ffffff;
+  background: rgba(6, 18, 36, 0.78);
 }
 
-/* 为不同类型的日志消息设置不同的颜色 */
-:deep(.log-content) {
-  .system-message {
-    color: #606266;
-    font-style: italic;
-  }
-  
-  .error-message {
-    color: #f56c6c;
-  }
-  
-  .success-message {
-    color: #67c23a;
-  }
-  
-  .warning-message {
-    color: #e6a23c;
-  }
-  
-  /* 普通日志消息 */
-  .log-message {
-    color: #1d1d1f;
-  }
-}
-
-/* 自定义滚动条样式 */
 .log-content-wrapper::-webkit-scrollbar {
-  width: 4px;
+  width: 6px;
 }
 
 .log-content-wrapper::-webkit-scrollbar-track {
-  background: #f5f5f5;
-  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 999px;
 }
 
 .log-content-wrapper::-webkit-scrollbar-thumb {
-  background: #ddd;
-  border-radius: 2px;
+  background: rgba(56, 196, 255, 0.6);
+  border-radius: 999px;
 }
 
 .log-content-wrapper::-webkit-scrollbar-thumb:hover {
-  background: #ccc;
+  background: rgba(56, 196, 255, 0.8);
 }
 
-/* 确保日志查看器不会被其他元素遮挡 */
-.content-wrapper {
-  padding-bottom: 60px;
+.visualization-controls :deep(.el-button.is-text) {
+  color: var(--text-secondary);
 }
 
-/* 优化FileUploader和FileInfo组件的样式 */
-:deep(.file-uploader) {
-  margin-bottom: 10px;
+.visualization-controls :deep(.el-button.is-text:hover) {
+  color: var(--accent-primary);
 }
 
+:deep(.el-checkbox__label) {
+  color: var(--text-secondary);
+  letter-spacing: 0.08em;
+}
+
+:deep(.el-button.is-text) {
+  color: var(--text-secondary);
+}
+
+:deep(.el-button.is-text:hover) {
+  color: var(--accent-primary);
+}
+
+:deep(.el-button--text .el-icon) {
+  font-size: 16px;
+}
+
+:deep(.file-uploader),
 :deep(.file-info) {
-  margin-top: 10px;
+  background: rgba(8, 22, 44, 0.72);
+  border: 1px solid rgba(56, 196, 255, 0.22);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+:deep(.el-upload) {
+  width: 100%;
 }
 
 :deep(.el-upload-dragger) {
-  padding: 12px;
-  height: auto;
-  min-height: 80px;
+  background: rgba(4, 16, 30, 0.85);
+  border: 1px dashed rgba(56, 196, 255, 0.32);
+  color: var(--text-secondary);
+  border-radius: 12px;
+  padding: 18px;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+:deep(.el-upload-dragger:hover) {
+  border-color: rgba(56, 196, 255, 0.55);
+  box-shadow: var(--accent-glow-soft);
 }
 
 :deep(.step-hint-box) {
-  margin-bottom: 0;
-  width: 100%;
-  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  background: rgba(6, 18, 36, 0.78);
+  border: 1px solid rgba(56, 196, 255, 0.22);
 }
 
 :deep(.step-item) {
-  margin-bottom: 10px;
-  overflow: visible;
-  display: flex;
-  align-items: flex-start;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
 }
 
 :deep(.step-number) {
-  flex-shrink: 0;
-  margin-right: 8px;
-  width: 24px;
-  height: 24px;
-  border-radius: 12px;
-  background: #0077ED;
-  color: white;
+  width: 26px;
+  height: 26px;
+  border-radius: 13px;
+  background: var(--accent-gradient);
+  color: #031320;
+  font-size: 13px;
+  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
-  margin-top: 2px;
+  box-shadow: var(--accent-glow-soft);
 }
 
 :deep(.step-label) {
-  margin-right: 6px;
-  font-weight: 500;
-  color: #333;
-  white-space: nowrap;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 :deep(.step-status) {
+  font-family: 'Rajdhani', 'Inter', sans-serif;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  color: var(--text-primary);
   word-break: break-all;
-  overflow-wrap: break-word;
-  font-family: monospace;
-  font-size: 13px;
-  color: #0077ED;
-  max-width: 100%;
 }
 
 :deep(.status-null) {
-  color: #ff3b30;
+  color: #ff647c;
+}
+
+:deep(.step-status span) {
+  word-break: break-all;
+}
+
+:deep(.log-content .system-message) {
+  color: var(--text-secondary);
   font-style: italic;
 }
 
-:deep(.el-table .cell) {
-  text-align: center;
+:deep(.log-content .error-message) {
+  color: #ff647c;
 }
 
-:deep(.el-table th) {
-  background-color: #f5f7fa;
-  color: #1d1d1f;
-  font-weight: 600;
-  padding: 10px 0;
+:deep(.log-content .success-message) {
+  color: #29f4aa;
 }
 
-:deep(.el-table__header-wrapper) {
-  border-bottom: 1px solid #ebeef5;
+:deep(.log-content .warning-message) {
+  color: #f7c341;
+}
+
+:deep(.log-content .log-message) {
+  color: var(--text-primary);
+}
+
+@media (max-width: 1280px) {
+  .workflow-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .workflow-sidebar {
+    position: static;
+  }
+}
+
+@media (max-width: 768px) {
+  .header-panel {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 24px;
+  }
+
+  .workflow-layout {
+    gap: 24px;
+  }
+
+  .log-section {
+    right: 16px;
+    left: 16px;
+    width: auto;
+  }
+
+  .upload-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
 

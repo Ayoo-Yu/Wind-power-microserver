@@ -1,13 +1,13 @@
 <template>
   <div class="system-maintenance">
-    <!-- 页面标题 -->
-    <div class="page-header">
-      <h2 class="page-title">系统维护</h2>
-      <p class="page-description">查看系统硬件配置、软件环境和运行参数信息</p>
-      <div class="wind-farm-banner">
-        <el-tag type="success" effect="dark">当前场站：{{ currentWindFarmDisplay }}</el-tag>
+    <div class="page-shell system-maintenance-content">
+      <div class="header-panel glass-panel">
+        <div class="header-text">
+          <h1 class="page-title">系统维护</h1>
+          <p class="page-subtitle">实时掌握硬件配置、软件环境以及关键运行参数</p>
+        </div>
+        <span class="status-indicator wind-farm-chip">当前场站：{{ currentWindFarmDisplay || '未选择' }}</span>
       </div>
-    </div>
 
     <!-- 系统信息卡片 -->
     <div class="system-cards">
@@ -210,6 +210,7 @@
         </div>
       </div>
     </el-card>
+    </div>
   </div>
 </template>
 

@@ -1,18 +1,16 @@
 <template>
   <div class="report-management">
-    <!-- 动态渐变背景 -->
-    <div class="gradient-background"></div>
-    
-    <!-- 页面标题 -->
-    <div class="page-title">
-      <p>数据上报配置与管理</p>
-      <div class="current-windfarm-indicator">
-        <el-tag type="success" effect="dark">当前场站：{{ currentWindFarmDisplay }}</el-tag>
+    <div class="page-shell report-management-content">
+      <div class="header-panel glass-panel">
+        <div class="header-text">
+          <h1 class="page-title">数据上报配置与管理</h1>
+          <p class="page-subtitle">统一调度自动上报任务、统计数据质量并追踪状态</p>
+        </div>
+        <span class="status-indicator wind-farm-chip">当前场站：{{ currentWindFarmDisplay || '未选择' }}</span>
       </div>
-    </div>
 
     <!-- 调度器状态卡片 -->
-    <el-card class="info-card scheduler-status-card" shadow="hover">
+    <el-card class="info-card scheduler-status-card glass-panel" shadow="never">
       <template #header>
         <div class="card-header">
           <span><i class="el-icon-timer"></i> 自动上报调度器</span>
@@ -66,6 +64,7 @@
         </div>
       </div>
     </el-card>
+
 
     <!-- 主要内容区域 -->
     <div class="content-container">
@@ -858,6 +857,7 @@
         </span>
       </template>
     </el-dialog>
+    </div>
   </div>
 </template>
 

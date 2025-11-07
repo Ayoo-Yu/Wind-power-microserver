@@ -4,57 +4,75 @@
     class="autopredict-container power-predict-container" 
     v-loading="loading" 
     element-loading-text="加载中，请稍候..."
-    :class="{'animated-background': isAnimatedBackground.value, 'static-background': !isAnimatedBackground.value}"
   >
-    <h1 class="page-title">自动化预测功能管理</h1>
-    <div class="hero-section">
-      <!-- Global buttons removed -->
-      <el-row :gutter="24">
-        <el-col :span="8" v-for="(item, index) in predictions" :key="index">
-          <el-card class="prediction-card">
-            <template #header>
-              <span>{{ item.title }}</span>
-            </template>
-            <div class="prediction-meta">
-              <el-tag :type="item.status ? 'success' : 'info'" effect="plain">
-                {{ item.status ? '已启用' : '未启用' }}
-              </el-tag>
-              <div class="meta-line">
-                <span class="meta-label">最近触发：</span>
-                <span>{{ formatDateTime(item.meta.lastTriggeredAt) }}</span>
-              </div>
-              <div class="meta-line">
-                <span class="meta-label">计划表达式：</span>
-                <span>{{ item.meta.scheduleCron || '默认计划' }}</span>
-              </div>
+    <div class="autopredict-content page-shell">
+      <div class="header-panel glass-panel">
+        <div class="header-text">
+          <h1 class="page-title">自动化预测功能管理</h1>
+          <p class="page-subtitle">集中管理超短期、短期、中期预测调度</p>
+        </div>
+        <span class="status-indicator wind-farm-chip">
+          当前场站：{{ selectedWindFarm || '未选择' }}
+        </span>
+      </div>
+
+      <div class="prediction-grid">
+        <div 
+          v-for="(item, index) in predictions" 
+          :key="index" 
+          class="prediction-card glass-panel"
+        >
+          <div class="prediction-header">
+            <h3>{{ item.title }}</h3>
+            <el-tag :type="item.status ? 'success' : 'info'" effect="plain">
+              {{ item.status ? '已启用' : '未启用' }}
+            </el-tag>
+          </div>
+          <div class="prediction-meta">
+            <div class="meta-line">
+              <span class="meta-label">最近触发</span>
+              <span>{{ formatDateTime(item.meta.lastTriggeredAt) || '暂无记录' }}</span>
             </div>
-            <div class="button-group">
-              <el-button 
-                :type="item.status ? 'success' : 'primary'" 
-                @click="showConfirmDialog('startTask', '启用预测任务', `确定要启用${item.title}吗？`, item.name)"
-                :disabled="item.status"
-              >
-                {{ item.status ? '运行中' : '启用' }}
-              </el-button>
-              
-              <el-button 
-                type="danger" 
-                @click="showConfirmDialog('stopTask', '停止预测任务', `确定要停止${item.title}吗？此操作会中断当前预测。`, item.name)"
-                :disabled="!item.status"
-              >
-                停止
-              </el-button>
-              
-              <!-- 定时重启按钮已移除 -->
+            <div class="meta-line">
+              <span class="meta-label">计划表达式</span>
+              <span>{{ item.meta.scheduleCron || '默认计划' }}</span>
             </div>
-            <div class="button-group extra">
-              <el-button type="warning" @click="showConfirmDialog('triggerTask', '手动触发', `立即触发一次${item.title}的训练和预测任务？`, item.name)" :disabled="!item.status">手动触发</el-button>
-              <el-button type="danger" @click="showConfirmDialog('deleteTask', '删除预测任务', `确定要删除${item.title}的调度配置吗？`, item.name)">删除</el-button>
-              <el-button type="primary" @click="fetchLogs(item.name)">日志</el-button>
-            </div>
-          </el-card>
-        </el-col>
-      </el-row>
+          </div>
+          <div class="button-group primary">
+            <el-button 
+              :type="item.status ? 'success' : 'primary'" 
+              @click="showConfirmDialog('startTask', '启用预测任务', `确定要启用${item.title}吗？`, item.name)"
+              :disabled="item.status"
+            >
+              {{ item.status ? '运行中' : '启用' }}
+            </el-button>
+
+            <el-button 
+              type="danger" 
+              @click="showConfirmDialog('stopTask', '停止预测任务', `确定要停止${item.title}吗？此操作会中断当前预测。`, item.name)"
+              :disabled="!item.status"
+            >
+              停止
+            </el-button>
+          </div>
+          <div class="button-group secondary">
+            <el-button 
+              type="warning" 
+              @click="showConfirmDialog('triggerTask', '手动触发', `立即触发一次${item.title}的训练和预测任务？`, item.name)"
+              :disabled="!item.status"
+            >
+              手动触发
+            </el-button>
+            <el-button 
+              type="danger" 
+              @click="showConfirmDialog('deleteTask', '删除预测任务', `确定要删除${item.title}的调度配置吗？`, item.name)"
+            >
+              删除
+            </el-button>
+            <el-button type="primary" @click="fetchLogs(item.name)">日志</el-button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 操作确认对话框 -->
@@ -133,12 +151,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, inject, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import axiosInstance from '../api/axios'
 import { useWindFarmStore } from '../store/windFarm'
-
-const isAnimatedBackground = inject('isAnimatedBackground');
 
 const predictions = reactive([
   {

@@ -1,499 +1,440 @@
 <!-- src/views/Home.vue -->
 <template>
   <div class="home-container">
-    <div class="content-container">
-      <!-- 头部区域 -->
-      <div class="hero-section">
-        <h1>中国三峡集团风电功率预测平台</h1>
-        <p class="subtitle">智能 · 高效 · 精准</p>
-      </div>
+    <div class="page-shell">
+      <section class="hero-panel glass-panel fade-in-up">
+        <div class="hero-grid">
+          <div class="hero-info">
+            <p class="hero-eyebrow">WIND POWER INTELLIGENCE</p>
+            <h1>中国三峡集团风电功率预测平台</h1>
+            <p class="hero-subtitle">融合气象数据、机组状态与AI建模的全链路预测中枢，为场站调度提供毫秒级支撑。</p>
+            <div class="hero-chips">
+              <span class="chip primary">AI预测引擎</span>
+              <span class="chip">多时段预测</span>
+              <span class="chip success">稳定运行</span>
+            </div>
+          </div>
+          <div class="hero-stats metric-grid">
+            <div class="metric-card">
+              <span class="metric-label">覆盖场站</span>
+              <span class="metric-value">42</span>
+              <span class="metric-meta">数据实时同步</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">今日预测功率</span>
+              <span class="metric-value">1.32GW</span>
+              <span class="metric-meta trend-up">+8.4% 较昨日</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">模型稳定性</span>
+              <span class="metric-value">99.2%</span>
+              <span class="metric-meta">误差持续优化</span>
+            </div>
+          </div>
+        </div>
+      </section>
 
-      <!-- 功能卡片区域 -->
-      <div class="features-section">
-        <!-- 模型训练 -->
-        <div class="feature-card">
-          <div class="card-content">
-            <div class="icon-wrapper">
+      <section class="features-section fade-in-up">
+        <div class="section-header">
+          <h2 class="section-title">核心功能矩阵</h2>
+          <p class="section-subtitle">CORE MODULES</p>
+        </div>
+        <div class="features-grid">
+          <article class="feature-card glass-panel feature-card--train">
+            <div class="feature-icon">
               <el-icon><DataAnalysis /></el-icon>
             </div>
             <h3>功率预测模型训练</h3>
-            <p>通过先进的算法进行高效的模型训练，提升预测准确度。</p>
-            <el-button 
+            <p>融合历史功率、气象因子与现场状态，自动完成参数寻优与版本管理。</p>
+            <div class="feature-meta">
+              <span>自动评估</span>
+              <span>模型追踪</span>
+            </div>
+            <el-button
               v-if="hasPermission('train_models')"
-              type="primary" 
-              class="learn-more-btn"
-              @click="urljump('http://localhost:8080/modeltrain')"
+              type="primary"
+              @click="navigate('/modeltrain')"
             >
-              了解更多
-              <el-icon class="arrow-icon"><ArrowRight /></el-icon>
+              进入模块
             </el-button>
-          </div>
-        </div>
+          </article>
 
-        <!-- 功率预测 -->
-        <div class="feature-card">
-          <div class="card-content">
-            <div class="icon-wrapper">
+          <article class="feature-card glass-panel feature-card--forecast">
+            <div class="feature-icon">
               <el-icon><TrendCharts /></el-icon>
             </div>
             <h3>风电功率预测</h3>
-            <p>通过精确的算法进行未来功率的预测，助力决策制定。</p>
-            <el-button 
+            <p>秒级输出超短期、短期预测曲线，支持多场站并行决策，精准驱动调度。</p>
+            <div class="feature-meta">
+              <span>多模型融合</span>
+              <span>误差诊断</span>
+            </div>
+            <el-button
               v-if="hasPermission('run_predictions')"
-              type="primary" 
-              class="learn-more-btn"
-              @click="urljump('http://localhost:8080/powerpredict')"
+              type="primary"
+              @click="navigate('/powerpredict')"
             >
-              了解更多
-              <el-icon class="arrow-icon"><ArrowRight /></el-icon>
+              进入模块
             </el-button>
-          </div>
-        </div>
+          </article>
 
-        <!-- 数据可视化 -->
-        <div class="feature-card">
-          <div class="card-content">
-            <div class="icon-wrapper">
+          <article class="feature-card glass-panel feature-card--auto">
+            <div class="feature-icon">
               <el-icon><PieChart /></el-icon>
             </div>
             <h3>功率自动化预测</h3>
-            <p>实现三类风电功率每日预测，包括超短期、短期、中期预测。</p>
-            <el-button 
+            <p>自动调度每日批量预测任务，输出规范化报表并推送至业务系统。</p>
+            <div class="feature-meta">
+              <span>任务编排</span>
+              <span>智能上报</span>
+            </div>
+            <el-button
               v-if="hasPermission('run_predictions')"
-              type="primary" 
-              class="learn-more-btn"
-              @click="urljump('http://localhost:8080/autopredict')"
+              type="primary"
+              @click="navigate('/autopredict')"
             >
-              了解更多
-              <el-icon class="arrow-icon"><ArrowRight /></el-icon>
+              进入模块
             </el-button>
-          </div>
-        </div>
+          </article>
 
-        <!-- 功率对比 -->
-        <div class="feature-card">
-          <div class="card-content">
-            <div class="icon-wrapper">
+          <article class="feature-card glass-panel feature-card--compare">
+            <div class="feature-icon">
               <el-icon><Histogram /></el-icon>
             </div>
-            <h3>数据可视化</h3>
-            <p>对比不同时间段的预测数据，开展数据可视化与分析。</p>
-            <el-button 
+            <h3>数据对比与洞察</h3>
+            <p>多维度交互式可视化，快速识别预测偏差与实际运行差异。</p>
+            <div class="feature-meta">
+              <span>指标分析</span>
+              <span>自定义看板</span>
+            </div>
+            <el-button
               v-if="hasPermission('view_all_data')"
-              type="primary" 
-              class="learn-more-btn"
-              @click="urljump('http://localhost:8080/powercompare')"
+              type="primary"
+              @click="navigate('/powercompare')"
             >
-              了解更多
-              <el-icon class="arrow-icon"><ArrowRight /></el-icon>
+              进入模块
             </el-button>
+          </article>
+        </div>
+      </section>
+
+      <section class="system-overview glass-panel fade-in-up">
+        <div class="overview-header">
+          <h2>系统运行概览</h2>
+          <p>核心模块统一调度，实时监控数据链路状态与模型健康。</p>
+        </div>
+        <div class="overview-grid">
+          <div class="overview-item">
+            <span class="label">数据刷新频率</span>
+            <span class="value">15s</span>
+          </div>
+          <div class="overview-item">
+            <span class="label">任务自动化覆盖</span>
+            <span class="value">98%</span>
+          </div>
+          <div class="overview-item">
+            <span class="label">异常告警响应</span>
+            <span class="value">&lt; 3min</span>
+          </div>
+          <div class="overview-item">
+            <span class="label">历史数据资产</span>
+            <span class="value">12TB</span>
           </div>
         </div>
-      </div>
+      </section>
 
-      <!-- 图表展示区域 -->
-      <!-- <div class="chart-section">
-        <div class="section-header">
-          <h2>风电功率月度变化</h2>
-          <p class="section-subtitle">实时监控风电场发电情况</p>
-        </div>
-        <div class="chart-container">
-          <canvas id="powerChart"></canvas>
-        </div>
-      </div> -->
-
-      <!-- 底部区域 -->
-      <footer class="footer">
-        <p>&copy; 2025 中国三峡集团. 版权所有.</p>
+      <footer class="footer fade-in-up">
+        <p>&copy; 2025 中国三峡集团 · 风电功率预测平台</p>
       </footer>
     </div>
   </div>
 </template>
 
 <script>
-import { onMounted, ref, computed, inject } from 'vue'
-import { ElMessage } from 'element-plus'
-// import Chart from 'chart.js/auto'
-// Import BarChart if it's a specific component and not globally registered
-// import { BarChart } from '@element-plus/icons-vue' // Example import
+import { inject } from 'vue'
+import { useRouter } from 'vue-router'
 
 export default {
   name: 'HomePage',
-  methods: {
-    urljump(url) {
-      window.location.href = url;
-    },
-  },
-
   setup() {
-    const activeMenu = ref('1')
-    const hasPermission = inject('hasPermission')
+    const hasPermission = inject('hasPermission', () => true)
+    const router = useRouter()
 
-    const viewDetails = () => {
-      ElMessage.info('更多详情即将推出！')
+    const navigate = (path) => {
+      if (path) {
+        router.push(path)
+      }
     }
-
-    // 计算背景内联样式
-    const backgroundStyle = computed(() => ({
-      position: 'absolute',
-      top: '0',
-      left: '0',
-      width: '100%',
-      height: '100%',
-      background: 'linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab)',
-      backgroundSize: '400% 400%',
-      animation: 'gradient 15s ease infinite',
-      zIndex: -1,
-    }))
-
-    onMounted(() => {
-      // const ctx = document.getElementById('powerChart').getContext('2d')
-      // new Chart(ctx, {
-      //   type: 'line',
-      //   data: {
-      //     labels: ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'],
-      //     datasets: [{
-      //       label: '风电功率 (MW)',
-      //       data: [12, 19, 3, 5, 2, 3, 6, 8, 13, 20, 18, 22],
-      //       backgroundColor: 'rgba(54, 162, 235, 0.2)',
-      //       borderColor:'rgba(54, 162, 235, 1)',
-      //       borderWidth: 2,
-      //       fill: true,
-      //       tension: 0.5
-      //     }]
-      //   },
-      //   options: {
-      //     responsive: true,
-      //     plugins: {
-      //       legend: {
-      //         position: 'top',
-      //       },
-      //       title: {
-      //         display: true,
-      //       }
-      //     },
-      //     scales: {
-      //       y: { 
-      //         beginAtZero: true,
-      //         title: {
-      //           display: true,
-      //           text: '功率 (MW)'
-      //         }
-      //       },
-      //       x: {
-      //         title: {
-      //           display: true,
-      //           text: '月份'
-      //         }
-      //       }
-      //     }
-      //   }
-      // })
-    })
 
     return {
-      activeMenu,
-      viewDetails,
-      backgroundStyle,
       hasPermission,
+      navigate,
     }
-  }
+  },
 }
 </script>
 
 <style scoped>
 .home-container {
-  min-height: 100vh;
+  position: relative;
+  z-index: 1;
+  color: var(--text-primary);
+}
+
+.hero-panel {
+  margin-bottom: var(--section-gap);
+  overflow: hidden;
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 36px;
+  align-items: stretch;
+}
+
+.hero-info {
   display: flex;
   flex-direction: column;
-  position: relative;
-  background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
-  background-size: 400% 400%;
-  animation: gradient 15s ease infinite;
+  gap: 20px;
 }
 
-@keyframes gradient {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
+.hero-eyebrow {
+  font-size: 13px;
+  letter-spacing: 0.48em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0;
 }
 
-.content-container {
-  flex: 1;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(5px);
-  padding: 40px;
-  border-radius: 30px;
-  margin: 40px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.hero-section {
-  text-align: center;
-  padding: 120px 20px;
-  position: relative;
-}
-
-.hero-section::before {
-  content: "✨";
-  position: absolute;
-  top: 60px;
-  left: 20%;
-  font-size: 24px;
-  opacity: 0.5;
-}
-
-.hero-section::after {
-  content: "✨";
-  position: absolute;
-  bottom: 60px;
-  right: 20%;
-  font-size: 24px;
-  opacity: 0.5;
-}
-
-.hero-section h1 {
-  font-size: 64px;
+.hero-info h1 {
+  margin: 0;
+  font-size: 48px;
   font-weight: 600;
-  color: white;
-  margin-bottom: 20px;
-  letter-spacing: -0.015em;
-  line-height: 1.1;
-  background: none;
-  -webkit-text-fill-color: white;
+  letter-spacing: 0.12em;
+  line-height: 1.18;
+  text-transform: uppercase;
 }
 
-.subtitle {
-  font-size: 24px;
-  color: rgba(255, 255, 255, 0.9);
-  margin-bottom: 40px;
-  letter-spacing: 0.1em;
+.hero-subtitle {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  letter-spacing: 0.08em;
+}
+
+.hero-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.hero-stats {
+  align-content: start;
+}
+
+.metric-card {
+  position: relative;
+}
+
+.metric-meta {
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  display: inline-block;
+  margin-top: 12px;
+}
+
+.metric-meta.trend-up {
+  color: var(--accent-secondary);
 }
 
 .features-section {
-  display: grid;
-  /* Updated to handle 4 cards in a 1x4 layout on larger screens */
-  grid-template-columns: repeat(4, 1fr); 
-  gap: 40px;
-  padding: 0 40px;
-  max-width: 1440px;
-  margin: 0 auto 80px;
-}
-
-.feature-card {
-  background: rgba(255, 255, 255, 0.8);
-  border-radius: 30px;
-  padding: 40px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.04);
-  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-  border: none;
-  position: relative;
-}
-
-.feature-card:nth-child(1) .icon-wrapper {
-  background: linear-gradient(135deg, #0077ED 0%, #00A2FF 100%);
-}
-
-.feature-card:nth-child(1)::before {
-  color: #0077ED;
-}
-
-.feature-card:nth-child(1) .learn-more-btn {
-  color: #0077ED;
-}
-
-.feature-card:nth-child(1) .learn-more-btn:hover {
-  color: #0062CC;
-}
-
-.feature-card:nth-child(2) .icon-wrapper {
-  background: linear-gradient(135deg, #34C759 0%, #30B753 100%);
-}
-
-.feature-card:nth-child(2)::before {
-  color: #34C759;
-}
-
-.feature-card:nth-child(2) .learn-more-btn {
-  color: #34C759;
-}
-
-.feature-card:nth-child(2) .learn-more-btn:hover {
-  color: #2CB14A;
-}
-
-.feature-card:nth-child(3) .icon-wrapper {
-  background: linear-gradient(135deg, #AF52DE 0%, #9F44D3 100%);
-}
-
-.feature-card:nth-child(3)::before {
-  color: #AF52DE;
-}
-
-.feature-card:nth-child(3) .learn-more-btn {
-  color: #AF52DE;
-}
-
-.feature-card:nth-child(3) .learn-more-btn:hover {
-  color: #9941C8;
-}
-
-/* Styling for the new 4th card - using a new color scheme */
-.feature-card:nth-child(4) .icon-wrapper {
-  background: linear-gradient(135deg, #FF9500 0%, #FFB340 100%); /* Orange gradient */
-}
-
-.feature-card:nth-child(4)::before {
-  color: #FF9500; /* Orange color for pseudo-element */
-}
-
-.feature-card:nth-child(4) .learn-more-btn {
-  color: #FF9500; /* Orange color for button text */
-}
-
-.feature-card:nth-child(4) .learn-more-btn:hover {
-  color: #E68600; /* Darker orange on hover */
-}
-
-.feature-card:nth-child(1):hover {
-  transform: translateY(-8px);
-  box-shadow: 0 12px 48px rgba(0, 119, 237, 0.12);
-}
-
-.feature-card:nth-child(2):hover {
-  transform: translateY(-8px);
-  box-shadow: 0 12px 48px rgba(52, 199, 89, 0.12);
-}
-
-.feature-card:nth-child(3):hover {
-  transform: translateY(-8px);
-  box-shadow: 0 12px 48px rgba(175, 82, 222, 0.12);
-}
-
-.feature-card:nth-child(4):hover {
-  transform: translateY(-8px);
-  box-shadow: 0 12px 48px rgba(255, 149, 0, 0.12); /* Shadow color for the 4th card */
-}
-
-.icon-wrapper {
-  width: 60px;
-  height: 60px;
-  border-radius: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 24px;
-}
-
-.icon-wrapper .el-icon {
-  font-size: 30px;
-  color: #ffffff;
-}
-
-.card-content h3 {
-  font-size: 24px;
-  font-weight: 600;
-  color: #1d1d1f;
-  margin-bottom: 16px;
-  letter-spacing: -0.003em;
-}
-
-.card-content p {
-  font-size: 16px;
-  color: #86868b;
-  line-height: 1.5;
-  margin-bottom: 24px;
-}
-
-.learn-more-btn {
-  background: none;
-  border: none;
-  font-size: 17px;
-  font-weight: 500;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: all 0.3s ease;
-}
-
-.learn-more-btn:hover {
-  color: #0062CC;
-  transform: translateX(4px);
-}
-
-.arrow-icon {
-  transition: transform 0.3s ease;
-}
-
-.learn-more-btn:hover .arrow-icon {
-  transform: translateX(4px);
-}
-
-/* .chart-section {
-  background: none;
-  padding: 60px;
-  border-radius: 30px;
+  margin-bottom: var(--section-gap);
 }
 
 .section-header {
   text-align: center;
-  margin-bottom: 40px;
-}
-
-.section-header h2 {
-  font-size: 40px;
-  font-weight: 600;
-  color: white;
-  margin-bottom: 16px;
-  letter-spacing: -0.003em;
+  margin-bottom: 28px;
 }
 
 .section-subtitle {
-  font-size: 20px;
-  color: #86868b;
+  margin-top: 8px;
+  letter-spacing: 0.28em;
 }
 
-.chart-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 40px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 30px;
-  border: none;
-} */
+.features-grid {
+  display: grid;
+  gap: 28px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.feature-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 28px;
+}
+
+.feature-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(160deg, rgba(56, 196, 255, 0.22), transparent 65%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.feature-card:hover::after {
+  opacity: 0.6;
+}
+
+.feature-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  color: #031320;
+  box-shadow: 0 18px 36px rgba(4, 20, 40, 0.35);
+}
+
+.feature-card h3 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.feature-card p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.65;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+.feature-meta {
+  display: inline-flex;
+  gap: 10px;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.feature-card--train .feature-icon {
+  background: linear-gradient(135deg, #3AA4FF, #5BE4FF);
+}
+
+.feature-card--forecast .feature-icon {
+  background: linear-gradient(135deg, #22F6AA, #4AE8D0);
+}
+
+.feature-card--auto .feature-icon {
+  background: linear-gradient(135deg, #776BFF, #9A9EFF);
+}
+
+.feature-card--compare .feature-icon {
+  background: linear-gradient(135deg, #FFB34F, #FF8B2F);
+}
+
+.feature-card :deep(.el-button) {
+  align-self: flex-start;
+  margin-top: 12px;
+}
+
+.system-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.overview-header h2 {
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.overview-header p {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+  letter-spacing: 0.08em;
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 18px;
+}
+
+.overview-item {
+  padding: 18px 20px;
+  border-radius: 14px;
+  background: rgba(5, 16, 34, 0.8);
+  border: 1px solid rgba(56, 196, 255, 0.18);
+  box-shadow: 0 14px 32px rgba(3, 13, 30, 0.5);
+}
+
+.overview-item .label {
+  display: block;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.overview-item .value {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
 
 .footer {
   text-align: center;
-  padding: 20px;
-  background: none;
-  backdrop-filter: none;
+  padding: 32px 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
-/* 响应式设计 */
-@media (max-width: 1200px) {
-  .features-section {
-    grid-template-columns: repeat(2, 1fr); /* Stays 2x2 for medium screens */
+@media (max-width: 1280px) {
+  .hero-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-stats {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   }
 }
 
 @media (max-width: 768px) {
-  .hero-section h1 {
-    font-size: 40px;
+  .hero-info h1 {
+    font-size: 32px;
   }
 
-  .features-section {
+  .hero-panel {
+    padding: 24px;
+  }
+
+  .features-grid {
     grid-template-columns: 1fr;
   }
 
   .feature-card {
-    padding: 30px;
+    padding: 24px;
   }
 }
 </style>

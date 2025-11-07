@@ -1,39 +1,44 @@
 <template>
   <div class="windfarm-management-container">
-    <div class="page-header">
-      <div class="header-text">
-        <h1 class="page-title">风电场可视化管理</h1>
-        <p class="page-description">集中查看全量风电场的基础信息、运行状态与数据准备度</p>
+    <div class="page-shell windfarm-management-content">
+      <div class="header-panel glass-panel">
+        <div class="header-text">
+          <h1 class="page-title">风电场可视化管理</h1>
+          <p class="page-subtitle">集中查看全量风电场的基础信息、运行状态与数据准备度</p>
+        </div>
+        <div class="header-actions">
+          <span class="status-indicator wind-farm-chip">当前场站：{{ currentWindFarmDisplay || '未选择' }}</span>
+          <el-button type="primary" @click="refreshData" :loading="isLoading">
+            <el-icon><Refresh /></el-icon>
+            刷新数据
+          </el-button>
+        </div>
       </div>
-      <div class="header-actions">
-        <el-button type="primary" plain @click="refreshData" :loading="isLoading">刷新数据</el-button>
-      </div>
-    </div>
 
     <el-row :gutter="20" class="summary-grid">
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card class="summary-card overview">
+        <el-card class="summary-card overview glass-panel">
           <div class="card-label">风电场总数</div>
           <div class="card-value">{{ totalFarms }}</div>
           <div class="card-footnote">覆盖所有接入系统的场站</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card class="summary-card active">
+        <el-card class="summary-card active glass-panel">
           <div class="card-label">运行中</div>
           <div class="card-value">{{ activeFarms }}</div>
           <div class="card-footnote">当前标记为启用的场站</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card class="summary-card inactive">
+        <el-card class="summary-card inactive glass-panel">
           <div class="card-label">待上线</div>
           <div class="card-value">{{ inactiveFarms }}</div>
           <div class="card-footnote">需重点关注的停用/未激活场站</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
-        <el-card class="summary-card capacity">
+        <el-card class="summary-card capacity glass-panel">
           <div class="card-label">装机容量 (MW)</div>
           <div class="card-value">{{ totalCapacity }}</div>
           <div class="card-footnote">合计容量，来源于场站配置</div>
@@ -43,7 +48,7 @@
 
     <el-row :gutter="20" class="content-grid">
       <el-col :xs="24" :lg="14">
-        <el-card class="panel-card">
+        <el-card class="panel-card glass-panel">
           <div class="panel-header">
             <h2>风电场列表</h2>
             <div class="panel-actions">
@@ -92,7 +97,7 @@
           </el-table>
         </el-card>
 
-        <el-card class="panel-card readiness-panel" v-loading="readinessLoading">
+        <el-card class="panel-card readiness-panel glass-panel" v-loading="readinessLoading">
           <div class="panel-header">
             <h2>数据准备度</h2>
             <span class="panel-subtitle">展示训练/预测/仿真数据的上传覆盖情况</span>
@@ -105,7 +110,7 @@
       </el-col>
 
       <el-col :xs="24" :lg="10">
-        <el-card class="panel-card map-panel">
+        <el-card class="panel-card map-panel glass-panel">
           <div class="panel-header">
             <h2>地理分布</h2>
             <span class="panel-subtitle">基于经纬度的场站位置散点图</span>
@@ -116,7 +121,7 @@
           </div>
         </el-card>
 
-        <el-card class="panel-card action-panel">
+        <el-card class="panel-card action-panel glass-panel">
           <div class="panel-header">
             <h2>快捷操作</h2>
             <span class="panel-subtitle">选择目标场站后快速进入相关模块</span>
@@ -169,6 +174,7 @@
         </el-card>
       </el-col>
     </el-row>
+    </div>
   </div>
 </template>
 
@@ -206,6 +212,7 @@ export default {
       isLoading,
       loadWindFarms,
       setSelectedWindFarm,
+      selectedWindFarm,
     } = useWindFarmStore()
 
     const totalFarms = computed(() => windFarms.value.length)
@@ -214,6 +221,14 @@ export default {
     const totalCapacity = computed(() => {
       const sum = windFarms.value.reduce((acc, farm) => acc + (Number(farm.capacity) || 0), 0)
       return sum.toFixed(1)
+    })
+
+    const currentWindFarmDisplay = computed(() => {
+      if (!selectedWindFarm.value) {
+        return '未选择'
+      }
+      const farm = windFarms.value.find(f => f.farm_code === selectedWindFarm.value)
+      return farm ? `${farm.farm_name}${farm.farm_code ? ` (${farm.farm_code})` : ''}` : '未选择'
     })
 
     const hasValidCoord = (farm) => farm && farm.latitude !== undefined && farm.latitude !== null && farm.longitude !== undefined && farm.longitude !== null
@@ -464,6 +479,7 @@ export default {
       actionFarmCode,
       windFarms,
       navigateTo,
+      currentWindFarmDisplay,
     }
   },
 }
@@ -477,12 +493,23 @@ export default {
   gap: 24px;
 }
 
-.page-header {
+.page-shell {
+  background-color: #f5f7ff;
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+}
+
+.header-panel {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 16px;
+  padding: 16px 24px;
+  background-color: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .header-text {
@@ -498,9 +525,33 @@ export default {
   color: #1f2d3d;
 }
 
-.page-description {
+.page-subtitle {
   margin: 0;
   color: rgba(31, 45, 61, 0.65);
+  font-size: 14px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-indicator {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2d3d;
+  background-color: #e0e6ed;
+  padding: 4px 10px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wind-farm-chip {
+  background-color: #e0e6ed;
+  color: #1f2d3d;
 }
 
 .summary-grid {
@@ -545,6 +596,15 @@ export default {
 
 .summary-card.capacity {
   background: linear-gradient(135deg, #f4f9ff 0%, #e8f3ff 100%);
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .content-grid {
