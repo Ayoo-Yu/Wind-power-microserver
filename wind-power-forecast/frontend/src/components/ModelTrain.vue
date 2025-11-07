@@ -214,6 +214,7 @@ import UploadProgress from './UploadProgress.vue';
 import { InfoFilled, ArrowDown, Check, Refresh } from '@element-plus/icons-vue';
 import Papa from 'papaparse';
 import axiosInstance from '../api/axios';
+import { getSelectedWindFarmCode } from '@/store/windFarm';
 import { Chart, CategoryScale, LinearScale, LineElement, PointElement, Title, Tooltip, Legend, LineController } from 'chart.js';
 const rawBaseURL = axiosInstance.defaults && axiosInstance.defaults.baseURL ? axiosInstance.defaults.baseURL : '';
 const API_BASE_PATH = rawBaseURL.replace(/\/$/, '');
@@ -780,7 +781,7 @@ export default {
 
       try {
         const response = await axiosInstance.get('get-daily-metrics', {
-          params: { file_id: this.fileId }
+          params: { file_id: this.fileId, wind_farm_code: getSelectedWindFarmCode() }
         });
         
         if (!response.data) {

@@ -3,6 +3,17 @@ import { ElMessage } from 'element-plus';
 import router from '../router';
 import { isAuthReady, isAuthLoading } from '../store/authReady'; // 导入认证状态
 
+const DEFAULT_WIND_FARM_CODE = 'default-farm';
+
+const getWindFarmCode = () => {
+  try {
+    return localStorage.getItem('selectedWindFarmCode') || DEFAULT_WIND_FARM_CODE;
+  } catch (error) {
+    console.warn('无法读取本地风场选择:', error);
+    return DEFAULT_WIND_FARM_CODE;
+  }
+};
+
 // 确定API基础URL
 let API_BASE_URL = process.env.VUE_APP_BASE_API;
 
@@ -41,6 +52,9 @@ instance.interceptors.request.use(
     } else {
       console.warn('请求未携带认证令牌:', config.url);
     }
+
+    const windFarmCode = getWindFarmCode();
+    config.headers['X-Windfarm-Code'] = windFarmCode;
     
     return config;
   },

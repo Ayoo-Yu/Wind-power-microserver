@@ -1,5 +1,6 @@
 // src/services/apiService.js
-import axios from 'axios';
+import axiosInstance from '../api/axios';
+import { getSelectedWindFarmCode } from '../store/windFarm';
 
 // 确定API基础URL
 let backendBaseUrl = process.env.VUE_APP_BASE_API;
@@ -26,7 +27,9 @@ export const upload_train_csv = (file, onUploadProgress) => {
   const formData = new FormData();
   formData.append('file', file);
 
-  return axios.post(`${backendBaseUrl}/upload_train_csv`, formData, {
+  formData.append('wind_farm_code', getSelectedWindFarmCode());
+
+  return axiosInstance.post('upload_train_csv', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
@@ -46,7 +49,9 @@ export const upload_predict_csv = (file, onUploadProgress) => {
   const formData = new FormData();
   formData.append('file', file);
 
-  return axios.post(`${backendBaseUrl}/upload_predict_csv`, formData, {
+  formData.append('wind_farm_code', getSelectedWindFarmCode());
+
+  return axiosInstance.post('upload_predict_csv', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
@@ -66,7 +71,9 @@ export const upload_model = (file, onUploadProgress) => {
   const formData = new FormData();
   formData.append('file', file);
 
-  return axios.post(`${backendBaseUrl}/upload_model`, formData, {
+  formData.append('wind_farm_code', getSelectedWindFarmCode());
+
+  return axiosInstance.post('upload_model', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
@@ -86,7 +93,9 @@ export const upload_scaler = (file, onUploadProgress) => {
   const formData = new FormData();
   formData.append('file', file);
 
-  return axios.post(`${backendBaseUrl}/upload_scaler`, formData, {
+  formData.append('wind_farm_code', getSelectedWindFarmCode());
+
+  return axiosInstance.post('upload_scaler', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
@@ -95,34 +104,43 @@ export const upload_scaler = (file, onUploadProgress) => {
 };
 
 export const modeltrain = (fileId, model, wfcapacity, trainRatio, customParams = null) => {
-  const requestData = { file_id: fileId, model, wfcapacity, train_ratio: trainRatio };
+  const requestData = { file_id: fileId, model, wfcapacity, train_ratio: trainRatio, wind_farm_code: getSelectedWindFarmCode() };
   
   // 如果是自定义模型，添加自定义参数
   if (model === 'CUSTOM' && customParams) {
     requestData.custom_params = customParams;
   }
   
-  return axios.post(`${backendBaseUrl}/modeltrain`, requestData, {
+  return axiosInstance.post('modeltrain', requestData, {
     timeout: 1800000  // 设置3分钟超时，适当增加以适应大模型的初始化时间
   });
 };
 
 export const checkTrainingStatus = (fileId) => {
-  return axios.get(`${backendBaseUrl}/check-training-status`, {
-    params: { file_id: fileId }
+  return axiosInstance.get('check-training-status', {
+    params: { file_id: fileId, wind_farm_code: getSelectedWindFarmCode() }
   });
 };
 
 export const predict = (csvfileId, modelfileId, scalerfileId) => {
-  return axios.post(`${backendBaseUrl}/predict`, { csvfileId: csvfileId, modelfileId:modelfileId, scalerfileId:scalerfileId});
+  return axiosInstance.post('predict', {
+    csvfileId: csvfileId,
+    modelfileId: modelfileId,
+    scalerfileId: scalerfileId,
+    wind_farm_code: getSelectedWindFarmCode(),
+  });
 };
 
 export const getActualValues = async (startTime, endTime) => {
   try {
-    const response = await axios.post(`${backendBaseUrl}/power-compare/data`, {
+    const response = await axiosInstance.post('power-compare/data', {
       start: startTime,
       end: endTime,
       types: ['实测值']
+    }, {
+      headers: {
+        'X-Windfarm-Code': getSelectedWindFarmCode(),
+      }
     });
     return response;
   } catch (error) {

@@ -120,9 +120,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, inject, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, inject, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import axiosInstance from '../api/axios'
+import { useWindFarmStore } from '../store/windFarm'
 
 const isAnimatedBackground = inject('isAnimatedBackground');
 
@@ -220,11 +221,17 @@ onUnmounted(() => {
   }
 })
 
+watch(selectedWindFarm, () => {
+  fetchStatus()
+})
+
 const showErrorDialog = (title, details) => {
   errorTitle.value = title || '操作失败'
   errorDetails.value = typeof details === 'object' ? JSON.stringify(details, null, 2) : String(details)
   errorDialogVisible.value = true
 }
+
+const { selectedWindFarm } = useWindFarmStore()
 
 const apiClient = axiosInstance;
 
@@ -270,7 +277,11 @@ apiClient.interceptors.response.use(
 const fetchStatus = async () => {
   loading.value = true
   try {
-    const res = await apiClient.get('status')
+    const res = await apiClient.get('status', {
+      params: {
+        wind_farm_code: selectedWindFarm.value,
+      },
+    })
     predictions.forEach(p => {
       p.status = res.data[p.name] || false
     })
@@ -311,7 +322,10 @@ const handleControl = async (name, action) => {
   console.log('handleControl invoked', name, action)
   loading.value = true
   try {
-    const res = await apiClient.post(`${action}`, { type: name })
+    const res = await apiClient.post(`${action}`, {
+      type: name,
+      wind_farm_code: selectedWindFarm.value,
+    })
     if (res.data.warning) {
       ElMessage.warning(res.data.warning)
     } else {
@@ -362,7 +376,12 @@ const fetchLogsByFilter = async () => {
       // If param logs are specific to a day derived from task type, adjust or remove this logic
       // For now, removing it if getParamOptDay is fully removed
     }
-    const res = await apiClient.get('logs', { params })
+    const res = await apiClient.get('logs', {
+      params: {
+        ...params,
+        wind_farm_code: selectedWindFarm.value,
+      },
+    })
     logsContent.value = res.data.logs || '暂无日志信息'
   } catch (error) {
     console.error('获取日志失败:', error)

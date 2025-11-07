@@ -104,6 +104,26 @@
           <h1 class="header-title">中国三峡集团风电功率预测平台</h1>
         </div>
         <div class="header-right">
+          <el-select
+            v-model="selectedWindFarm"
+            size="small"
+            class="wind-farm-select"
+            :loading="isWindFarmLoading"
+            placeholder="选择场站"
+            filterable
+          >
+            <el-option
+              v-for="farm in windFarms"
+              :key="farm.farm_code || farm.farm_name"
+              :label="farm.farm_name ? `${farm.farm_name}${farm.farm_code ? ` (${farm.farm_code})` : ''}` : (farm.farm_code || '默认场站')"
+              :value="farm.farm_code || farm.farm_name || 'default-farm'"
+            />
+            <el-option
+              v-if="!windFarms.length"
+              :value="selectedWindFarm"
+              :label="selectedWindFarmName"
+            />
+          </el-select>
           <el-dropdown @command="handleCommand">
             <span class="user-profile">
               <el-avatar :size="32" class="avatar">{{ userInitial }}</el-avatar>
@@ -132,6 +152,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import axiosInstance from '../api/axios'
 import { isAuthReady, isAuthLoading } from '../store/authReady' // 导入认证状态
+import { useWindFarmStore } from '../store/windFarm'
 
 // 引入 Element Plus 图标
 import {
@@ -176,8 +197,29 @@ export default {
     // 用户信息
     const currentUser = ref(null)
 
+    const {
+      windFarms,
+      isLoading: isWindFarmLoading,
+      selectedWindFarm,
+      loadWindFarms,
+      findWindFarmByCode,
+    } = useWindFarmStore()
+
+    const selectedWindFarmName = computed(() => {
+      const code = selectedWindFarm.value
+      const farm = findWindFarmByCode(code)
+      if (farm) {
+        if (farm.farm_name && farm.farm_code) {
+          return `${farm.farm_name} (${farm.farm_code})`
+        }
+        return farm.farm_name || farm.farm_code
+      }
+      return code || '默认场站'
+    })
+
     // 将 isAnimatedBackground 提供给子组件使用
     provide('isAnimatedBackground', isAnimatedBackground)
+    provide('selectedWindFarm', selectedWindFarm)
 
     // 计算背景内联样式
     const backgroundStyle = computed(() => ({
@@ -383,6 +425,7 @@ export default {
     // 生命周期钩子
     onMounted(() => {
       fetchCurrentUser()
+      loadWindFarms()
     })
 
     return {
@@ -398,7 +441,11 @@ export default {
       handleCommand,
       hasPermission,
       isAuthReady, // 暴露认证状态
-      isAuthLoading // 暴露认证加载状态
+      isAuthLoading, // 暴露认证加载状态
+      windFarms,
+      isWindFarmLoading,
+      selectedWindFarm,
+      selectedWindFarmName,
     }
   },
 }
@@ -562,6 +609,11 @@ export default {
 .header-right {
   display: flex;
   align-items: center;
+  gap: 16px;
+}
+
+.wind-farm-select {
+  min-width: 220px;
 }
 
 .user-profile {
