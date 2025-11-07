@@ -146,6 +146,7 @@ const predictions = reactive([
 ])
 
 const loading = ref(true)
+const { selectedWindFarm } = useWindFarmStore()
 
 // 定时重启相关变量 - 已移除
 // const scheduleDialogVisible = ref(false)
@@ -230,8 +231,6 @@ const showErrorDialog = (title, details) => {
   errorDetails.value = typeof details === 'object' ? JSON.stringify(details, null, 2) : String(details)
   errorDialogVisible.value = true
 }
-
-const { selectedWindFarm } = useWindFarmStore()
 
 const apiClient = axiosInstance;
 

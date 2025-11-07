@@ -132,18 +132,30 @@ def train_model():
     # 在模型训练之后增加MinIO上传和数据库记录
     db = SessionLocal()
 
+    default_wind_farm_code = MINIO_CONFIG.get("default_wind_farm_code", "default-farm")
+    model_object_name = None
+    scaler_object_name = None
+    metrics_object_prefix = None
+    wind_farm_code = default_wind_farm_code
+    wind_farm_id = None
+
     try:
         dataset_record = db.query(Dataset).filter(Dataset.file_id == file_id).first()
-    default_wind_farm_code = MINIO_CONFIG.get("default_wind_farm_code", "default-farm")
-    raw_wind_farm_code = None
-    if dataset_record:
-        raw_wind_farm_code = dataset_record.wind_farm_code or dataset_record.wind_farm
-    if not raw_wind_farm_code:
-        raw_wind_farm_code = data.get('wind_farm_code')
-    if not raw_wind_farm_code:
-        raw_wind_farm_code = default_wind_farm_code
+        raw_wind_farm_code = None
+        if dataset_record:
+            raw_wind_farm_code = dataset_record.wind_farm_code or dataset_record.wind_farm
+            wind_farm_id = dataset_record.wind_farm_id
+
+        if not raw_wind_farm_code:
+            raw_wind_farm_code = data.get('wind_farm_code')
+
+        if not raw_wind_farm_code:
+            raw_wind_farm_code = default_wind_farm_code
+
         wind_farm_code = normalize_wind_farm_code(raw_wind_farm_code, default_wind_farm_code)
-        wind_farm_id = dataset_record.wind_farm_id if dataset_record else None
+
+        if wind_farm_id is None:
+            wind_farm_id = data.get('wind_farm_id')
 
         # 生成唯一标识
         model_version = f"{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
