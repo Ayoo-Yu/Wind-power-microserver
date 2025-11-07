@@ -6,6 +6,9 @@
     <!-- 页面标题 -->
     <div class="page-title">
       <p>数据上报配置与管理</p>
+      <div class="current-windfarm-indicator">
+        <el-tag type="success" effect="dark">当前场站：{{ currentWindFarmDisplay }}</el-tag>
+      </div>
     </div>
 
     <!-- 调度器状态卡片 -->
@@ -859,10 +862,11 @@
 </template>
 
 <script>
-import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, Setting, Delete, View, Plus, Refresh, Search, RefreshLeft } from '@element-plus/icons-vue'
 import axios from '../api/axios'
+import { useWindFarmStore } from '@/store/windFarm'
 
 export default {
   name: 'ReportManagement',
@@ -877,11 +881,22 @@ export default {
     RefreshLeft
   },
   setup() {
+    const windFarmStore = useWindFarmStore()
+    const { selectedWindFarm, findWindFarmByCode, windFarms: storeWindFarms } = windFarmStore
+    const windFarms = storeWindFarms
+    const currentWindFarmRecord = computed(() => findWindFarmByCode(selectedWindFarm.value))
+    const currentWindFarmDisplay = computed(() => {
+      const record = currentWindFarmRecord.value
+      if (record) {
+        return record.farm_name || record.farm_code || selectedWindFarm.value
+      }
+      return selectedWindFarm.value || '未选择场站'
+    })
+
     // 保存原始的console.error用于清理
     const originalError = console.error
     
     // 数据定义
-    const windFarms = ref([])
     const reportConfigs = ref([])
     const reportLogs = ref([])
     
@@ -901,7 +916,7 @@ export default {
     // 上报数据质量统计
     const statsLoading = ref(false)
     const statsQuery = reactive({
-      farm_code: null,
+      farm_code: selectedWindFarm.value || null,
       month: new Date().toISOString().slice(0, 7), // 默认当前月
     })
     const statistics = ref([])
@@ -965,12 +980,33 @@ export default {
     
     // 日志查询
     const logQuery = reactive({
-      farm_code: '',
+      farm_code: selectedWindFarm.value || '',
       report_type: '',
       status: '',
       dateRange: null
     })
     
+    const isInitialized = ref(false)
+
+    const syncSelectedFarmContext = ({ overrideFilters = false } = {}) => {
+      const newCode = selectedWindFarm.value || null
+
+      if (overrideFilters || !statsQuery.farm_code) {
+        statsQuery.farm_code = newCode
+      }
+
+      if (overrideFilters || !logQuery.farm_code) {
+        logQuery.farm_code = newCode || ''
+      }
+
+      const record = currentWindFarmRecord.value
+      if (record) {
+        selectedFarmId.value = record.id
+      } else if (overrideFilters) {
+        selectedFarmId.value = null
+      }
+    }
+
     const logPagination = reactive({
       page: 1,
       per_page: 20,
@@ -1181,6 +1217,7 @@ export default {
         const response = await axios.get('/report/farms')
         console.log('风电场站列表响应:', response.data)
         windFarms.value = response.data
+        syncSelectedFarmContext({ overrideFilters: true })
       } catch (error) {
         console.error('获取风电场站列表失败:', error)
         if (error.response?.status === 405) {
@@ -1203,6 +1240,9 @@ export default {
         if (selectedFarmId.value) {
           params.farm_id = selectedFarmId.value
         }
+        if (selectedWindFarm.value) {
+          params.wind_farm_code = selectedWindFarm.value
+        }
         
         const response = await axios.get('/report/configs', {
           params
@@ -1222,7 +1262,11 @@ export default {
     // 获取调度器状态
     const fetchSchedulerStatus = async () => {
       try {
-        const response = await axios.get('/report/scheduler/status')
+        const response = await axios.get('/report/scheduler/status', {
+          params: {
+            wind_farm_code: selectedWindFarm.value
+          }
+        })
         schedulerStatus.value = response.data
       } catch (error) {
         console.error('获取调度器状态失败:', error)
@@ -1234,7 +1278,9 @@ export default {
     const startScheduler = async () => {
       schedulerLoading.value = true
       try {
-        const response = await axios.post('/report/scheduler/start')
+        const response = await axios.post('/report/scheduler/start', {
+          wind_farm_code: selectedWindFarm.value
+        })
         ElMessage.success(response.data.message)
         await fetchSchedulerStatus()
       } catch (error) {
@@ -1249,7 +1295,9 @@ export default {
     const stopScheduler = async () => {
       schedulerLoading.value = true
       try {
-        const response = await axios.post('/report/scheduler/stop')
+        const response = await axios.post('/report/scheduler/stop', {
+          wind_farm_code: selectedWindFarm.value
+        })
         ElMessage.success(response.data.message)
         await fetchSchedulerStatus()
       } catch (error) {
@@ -1283,7 +1331,8 @@ export default {
           per_page: logPagination.per_page
         }
         
-        if (logQuery.farm_code) params.farm_code = logQuery.farm_code
+        const farmCode = logQuery.farm_code || selectedWindFarm.value
+        if (farmCode) params.farm_code = farmCode
         if (logQuery.report_type) params.report_type = logQuery.report_type
         if (logQuery.status) params.status = logQuery.status
         if (logQuery.dateRange && logQuery.dateRange.length === 2) {
@@ -1872,7 +1921,8 @@ export default {
     const executeManualReport = async (useCustomData = false) => {
       try {
         const payload = {
-          config_id: previewData.value.config_info.id
+          config_id: previewData.value.config_info.id,
+          wind_farm_code: selectedWindFarm.value
         }
         
         if (useCustomData) {
@@ -1979,7 +2029,7 @@ export default {
     // 重置日志查询
     const resetLogQuery = () => {
       Object.assign(logQuery, {
-        farm_code: '',
+        farm_code: selectedWindFarm.value || '',
         report_type: '',
         status: '',
         dateRange: null
@@ -2122,10 +2172,12 @@ export default {
     // 生命周期
     onMounted(async () => {
       await fetchFarms()
+      syncSelectedFarmContext({ overrideFilters: true })
       await fetchConfigs()
       await fetchLogs()
       await fetchSchedulerStatus()
       await fetchStatistics()
+      isInitialized.value = true
       
       // 全局ResizeObserver错误处理 - 使用debounce和requestAnimationFrame
       const handleResizeObserverError = (e) => {
@@ -2148,6 +2200,26 @@ export default {
       }
     })
     
+    watch(
+      () => selectedWindFarm.value,
+      async (newCode, oldCode) => {
+        if (newCode === oldCode) {
+          return
+        }
+
+        syncSelectedFarmContext({ overrideFilters: true })
+
+        if (!isInitialized.value) {
+          return
+        }
+
+        await fetchConfigs()
+        await fetchLogs()
+        await fetchSchedulerStatus()
+        await fetchStatistics()
+      }
+    )
+
     // 组件卸载时清理
     onUnmounted(() => {
       // 清理定时器
@@ -2165,8 +2237,9 @@ export default {
       statsLoading.value = true
       try {
         const params = {}
-        if (statsQuery.farm_code) {
-          params.farm_code = statsQuery.farm_code
+        const statsFarmCode = statsQuery.farm_code || selectedWindFarm.value
+        if (statsFarmCode) {
+          params.farm_code = statsFarmCode
         }
         if (statsQuery.month) {
           params.month = statsQuery.month
@@ -2228,6 +2301,7 @@ export default {
     }
     
     return {
+      currentWindFarmDisplay,
       // 数据
       windFarms,
       reportConfigs,
@@ -2400,6 +2474,12 @@ export default {
   font-size: 1em;
   opacity: 0.9;
   margin: 0;
+}
+
+.current-windfarm-indicator {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
 }
 
 /* 内容容器 */

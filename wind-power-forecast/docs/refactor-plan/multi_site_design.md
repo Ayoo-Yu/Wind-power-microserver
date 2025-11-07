@@ -35,6 +35,12 @@
 - 队列任务 payload 增加 `wind_farm_id` 或 `wind_farm_code`，worker 在运行前检查并注入上下文。
 - API 请求新增 `wind_farm_id` 参数（如上传、训练、预测、调度），并在响应中返回场站信息。
 - 前端路由与 store 需要引入场站选择器，所有页面调用 API 时附带场站上下文。
+- 前端全局 Axios 拦截器默认附带 `X-Windfarm-Code` 请求头；表单/任务提交额外携带 `wind_farm_code` 字段以兼容旧接口。
+
+### 前端适配与 UI 提示
+- 布局右上角新增场站选择器，状态保存在本地并通过 `windFarmStore` 对外暴露。
+- 关键页面（功率预测、功率对比、气象数据拉取、系统维护等）在 UI 顶部展示“当前场站”标识，切换时自动刷新各自数据。
+- 自定义 API 请求或第三方库调用需复用 `axiosInstance` 或手动附带 `X-Windfarm-Code`/`wind_farm_code`，以避免数据串场。
 
 ### 下一步（Step2 参考）
 1. 设计 Alembic/SQL 脚本：创建 `wind_farms` 表，向相关表添加 `wind_farm_id` 列并建立索引。

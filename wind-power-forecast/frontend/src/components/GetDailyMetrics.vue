@@ -13,6 +13,7 @@
 <script>
 import Papa from 'papaparse';
 import axiosInstance from '../api/axios';
+import { useWindFarmStore } from '@/store/windFarm';
 import { Chart, CategoryScale, LinearScale, LineElement, PointElement, Title, Tooltip, Legend, LineController } from 'chart.js';
 // 注册所需的组件，包括 LineController
 Chart.register(
@@ -31,6 +32,7 @@ export default {
     return {
       dailyMetrics: null,  // 用于存储获取到的日常指标数据
       chartData: null,  // 用于存储可视化的图表数据
+      windFarmStore: useWindFarmStore(),
     }
   },
   props: {
@@ -51,6 +53,11 @@ export default {
       default: ''
     },
   },
+  computed: {
+    selectedWindFarmCode() {
+      return this.windFarmStore.selectedWindFarm.value;
+    }
+  },
   methods:{
     // 获取 daily-metrics.csv 数据
     fetchDailyMetrics() {
@@ -61,7 +68,10 @@ export default {
 
       axiosInstance
         .get('get-daily-metrics', {
-          params: { file_id: this.fileId }
+          params: {
+            file_id: this.fileId,
+            wind_farm_code: this.selectedWindFarmCode,
+          }
         })
         .then(response => {
           console.log('Response data:', response.data);  // 打印返回的数据，查看是否为 CSV 格式

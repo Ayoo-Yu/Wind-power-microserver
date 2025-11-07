@@ -7,6 +7,9 @@
     <div class="page-header">
       <h1 class="page-title">气象预报数据拉取</h1>
       <p class="page-description">配置SSH连接，实现气象预报数据的定时拉取、处理和上传</p>
+      <div class="wind-farm-banner">
+        <el-tag type="success" effect="dark">当前场站：{{ currentWindFarmDisplay }}</el-tag>
+      </div>
     </div>
 
     <!-- SSH连接配置卡片 -->
@@ -597,9 +600,10 @@
 </template>
 
 <script>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import axiosInstance from '../api/axios'
+import { useWindFarmStore } from '@/store/windFarm'
 import {
   Connection,
   Download,
@@ -616,6 +620,16 @@ export default {
     Timer
   },
   setup() {
+    const { selectedWindFarm, findWindFarmByCode } = useWindFarmStore()
+    const currentWindFarmRecord = computed(() => findWindFarmByCode(selectedWindFarm.value))
+    const currentWindFarmDisplay = computed(() => {
+      const record = currentWindFarmRecord.value
+      if (record) {
+        return record.farm_name || record.farm_code || selectedWindFarm.value
+      }
+      return selectedWindFarm.value
+    })
+
     // 响应式数据
     const connections = ref([])
     const tasks = ref([])
@@ -1282,7 +1296,18 @@ export default {
       checkSchedulerStatus() // 检查调度器状态
     })
 
+    watch(() => selectedWindFarm.value, () => {
+      connections.value = []
+      tasks.value = []
+      schedulerInfo.value = { is_running: false, jobs: [], total_jobs: 0 }
+      fetchConnections()
+      fetchTasks()
+      checkSchedulerStatus()
+      ElMessage.info(`已切换到场站：${currentWindFarmDisplay.value}`)
+    })
+
     return {
+      currentWindFarmDisplay,
       // 数据
       connections,
       tasks,
@@ -1405,6 +1430,12 @@ export default {
   opacity: 0.9;
   margin: 0;
   color: white;
+}
+
+.wind-farm-banner {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
 }
 
 /* 卡片样式 */

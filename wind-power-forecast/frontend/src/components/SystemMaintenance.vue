@@ -4,6 +4,9 @@
     <div class="page-header">
       <h2 class="page-title">系统维护</h2>
       <p class="page-description">查看系统硬件配置、软件环境和运行参数信息</p>
+      <div class="wind-farm-banner">
+        <el-tag type="success" effect="dark">当前场站：{{ currentWindFarmDisplay }}</el-tag>
+      </div>
     </div>
 
     <!-- 系统信息卡片 -->
@@ -211,9 +214,10 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import axiosInstance from '../api/axios'
+import { useWindFarmStore } from '@/store/windFarm'
 import {
   Monitor,
   Platform,
@@ -230,6 +234,16 @@ export default {
     Document
   },
   setup() {
+    const { selectedWindFarm, findWindFarmByCode } = useWindFarmStore()
+    const currentWindFarmRecord = computed(() => findWindFarmByCode(selectedWindFarm.value))
+    const currentWindFarmDisplay = computed(() => {
+      const record = currentWindFarmRecord.value
+      if (record) {
+        return record.farm_name || record.farm_code || selectedWindFarm.value
+      }
+      return selectedWindFarm.value
+    })
+
     // 加载状态
     const loadingHardware = ref(false)
     const loadingSoftware = ref(false)
@@ -360,7 +374,13 @@ export default {
       initializeData()
     })
 
+    watch(() => selectedWindFarm.value, () => {
+      initializeData()
+      ElMessage.info(`已切换到场站：${currentWindFarmDisplay.value}`)
+    })
+
     return {
+      currentWindFarmDisplay,
       loadingHardware,
       loadingSoftware,
       loadingRuntime,
@@ -410,6 +430,12 @@ export default {
   color: rgba(255, 255, 255, 0.9);
   margin: 0;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.wind-farm-banner {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
 }
 
 .system-cards {

@@ -2,6 +2,11 @@
   <div class="power-predict-container">
     <div class="content-wrapper">
       <h1 class="page-title">功率预测</h1>
+      <div class="wind-farm-banner">
+        <el-tag type="success" effect="dark">
+          当前场站：{{ currentWindFarmDisplay }}
+        </el-tag>
+      </div>
 
       <div class="main-content">
         <div class="upload-section">
@@ -225,11 +230,14 @@ import LogViewer from './LogViewer.vue';
 import * as echarts from 'echarts';
 import { ArrowDown, InfoFilled, Download } from '@element-plus/icons-vue';
 import axiosInstance from '../api/axios';
+import { useWindFarmStore } from '@/store/windFarm';
 
 const rawBaseURL = axiosInstance.defaults && axiosInstance.defaults.baseURL ? axiosInstance.defaults.baseURL : '';
 const API_BASE_PATH = rawBaseURL.replace(/\/$/, '');
 const SOCKET_BASE_URL = window.location.origin;
 const SOCKET_PATH = API_BASE_PATH ? `${API_BASE_PATH}/socket.io` : '/socket.io';
+
+const windFarmStore = useWindFarmStore();
 
 function buildDownloadUrl(basePath, path) {
   if (!path) {
@@ -253,6 +261,26 @@ export default {
     ArrowDown,
     InfoFilled,
     Download
+  },
+  computed: {
+    selectedWindFarm() {
+      return windFarmStore.selectedWindFarm.value;
+    },
+    currentWindFarmRecord() {
+      return windFarmStore.findWindFarmByCode(this.selectedWindFarm);
+    },
+    currentWindFarmDisplay() {
+      const record = this.currentWindFarmRecord;
+      if (record) {
+        return record.farm_name || record.farm_code || this.selectedWindFarm;
+      }
+      return this.selectedWindFarm;
+    }
+  },
+  watch: {
+    selectedWindFarm() {
+      this.handleWindFarmSelectionChange();
+    }
   },
   data() {
     return {
@@ -287,6 +315,24 @@ export default {
     };
   },
   methods: {
+    handleWindFarmSelectionChange() {
+      this.$message.info(`已切换到场站：${this.currentWindFarmDisplay}`);
+      ['Csv', 'Model', 'Scaler'].forEach(type => this.resetState(type));
+      this.predictions = [];
+      this.actualValues = [];
+      this.showActualValues = false;
+      this.metrics = null;
+      this.downloadUrl = '';
+      this.clearLogs();
+      if (this.socket) {
+        try {
+          this.socket.disconnect();
+        } catch (error) {
+          console.warn('断开socket失败:', error);
+        }
+        this.socket = null;
+      }
+    },
     composeDownloadUrl(path) {
       return buildDownloadUrl(this.backendBaseUrl, path);
     },
@@ -1005,6 +1051,12 @@ export default {
   margin-bottom: 40px;
   letter-spacing: -0.003em;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.wind-farm-banner {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
 }
 
 .main-content {

@@ -16,6 +16,10 @@
 
     <h1 class="page-title">数据可视化与下载</h1>
 
+    <div class="wind-farm-banner">
+      <el-tag type="success" effect="dark">当前场站：{{ currentWindFarmDisplay }}</el-tag>
+    </div>
+
     <!-- 时间选择与配置区域 -->
     <div class="config-panel">
       <el-card class="merged-config-card"> 
@@ -190,6 +194,8 @@
 import { Chart, CategoryScale, LinearScale, LineElement, PointElement, Title, Tooltip, Legend, LineController } from 'chart.js'
 import zoomPlugin from 'chartjs-plugin-zoom';
 import axiosInstance from '../api/axios'
+import { ElMessage } from 'element-plus'
+import { useWindFarmStore } from '@/store/windFarm'
 
 Chart.register(
   CategoryScale,
@@ -206,6 +212,8 @@ Chart.register(
 // Define Y-axis constants at a higher scope
 const YAXIS_POWER = 'yPower';
 const YAXIS_WINDSPEED = 'yWindSpeed';
+
+const windFarmStore = useWindFarmStore();
 
 export default {
   name: 'PowerCompare',
@@ -257,6 +265,21 @@ export default {
       isMetricButtonCooling: false, // 指标按钮的冷却状态标志
     }
   },
+  computed: {
+    selectedWindFarm() {
+      return windFarmStore.selectedWindFarm.value;
+    },
+    currentWindFarmRecord() {
+      return windFarmStore.findWindFarmByCode(this.selectedWindFarm);
+    },
+    currentWindFarmDisplay() {
+      const record = this.currentWindFarmRecord;
+      if (record) {
+        return record.farm_name || record.farm_code || this.selectedWindFarm;
+      }
+      return this.selectedWindFarm;
+    }
+  },
   mounted() {
     const today = new Date();
     const year = today.getFullYear();
@@ -270,6 +293,19 @@ export default {
     this.fetchComparisonData();
   },
   methods: {
+    handleWindFarmSelectionChange() {
+      ElMessage.info(`已切换到场站：${this.currentWindFarmDisplay}`);
+      this.chartData = null;
+      this.dailyMetrics = null;
+      this.exportData = { comparison: null, metrics: null };
+      this.qualificationRates = null;
+      this.showDailyMetricsAnalysis = false;
+      this.showQualificationRateAnalysis = false;
+      this.chartKey += 1;
+      if (this.timeRange && this.timeRange.length === 2) {
+        this.fetchComparisonData();
+      }
+    },
     refreshPage() {
       window.location.reload();
     },
@@ -312,6 +348,7 @@ export default {
           start: this.timeRange[0],
           end: this.timeRange[1],
           types: this.selectedTypes,
+          wind_farm_code: this.selectedWindFarm,
           ...(this.selectedTypes.includes('超短期预测') && { supershort_horizon: 'average' })
         };
 
@@ -1458,6 +1495,9 @@ export default {
     },
   },
   watch: {
+    selectedWindFarm() {
+      this.handleWindFarmSelectionChange();
+    },
     showDailyMetricsAnalysis(newValue) {
       if (newValue) { 
         this.$nextTick(() => { 
@@ -1570,6 +1610,12 @@ export default {
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+.wind-farm-banner {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
 .config-panel {
   margin-bottom: 24px;
 }
@@ -1592,11 +1638,6 @@ export default {
   flex-wrap: wrap; 
 }
 
-/* Row 1: Time Picker, Query Button, Download Buttons */
-.config-row-1 {
-  /* justify-content: space-between; */ /* Let items flow naturally with gaps */
-}
-
 .config-row-1 .time-picker-wrapper-outer {
   display: flex;
   align-items: center;
@@ -1605,10 +1646,6 @@ export default {
 
 .time-range-picker-element {
   min-width: 300px; /* Give date picker enough space */
-}
-
-.config-row-1 .query-button {
-  /* margin-left: auto; */ /* Removed to keep it next to picker */
 }
 
 .download-buttons-row1 {

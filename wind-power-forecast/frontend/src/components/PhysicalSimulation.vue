@@ -3,6 +3,9 @@
     <div class="content-wrapper">
       <h1 class="page-title">物理仿真数据展示</h1>
       <p class="page-subtitle">通过双线性插值计算任意工况下的风机表现</p>
+      <div class="wind-farm-banner">
+        <el-tag type="success" effect="dark">当前场站：{{ currentWindFarmDisplay }}</el-tag>
+      </div>
 
       <div class="main-content">
         <!-- 参数设置区域 -->
@@ -168,6 +171,7 @@ import axiosInstance from '../api/axios';
 import Plotly from 'plotly.js-dist-min';
 import { ElMessage } from 'element-plus';
 import { InfoFilled, Download } from '@element-plus/icons-vue';
+import { useWindFarmStore } from '@/store/windFarm';
 
 export default {
   name: 'PhysicalSimulation',
@@ -176,7 +180,9 @@ export default {
     Download
   },
   data() {
+    const windFarmStore = useWindFarmStore();
     return {
+      windFarmStore,
       farmNames: [],
       selectedFarm: null,
       targetWindSpeed: null,
@@ -192,6 +198,23 @@ export default {
     };
   },
   computed: {
+    selectedWindFarmCode() {
+      return this.windFarmStore.selectedWindFarm.value;
+    },
+    currentWindFarmRecord() {
+      const finder = this.windFarmStore.findWindFarmByCode;
+      if (typeof finder === 'function') {
+        return finder(this.selectedWindFarmCode);
+      }
+      return null;
+    },
+    currentWindFarmDisplay() {
+      const record = this.currentWindFarmRecord;
+      if (record) {
+        return record.farm_name || record.farm_code || this.selectedWindFarmCode;
+      }
+      return this.selectedFarm || this.selectedWindFarmCode || '未选择场站';
+    },
     isReadyForSimulation() {
       return this.selectedFarm && 
              this.targetWindSpeed !== null && 
@@ -200,16 +223,67 @@ export default {
              this.targetWindDirection !== '';
     }
   },
+  watch: {
+    selectedWindFarmCode(newCode, oldCode) {
+      if (newCode === oldCode) {
+        return;
+      }
+      this.reloadForSelectedWindFarm();
+    }
+  },
   mounted() {
-    this.fetchFarmNames();
+    this.reloadForSelectedWindFarm();
   },
   methods: {
+    async reloadForSelectedWindFarm() {
+      this.targetWindSpeed = null;
+      this.targetWindDirection = null;
+      this.simulationResults = [];
+      await this.fetchFarmNames();
+
+      const defaultName = this.getDefaultFarmName();
+      if (defaultName) {
+        this.selectedFarm = defaultName;
+        await this.handleFarmSelection(defaultName, { syncStore: false });
+      } else {
+        this.selectedFarm = null;
+        this.farmConditions = [];
+        this.farmTurbines = [];
+      }
+    },
+
+    getDefaultFarmName() {
+      const record = this.currentWindFarmRecord;
+      if (record && record.farm_name) {
+        return record.farm_name;
+      }
+      return this.farmNames.length > 0 ? this.farmNames[0] : null;
+    },
+
+    findFarmRecordByName(farmName) {
+      if (!farmName || !this.windFarmStore || !this.windFarmStore.windFarms) {
+        return null;
+      }
+      const farms = this.windFarmStore.windFarms.value || [];
+      return farms.find(
+        (farm) => farm.farm_name === farmName || farm.farm_code === farmName
+      ) || null;
+    },
+
     async fetchFarmNames() {
       this.loadingFarms = true;
       try {
-        const response = await axiosInstance.get('physical_simulation/conditions');
+        const params = {};
+        if (this.selectedWindFarmCode) {
+          params.wind_farm_code = this.selectedWindFarmCode;
+        }
+        const response = await axiosInstance.get('physical_simulation/conditions', { params });
         const uniqueFarms = [...new Set(response.data.map(item => item.farm_name))];
         this.farmNames = uniqueFarms;
+        const defaultName = this.getDefaultFarmName();
+        if (defaultName && !this.farmNames.includes(defaultName)) {
+          this.farmNames.unshift(defaultName);
+        }
       } catch (error) {
         console.error('Error fetching farm names:', error);
         ElMessage.error('获取风电场列表失败');
@@ -218,25 +292,41 @@ export default {
       }
     },
     
-    async handleFarmSelection(farmName) {
+    async handleFarmSelection(farmName, options = {}) {
+      const { syncStore = true } = options;
       if (!farmName) {
         this.farmConditions = [];
         this.farmTurbines = [];
         return;
+      }
+
+      if (syncStore) {
+        const record = this.findFarmRecordByName(farmName);
+        if (record && record.farm_code && record.farm_code !== this.selectedWindFarmCode) {
+          this.windFarmStore.setSelectedWindFarm(record.farm_code);
+          return;
+        }
       }
       
       this.loadingSimulation = true;
       try {
         const [conditionsRes, turbinesRes] = await Promise.all([
           axiosInstance.get('physical_simulation/conditions', {
-            params: { farm_name: farmName }
+            params: {
+              farm_name: farmName,
+              wind_farm_code: this.selectedWindFarmCode
+            }
           }),
           axiosInstance.get('physical_simulation/turbines', {
-            params: { farm_name: farmName }
+            params: {
+              farm_name: farmName,
+              wind_farm_code: this.selectedWindFarmCode
+            }
           }),
         ]);
         this.farmConditions = conditionsRes.data;
         this.farmTurbines = turbinesRes.data;
+        this.selectedFarm = farmName;
         
         ElMessage.success(`已加载 ${this.farmTurbines.length} 台风机数据`);
       } catch (error) {
@@ -552,6 +642,12 @@ export default {
   text-align: center;
   margin-bottom: 40px;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.wind-farm-banner {
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: center;
 }
 
 .main-content {
