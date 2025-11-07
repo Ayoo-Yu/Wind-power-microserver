@@ -15,6 +15,19 @@
             <template #header>
               <span>{{ item.title }}</span>
             </template>
+            <div class="prediction-meta">
+              <el-tag :type="item.status ? 'success' : 'info'" effect="plain">
+                {{ item.status ? '已启用' : '未启用' }}
+              </el-tag>
+              <div class="meta-line">
+                <span class="meta-label">最近触发：</span>
+                <span>{{ formatDateTime(item.meta.lastTriggeredAt) }}</span>
+              </div>
+              <div class="meta-line">
+                <span class="meta-label">计划表达式：</span>
+                <span>{{ item.meta.scheduleCron || '默认计划' }}</span>
+              </div>
+            </div>
             <div class="button-group">
               <el-button 
                 :type="item.status ? 'success' : 'primary'" 
@@ -35,8 +48,8 @@
               <!-- 定时重启按钮已移除 -->
             </div>
             <div class="button-group extra">
-              <el-button type="danger" @click="showConfirmDialog('deleteTask', '删除预测任务', `确定要从PM2中删除${item.title}吗？此操作不会删除脚本文件，但会移除任务记录。`, item.name)">删除</el-button>
-              <!-- 详情按钮已移除 -->
+              <el-button type="warning" @click="showConfirmDialog('triggerTask', '手动触发', `立即触发一次${item.title}的训练和预测任务？`, item.name)" :disabled="!item.status">手动触发</el-button>
+              <el-button type="danger" @click="showConfirmDialog('deleteTask', '删除预测任务', `确定要删除${item.title}的调度配置吗？`, item.name)">删除</el-button>
               <el-button type="primary" @click="fetchLogs(item.name)">日志</el-button>
             </div>
           </el-card>
@@ -131,18 +144,30 @@ const predictions = reactive([
   {
     name: 'supershort',
     title: '超短期风电功率预测',
-    status: false
+    status: false,
+    meta: {
+      lastTriggeredAt: null,
+      scheduleCron: null,
+    },
   },
   {
     name: 'short',
     title: '短期风电功率预测',
-    status: false
+    status: false,
+    meta: {
+      lastTriggeredAt: null,
+      scheduleCron: null,
+    },
   },
   {
     name: 'medium',
     title: '中期风电功率预测',
-    status: false
-  }
+    status: false,
+    meta: {
+      lastTriggeredAt: null,
+      scheduleCron: null,
+    },
+  },
 ])
 
 const loading = ref(true)
@@ -264,14 +289,26 @@ apiClient.interceptors.response.use(
         message: error.message
       }
     }
-    if (errorDetails.data && errorDetails.data.error && errorDetails.data.error.includes('PM2')) {
-      errorMessage = 'PM2服务错误'
-    }
     ElMessage.error(errorMessage)
     console.error('详细错误:', errorDetails)
     return Promise.reject(error)
   }
 )
+
+const formatDateTime = value => {
+  if (!value) {
+    return '无记录'
+  }
+  try {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) {
+      return value
+    }
+    return date.toLocaleString()
+  } catch (error) {
+    return value
+  }
+}
 
 const fetchStatus = async () => {
   loading.value = true
@@ -281,8 +318,11 @@ const fetchStatus = async () => {
         wind_farm_code: selectedWindFarm.value,
       },
     })
+    const meta = res.data.meta || {}
     predictions.forEach(p => {
-      p.status = res.data[p.name] || false
+      p.status = Boolean(meta[p.name]?.enabled ?? res.data[p.name])
+      p.meta.lastTriggeredAt = meta[p.name]?.last_triggered_at || meta[p.name]?.lastTriggeredAt || null
+      p.meta.scheduleCron = meta[p.name]?.schedule_cron || meta[p.name]?.scheduleCron || null
     })
   } catch (error) {
     console.error('获取状态失败:', error)
@@ -310,6 +350,9 @@ const executeConfirmedAction = () => {
       break
     case 'deleteTask':
       handleControl(confirmDialog.params, 'delete')
+      break
+    case 'triggerTask':
+      handleTrigger(confirmDialog.params)
       break
     // Removed cases for saveSettings, resurrectConfig, clearSavedConfig
     default:
@@ -346,8 +389,30 @@ const handleControl = async (name, action) => {
   }
 }
 
+const handleTrigger = async (name) => {
+  loading.value = true
+  try {
+    const res = await apiClient.post('trigger', {
+      type: name,
+      wind_farm_code: selectedWindFarm.value,
+    })
+    ElMessage.success(res.data.message || '任务已触发')
+    await fetchStatus()
+  } catch (error) {
+    if (error.response && error.response.data) {
+      const errorData = error.response.data
+      showErrorDialog(
+        `触发 ${name} 失败`,
+        errorData.details || errorData.error || error.message
+      )
+    }
+  } finally {
+    loading.value = false
+  }
+}
+
 // 定时重启方法 (showScheduleDialog, setSchedule) 已移除
-// 保存/加载/删除 PM2 配置方法 (saveSettings, resurrectConfig, clearSavedConfig) 已移除
+// 保存/加载/删除 调度配置的方法 (saveSettings, resurrectConfig, clearSavedConfig) 已移除
 // 查询脚本详情方法 (fetchScriptInfo) 已移除
 // 获取任务状态方法 (fetchTaskStatus, refreshTaskStatus, fetchTaskStatusByDate, resetTaskDateInfo) 已移除
 // 获取任务标题方法 (getTaskTitle) 已移除 (如果日志部分不需要可以彻底删除)
@@ -423,8 +488,6 @@ const handleLogTypeChange = () => {
 // 历史记录辅助方法 (getTaskTypeTagType, getTaskTypeLabel, getActionTagType, getActionLabel, getStatusTagType, getStatusLabel) 已移除
 // 参数优化星期相关方法 (getParamOptWeekday, getParamOptDay) 已移除
 // 预测任务状态文本/类型方法 (getTaskPredictionType, getTaskPredictionStatus) 已移除
-
-// getTaskTitle might still be used by logs, so keeping it conditionally or removing if not used.
 
 </script>
 
@@ -632,6 +695,25 @@ const handleLogTypeChange = () => {
   font-size: 24px;
   font-weight: 500;
   color: #1d1d1f;
+}
+
+.prediction-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.meta-line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.meta-label {
+  color: rgba(255, 255, 255, 0.6);
+  margin-right: 4px;
 }
 
 .el-dialog {
