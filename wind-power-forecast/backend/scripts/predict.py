@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 import joblib
 from .data_processor import preprocess_data_pre, feature_engineering, create_time_window_pre
-from .config import LAGS, OUTPUT_DIR
+from .config import LAGS, OUTPUT_DIR, WINDOW_SIZE
 
 
 def load_models_and_scaler(model_path, scaler_path):
@@ -35,7 +35,14 @@ def preprocess_new_data(file_path, lags):
     
     # 特征工程
     X_fe, _ = feature_engineering(X, X, lags)  # 对新数据，验证集可以忽略
-    
+
+    X_fe = X_fe.reset_index(drop=True)
+    if len(X_fe) < len(timestamps):
+        timestamps = timestamps.iloc[len(timestamps) - len(X_fe):]
+    else:
+        timestamps = timestamps.iloc[:len(X_fe)]
+    timestamps = timestamps.reset_index(drop=True)
+
     return X_fe, timestamps
 
 
@@ -104,30 +111,31 @@ def make_predictions(model, scaler, X_new, window_size, LAGS):
     print(f"✅ 成功生成 {len(preds)} 个预测")
     return preds
 
-def save_predictions_to_csv(predictions, timestamps, output_dir, MODEL_PATH):
+def save_predictions_to_csv(
+    predictions,
+    timestamps,
+    output_dir,
+    model_path,
+):
     """
     保存预测结果到 CSV 文件
     """
     os.makedirs(output_dir, exist_ok=True)
     
-    # 计算需要跳过的样本数（用于时间窗口和滞后特征）
-    window_size = 16  # 与predict函数中的默认值保持一致
-    lags = 3  # 与config中的LAGS保持一致
-    
-    # 计算实际预测结果对应的时间戳
-    start_idx = window_size + lags - 1  # 第一个预测结果对应的时间戳索引
-    valid_timestamps = timestamps[start_idx:start_idx + len(predictions)]
-    
-    # 创建DataFrame，确保时间戳和预测结果一一对应
+    if len(predictions) != len(timestamps):
+        raise ValueError(
+            f"预测结果与时间戳数量不一致，predictions={len(predictions)}, timestamps={len(timestamps)}"
+        )
+
     df = pd.DataFrame({
-        'Timestamp': valid_timestamps,
+        'Timestamp': timestamps,
         'Predicted Power': predictions
     })
     
     # 确保列名清晰可见
     df.columns = ['Timestamp', 'Predicted Power']
     
-    model_name = MODEL_PATH.split('/')[-1].split('.')[0]
+    model_name = model_path.split('/')[-1].split('.')[0]
     print(model_name)
     csv_filename = f'{model_name}_prediction.csv'
     csv_filepath = os.path.join(output_dir, csv_filename)

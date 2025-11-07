@@ -33,16 +33,29 @@ def run_prediction(
     model, scaler = load_models_and_scaler(str(model_path), str(scaler_path))
     features, timestamps = preprocess_new_data(str(csv_path), LAGS)
     predictions = make_predictions(model, scaler, features, window_size, LAGS)
+    start_idx = window_size - 1
+    end_idx = start_idx + len(predictions)
+    prediction_timestamps = timestamps[start_idx:end_idx]
+
+    if len(prediction_timestamps) != len(predictions):
+        raise ValueError(
+            "时间戳与预测结果数量不匹配",
+        )
 
     predictions_df = pd.DataFrame({
-        "Timestamp": timestamps[LAGS + window_size - 1 : LAGS + window_size - 1 + len(predictions)],
+        "Timestamp": prediction_timestamps,
         "Predicted Power": predictions,
     })
 
     output_dir = Path(OUTPUT_DIR)
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = Path(
-        save_predictions_to_csv(predictions, timestamps, str(output_dir), str(model_path))
+        save_predictions_to_csv(
+            predictions,
+            prediction_timestamps,
+            str(output_dir),
+            str(model_path),
+        )
     )
 
     return PredictionResult(output_file=output_file, predictions=predictions_df)

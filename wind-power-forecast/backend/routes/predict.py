@@ -50,7 +50,11 @@ def predict():
 
     # 运行预测与后处理
     try:
-        forecast_file_path = run_predict(CSV_FILE_PATH=csvupload_path, MODEL_PATH=modelupload_path, SCALER_PATH=scalerupload_path)
+        forecast_file_path = run_predict(
+            csv_path=csvupload_path,
+            model_path=modelupload_path,
+            scaler_path=scalerupload_path,
+        )
     except Exception as e:
         current_app.logger.error(f"预测过程中出错: {e}")
         return jsonify({'error': '预测过程中出错', 'details': str(e)}), 500
