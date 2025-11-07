@@ -10,7 +10,7 @@ from services.file_service import find_file_by_id
 from services.predict_service import run_predict
 from services.storage_service import get_prediction_path
 from windpower_core.storage import normalize_wind_farm_code, sanitize_filename
-from models import PredictionRecord, Model, Dataset
+from models import PredictionRecord, Dataset
 from database_config import minio_client, SessionLocal
 from config import MINIO_CONFIG
 

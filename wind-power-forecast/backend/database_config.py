@@ -107,9 +107,8 @@ def cleanup_old_models(db: Session, keep_last=5):
                 if model.model_path:
                     try:
                         bucket_name = MINIO_CONFIG["buckets"]["models"]
-                        object_name = model.model_path.split("/")[-1]
-                        minio_client.remove_object(bucket_name, object_name)
-                        print(f"✅ 已从S3删除模型文件: {object_name}")
+                        minio_client.remove_object(bucket_name, model.model_path)
+                        print(f"✅ 已从S3删除模型文件: {model.model_path}")
                     except Exception as e:
                         print(f"警告: 从S3删除模型文件失败: {e}")
                 
@@ -117,9 +116,8 @@ def cleanup_old_models(db: Session, keep_last=5):
                 if model.scaler_path:
                     try:
                         bucket_name = MINIO_CONFIG["buckets"]["scalers"]
-                        object_name = model.scaler_path.split("/")[-1]
-                        minio_client.remove_object(bucket_name, object_name)
-                        print(f"✅ 已从S3删除缩放器文件: {object_name}")
+                        minio_client.remove_object(bucket_name, model.scaler_path)
+                        print(f"✅ 已从S3删除缩放器文件: {model.scaler_path}")
                     except Exception as e:
                         print(f"警告: 从S3删除缩放器文件失败: {e}")
                 
@@ -127,9 +125,9 @@ def cleanup_old_models(db: Session, keep_last=5):
                 if model.metrics_path:
                     try:
                         bucket_name = MINIO_CONFIG["buckets"]["metrics"]
-                        object_name = model.metrics_path.split("/")[-1]
-                        minio_client.remove_object(bucket_name, object_name)
-                        print(f"✅ 已从S3删除指标文件: {object_name}")
+                        for obj in minio_client.list_objects(bucket_name, prefix=model.metrics_path, recursive=True):
+                            minio_client.remove_object(bucket_name, obj.object_name)
+                            print(f"✅ 已从S3删除指标文件: {obj.object_name}")
                     except Exception as e:
                         print(f"警告: 从S3删除指标文件失败: {e}")
                 
