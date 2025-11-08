@@ -1,5 +1,6 @@
 """应用工厂，集中后端初始化逻辑。"""
 
+import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
