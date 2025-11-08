@@ -2,7 +2,10 @@
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
-from .config import LAGS
+try:
+    from .config import LAGS
+except ImportError:  # 在脚本模式下回退到绝对导入
+    from config import LAGS
 
 lags = LAGS
 

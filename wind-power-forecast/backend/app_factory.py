@@ -19,16 +19,25 @@ from flask_jwt_extended import JWTManager
 from flask_socketio import SocketIO
 from sqlalchemy import text
 
-from .config import Config, MINIO_CONFIG
+try:
+    from .config import Config, MINIO_CONFIG
+except ImportError:  # 在作为脚本运行时回退到绝对导入
+    from config import Config, MINIO_CONFIG
 from connection_middleware import register_middleware
 from database_config import Base, engine, minio_client
-from .db_models import Dataset
+try:
+    from .db_models import Dataset
+except ImportError:  # 在作为脚本运行时回退到绝对导入
+    from db_models import Dataset
 from db_session import db_session
 from logging_config import configure_logging
 from services.file_service import allowed_file, save_uploaded_file
 from windpower_core.storage import dataset_object_key, normalize_wind_farm_code, sanitize_filename
 from task_queue import init_celery
-from .libs.config import settings as app_settings
+try:
+    from .libs.config import settings as app_settings
+except ImportError:  # 在作为脚本运行时回退到绝对导入
+    from libs.config import settings as app_settings
 
 _settings = app_settings
 _cors_methods = [method.strip() for method in _settings.cors_allowed_methods.split(",") if method.strip()]

@@ -21,9 +21,15 @@ from flask_cors import CORS
 from flask_socketio import SocketIO
 from dotenv import load_dotenv
 from database_config import Base, engine, minio_client
-from .config import Config, MINIO_CONFIG
+try:
+    from .config import Config, MINIO_CONFIG
+except ImportError:  # 在脚本模式下回退到绝对导入
+    from config import Config, MINIO_CONFIG
 from s3_error import S3Error
-from .db_models import Dataset
+try:
+    from .db_models import Dataset
+except ImportError:  # 在脚本模式下回退到绝对导入
+    from db_models import Dataset
 from datetime import datetime,timedelta
 from services.file_service import allowed_file, save_uploaded_file
 import os

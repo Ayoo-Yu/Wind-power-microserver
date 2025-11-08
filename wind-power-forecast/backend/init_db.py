@@ -1,5 +1,8 @@
 from database_config import engine
-from .db_models import Base
+try:
+    from .db_models import Base
+except ImportError:  # 在脚本模式下回退到绝对导入
+    from db_models import Base  # type: ignore
 # 修改导入路径。如果scripts.init_users路径不正确，请调整为正确的路径
 from init_users import init_users_and_roles
 

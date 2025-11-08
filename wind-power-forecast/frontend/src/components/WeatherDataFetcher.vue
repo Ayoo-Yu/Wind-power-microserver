@@ -110,7 +110,7 @@
                 <el-button
                   type="info"
                   size="small"
-                  @click="checkSchedulerStatus"
+                  @click="checkSchedulerStatus(true)"
                   :loading="checkingScheduler"
                 >
                   检查状态
@@ -1115,19 +1115,42 @@ export default {
     
     // Cron表达式转换为用户友好的描述
     // 调度器管理方法
-    const checkSchedulerStatus = async () => {
+    const checkSchedulerStatus = async (showNotification = false) => {
       checkingScheduler.value = true
       try {
         const response = await axiosInstance.get('weather-fetch/scheduler/status')
-        schedulerInfo.value = response.data
-        ElMessage.success('调度器状态更新成功')
-      } catch (error) {
-        console.error('获取调度器状态失败:', error)
-        ElMessage.error('获取调度器状态失败')
+        const data = response.data || {}
         schedulerInfo.value = {
-          is_running: false,
-          jobs: [],
-          total_jobs: 0
+          is_running: data.is_running ?? false,
+          jobs: Array.isArray(data.jobs) ? data.jobs : [],
+          total_jobs: data.total_jobs ?? 0
+        }
+        if (showNotification) {
+          ElMessage.success('调度器状态更新成功')
+        }
+      } catch (error) {
+        const status = error?.response?.status
+        if (status === 503) {
+          const data = error.response?.data || {}
+          console.warn('调度器未初始化:', data?.message || error)
+          schedulerInfo.value = {
+            is_running: data.is_running ?? false,
+            jobs: Array.isArray(data.jobs) ? data.jobs : [],
+            total_jobs: data.total_jobs ?? 0
+          }
+          if (showNotification) {
+            ElMessage.warning(data.message || '调度器未初始化')
+          }
+        } else {
+          console.error('获取调度器状态失败:', error)
+          if (showNotification) {
+            ElMessage.error('获取调度器状态失败')
+          }
+          schedulerInfo.value = {
+            is_running: false,
+            jobs: [],
+            total_jobs: 0
+          }
         }
       } finally {
         checkingScheduler.value = false

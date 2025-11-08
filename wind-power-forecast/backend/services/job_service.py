@@ -4,7 +4,10 @@ import json
 from datetime import datetime
 from typing import Optional
 
-from ..db_models import Job
+try:
+    from ..db_models import Job
+except ImportError:  # 在脚本模式下回退到绝对导入
+    from db_models import Job
 from db_session import db_session
 
 

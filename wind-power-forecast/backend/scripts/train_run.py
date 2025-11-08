@@ -1,10 +1,42 @@
-from .data_processor import load_data, preprocess_data, split_data, feature_engineering, scale_data, create_time_window
-from .models import get_lightgbm_params
-from .train import train_and_evaluate, save_predictions
-from .utils import visualize_results
+try:
+    from .data_processor import (
+        load_data,
+        preprocess_data,
+        split_data,
+        feature_engineering,
+        scale_data,
+        create_time_window,
+    )
+except ImportError:  # 在脚本模式下回退到绝对导入
+    from data_processor import (
+        load_data,
+        preprocess_data,
+        split_data,
+        feature_engineering,
+        scale_data,
+        create_time_window,
+    )
+
+try:
+    from .models import get_lightgbm_params
+except ImportError:  # 在脚本模式下回退到绝对导入
+    from models import get_lightgbm_params
+
+try:
+    from .train import train_and_evaluate, save_predictions
+except ImportError:  # 在脚本模式下回退到绝对导入
+    from train import train_and_evaluate, save_predictions
+
+try:
+    from .utils import visualize_results
+except ImportError:  # 在脚本模式下回退到绝对导入
+    from utils import visualize_results
 import sys
 sys.path.append('./config')
-from .config import WINDOW_SIZE, LAGS
+try:
+    from .config import WINDOW_SIZE, LAGS
+except ImportError:  # 在脚本模式下回退到绝对导入
+    from config import WINDOW_SIZE, LAGS
 import os
 from datetime import datetime
 from flask import current_app

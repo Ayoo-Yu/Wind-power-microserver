@@ -73,6 +73,8 @@ instance.interceptors.response.use(
   error => {
     // 详细日志错误信息
     console.error('响应错误:', error.message);
+    let handledMessage = false;
+
     if (error.response) {
       console.error('状态码:', error.response.status);
       console.error('响应数据:', error.response.data);
@@ -92,10 +94,17 @@ instance.interceptors.response.use(
         
         // 显示消息提示用户
         ElMessage.error('您的登录已过期，请重新登录');
+        handledMessage = true;
         
         // 如果当前不在登录页，重定向到登录页
         if (router.currentRoute.value.path !== '/login') {
           router.push('/login');
+        }
+      } else if (error.response.status === 503) {
+        const message = error.response.data?.message;
+        if (message) {
+          ElMessage.warning(message);
+          handledMessage = true;
         }
       }
     } else if (error.request) {
@@ -106,7 +115,8 @@ instance.interceptors.response.use(
     // 处理错误情况
     if (error.message === 'Network Error') {
       ElMessage.error('网络错误，请检查您的网络连接或服务器状态');
-    } else if (!error.response || error.response.status !== 401) {
+      handledMessage = true;
+    } else if (!handledMessage && (!error.response || error.response.status !== 401)) {
       // 只显示非401错误的消息（因为401已在上面处理）
       ElMessage.error(error.response?.data?.message || '请求失败');
     }

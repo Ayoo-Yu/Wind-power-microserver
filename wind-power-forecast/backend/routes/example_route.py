@@ -2,7 +2,10 @@
 示例路由 - 展示正确的数据库连接使用方式
 """
 from flask import Blueprint, jsonify, request
-from ..db_models import Dataset, User
+try:
+    from ..db_models import Dataset, User
+except ImportError:  # 在脚本模式下回退到绝对导入
+    from db_models import Dataset, User  # type: ignore
 from db_session import db_session, get_db
 import logging
 

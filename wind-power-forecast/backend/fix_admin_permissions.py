@@ -10,7 +10,10 @@ import logging
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from database_config import get_db, engine
-from .db_models import Base, User, Role
+try:
+    from .db_models import Base, User, Role
+except ImportError:  # 在脚本模式下回退到绝对导入
+    from db_models import Base, User, Role  # type: ignore
 from sqlalchemy import text
 
 # 配置日志

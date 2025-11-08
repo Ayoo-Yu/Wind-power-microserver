@@ -1,5 +1,9 @@
 import json
-from .libs.config import settings
+
+try:
+    from .libs.config import settings
+except ImportError:  # 在作为脚本运行时回退到绝对导入
+    from libs.config import settings
 
 # ---- 基础配置导出 --------------------------------------------------------
 

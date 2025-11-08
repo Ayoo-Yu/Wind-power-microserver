@@ -1,7 +1,10 @@
 from datetime import datetime
 from typing import Optional
 
-from ..config import MINIO_CONFIG
+try:
+    from ..config import MINIO_CONFIG
+except ImportError:  # 在脚本模式下回退到绝对导入
+    from config import MINIO_CONFIG
 from windpower_core.storage import (
     metrics_object_key,
     model_object_key,

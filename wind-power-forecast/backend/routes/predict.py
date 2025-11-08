@@ -12,7 +12,10 @@ from services.storage_service import get_prediction_path
 from windpower_core.storage import normalize_wind_farm_code, sanitize_filename
 from models import PredictionRecord, Dataset
 from database_config import minio_client, SessionLocal
-from ..config import MINIO_CONFIG
+try:
+    from ..config import MINIO_CONFIG
+except ImportError:  # 在脚本模式下回退到绝对导入
+    from config import MINIO_CONFIG
 
 # 预测蓝图
 predict_bp = Blueprint('predict', __name__)

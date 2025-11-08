@@ -1,5 +1,8 @@
 from database_config import get_db, engine
-from .db_models import Base, User, Role
+try:
+    from .db_models import Base, User, Role
+except ImportError:  # 在脚本模式下回退到绝对导入
+    from db_models import Base, User, Role  # type: ignore
 from utils.password_utils import generate_password_hash
 from datetime import datetime
 import logging

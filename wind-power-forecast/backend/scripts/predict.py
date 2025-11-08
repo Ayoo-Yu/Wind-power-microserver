@@ -4,8 +4,15 @@ import os
 import pandas as pd
 import numpy as np
 import joblib
-from .data_processor import preprocess_data_pre, feature_engineering, create_time_window_pre
-from .config import LAGS, OUTPUT_DIR, WINDOW_SIZE
+try:
+    from .data_processor import preprocess_data_pre, feature_engineering, create_time_window_pre
+except ImportError:  # 在脚本模式下回退到绝对导入
+    from data_processor import preprocess_data_pre, feature_engineering, create_time_window_pre
+
+try:
+    from .config import LAGS, OUTPUT_DIR, WINDOW_SIZE
+except ImportError:  # 在脚本模式下回退到绝对导入
+    from config import LAGS, OUTPUT_DIR, WINDOW_SIZE
 
 
 def load_models_and_scaler(model_path, scaler_path):
