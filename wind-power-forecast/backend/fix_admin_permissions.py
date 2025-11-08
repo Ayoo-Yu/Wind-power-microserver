@@ -10,7 +10,7 @@ import logging
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from database_config import get_db, engine
-from db_models import Base, User, Role
+from .db_models import Base, User, Role
 from sqlalchemy import text
 
 # 配置日志

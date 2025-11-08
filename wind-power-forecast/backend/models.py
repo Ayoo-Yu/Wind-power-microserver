@@ -2,7 +2,7 @@
 # 此文件用于保持向后兼容性，将所有导入重定向到db_models包
 
 # 导入所有db_models内容
-from db_models import *
+from .db_models import *
 
 import warnings
 warnings.warn(

@@ -1,6 +1,5 @@
 """应用工厂，集中后端初始化逻辑。"""
 
-import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -19,22 +18,25 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from flask_socketio import SocketIO
 from sqlalchemy import text
-from dotenv import load_dotenv
 
-from config import Config, MINIO_CONFIG
+from .config import Config, MINIO_CONFIG
 from connection_middleware import register_middleware
 from database_config import Base, engine, minio_client
-from db_models import Dataset
+from .db_models import Dataset
 from db_session import db_session
 from logging_config import configure_logging
 from services.file_service import allowed_file, save_uploaded_file
 from windpower_core.storage import dataset_object_key, normalize_wind_farm_code, sanitize_filename
 from task_queue import init_celery
+from .libs.config import settings as app_settings
 
+_settings = app_settings
+_cors_methods = [method.strip() for method in _settings.cors_allowed_methods.split(",") if method.strip()]
+_cors_headers = [header.strip() for header in _settings.cors_allowed_headers.split(",") if header.strip()]
+_cors_origins = _settings.cors_origins_list or ["*"]
+_socketio_cors = "*" if _cors_origins == ["*"] else _cors_origins
 
-load_dotenv()
-
-socketio = SocketIO(cors_allowed_origins="*", async_mode="gevent")
+socketio = SocketIO(cors_allowed_origins=_socketio_cors, async_mode="gevent")
 jwt = JWTManager()
 
 
@@ -62,8 +64,8 @@ def create_app(config_object: type[Config] = Config) -> Flask:
 
 
 def _configure_jwt(app: Flask) -> None:
-    app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY", "wind-power-forecast-secret-key")
-    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=12)
+    app.config["JWT_SECRET_KEY"] = _settings.jwt_secret_key
+    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=_settings.jwt_access_token_expires_hours)
     jwt.init_app(app)
 
 
@@ -72,15 +74,10 @@ def _configure_cors(app: Flask) -> None:
         app,
         resources={
             r"/*": {
-                "origins": "*",
-                "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-                "allow_headers": [
-                    "Content-Type",
-                    "Authorization",
-                    "X-Requested-With",
-                    "Accept",
-                    "Origin",
-                ],
+                "origins": "*" if _cors_origins == ["*"] else _cors_origins,
+                "methods": _cors_methods or ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+                "allow_headers": _cors_headers
+                or ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
                 "expose_headers": [
                     "Content-Type",
                     "Content-Length",

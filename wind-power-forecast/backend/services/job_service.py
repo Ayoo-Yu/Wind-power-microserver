@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from typing import Optional
 
-from db_models import Job
+from ..db_models import Job
 from db_session import db_session
 
 

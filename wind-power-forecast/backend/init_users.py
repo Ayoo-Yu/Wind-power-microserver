@@ -1,5 +1,5 @@
 from database_config import get_db, engine
-from db_models import Base, User, Role
+from .db_models import Base, User, Role
 from utils.password_utils import generate_password_hash
 from datetime import datetime
 import logging

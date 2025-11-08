@@ -4,7 +4,7 @@ from models import Dataset, Model, TrainingRecord, EvaluationMetrics
 from database_config import get_db
 import time
 from services.storage_service import get_model_path, get_scaler_path, get_metrics_path
-from config import MINIO_CONFIG
+from ..config import MINIO_CONFIG
 from db_session import db_session  # 导入上下文管理器
 
 training_bp = Blueprint('training', __name__)

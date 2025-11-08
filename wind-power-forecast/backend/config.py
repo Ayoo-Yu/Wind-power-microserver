@@ -1,125 +1,47 @@
-import os
-from minio import Minio
-from minio.commonconfig import ENABLED
 import json
-from dotenv import load_dotenv
+from .libs.config import settings
 
-# 加载环境变量
-load_dotenv()
+# ---- 基础配置导出 --------------------------------------------------------
 
-# 获取环境变量，如果不存在则使用默认值
-DB_HOST = os.environ.get('DB_HOST', 'kingbase')
-DB_PORT = os.environ.get('DB_PORT', '54321')
-DB_USER = os.environ.get('DB_USER', 'system')
-DB_PASSWORD = os.environ.get('DB_PASSWORD', '12345678ab')
-DB_NAME = os.environ.get('DB_NAME', 'windpower')
+_settings = settings
 
-# MinIO配置
-MINIO_ENDPOINT = os.environ.get('MINIO_ENDPOINT', 'minio')
-MINIO_PORT = os.environ.get('MINIO_PORT', '9900')
-MINIO_ACCESS_KEY = os.environ.get('MINIO_ACCESS_KEY', 'minioadmin')
-MINIO_SECRET_KEY = os.environ.get('MINIO_SECRET_KEY', 'minioadmin')
-MINIO_SECURE = os.environ.get('MINIO_SECURE', 'False').lower() == 'true'
+DB_HOST = _settings.db_host
+DB_PORT = str(_settings.db_port)
+DB_USER = _settings.db_user
+DB_PASSWORD = _settings.db_password
+DB_NAME = _settings.db_name
 
-# 默认场站配置
-DEFAULT_WIND_FARM_CODE = os.environ.get('DEFAULT_WIND_FARM_CODE', 'default-farm')
+KINGBASE_CONFIG = _settings.kingbase_config
+MINIO_CONFIG = _settings.minio_config
 
-# Redis / Celery 配置
-REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', REDIS_URL)
-CELERY_TASK_DEFAULT_QUEUE = os.environ.get('CELERY_TASK_DEFAULT_QUEUE', 'windpower-default')
-CELERY_TIMEZONE = os.environ.get('CELERY_TIMEZONE', 'Asia/Shanghai')
+REDIS_URL = _settings.redis_url
+CELERY_RESULT_BACKEND = _settings.celery_backend
+CELERY_TASK_DEFAULT_QUEUE = _settings.celery_task_default_queue
+CELERY_TIMEZONE = _settings.celery_timezone
 
-# 打印配置信息用于调试
-print(f"数据库连接配置: {DB_HOST}:{DB_PORT}/{DB_NAME}")
-print(f"MinIO连接配置: {'https' if MINIO_SECURE else 'http'}://{MINIO_ENDPOINT}:{MINIO_PORT}")
-print(f"任务队列配置: {REDIS_URL}")
+DEFAULT_WIND_FARM_CODE = _settings.default_wind_farm_code
 
-KINGBASE_CONFIG = {
-    "host": DB_HOST,
-    "port": DB_PORT,
-    "user": DB_USER,
-    "password": DB_PASSWORD,
-    "database": DB_NAME
-}
+# ---- Flask 配置对象 -----------------------------------------------------
 
-MINIO_CONFIG = {
-    "endpoint": MINIO_ENDPOINT,
-    "port": MINIO_PORT,
-    "access_key": MINIO_ACCESS_KEY,
-    "secret_key": MINIO_SECRET_KEY,
-    "secure": MINIO_SECURE,
-    "default_wind_farm_code": DEFAULT_WIND_FARM_CODE,
-    "buckets": {
-        "datasets": "wind-datasets",
-        "models": "wind-models",
-        "predictions": "wind-predictions",
-        "scalers": "wind-scalers",
-        "metrics": "wind-metrics",
-        "logs": "wind-logs"
-    },
-    "policies": {
-        "wind-datasets": "private",
-        "wind-models": "public-read",
-        "wind-predictions": "private",
-        "wind-scalers": "private",
-        "wind-metrics": "public-read",
-        "wind-logs": "public-read"
-    }
-}
 
 class Config:
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
-    DOWNLOAD_FOLDER = os.path.join(BASE_DIR, 'forecasts')
+    BASE_DIR = str(_settings.base_dir)
+    UPLOAD_FOLDER = str(_settings.upload_folder)
+    DOWNLOAD_FOLDER = str(_settings.download_folder)
     MAX_CONTENT_LENGTH = 500 * 1024 * 1024  # 500MB
     ALLOWED_EXTENSIONS = {'csv', 'xlsx', 'xls', 'pkl', 'json', 'joblib', 'h5', 'hdf5', 'pb', 'pt', 'pth'}
 
-    KINGBASE_CONFIG = {
-        "host": DB_HOST,
-        "port": DB_PORT,
-        "user": DB_USER,
-        "password": DB_PASSWORD,
-        "database": DB_NAME
-    }
-    
-    MINIO_CONFIG = {
-        "endpoint": MINIO_ENDPOINT,
-        "port": MINIO_PORT,
-        "access_key": MINIO_ACCESS_KEY,
-        "secret_key": MINIO_SECRET_KEY,
-        "secure": MINIO_SECURE,
-        "default_wind_farm_code": DEFAULT_WIND_FARM_CODE,
-        "buckets": {
-            "datasets": "wind-datasets",
-            "models": "wind-models",
-            "predictions": "wind-predictions",
-            "scalers": "wind-scalers",
-            "metrics": "wind-metrics",
-            "logs": "wind-logs"
-        },
-        "policies": {
-            "wind-datasets": "private",
-            "wind-models": "public-read",
-            "wind-predictions": "private",
-            "wind-scalers": "private",
-            "wind-metrics": "public-read",
-            "wind-logs": "public-read"
-        }
-    }
+    KINGBASE_CONFIG = dict(KINGBASE_CONFIG)
+    MINIO_CONFIG = dict(MINIO_CONFIG)
 
-    MODEL_STORAGE = {
-        'model_dir': os.path.join(BASE_DIR, 'saved_models'),
-        'scaler_dir': os.path.join(BASE_DIR, 'saved_scalers'),
-        'metrics_dir': os.path.join(BASE_DIR, 'saved_metrics')
-    }
+    MODEL_STORAGE = dict(_settings.model_storage_dirs)
 
     DEFAULT_WIND_FARM_CODE = DEFAULT_WIND_FARM_CODE
 
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'your-secret-key')
-    SQLALCHEMY_DATABASE_URI = f"postgresql+kingbase://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    SECRET_KEY = _settings.secret_key
+    SQLALCHEMY_DATABASE_URI = _settings.sqlalchemy_database_uri
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    DEBUG = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
+    DEBUG = _settings.flask_debug
     SESSION_TYPE = 'filesystem'
     SESSION_PERMANENT = False
     PERMANENT_SESSION_LIFETIME = 1800  # 30分钟

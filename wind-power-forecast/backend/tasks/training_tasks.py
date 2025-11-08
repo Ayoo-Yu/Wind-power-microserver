@@ -10,8 +10,8 @@ from services.job_service import mark_job_started, update_job_status
 from services.file_service import find_file_by_id
 from services.modeltrain_service import run_modeltrain
 from database_config import SessionLocal, minio_client
-from config import MINIO_CONFIG
-from db_models import Dataset
+from ..config import MINIO_CONFIG
+from ..db_models import Dataset
 from services.storage_service import get_model_path, get_scaler_path, get_prediction_path
 from windpower_core.storage import normalize_wind_farm_code, sanitize_filename
 

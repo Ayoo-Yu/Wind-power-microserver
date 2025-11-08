@@ -6,8 +6,8 @@ from services.job_service import create_job, get_job, serialize_job, update_job_
 from tasks.training_tasks import train_model_task
 from tasks.prediction_tasks import predict_task
 from database_config import SessionLocal
-from db_models import Dataset
-from config import MINIO_CONFIG
+from ..db_models import Dataset
+from ..config import MINIO_CONFIG
 from windpower_core.storage import normalize_wind_farm_code
 
 

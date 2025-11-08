@@ -7,7 +7,7 @@ from pathlib import Path
 
 from celery import Celery
 
-from config import Config
+from .config import Config
 
 # 确保可以导入项目包（worker 直接运行此模块时不会经过 Flask app）
 PROJECT_ROOT = Path(__file__).resolve().parents[1]

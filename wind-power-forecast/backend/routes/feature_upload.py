@@ -8,7 +8,7 @@ import logging # Import logging
 
 from sqlalchemy import text # Import text for raw SQL if needed (optional)
 from db_session import db_session
-from db_models import TrainPreMiddle, TrainPreShort # Import the new models
+from ..db_models import TrainPreMiddle, TrainPreShort  # Import the new models
 from services.file_service import allowed_file # Reuse existing file validation if desired
 
 feature_upload_bp = Blueprint('feature_upload', __name__)

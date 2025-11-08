@@ -2,7 +2,7 @@
 示例路由 - 展示正确的数据库连接使用方式
 """
 from flask import Blueprint, jsonify, request
-from db_models import Dataset, User
+from ..db_models import Dataset, User
 from db_session import db_session, get_db
 import logging
 

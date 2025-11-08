@@ -1,8 +1,8 @@
-from config import KINGBASE_CONFIG, MINIO_CONFIG, set_bucket_policy
-from db_models import Base, Model
+from .config import KINGBASE_CONFIG, MINIO_CONFIG, set_bucket_policy
+from .db_models import Base, Model
 from sqlalchemy.orm import Session, sessionmaker
 
-import kingbase_dialect  # noqa: F401  确保方言注册
+from . import kingbase_dialect  # noqa: F401  确保方言注册
 
 from windpower_core.database import (
     build_database_uri,
