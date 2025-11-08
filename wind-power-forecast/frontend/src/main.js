@@ -6,6 +6,7 @@ import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css' // 确保路径正确
 import * as ElementPlusIconsVue from '@element-plus/icons-vue' // 导入Element Plus图标
 import './element-variables.scss'
+import './styles/design-tokens.css'
 import './assets/main.css'  // 已有的主CSS文件
 import './assets/form-override.css'  // 导入新的表单覆盖CSS（放在最后确保优先级最高）
 import './styles/digital-dashboard.scss'

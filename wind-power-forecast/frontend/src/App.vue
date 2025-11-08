@@ -20,50 +20,6 @@ onMounted(() => {
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Rajdhani:wght@500;600;700&display=swap');
 
-:root {
-  --app-bg: radial-gradient(circle at 20% 20%, rgba(20, 148, 255, 0.18), transparent 55%),
-            radial-gradient(circle at 80% 10%, rgba(0, 208, 132, 0.22), transparent 50%),
-            #030712;
-  --grid-overlay: rgba(35, 143, 255, 0.08);
-  --surface-glass: rgba(10, 22, 45, 0.82);
-  --surface-card: rgba(13, 28, 54, 0.9);
-  --surface-border: rgba(66, 195, 255, 0.18);
-  --surface-border-strong: rgba(66, 195, 255, 0.32);
-  --surface-shadow: 0 24px 80px rgba(2, 16, 42, 0.55);
-  --text-primary: #ECF6FF;
-  --text-secondary: rgba(236, 246, 255, 0.64);
-  --text-muted: rgba(236, 246, 255, 0.45);
-  --accent-primary: #38C4FF;
-  --accent-secondary: #22F6AA;
-  --accent-gradient: linear-gradient(135deg, #38C4FF 0%, #22F6AA 100%);
-  --accent-gradient-strong: linear-gradient(135deg, #23E0FF 0%, #1EFFA3 50%, #2B7BFF 100%);
-  --accent-shadow: 0 12px 45px rgba(34, 246, 170, 0.35);
-  --accent-glow-soft: 0 0 22px rgba(56, 196, 255, 0.25);
-  --divider-color: rgba(255, 255, 255, 0.08);
-  --chart-blue: #3AA4FF;
-  --chart-green: #21E3AA;
-  --chart-purple: #776BFF;
-  --status-success: #3AD68B;
-  --status-warning: #F7C341;
-  --status-danger: #FF5D7A;
-
-  --el-color-primary: #38C4FF;
-  --el-color-primary-light-3: #6DD7FF;
-  --el-color-primary-light-5: #94E4FF;
-  --el-color-primary-light-7: #BDEEFF;
-  --el-color-primary-light-9: #E6F9FF;
-  --el-color-primary-dark-2: #2398CC;
-  --el-bg-color-overlay: rgba(10, 22, 45, 0.92);
-  --el-bg-color: rgba(7, 17, 35, 0.92);
-  --el-text-color-regular: var(--text-secondary);
-  --el-text-color-primary: var(--text-primary);
-  --el-text-color-secondary: var(--text-muted);
-  --el-border-color: rgba(56, 196, 255, 0.2);
-  --el-border-color-light: rgba(56, 196, 255, 0.12);
-  --el-border-color-lighter: rgba(56, 196, 255, 0.08);
-  --el-border-radius-base: 14px;
-}
-
 html, body {
   height: 100%;
 }
