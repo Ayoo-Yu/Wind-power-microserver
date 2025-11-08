@@ -14,7 +14,7 @@
     <div class="workflow-layout">
       <div class="upload-grid">
         <!-- 数据集上传区域 -->
-        <div class="upload-card glass-panel">
+        <div :class="uploadCardClasses('csv')">
           <div class="card-header">
             <h2>选择预测数据集</h2>
             <div class="step-number">1</div>
@@ -35,7 +35,7 @@
         </div>
 
         <!-- 模型上传区域 -->
-        <div class="upload-card glass-panel">
+        <div :class="uploadCardClasses('model')">
           <div class="card-header">
             <h2>选择预测模型</h2>
             <div class="step-number">2</div>
@@ -57,7 +57,7 @@
         </div>
 
         <!-- 归一化模型上传区域 -->
-        <div class="upload-card glass-panel">
+        <div :class="uploadCardClasses('scaler')">
           <div class="card-header">
             <h2>选择归一化模型</h2>
             <div class="step-number">3</div>
@@ -104,7 +104,7 @@
         </div>
 
         <!-- 操作按钮 -->
-        <div class="action-card glass-panel">
+        <div :class="['action-card', 'glass-panel', { 'action-card--armed': csvfileId && modelfileId && scalerfileId, 'action-card--processing': processing }]">
           <div v-if="!csvfileId || !modelfileId || !scalerfileId" class="empty-action-panel">
             <el-icon class="empty-icon"><InfoFilled /></el-icon>
             <p class="empty-text">请完成所有文件上传后开始预测</p>
@@ -132,7 +132,8 @@
     </div>
 
     <!-- 预测结果可视化区域 -->
-    <div v-if="predictions.length > 0" class="visualization-section glass-panel">
+    <transition name="panel-fade" appear>
+      <div v-if="predictions.length > 0" class="visualization-section glass-panel" :class="{ 'visualization-section--pulse': visualizationPulse }">
       <div class="visualization-header">
         <h3 class="section-title">预测结果可视化</h3>
         <div class="visualization-controls">
@@ -152,7 +153,7 @@
       <div class="chart-container">
         <div ref="chartRef" style="width: 100%; height: 400px;"></div>
       </div>
-      <div v-if="metrics" class="metrics-container">
+      <div v-if="metrics" class="metrics-container" :class="{ 'metrics-container--pulse': metricsPulse }">
         <div class="metrics-header">
           <h4>评估指标</h4>
           <div class="download-metrics">
@@ -189,7 +190,8 @@
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </transition>
 
     <!-- 日志查看器 -->
     <div class="log-section glass-panel" :class="{ 'log-expanded': logVisible }">
@@ -365,9 +367,28 @@ export default {
       metrics: null,
       chart: null,
       logVisible: false,
+      completedStages: {
+        csv: false,
+        model: false,
+        scaler: false,
+      },
+      activeHighlight: '',
+      highlightTimer: null,
+      visualizationPulse: false,
+      metricsPulse: false,
     };
   },
   methods: {
+    uploadCardClasses(stage) {
+      return [
+        'upload-card',
+        'glass-panel',
+        {
+          'upload-card--completed': this.completedStages[stage],
+          'upload-card--active': this.activeHighlight === stage,
+        },
+      ];
+    },
     handleWindFarmSelectionChange() {
       this.$message.info(`已切换到场站：${this.currentWindFarmDisplay}`);
       ['Csv', 'Model', 'Scaler'].forEach(type => this.resetState(type));
@@ -460,6 +481,11 @@ export default {
       if (response.file_id) {
         this[`${type.toLowerCase()}fileId`] = response.file_id;
         this.$message.success(successMessage);
+        const stageKey = type.toLowerCase();
+        if (stageKey in this.completedStages) {
+          this.completedStages[stageKey] = true;
+          this.triggerCardHighlight(stageKey);
+        }
       }
       this[`selected${type}File`] = null;
     },
@@ -541,6 +567,7 @@ export default {
           this.predictions = response.data.predictions;
           console.log('预测数据加载成功，数据长度:', this.predictions.length);
           this.$message.success('预测完成！');
+          this.triggerVisualizationPulse();
           this.$nextTick(() => {
             console.log('开始初始化图表');
             this.initChart();
@@ -710,6 +737,10 @@ export default {
             },
             right: '20px'
           },
+          animationDuration: 600,
+          animationEasing: 'cubicOut',
+          animationDurationUpdate: 500,
+          animationEasingUpdate: 'cubicOut',
           xAxis: {
             type: 'category',
             boundaryGap: false,
@@ -748,7 +779,17 @@ export default {
               },
               symbol: 'circle',
               symbolSize: 6,
-              smooth: true
+              smooth: true,
+              areaStyle: {
+                opacity: 0.22,
+                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                  { offset: 0, color: 'rgba(0, 119, 237, 0.45)' },
+                  { offset: 1, color: 'rgba(0, 119, 237, 0.05)' },
+                ]),
+              },
+              emphasis: {
+                focus: 'series',
+              },
             }
           ]
         };
@@ -767,7 +808,17 @@ export default {
             },
             symbol: 'circle',
             symbolSize: 6,
-            smooth: true
+            smooth: true,
+            areaStyle: {
+              opacity: 0.18,
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: 'rgba(52, 199, 89, 0.42)' },
+                { offset: 1, color: 'rgba(52, 199, 89, 0.05)' },
+              ]),
+            },
+            emphasis: {
+              focus: 'series',
+            },
           });
         }
 
@@ -934,6 +985,35 @@ export default {
       this.processing = false;
       this.selectedModel = null;
       this.downloadUrl = '';
+      const stageKey = type.toLowerCase();
+      if (stageKey in this.completedStages) {
+        this.completedStages[stageKey] = false;
+      }
+      if (this.activeHighlight === stageKey) {
+        this.activeHighlight = '';
+      }
+    },
+    triggerCardHighlight(stage) {
+      this.activeHighlight = stage;
+      if (this.highlightTimer) {
+        clearTimeout(this.highlightTimer);
+      }
+      this.highlightTimer = setTimeout(() => {
+        this.activeHighlight = '';
+        this.highlightTimer = null;
+      }, 900);
+    },
+    triggerVisualizationPulse() {
+      this.visualizationPulse = true;
+      setTimeout(() => {
+        this.visualizationPulse = false;
+      }, 1000);
+    },
+    triggerMetricsPulse() {
+      this.metricsPulse = true;
+      setTimeout(() => {
+        this.metricsPulse = false;
+      }, 1000);
     },
 
     downloadMetrics() {
@@ -1050,6 +1130,10 @@ export default {
       this.chart.dispose();
       this.chart = null;
     }
+    if (this.highlightTimer) {
+      clearTimeout(this.highlightTimer);
+      this.highlightTimer = null;
+    }
     window.removeEventListener('resize', () => {
       if (this.chart) {
         this.chart.resize();
@@ -1123,11 +1207,43 @@ export default {
 }
 
 .upload-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 18px;
   padding: 26px 24px;
   min-height: 260px;
+  overflow: hidden;
+  border-radius: 20px;
+  border: 1px solid rgba(56, 196, 255, 0.12);
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease,
+    border-color 0.25s ease;
+}
+
+.upload-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 20px;
+  background: radial-gradient(circle at 20% 15%, rgba(56, 196, 255, 0.18), transparent 65%);
+  opacity: 0.25;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+.upload-card--completed {
+  border-color: rgba(56, 196, 255, 0.26);
+  box-shadow: 0 18px 42px rgba(8, 32, 72, 0.45);
+}
+
+.upload-card--completed::after {
+  opacity: 0.55;
+}
+
+.upload-card--active {
+  animation: uploadCardBlink 0.9s ease;
 }
 
 .card-header {
@@ -1179,6 +1295,43 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+.action-card {
+  position: relative;
+  border-radius: 20px;
+  border: 1px solid rgba(56, 196, 255, 0.12);
+  overflow: hidden;
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease,
+    border-color 0.25s ease;
+}
+
+.action-card::after {
+  content: '';
+  position: absolute;
+  inset: -30% -120%;
+  background: linear-gradient(110deg, rgba(56, 196, 255, 0) 20%, rgba(56, 196, 255, 0.35) 55%, rgba(56, 196, 255, 0) 80%);
+  transform: translateX(-120%);
+  opacity: 0;
+  transition: transform 0.6s ease, opacity 0.6s ease;
+  pointer-events: none;
+}
+
+.action-card--armed {
+  border-color: rgba(34, 246, 170, 0.4);
+  box-shadow: 0 18px 42px rgba(34, 246, 170, 0.35);
+}
+
+.action-card--armed::after {
+  opacity: 0.6;
+  transform: translateX(120%);
+}
+
+.action-card--processing {
+  border-color: rgba(255, 192, 72, 0.45);
+  box-shadow: 0 18px 42px rgba(255, 192, 72, 0.28);
 }
 
 .status-card h3 {
@@ -1282,6 +1435,14 @@ export default {
   flex-direction: column;
   gap: 20px;
   padding: 28px 30px;
+  border-radius: 22px;
+  border: 1px solid rgba(56, 196, 255, 0.18);
+  box-shadow: 0 22px 48px rgba(8, 26, 56, 0.45);
+  transition: box-shadow 0.35s ease, border-color 0.35s ease;
+}
+
+.visualization-section--pulse {
+  animation: visualizationPulse 1s ease;
 }
 
 .visualization-header {
@@ -1312,6 +1473,12 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  transition: box-shadow 0.35s ease, border-color 0.35s ease;
+}
+
+.metrics-container--pulse {
+  border-color: rgba(34, 246, 170, 0.4);
+  box-shadow: 0 18px 42px rgba(34, 246, 170, 0.35);
 }
 
 .metrics-header {
@@ -1437,6 +1604,44 @@ export default {
 
 .log-content-wrapper::-webkit-scrollbar-thumb:hover {
   background: rgba(56, 196, 255, 0.8);
+}
+
+.panel-fade-enter-active,
+.panel-fade-leave-active {
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.panel-fade-enter-from,
+.panel-fade-leave-to {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+@keyframes uploadCardBlink {
+  0% {
+    box-shadow: 0 0 0 rgba(56, 196, 255, 0.35);
+  }
+  50% {
+    box-shadow: 0 24px 54px rgba(56, 196, 255, 0.5);
+  }
+  100% {
+    box-shadow: 0 0 0 rgba(56, 196, 255, 0.1);
+  }
+}
+
+@keyframes visualizationPulse {
+  0% {
+    border-color: rgba(56, 196, 255, 0.18);
+    box-shadow: 0 22px 48px rgba(8, 26, 56, 0.45);
+  }
+  50% {
+    border-color: rgba(56, 196, 255, 0.42);
+    box-shadow: 0 30px 68px rgba(8, 26, 56, 0.65);
+  }
+  100% {
+    border-color: rgba(56, 196, 255, 0.18);
+    box-shadow: 0 22px 48px rgba(8, 26, 56, 0.45);
+  }
 }
 
 .visualization-controls :deep(.el-button.is-text) {

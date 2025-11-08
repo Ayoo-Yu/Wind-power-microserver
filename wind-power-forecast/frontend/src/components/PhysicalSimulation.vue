@@ -21,12 +21,15 @@
         <div class="simulation-hero__metrics">
           <div
             v-for="metric in heroMetrics"
-            :key="metric.label"
-            class="simulation-hero-metric"
+            :key="metric.key"
+            :class="[
+              'simulation-hero-metric',
+              { 'metric--pulse': heroMetricPulse[metric.key] }
+            ]"
           >
             <span class="metric-label">{{ metric.label }}</span>
             <span class="metric-value">
-              {{ metric.value }}
+              <span class="metric-value__number">{{ metric.display }}</span>
               <span v-if="metric.unit" class="metric-unit">{{ metric.unit }}</span>
             </span>
             <span v-if="metric.meta" class="metric-meta">{{ metric.meta }}</span>
@@ -36,7 +39,10 @@
 
       <div class="simulation-content">
         <div class="dataset-upload-section">
-          <el-card class="dataset-upload-card digital-panel" shadow="hover">
+          <el-card
+            :class="['dataset-upload-card', 'digital-panel', { 'panel--pulse': datasetPanelPulse.card }]"
+            shadow="hover"
+          >
           <template #header>
             <div class="dataset-upload-header">
               <div class="header-left">
@@ -62,7 +68,9 @@
               </template>
               <el-row :gutter="24" class="dataset-upload-pane">
                 <el-col :xs="24" :lg="14">
-                  <div class="upload-panel">
+                  <div
+                    :class="['upload-panel', { 'panel--pulse': datasetPanelPulse[entry.key] }]"
+                  >
                     <p class="upload-subtitle">{{ entry.subtitle }}</p>
                     <ul class="upload-tips">
                       <li v-for="tip in entry.tips" :key="tip">{{ tip }}</li>
@@ -132,7 +140,9 @@
                   </div>
                 </el-col>
                 <el-col :xs="24" :lg="10">
-                  <div class="dataset-schema-panel">
+                  <div
+                    :class="['dataset-schema-panel', { 'panel--pulse': datasetPanelPulse[`${entry.key}Schema`] }]"
+                  >
                     <h4>必备字段</h4>
                     <div class="dataset-columns">
                       <div class="dataset-columns-head">
@@ -159,7 +169,14 @@
       <div class="main-content">
         <!-- 参数设置区域 -->
         <div class="upload-section">
-          <div class="upload-card digital-panel digital-panel--interactive">
+          <div
+            :class="[
+              'upload-card',
+              'digital-panel',
+              'digital-panel--interactive',
+              { 'panel--pulse': stepPulse.step1 }
+            ]"
+          >
             <div class="card-header">
               <h2>选择风电场</h2>
               <div class="step-number">1</div>
@@ -183,7 +200,14 @@
             </div>
           </div>
 
-          <div class="upload-card digital-panel digital-panel--interactive">
+          <div
+            :class="[
+              'upload-card',
+              'digital-panel',
+              'digital-panel--interactive',
+              { 'panel--pulse': stepPulse.step2 }
+            ]"
+          >
             <div class="card-header">
               <h2>设置目标风速</h2>
               <div class="step-number">2</div>
@@ -201,7 +225,14 @@
             </div>
           </div>
 
-          <div class="upload-card digital-panel digital-panel--interactive">
+          <div
+            :class="[
+              'upload-card',
+              'digital-panel',
+              'digital-panel--interactive',
+              { 'panel--pulse': stepPulse.step3 }
+            ]"
+          >
             <div class="card-header">
               <h2>设置目标风向</h2>
               <div class="step-number">3</div>
@@ -222,7 +253,9 @@
 
         <!-- 右侧操作面板 -->
         <div class="right-panel">
-          <div class="action-card digital-panel">
+          <div
+            :class="['action-card', 'digital-panel', { 'panel--pulse': stepPulse.action }]"
+          >
             <div v-if="!isReadyForSimulation" class="empty-action-panel">
               <el-icon class="empty-icon"><InfoFilled /></el-icon>
               <p class="empty-text">请完成参数设置后开始仿真计算</p>
@@ -241,7 +274,7 @@
           </div>
 
           <!-- 仿真参数显示 -->
-          <div v-if="selectedFarm" class="status-card digital-panel">
+          <div v-if="selectedFarm" :class="['status-card', 'digital-panel', { 'panel--pulse': stepPulse.status }]">
             <h3>仿真参数</h3>
             <div class="card-content">
               <div class="param-item">
@@ -273,7 +306,14 @@
         
         <div class="results-container">
           <!-- 可视化图表 -->
-          <div class="chart-card digital-panel digital-panel--interactive">
+          <div
+            :class="[
+              'chart-card',
+              'digital-panel',
+              'digital-panel--interactive',
+              { 'panel--pulse': stepPulse.chart }
+            ]"
+          >
             <div class="card-header">
               <h3>风电场布局及仿真风速分布</h3>
             </div>
@@ -283,7 +323,14 @@
           </div>
 
           <!-- 数据表格 -->
-          <div class="table-card digital-panel digital-panel--interactive">
+          <div
+            :class="[
+              'table-card',
+              'digital-panel',
+              'digital-panel--interactive',
+              { 'panel--pulse': stepPulse.table }
+            ]"
+          >
             <div class="card-header">
               <h3>详细仿真数据</h3>
               <el-button type="primary" size="small" @click="exportResults">
@@ -392,6 +439,46 @@ export default {
         conditions: { file: null, fileList: [], uploading: false, result: null, error: null },
         readings: { file: null, fileList: [], uploading: false, result: null, error: null },
       },
+      heroMetricDisplay: {
+        turbines: 0,
+        conditions: 0,
+        results: 0,
+      },
+      heroMetricPulse: {
+        turbines: false,
+        conditions: false,
+        results: false,
+      },
+      heroPulseTimers: {
+        turbines: null,
+        conditions: null,
+        results: null,
+      },
+      heroMetricTweens: {
+        turbines: null,
+        conditions: null,
+        results: null,
+      },
+      datasetPanelPulse: {
+        card: false,
+        turbines: false,
+        turbinesSchema: false,
+        conditions: false,
+        conditionsSchema: false,
+        readings: false,
+        readingsSchema: false,
+      },
+      datasetPulseTimers: {},
+      stepPulse: {
+        step1: false,
+        step2: false,
+        step3: false,
+        action: false,
+        status: false,
+        chart: false,
+        table: false,
+      },
+      stepPulseTimers: {},
     };
   },
   computed: {
@@ -432,20 +519,23 @@ export default {
       const resultCount = this.simulationResults.length;
       return [
         {
+          key: 'turbines',
           label: '绑定风机',
-          value: turbineCount || '—',
+          display: turbineCount ? this.heroMetricDisplay.turbines : '—',
           unit: turbineCount ? '台' : '',
           meta: this.selectedFarm ? `场站：${this.selectedFarm}` : '等待选择场站',
         },
         {
+          key: 'conditions',
           label: '工况节点',
-          value: conditionCount || '—',
+          display: conditionCount ? this.heroMetricDisplay.conditions : '—',
           unit: conditionCount ? '个' : '',
           meta: conditionCount ? '用于插值的节点' : '尚未上传工况数据',
         },
         {
+          key: 'results',
           label: '仿真结果',
-          value: resultCount || '—',
+          display: resultCount ? this.heroMetricDisplay.results : '—',
           unit: resultCount ? '条' : '',
           meta: this.loadingSimulation ? '正在计算' : (resultCount ? '最新一次仿真输出' : '尚未运行仿真'),
         },
@@ -458,18 +548,213 @@ export default {
         return;
       }
       this.reloadForSelectedWindFarm();
+    },
+    farmTurbines(newList) {
+      const count = Array.isArray(newList) ? newList.length : 0;
+      this.animateHeroMetric('turbines', count);
+    },
+    farmConditions(newList) {
+      const count = Array.isArray(newList) ? newList.length : 0;
+      this.animateHeroMetric('conditions', count);
+    },
+    simulationResults(newList) {
+      const count = Array.isArray(newList) ? newList.length : 0;
+      this.animateHeroMetric('results', count);
+      if (count > 0) {
+        this.triggerStepPulse('chart');
+        this.triggerStepPulse('table');
+      }
+    },
+    activeUploadTab(newTab) {
+      this.triggerDatasetPulse('card');
+      if (newTab) {
+        this.triggerDatasetPulse(newTab);
+        this.triggerDatasetPulse(`${newTab}Schema`);
+      }
+    },
+    selectedFarm(newVal, oldVal) {
+      if (newVal !== oldVal) {
+        this.triggerStepPulse('step1');
+        this.triggerStepPulse('status');
+      }
+    },
+    targetWindSpeed(newVal, oldVal) {
+      if (newVal !== oldVal) {
+        this.triggerStepPulse('step2');
+      }
+    },
+    targetWindDirection(newVal, oldVal) {
+      if (newVal !== oldVal) {
+        this.triggerStepPulse('step3');
+      }
+    },
+    loadingSimulation(newVal, oldVal) {
+      if (oldVal && !newVal && this.simulationResults.length) {
+        this.triggerStepPulse('action');
+      }
+    },
+    isReadyForSimulation(newVal, oldVal) {
+      if (newVal && !oldVal) {
+        this.triggerStepPulse('action');
+      }
     }
   },
   mounted() {
     this.reloadForSelectedWindFarm();
   },
+  beforeUnmount() {
+    this.clearAllPulses();
+    if (this.heroMetricTweens) {
+      Object.values(this.heroMetricTweens).forEach((id) => {
+        if (id) {
+          cancelAnimationFrame(id);
+        }
+      });
+    }
+  },
   methods: {
+    animateHeroMetric(key, targetValue) {
+      if (!Object.prototype.hasOwnProperty.call(this.heroMetricDisplay, key)) {
+        return;
+      }
+      const target = Number.isFinite(Number(targetValue)) ? Number(targetValue) : 0;
+      if (!target) {
+        if (this.heroMetricTweens[key]) {
+          cancelAnimationFrame(this.heroMetricTweens[key]);
+          this.heroMetricTweens[key] = null;
+        }
+        this.heroMetricDisplay[key] = 0;
+        this.heroMetricPulse[key] = false;
+        return;
+      }
+      if (this.heroMetricTweens[key]) {
+        cancelAnimationFrame(this.heroMetricTweens[key]);
+        this.heroMetricTweens[key] = null;
+      }
+      const start = Number(this.heroMetricDisplay[key]) || 0;
+      const diff = target - start;
+      if (diff === 0) {
+        this.triggerHeroPulse(key);
+        return;
+      }
+      const duration = 600;
+      const startTime = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+      const step = (timestamp) => {
+        const now = timestamp || (typeof performance !== 'undefined' ? performance.now() : Date.now());
+        const progress = Math.min((now - startTime) / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        this.heroMetricDisplay[key] = Math.round(start + diff * eased);
+        if (progress < 1) {
+          this.heroMetricTweens[key] = requestAnimationFrame(step);
+        } else {
+          this.heroMetricTweens[key] = null;
+        }
+      };
+      this.heroMetricTweens[key] = requestAnimationFrame(step);
+      this.triggerHeroPulse(key);
+    },
+    triggerHeroPulse(key, duration = 900) {
+      if (!Object.prototype.hasOwnProperty.call(this.heroMetricPulse, key)) {
+        return;
+      }
+      if (this.heroPulseTimers[key]) {
+        clearTimeout(this.heroPulseTimers[key]);
+      }
+      this.heroMetricPulse[key] = true;
+      this.heroPulseTimers[key] = setTimeout(() => {
+        this.heroMetricPulse[key] = false;
+        this.heroPulseTimers[key] = null;
+      }, duration);
+    },
+    triggerDatasetPulse(key, duration = 900) {
+      if (!Object.prototype.hasOwnProperty.call(this.datasetPanelPulse, key)) {
+        return;
+      }
+      if (!this.datasetPulseTimers) {
+        this.datasetPulseTimers = {};
+      }
+      if (this.datasetPulseTimers[key]) {
+        clearTimeout(this.datasetPulseTimers[key]);
+      }
+      this.datasetPanelPulse[key] = true;
+      this.datasetPulseTimers[key] = setTimeout(() => {
+        this.datasetPanelPulse[key] = false;
+        this.datasetPulseTimers[key] = null;
+      }, duration);
+    },
+    clearDatasetPulse(key) {
+      if (!Object.prototype.hasOwnProperty.call(this.datasetPanelPulse, key)) {
+        return;
+      }
+      if (this.datasetPulseTimers && this.datasetPulseTimers[key]) {
+        clearTimeout(this.datasetPulseTimers[key]);
+        this.datasetPulseTimers[key] = null;
+      }
+      this.datasetPanelPulse[key] = false;
+    },
+    triggerStepPulse(key, duration = 900) {
+      if (!Object.prototype.hasOwnProperty.call(this.stepPulse, key)) {
+        return;
+      }
+      if (!this.stepPulseTimers) {
+        this.stepPulseTimers = {};
+      }
+      if (this.stepPulseTimers[key]) {
+        clearTimeout(this.stepPulseTimers[key]);
+      }
+      this.stepPulse[key] = true;
+      this.stepPulseTimers[key] = setTimeout(() => {
+        this.stepPulse[key] = false;
+        this.stepPulseTimers[key] = null;
+      }, duration);
+    },
+    resetHeroMetricDisplays() {
+      Object.keys(this.heroMetricDisplay).forEach((key) => {
+        if (this.heroMetricTweens[key]) {
+          cancelAnimationFrame(this.heroMetricTweens[key]);
+          this.heroMetricTweens[key] = null;
+        }
+        if (this.heroPulseTimers[key]) {
+          clearTimeout(this.heroPulseTimers[key]);
+          this.heroPulseTimers[key] = null;
+        }
+        this.heroMetricDisplay[key] = 0;
+        this.heroMetricPulse[key] = false;
+      });
+    },
+    clearAllPulses() {
+      this.resetHeroMetricDisplays();
+      if (this.datasetPulseTimers) {
+        Object.keys(this.datasetPulseTimers).forEach((key) => {
+          if (this.datasetPulseTimers[key]) {
+            clearTimeout(this.datasetPulseTimers[key]);
+            this.datasetPulseTimers[key] = null;
+          }
+        });
+      }
+      if (this.stepPulseTimers) {
+        Object.keys(this.stepPulseTimers).forEach((key) => {
+          if (this.stepPulseTimers[key]) {
+            clearTimeout(this.stepPulseTimers[key]);
+            this.stepPulseTimers[key] = null;
+          }
+        });
+      }
+      Object.keys(this.datasetPanelPulse).forEach((key) => {
+        this.datasetPanelPulse[key] = false;
+      });
+      Object.keys(this.stepPulse).forEach((key) => {
+        this.stepPulse[key] = false;
+      });
+    },
     handleDatasetFileChange(key, uploadFile, uploadFiles) {
       const state = this.datasetUploadState[key];
       state.fileList = uploadFiles.slice(-1);
       state.file = uploadFile?.raw || null;
       state.result = null;
       state.error = null;
+      this.triggerDatasetPulse(key);
+      this.triggerDatasetPulse(`${key}Schema`);
     },
     handleDatasetFileRemove(key) {
       this.resetDatasetUploadState(key, { clearMessages: true });
@@ -483,6 +768,8 @@ export default {
         state.result = null;
         state.error = null;
       }
+      this.clearDatasetPulse(key);
+      this.clearDatasetPulse(`${key}Schema`);
     },
     async submitDatasetUpload(key) {
       const state = this.datasetUploadState[key];
@@ -516,6 +803,10 @@ export default {
         state.fileList = [];
         ElMessage.success(response.data?.message || `${meta.title}上传成功`);
 
+        this.triggerDatasetPulse('card');
+        this.triggerDatasetPulse(key);
+        this.triggerDatasetPulse(`${key}Schema`);
+
         if (this.selectedFarm) {
           await this.handleFarmSelection(this.selectedFarm, { syncStore: false });
         } else {
@@ -532,6 +823,7 @@ export default {
       }
     },
     async reloadForSelectedWindFarm() {
+      this.clearAllPulses();
       this.targetWindSpeed = null;
       this.targetWindDirection = null;
       this.simulationResults = [];
@@ -627,6 +919,12 @@ export default {
         this.farmTurbines = turbinesRes.data;
         this.selectedFarm = farmName;
         
+        this.triggerDatasetPulse('card');
+        this.triggerDatasetPulse(this.activeUploadTab);
+        this.triggerDatasetPulse(`${this.activeUploadTab}Schema`);
+        this.triggerStepPulse('status');
+        this.triggerStepPulse('step1');
+        
         ElMessage.success(`已加载 ${this.farmTurbines.length} 台风机数据`);
       } catch (error) {
         console.error(`Error fetching data for farm ${farmName}:`, error);
@@ -714,6 +1012,7 @@ export default {
     },
     
     async runSimulation() {
+      this.triggerStepPulse('action');
       this.loadingSimulation = true;
       this.simulationResults = [];
 
@@ -854,6 +1153,7 @@ export default {
 
           try {
             Plotly.newPlot(this.$refs.plot, [trace], layout, {responsive: true});
+            this.triggerStepPulse('chart');
           } catch (error) {
             console.error('Error creating plot:', error);
             ElMessage.error('图表绘制失败');
@@ -892,6 +1192,7 @@ export default {
       link.click();
       
       ElMessage.success('数据导出成功');
+      this.triggerStepPulse('table');
     }
   },
 };
@@ -980,6 +1281,23 @@ export default {
   color: var(--text-secondary);
 }
 
+.metric--pulse {
+  position: relative;
+  border-color: rgba(66, 195, 255, 0.42);
+  box-shadow: 0 28px 70px rgba(34, 246, 170, 0.28);
+  animation: panelPulse 0.9s ease;
+}
+
+.metric--pulse::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: radial-gradient(circle at 20% 20%, rgba(66, 195, 255, 0.28), transparent 65%);
+  opacity: 0.55;
+}
+
 .metric-value {
   font-family: 'Rajdhani', 'Inter', sans-serif;
   font-size: 30px;
@@ -988,6 +1306,16 @@ export default {
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
+}
+
+.metric-value__number {
+  display: inline-block;
+  min-width: 2.5ch;
+  transition: transform 0.35s ease;
+}
+
+.metric--pulse .metric-value__number {
+  animation: numberPop 0.8s ease;
 }
 
 .metric-unit {
@@ -1000,6 +1328,53 @@ export default {
   font-size: 12px;
   letter-spacing: 0.1em;
   color: var(--text-muted);
+}
+
+.panel--pulse {
+  position: relative;
+  border-color: rgba(66, 195, 255, 0.32) !important;
+  box-shadow: 0 24px 60px rgba(34, 246, 170, 0.28);
+  animation: panelPulse 0.9s ease;
+}
+
+.panel--pulse::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: radial-gradient(circle at 15% 15%, rgba(66, 195, 255, 0.24), transparent 70%);
+  opacity: 0.45;
+}
+
+@keyframes panelPulse {
+  0% {
+    box-shadow: 0 0 0 rgba(34, 246, 170, 0.35);
+    border-color: rgba(66, 195, 255, 0.2);
+  }
+  50% {
+    box-shadow: 0 30px 74px rgba(34, 246, 170, 0.45);
+    border-color: rgba(66, 195, 255, 0.46);
+  }
+  100% {
+    box-shadow: 0 0 0 rgba(34, 246, 170, 0.12);
+    border-color: rgba(66, 195, 255, 0.22);
+  }
+}
+
+@keyframes numberPop {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.6;
+  }
+  55% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .dataset-upload-section {

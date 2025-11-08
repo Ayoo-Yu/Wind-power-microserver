@@ -1,344 +1,326 @@
 <template>
-  <div class="user-management-container">
-    <!-- 页面标题区域 -->
-    <div class="page-header">
-      <h1 class="page-title">用户管理系统</h1>
-      <p class="page-description">管理系统用户账号、权限和状态</p>
-    </div>
-    
-    <!-- 内容区域的白色卡片 -->
-    <div class="content-wrapper">
-      <el-card class="main-card">
-        <!-- 操作按钮区域 -->
-        <div class="card-header">
-          <div class="header-left">
-            <h2 class="section-title">用户管理</h2>
+  <DigitalPage>
+    <div class="user-management">
+      <DigitalHero
+        eyebrow="ACCESS CONTROL"
+        title="用户管理系统"
+        subtitle="集中管理系统用户账号、角色与权限"
+        :metrics="heroMetrics"
+        :chips="heroChips"
+      >
+        <template #meta>
+          <span class="digital-status-chip">认证状态：{{ authStatusLabel }}</span>
+          <span class="digital-status-chip">角色总数：{{ roles.length }}</span>
+        </template>
+        <template #actions>
+          <el-button
+            v-if="hasPermission('manage_users')"
+            type="primary"
+            size="large"
+            class="hero-action-button"
+            @click="handleAddUser"
+          >
+            <el-icon><Plus /></el-icon>
+            添加用户
+          </el-button>
+        </template>
+      </DigitalHero>
+
+      <section class="user-management__content">
+        <div
+          :class="[
+            'user-management__panel',
+            'digital-panel',
+            'digital-panel--interactive',
+            { 'panel--pulse': tablePulse }
+          ]"
+        >
+          <div class="user-management__panel-header">
+            <div class="panel-header__copy">
+              <h2>用户列表</h2>
+              <p>查看、筛选并维护系统用户的关键信息</p>
+            </div>
+            <div class="panel-header__chips">
+              <span class="digital-status-chip">当前页：{{ currentPage }}</span>
+              <span class="digital-status-chip">每页：{{ pageSize }}</span>
+            </div>
           </div>
-          <div class="header-right">
-            <el-button 
-              type="primary" 
-              @click="handleAddUser"
-              v-if="hasPermission('manage_users')"
-              :icon="Plus"
-              class="add-button"
+
+          <div class="user-management__toolbar">
+            <el-input
+              v-model="searchQuery"
+              placeholder="搜索用户名、姓名、邮箱或角色"
+              clearable
+              class="user-management__search"
             >
-              添加用户
+              <template #prefix>
+                <el-icon><Search /></el-icon>
+              </template>
+            </el-input>
+            <div class="toolbar__actions">
+              <el-tooltip content="刷新列表" placement="top">
+                <el-button
+                  :icon="Refresh"
+                  circle
+                  :loading="loading"
+                  @click="fetchData"
+                />
+              </el-tooltip>
+            </div>
+          </div>
+
+          <el-table
+            :data="filteredUsers"
+            class="user-management__table"
+            v-loading="loading"
+            border
+            stripe
+            highlight-current-row
+            row-key="id"
+            @sort-change="handleSortChange"
+            @filter-change="handleFilterChange"
+          >
+            <el-table-column prop="id" label="ID" width="70" sortable="custom" />
+            <el-table-column prop="username" label="用户名" width="120" sortable="custom">
+              <template #default="scope">
+                <el-text :type="isSuperAdmin() && scope.row.username === 'admin' ? 'danger' : 'primary'">
+                  {{ scope.row.username }}
+                </el-text>
+              </template>
+            </el-table-column>
+            <el-table-column prop="full_name" label="姓名" width="120" sortable />
+            <el-table-column prop="email" label="邮箱" min-width="200" sortable />
+            <el-table-column
+              prop="role.name"
+              label="角色"
+              width="140"
+              sortable
+              :filters="roleFilters"
+              :filter-method="filterByRole"
+            >
+              <template #default="scope">
+                <el-tag :type="scope.row.role.name === '系统管理员' ? 'danger' : 'primary'" effect="dark">
+                  {{ scope.row.role.name }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column
+              label="状态"
+              width="110"
+              :filters="[
+                { text: '启用', value: true },
+                { text: '禁用', value: false }
+              ]"
+              :filter-method="filterByStatus"
+            >
+              <template #default="scope">
+                <el-tag :type="scope.row.is_active ? 'success' : 'danger'" effect="dark">
+                  {{ scope.row.is_active ? '启用' : '禁用' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="last_login" label="最后登录时间" min-width="180" sortable="custom">
+              <template #default="scope">
+                {{ formatDate(scope.row.last_login) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" fixed="right" width="210">
+              <template #default="scope">
+                <el-button-group class="user-management__actions">
+                  <el-tooltip content="编辑用户" placement="top">
+                    <el-button
+                      v-if="hasPermission('manage_users')"
+                      type="primary"
+                      :icon="Edit"
+                      size="small"
+                      @click="handleEdit(scope.row)"
+                    />
+                  </el-tooltip>
+                  <el-tooltip :content="scope.row.is_active ? '禁用用户' : '启用用户'" placement="top">
+                    <el-button
+                      v-if="hasPermission('manage_users')"
+                      :type="scope.row.is_active ? 'danger' : 'success'"
+                      :icon="scope.row.is_active ? Lock : Unlock"
+                      size="small"
+                      @click="handleToggleStatus(scope.row)"
+                    />
+                  </el-tooltip>
+                  <el-tooltip content="重置密码" placement="top">
+                    <el-button
+                      v-if="hasPermission('manage_users')"
+                      type="warning"
+                      :icon="Key"
+                      size="small"
+                      @click="handleResetPassword(scope.row)"
+                    />
+                  </el-tooltip>
+                  <el-tooltip content="删除用户" placement="top">
+                    <el-button
+                      v-if="hasPermission('manage_users')"
+                      type="danger"
+                      :icon="Delete"
+                      size="small"
+                      @click="handleDelete(scope.row)"
+                    />
+                  </el-tooltip>
+                </el-button-group>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <div class="user-management__footer">
+            <el-pagination
+              v-model:current-page="currentPage"
+              v-model:page-size="pageSize"
+              :page-sizes="[10, 20, 50, 100]"
+              layout="total, sizes, prev, pager, next, jumper"
+              :total="users.length"
+              @size-change="handleSizeChange"
+              @current-change="handleCurrentChange"
+              background
+            />
+          </div>
+        </div>
+      </section>
+
+      <el-dialog
+        v-model="showUserDialog"
+        :title="isEdit ? '编辑用户' : '添加用户'"
+        width="500px"
+        @closed="handleDialogClosed"
+        destroy-on-close
+      >
+        <el-form
+          ref="userForm"
+          :model="userFormData"
+          :rules="userRules"
+          label-width="100px"
+          label-position="left"
+          class="custom-form"
+        >
+          <el-form-item label="用户名" prop="username" v-if="!isEdit">
+            <el-input v-model="userFormData.username" placeholder="请输入用户名" />
+          </el-form-item>
+
+          <el-form-item label="密码" prop="password" v-if="!isEdit">
+            <el-input
+              v-model="userFormData.password"
+              type="password"
+              placeholder="请输入密码"
+              show-password
+            />
+          </el-form-item>
+
+          <el-form-item label="姓名" prop="full_name">
+            <el-input v-model="userFormData.full_name" placeholder="请输入姓名" />
+          </el-form-item>
+
+          <el-form-item label="邮箱" prop="email">
+            <el-input v-model="userFormData.email" placeholder="请输入邮箱" />
+          </el-form-item>
+
+          <el-form-item label="角色" prop="role_id">
+            <el-select v-model="userFormData.role_id" placeholder="请选择角色" style="width: 100%">
+              <el-option
+                v-for="role in roles"
+                :key="role.id"
+                :label="role.name"
+                :value="role.id"
+              />
+            </el-select>
+          </el-form-item>
+
+          <el-form-item label="状态" prop="is_active">
+            <el-switch
+              v-model="userFormData.is_active"
+              active-text="启用"
+              inactive-text="禁用"
+              :active-value="true"
+              :inactive-value="false"
+            />
+          </el-form-item>
+        </el-form>
+
+        <template #footer>
+          <div class="dialog-footer">
+            <el-button @click="showUserDialog = false">取消</el-button>
+            <el-button type="primary" :loading="submitting" @click="handleSubmitUser">
+              确认
             </el-button>
           </div>
-        </div>
-      
-        <!-- 搜索工具条 -->
-        <div class="toolbar">
-          <el-input
-            v-model="searchQuery"
-            placeholder="搜索用户"
-            clearable
-            class="search-input"
-          >
-            <template #prefix>
-              <el-icon><Search /></el-icon>
-            </template>
-          </el-input>
-          <el-tooltip content="刷新列表" placement="top">
-            <el-button 
-              :icon="Refresh" 
-              circle 
-              @click="fetchData"
-              :loading="loading"
-            ></el-button>
-          </el-tooltip>
-        </div>
-        
-        <!-- 用户列表表格 -->
-        <el-table 
-          :data="filteredUsers" 
-          style="width: 100%" 
-          v-loading="loading"
-          border
-          stripe
-          highlight-current-row
-          row-key="id"
-          @sort-change="handleSortChange"
-          class="data-table"
+        </template>
+      </el-dialog>
+
+      <el-dialog
+        v-model="showResetPasswordDialog"
+        title="重置用户密码"
+        width="400px"
+        destroy-on-close
+      >
+        <el-form
+          ref="resetPasswordForm"
+          :model="resetPasswordFormData"
+          :rules="resetPasswordRules"
+          label-width="100px"
+          label-position="left"
+          class="custom-form"
         >
-          <el-table-column 
-            prop="id" 
-            label="ID" 
-            width="60"
-            sortable="custom"
-          />
-          <el-table-column 
-            prop="username" 
-            label="用户名" 
-            width="100"
-            sortable="custom"
-          >
-            <template #default="scope">
-              <el-text 
-                :type="isSuperAdmin() && scope.row.username === 'admin' ? 'danger' : 'primary'"
-              >
-                {{ scope.row.username }}
-              </el-text>
-            </template>
-          </el-table-column>
-          <el-table-column 
-            prop="full_name" 
-            label="姓名" 
-            width="100"
-            sortable
-          />
-          <el-table-column 
-            prop="email" 
-            label="邮箱" 
-            min-width="160"
-            sortable
-          />
-          <el-table-column 
-            prop="role.name" 
-            label="角色" 
-            width="110"
-            sortable
-            :filters="roleFilters"
-            :filter-method="filterByRole"
-          >
-            <template #default="scope">
-              <el-tag 
-                :type="scope.row.role.name === '系统管理员' ? 'danger' : 'primary'"
-                effect="plain"
-              >
-                {{ scope.row.role.name }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column 
-            label="状态" 
-            width="80"
-            :filters="[
-              { text: '启用', value: true },
-              { text: '禁用', value: false }
-            ]"
-            :filter-method="filterByStatus"
-          >
-            <template #default="scope">
-              <el-tag 
-                :type="scope.row.is_active ? 'success' : 'danger'"
-                effect="plain"
-              >
-                {{ scope.row.is_active ? '启用' : '禁用' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column 
-            prop="last_login"
-            label="最后登录时间" 
-            min-width="160"
-            sortable="custom"
-          >
-            <template #default="scope">
-              {{ formatDate(scope.row.last_login) }}
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" fixed="right" width="170">
-            <template #default="scope">
-              <el-button-group class="compact-buttons">
-                <el-tooltip content="编辑用户" placement="top">
-                  <el-button 
-                    type="primary" 
-                    :icon="Edit" 
-                    size="small" 
-                    @click="handleEdit(scope.row)"
-                    v-if="hasPermission('manage_users')"
-                  />
-                </el-tooltip>
-                <el-tooltip :content="scope.row.is_active ? '禁用用户' : '启用用户'" placement="top">
-                  <el-button 
-                    :type="scope.row.is_active ? 'danger' : 'success'" 
-                    :icon="scope.row.is_active ? Lock : Unlock" 
-                    size="small" 
-                    @click="handleToggleStatus(scope.row)"
-                    v-if="hasPermission('manage_users')"
-                  />
-                </el-tooltip>
-                <el-tooltip content="重置密码" placement="top">
-                  <el-button 
-                    type="warning" 
-                    :icon="Key" 
-                    size="small" 
-                    @click="handleResetPassword(scope.row)"
-                    v-if="hasPermission('manage_users')"
-                  />
-                </el-tooltip>
-                <el-tooltip content="删除用户" placement="top">
-                  <el-button 
-                    type="danger" 
-                    :icon="Delete" 
-                    size="small" 
-                    @click="handleDelete(scope.row)"
-                    v-if="hasPermission('manage_users')"
-                  />
-                </el-tooltip>
-              </el-button-group>
-            </template>
-          </el-table-column>
-        </el-table>
-        
-        <!-- 分页 -->
-        <div class="pagination-container">
-          <el-pagination
-            v-model:current-page="currentPage"
-            v-model:page-size="pageSize"
-            :page-sizes="[10, 20, 50, 100]"
-            layout="total, sizes, prev, pager, next, jumper"
-            :total="users.length"
-            @size-change="handleSizeChange"
-            @current-change="handleCurrentChange"
-            background
-          />
-        </div>
-      </el-card>
-    </div>
-    
-    <!-- 添加/编辑用户对话框 -->
-    <el-dialog
-      v-model="showUserDialog"
-      :title="isEdit ? '编辑用户' : '添加用户'"
-      width="500px"
-      @closed="handleDialogClosed"
-      destroy-on-close
-    >
-      <el-form 
-        ref="userForm" 
-        :model="userFormData" 
-        :rules="userRules" 
-        label-width="100px"
-        label-position="left"
-        class="custom-form"
-      >
-        <el-form-item label="用户名" prop="username" v-if="!isEdit">
-          <el-input v-model="userFormData.username" placeholder="请输入用户名" />
-        </el-form-item>
-        
-        <el-form-item label="密码" prop="password" v-if="!isEdit">
-          <el-input 
-            v-model="userFormData.password" 
-            type="password" 
-            placeholder="请输入密码"
-            show-password
-          />
-        </el-form-item>
-        
-        <el-form-item label="姓名" prop="full_name">
-          <el-input v-model="userFormData.full_name" placeholder="请输入姓名" />
-        </el-form-item>
-        
-        <el-form-item label="邮箱" prop="email">
-          <el-input v-model="userFormData.email" placeholder="请输入邮箱" />
-        </el-form-item>
-        
-        <el-form-item label="角色" prop="role_id">
-          <el-select v-model="userFormData.role_id" placeholder="请选择角色" style="width: 100%">
-            <el-option 
-              v-for="role in roles" 
-              :key="role.id" 
-              :label="role.name" 
-              :value="role.id" 
+          <el-form-item label="新密码" prop="password">
+            <el-input
+              v-model="resetPasswordFormData.password"
+              type="password"
+              placeholder="请输入新密码"
+              show-password
             />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="状态" prop="is_active">
-          <el-switch 
-            v-model="userFormData.is_active" 
-            active-text="启用" 
-            inactive-text="禁用"
-            :active-value="true"
-            :inactive-value="false"
-          />
-        </el-form-item>
-      </el-form>
-      
-      <template #footer>
-        <div class="dialog-footer">
-          <el-button @click="showUserDialog = false">取消</el-button>
-          <el-button 
-            type="primary" 
-            :loading="submitting"
-            @click="handleSubmitUser"
-          >
-            确认
-          </el-button>
-        </div>
-      </template>
-    </el-dialog>
-    
-    <!-- 重置密码对话框 -->
-    <el-dialog
-      v-model="showResetPasswordDialog"
-      title="重置用户密码"
-      width="400px"
-      destroy-on-close
-    >
-      <el-form 
-        ref="resetPasswordForm" 
-        :model="resetPasswordFormData" 
-        :rules="resetPasswordRules" 
-        label-width="100px"
-        label-position="left"
-        class="custom-form"
-      >
-        <el-form-item label="新密码" prop="password">
-          <el-input 
-            v-model="resetPasswordFormData.password" 
-            type="password" 
-            placeholder="请输入新密码"
-            show-password
-          />
-        </el-form-item>
-        
-        <el-form-item label="确认密码" prop="confirmPassword">
-          <el-input 
-            v-model="resetPasswordFormData.confirmPassword" 
-            type="password" 
-            placeholder="请再次输入新密码"
-            show-password
-          />
-        </el-form-item>
-      </el-form>
-      
-      <template #footer>
-        <div class="dialog-footer">
-          <el-button @click="showResetPasswordDialog = false">取消</el-button>
-          <el-button 
-            type="primary" 
-            :loading="resettingPassword"
-            @click="handleSubmitResetPassword"
-          >
-            确认
-          </el-button>
-        </div>
-      </template>
-    </el-dialog>
-  </div>
+          </el-form-item>
+
+          <el-form-item label="确认密码" prop="confirmPassword">
+            <el-input
+              v-model="resetPasswordFormData.confirmPassword"
+              type="password"
+              placeholder="请再次输入新密码"
+              show-password
+            />
+          </el-form-item>
+        </el-form>
+
+        <template #footer>
+          <div class="dialog-footer">
+            <el-button @click="showResetPasswordDialog = false">取消</el-button>
+            <el-button type="primary" :loading="resettingPassword" @click="handleSubmitResetPassword">
+              确认
+            </el-button>
+          </div>
+        </template>
+      </el-dialog>
+    </div>
+  </DigitalPage>
 </template>
 
 <script>
-import { ref, reactive, onMounted, computed, watchEffect } from 'vue'
+import { ref, reactive, onMounted, computed, watchEffect, watch, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { 
-  Plus, 
-  Edit, 
-  Refresh, 
-  Search, 
-  Delete, 
-  Lock, 
-  Unlock, 
-  Key 
+import {
+  Plus,
+  Edit,
+  Refresh,
+  Search,
+  Delete,
+  Lock,
+  Unlock,
+  Key
 } from '@element-plus/icons-vue'
 import { getUsers, createUser, updateUser, deleteUser, resetUserPassword, getRoles } from '../api/auth'
-import { isAuthReady, isAuthLoading } from '../store/authReady' // 导入认证状态
+import { isAuthReady, isAuthLoading } from '../store/authReady'
+import DigitalPage from './common/DigitalPage.vue'
+import DigitalHero from './common/DigitalHero.vue'
 
 export default {
   name: 'UserManagement',
+  components: {
+    DigitalPage,
+    DigitalHero,
+  },
   setup() {
     // 数据
     const users = ref([])
@@ -348,6 +330,21 @@ export default {
     const submitting = ref(false)
     const resettingPassword = ref(false)
     const searchQuery = ref('')
+
+    const tablePulse = ref(false)
+    const tablePulseTimer = ref(null)
+    const lastFetchAt = ref(null)
+
+    const triggerTablePulse = (duration = 900) => {
+      if (tablePulseTimer.value) {
+        clearTimeout(tablePulseTimer.value)
+      }
+      tablePulse.value = true
+      tablePulseTimer.value = setTimeout(() => {
+        tablePulse.value = false
+        tablePulseTimer.value = null
+      }, duration)
+    }
     
     // 分页
     const currentPage = ref(1)
@@ -388,6 +385,50 @@ export default {
         text: role.name,
         value: role.name
       }))
+    })
+
+    const authStatusLabel = computed(() => {
+      if (isAuthLoading.value) return '认证检查中'
+      return isAuthReady.value ? '认证已通过' : '认证未通过'
+    })
+
+    const heroMetrics = computed(() => {
+      const total = users.value.length
+      const activeCount = users.value.filter(user => user.is_active).length
+      const roleCount = roles.value.length
+      const activeRate = total ? Math.round((activeCount / Math.max(total, 1)) * 100) : 0
+
+      return [
+        {
+          id: 'total-users',
+          label: '总用户',
+          value: total || '—',
+          meta: total ? '注册账户' : '等待同步',
+        },
+        {
+          id: 'active-users',
+          label: '启用账户',
+          value: activeCount || '—',
+          meta: total ? `${activeRate}% 活跃` : '暂无数据',
+        },
+        {
+          id: 'role-count',
+          label: '角色数量',
+          value: roleCount || '—',
+          meta: roleCount ? '角色配置可用' : '未创建角色',
+        },
+      ]
+    })
+
+    const lastSyncLabel = computed(() => {
+      if (!lastFetchAt.value) {
+        return '尚未同步'
+      }
+      return new Intl.DateTimeFormat('zh-CN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      }).format(lastFetchAt.value)
     })
     
     // 排序相关状态
@@ -548,6 +589,12 @@ export default {
       // 普通用户没有用户管理相关权限
       return false;
     }
+
+    const canManageUsers = computed(() => hasPermission('manage_users'))
+    const heroChips = computed(() => [
+      { id: 'sync', label: `上次同步：${lastSyncLabel.value}` },
+      { id: 'mode', label: canManageUsers.value ? '管理模式' : '查看模式' },
+    ])
     
     // 获取用户和角色数据
     const fetchData = async () => {
@@ -567,6 +614,8 @@ export default {
         await fetchRolesInternal();
         
         console.log('用户和角色数据获取完成 (串行)');
+        lastFetchAt.value = new Date();
+        triggerTablePulse();
       } catch (error) {
         // 错误已在内部函数处理
         console.error('获取用户/角色数据时出错 (串行):', error);
@@ -618,16 +667,16 @@ export default {
     watchEffect(() => {
       console.log(`watchEffect: isAuthLoading=${isAuthLoading.value}, isAuthReady=${isAuthReady.value}`);
       if (!isAuthLoading.value && isAuthReady.value) {
-        // 当认证检查完成(loading=false)且认证成功(ready=true)时
         fetchData();
       } else if (!isAuthLoading.value && !isAuthReady.value) {
-        // 认证检查完成但未认证成功，可以清空列表或显示提示
         console.log('认证未通过，不加载用户数据');
         users.value = [];
         roles.value = [];
       }
-      // 如果isAuthLoading为true，等待检查完成
     });
+
+    watch(searchQuery, () => triggerTablePulse(600))
+    watch([pageSize, currentPage], () => triggerTablePulse(600))
     
     // 格式化日期
     const formatDate = (dateStr) => {
@@ -979,11 +1028,23 @@ export default {
           console.log('样本日期格式:', sampleDate, typeof sampleDate)
         }
       }
+      triggerTablePulse(500)
+    }
+
+    const handleFilterChange = () => {
+      triggerTablePulse(500)
     }
     
     // 生命周期钩子
     onMounted(() => {
       console.log('UserManagement组件已挂载，等待认证状态就绪...');
+    })
+
+    onUnmounted(() => {
+      if (tablePulseTimer.value) {
+        clearTimeout(tablePulseTimer.value)
+        tablePulseTimer.value = null
+      }
     })
     
     return {
@@ -1019,10 +1080,15 @@ export default {
       handleDialogClosed,
       isSuperAdmin,
       handleSortChange,
+      handleFilterChange,
       filterByRole,
       filterByStatus,
       handleSizeChange,
       handleCurrentChange,
+      heroMetrics,
+      heroChips,
+      authStatusLabel,
+      tablePulse,
       // 图标
       Plus,
       Edit,
@@ -1038,291 +1104,215 @@ export default {
 </script>
 
 <style scoped>
-.user-management-container {
-  min-height: 100vh;
-  background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
-  background-size: 400% 400%;
-  animation: gradient 15s ease infinite;
-  padding: 30px;
-  box-sizing: border-box;
-  overflow: auto;
+.user-management {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding: 0 12px 36px;
 }
 
-@keyframes gradient {
+.hero-action-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: 0.08em;
+}
+
+.user-management__content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.user-management__panel {
+  position: relative;
+  padding: 26px 28px;
+  border-radius: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow: hidden;
+}
+
+.panel--pulse {
+  border-color: rgba(66, 195, 255, 0.32) !important;
+  box-shadow: 0 24px 60px rgba(34, 246, 170, 0.25);
+  animation: panelPulse 0.9s ease;
+}
+
+.panel--pulse::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: radial-gradient(circle at 20% 20%, rgba(66, 195, 255, 0.26), transparent 65%);
+  opacity: 0.45;
+}
+
+@keyframes panelPulse {
   0% {
-    background-position: 0% 50%;
+    box-shadow: 0 0 0 rgba(34, 246, 170, 0.28);
   }
   50% {
-    background-position: 100% 50%;
+    box-shadow: 0 26px 70px rgba(34, 246, 170, 0.45);
   }
   100% {
-    background-position: 0% 50%;
+    box-shadow: 0 0 0 rgba(34, 246, 170, 0.18);
   }
 }
 
-/* 页面标题区域 */
-.page-header {
-  text-align: center;
-  margin-bottom: 30px;
-}
-
-.page-title {
-  font-size: 42px !important;
-  font-weight: 600;
-  color: white;
-  text-align: center;
-  margin: 0 0 10px;
-  letter-spacing: -0.003em;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.page-description {
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 16px;
-  margin: 0;
-  font-weight: 400;
-}
-
-/* 内容区白色卡片 */
-.content-wrapper {
-  max-width: 95%;
-  margin: 0 auto;
-  padding: 0 20px;
-  box-sizing: border-box;
-}
-
-.main-card {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(10px);
-  border-radius: 12px;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
-  padding: 15px;
-  margin-bottom: 30px;
-  border: 1px solid rgba(0, 0, 0, 0.03);
-}
-
-/* 卡片标题和操作区 */
-.card-header {
+.user-management__panel-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  border-bottom: 1px solid #eee;
-  padding-bottom: 15px;
+  align-items: flex-start;
+  gap: 16px;
 }
 
-.header-left {
-  display: flex;
-  align-items: center;
-}
-
-.section-title {
-  font-size: 18px;
-  font-weight: 500;
+.panel-header__copy h2 {
   margin: 0;
-  color: #333;
+  font-size: 22px;
+  letter-spacing: 0.08em;
+  color: var(--text-primary);
 }
 
-.header-right {
+.panel-header__copy p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+}
+
+.panel-header__chips {
   display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.user-management__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.user-management__search {
+  flex: 1 1 280px;
+  max-width: 520px;
+}
+
+.toolbar__actions {
+  display: flex;
+  align-items: center;
   gap: 10px;
 }
 
-/* 工具栏样式 */
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-}
-
-.search-input {
-  width: 280px;
-}
-
-/* 按钮组紧凑样式 */
-:deep(.el-button-group) {
-  display: flex;
-  flex-wrap: nowrap;
-}
-
-:deep(.el-button-group .el-button) {
-  padding: 5px 8px;
-}
-
-/* 表格内容样式 */
-:deep(.el-table .cell) {
-  white-space: nowrap;
+.user-management__table {
+  border-radius: 18px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-  padding: 6px 12px !important;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100%;
 }
 
-/* 表头样式 */
-:deep(.el-table__header th) {
-  font-weight: 600;
-  color: #333;
-  background-color: #f5f7fa !important;
+:deep(.user-management__table .el-table) {
+  background: transparent;
+  color: var(--text-primary);
+  --el-table-border-color: rgba(66, 195, 255, 0.12);
 }
 
-:deep(.el-table__header th .cell) {
-  justify-content: center;
+:deep(.user-management__table .el-table__header th) {
+  background: rgba(66, 195, 255, 0.08);
+  color: var(--text-secondary);
+  letter-spacing: 0.08em;
 }
 
-/* 表格标签居中显示 */
-:deep(.el-table .el-tag) {
-  margin: 0 auto;
+:deep(.user-management__table .el-table__row) {
+  background: rgba(6, 22, 44, 0.72);
+  transition: background 0.3s ease, transform 0.3s ease;
 }
 
-/* 表格单元格高度设置 */
-:deep(.el-table__row td) {
-  height: 48px !important;
-}
-
-/* 表格文本元素居中 */
-:deep(.el-table .el-text) {
-  display: flex;
-  justify-content: center;
-  width: 100%;
-}
-
-/* 调整左对齐的列 */
-:deep(.el-table__header th:nth-child(2) .cell),
-:deep(.el-table__header th:nth-child(3) .cell),
-:deep(.el-table__header th:nth-child(4) .cell),
-:deep(.el-table__body td:nth-child(2) .cell),
-:deep(.el-table__body td:nth-child(3) .cell),
-:deep(.el-table__body td:nth-child(4) .cell) {
-  justify-content: flex-start;
-}
-
-:deep(.el-table__body td:nth-child(7) .cell) {
-  justify-content: center;
-}
-
-/* 日期列样式调整 */
-:deep(.el-table__body td:last-child .cell) {
-  white-space: nowrap;
-  justify-content: center;
-}
-
-/* 邮箱和长文本列调整 */
-:deep(.el-table__header th:nth-child(4) .cell),
-:deep(.el-table__body td:nth-child(4) .cell) {
-  justify-content: flex-start;
-  text-align: left;
-  white-space: normal;
-  word-break: break-word;
-}
-
-/* 响应式调整 */
-@media (max-width: 1366px) {
-  .content-wrapper {
-    max-width: 98%;
-    padding: 0 10px;
-  }
-  
-  .search-input {
-    width: 220px;
-  }
-}
-
-/* 数据表格样式 */
-.data-table {
-  margin-bottom: 15px;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
-  width: 100%;
-}
-
-:deep(.el-table) {
-  --el-table-border-color: #f0f0f0;
-  --el-table-header-background-color: #f8f9fa;
-  width: 100% !important;
-}
-
-/* 修复表格在某些浏览器中的宽度问题 */
-:deep(.el-table__header),
-:deep(.el-table__body) {
-  width: 100% !important;
-}
-
-:deep(.el-table__inner-wrapper) {
-  overflow-x: auto;
-}
-
-:deep(.el-table__row) {
-  transition: all 0.3s ease;
-}
-
-:deep(.el-table__row:hover) {
-  background-color: rgba(0, 119, 237, 0.05) !important;
+:deep(.user-management__table .el-table__row:hover) {
+  background: rgba(66, 195, 255, 0.12);
   transform: translateY(-1px);
 }
 
-/* 修复操作列的按钮换行问题 */
-:deep(.el-table__fixed-right) {
-  height: 100% !important;
-}
-
-:deep(.el-button) {
-  transition: all 0.3s ease;
-}
-
-:deep(.el-button:hover) {
-  transform: translateY(-2px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-/* 分页样式 */
-.pagination-container {
+:deep(.user-management__table .cell) {
   display: flex;
-  justify-content: center;
-  margin-top: 20px;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 10px 12px;
+  gap: 6px;
 }
 
-/* 对话框样式 */
+:deep(.user-management__table td.is-center .cell),
+:deep(.user-management__table th.is-center .cell) {
+  justify-content: center;
+}
+
+:deep(.user-management__table td.is-right .cell),
+:deep(.user-management__table th.is-right .cell) {
+  justify-content: flex-end;
+}
+
+.user-management__actions {
+  display: flex !important;
+  gap: 4px !important;
+}
+
+.user-management__footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
+}
+
+:deep(.el-pagination.is-background .el-pager li.is-active) {
+  background: rgba(66, 195, 255, 0.28);
+  color: var(--text-primary);
+}
+
+:deep(.el-pagination.is-background .el-pager li:not(.is-active)) {
+  background: rgba(6, 22, 44, 0.5);
+  color: var(--text-secondary);
+}
+
+:deep(.el-input__wrapper) {
+  background: rgba(6, 22, 44, 0.6);
+  border: 1px solid rgba(66, 195, 255, 0.18);
+  box-shadow: none;
+}
+
+:deep(.el-input__inner) {
+  color: var(--text-primary);
+}
+
+:deep(.el-dialog) {
+  background: rgba(7, 24, 46, 0.92);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(66, 195, 255, 0.18);
+}
+
+:deep(.el-dialog__title) {
+  color: var(--text-primary);
+  letter-spacing: 0.08em;
+}
+
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  padding-top: 10px;
+  gap: 12px;
 }
 
-.custom-form .el-form-item__label {
-  font-weight: 500;
-}
+@media (max-width: 1200px) {
+  .user-management__panel {
+    padding: 22px 20px;
+  }
 
-:deep(.el-button-group) {
-  display: flex;
-}
+  .user-management__toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
 
-:deep(.el-table .cell) {
-  word-break: break-word;
-}
-
-:deep(.el-table__row) {
-  transition: all 0.3s;
-}
-
-:deep(.el-table__row:hover) {
-  background-color: var(--el-fill-color-light) !important;
-}
-
-/* 紧凑按钮组 */
-.compact-buttons {
-  display: flex !important;
-  gap: 2px !important;
-}
-
-.compact-buttons :deep(.el-button) {
-  padding: 5px 6px !important;
-  min-width: 32px;
+  .toolbar__actions {
+    align-self: flex-end;
+  }
 }
 </style> 

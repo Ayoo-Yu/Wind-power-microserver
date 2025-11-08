@@ -27,7 +27,14 @@
       <!-- 左侧：文件上传、模型选择与操作面板 -->
       <div class="left-panel">
         <!-- 数据集上传区域 -->
-        <section class="panel-section" :class="{ 'is-collapsed': isStepCollapsed[0], 'completed': stepCompleted[0] }">
+        <section
+          class="panel-section"
+          :class="{
+            'is-collapsed': isStepCollapsed[0],
+            completed: stepCompleted[0],
+            'is-highlighted': stepHighlights[0]
+          }"
+        >
           <div class="panel-header" @click="toggleStep(0)">
             <div class="step-status">
               <h2>步骤一：选择训练集</h2>
@@ -53,7 +60,14 @@
         </section>
 
         <!-- 文件信息区域 -->
-        <section class="panel-section" :class="{ 'is-collapsed': isStepCollapsed[1], 'completed': stepCompleted[1] }">
+        <section
+          class="panel-section"
+          :class="{
+            'is-collapsed': isStepCollapsed[1],
+            completed: stepCompleted[1],
+            'is-highlighted': stepHighlights[1]
+          }"
+        >
           <div class="panel-header" @click="toggleStep(1)">
             <div class="step-status">
               <h2>步骤二：确认文件并上传</h2>
@@ -78,7 +92,14 @@
         </section>
 
         <!-- 模型选择区域 -->
-        <section class="panel-section" :class="{ 'is-collapsed': isStepCollapsed[2], 'completed': stepCompleted[2] }">
+        <section
+          class="panel-section"
+          :class="{
+            'is-collapsed': isStepCollapsed[2],
+            completed: stepCompleted[2],
+            'is-highlighted': stepHighlights[2]
+          }"
+        >
           <div class="panel-header" @click="toggleStep(2)">
             <div class="step-status">
               <h2>步骤三：设置训练模型</h2>
@@ -110,7 +131,14 @@
         </section>
 
         <!-- 操作面板区域 -->
-        <section class="panel-section" :class="{ 'is-collapsed': isStepCollapsed[3], 'completed': stepCompleted[3] }">
+        <section
+          class="panel-section"
+          :class="{
+            'is-collapsed': isStepCollapsed[3],
+            completed: stepCompleted[3],
+            'is-highlighted': stepHighlights[3]
+          }"
+        >
           <div class="panel-header" @click="toggleStep(3)">
             <div class="step-status">
               <h2>步骤四：启动训练</h2>
@@ -300,6 +328,8 @@ export default {
       logVisible: false,
       isStepCollapsed: [false, false, false, false],
       stepCompleted: [false, false, false, false],
+      stepHighlights: [false, false, false, false],
+      stepHighlightTimers: [],
     };
   },
   computed: {
@@ -325,6 +355,9 @@ export default {
         : this.predictionReady || this.downloadUrl || this.reportDownloadUrl
           ? 'READY'
           : 'IDLE'
+      const completedSteps = this.stepCompleted.filter(Boolean).length
+      const totalSteps = this.stepCompleted.length || 4
+      const progressPercent = Math.round((completedSteps / totalSteps) * 100)
 
       return [
         {
@@ -349,7 +382,7 @@ export default {
           id: 'status',
           label: '训练状态',
           value: progressStatus,
-          meta: this.logs ? '日志已生成' : '等待任务',
+          meta: `${this.logs ? '日志已生成' : '等待任务'} · 完成度 ${completedSteps}/${totalSteps} (${progressPercent}%)`,
         },
       ]
     },
@@ -357,6 +390,44 @@ export default {
   methods: {
     composeDownloadUrl(path) {
       return buildDownloadUrl(this.backendBaseUrl, path);
+    },
+    triggerStepHighlight(index) {
+      if (index < 0 || index >= this.stepHighlights.length) {
+        return;
+      }
+      this.$set(this.stepHighlights, index, true);
+      if (!Array.isArray(this.stepHighlightTimers)) {
+        this.stepHighlightTimers = [];
+      }
+      if (this.stepHighlightTimers[index]) {
+        clearTimeout(this.stepHighlightTimers[index]);
+      }
+      this.stepHighlightTimers[index] = setTimeout(() => {
+        this.$set(this.stepHighlights, index, false);
+        this.stepHighlightTimers[index] = null;
+      }, 1000);
+    },
+    clearStepHighlight(index) {
+      if (index < 0 || index >= this.stepHighlights.length) {
+        return;
+      }
+      this.$set(this.stepHighlights, index, false);
+      if (this.stepHighlightTimers && this.stepHighlightTimers[index]) {
+        clearTimeout(this.stepHighlightTimers[index]);
+        this.stepHighlightTimers[index] = null;
+      }
+    },
+    clearStepHighlights() {
+      this.stepHighlights = this.stepHighlights.map(() => false);
+      if (Array.isArray(this.stepHighlightTimers)) {
+        this.stepHighlightTimers.forEach((timer, idx) => {
+          if (timer) {
+            clearTimeout(timer);
+            this.stepHighlightTimers[idx] = null;
+          }
+        });
+      }
+      this.stepHighlightTimers = [];
     },
     onFileSelected(file) {
       this.resetState();
@@ -377,6 +448,8 @@ export default {
         this.$message.success('文件上传成功！请点击选择模型类型。');
         this.stepCompleted[0] = true;
         this.stepCompleted[1] = true;
+        this.triggerStepHighlight(0);
+        this.triggerStepHighlight(1);
         setTimeout(() => {
           this.isStepCollapsed[0] = true;
           this.isStepCollapsed[1] = true;
@@ -482,6 +555,7 @@ export default {
       this.clearTimers();
       this.isStepCollapsed = [false, false, false, false];
       this.stepCompleted = [false, false, false, false];
+      this.clearStepHighlights();
     },
     handleManualUpload() {
       if (!this.selectedFile) {
@@ -510,6 +584,7 @@ export default {
       }
       
       this.stepCompleted[2] = true;
+      this.triggerStepHighlight(2);
       this.$nextTick(() => {
         setTimeout(() => {
           this.isStepCollapsed[2] = true;
@@ -668,6 +743,7 @@ export default {
           this.$message.success('模型训练已完成！');
           this.clearTimers();
           this.stepCompleted[3] = true;
+          this.triggerStepHighlight(3);
         }
       }
     },
@@ -750,6 +826,8 @@ export default {
           
           this.logs += `<div class="success-message">[系统消息] 训练已完成，可以下载结果。</div>\n`;
           this.clearTimers();
+          this.stepCompleted[3] = true;
+          this.triggerStepHighlight(3);
         } else if (response.data.status === 'in_progress') {
           this.logs += `<div class="system-message">[系统消息] 训练仍在进行中，请耐心等待。</div>\n`;
           
@@ -805,6 +883,7 @@ export default {
         this.clearTimers();
         this.logs += `<div class="success-message">[系统消息] 根据日志分析，训练已完成</div>\n`;
         this.stepCompleted[3] = true;
+        this.triggerStepHighlight(3);
       }
     },
     clearLogs() {
@@ -828,6 +907,7 @@ export default {
       this.clearTimers();
       this.isStepCollapsed = [false, false, false, false];
       this.stepCompleted = [false, false, false, false];
+      this.clearStepHighlights();
     },
     async fetchDailyMetrics() {
       if (!this.fileId) {
@@ -988,6 +1068,7 @@ export default {
       if (this.chartInstances) {
         this.chartInstances.forEach(chart => chart.destroy());
       }
+      this.clearStepHighlights();
     },
     forceCheckStatus() {
       if (!this.fileId) {
@@ -1049,17 +1130,47 @@ export default {
 }
 
 .panel-section {
+  position: relative;
   background: rgba(6, 18, 36, 0.82);
   border: 1px solid rgba(66, 195, 255, 0.18);
   border-radius: 16px;
   box-shadow: 0 24px 48px rgba(3, 13, 30, 0.5);
   overflow: hidden;
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease,
+    border-color 0.25s ease;
+}
+
+.panel-section::after {
+  content: '';
+  position: absolute;
+  inset: -20% -80%;
+  background: linear-gradient(115deg, rgba(66, 195, 255, 0) 20%, rgba(66, 195, 255, 0.35) 55%, rgba(66, 195, 255, 0) 80%);
+  opacity: 0;
+  transform: translateX(-120%);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+  pointer-events: none;
 }
 
 .panel-section:hover {
   transform: translateY(-3px);
   box-shadow: 0 28px 58px rgba(3, 13, 30, 0.58);
+}
+
+.panel-section.completed {
+  border-color: rgba(66, 195, 255, 0.32);
+  box-shadow: 0 28px 64px rgba(3, 13, 30, 0.65);
+}
+
+.panel-section.completed::after {
+  opacity: 0.4;
+}
+
+.panel-section.is-highlighted::after {
+  opacity: 0.65;
+  transform: translateX(120%);
+  animation: panelHighlight 1s ease;
 }
 
 .panel-header {
@@ -1081,10 +1192,22 @@ export default {
 
 .panel-content {
   padding: 20px 22px;
+  opacity: 1;
+  max-height: 900px;
+  transform: translateY(0);
+  transition:
+    opacity 0.35s ease,
+    max-height 0.35s ease,
+    transform 0.35s ease,
+    padding 0.35s ease;
 }
 
 .panel-section.is-collapsed .panel-content {
   padding: 0;
+  opacity: 0;
+  max-height: 0;
+  transform: translateY(-12px);
+  pointer-events: none;
 }
 
 .panel-section .toggle-button {
@@ -1112,6 +1235,12 @@ export default {
 .step-status .completed-text {
   color: var(--accent-primary);
   font-size: 13px;
+  letter-spacing: 0.08em;
+}
+
+.step-status .completed-icon {
+  color: var(--accent-primary);
+  animation: checkmarkPop 0.6s ease;
 }
 
 .empty-operation-panel,
@@ -1210,6 +1339,33 @@ export default {
     left: 16px;
     right: 16px;
     width: auto;
+  }
+}
+
+@keyframes panelHighlight {
+  0% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.75;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes checkmarkPop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.2;
+  }
+  70% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
   }
 }
 </style>

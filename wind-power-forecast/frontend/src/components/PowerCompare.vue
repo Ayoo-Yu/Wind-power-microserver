@@ -20,7 +20,10 @@
       </template>
     </DigitalHero>
 
-    <el-card class="operational-upload-card glass-panel" shadow="never">
+    <el-card
+      :class="['operational-upload-card', 'glass-panel', { 'panel--pulse': panelPulse.upload }]"
+      shadow="never"
+    >
       <template #header>
         <div class="card-header">
           <div class="card-header-title">
@@ -130,7 +133,7 @@
             </div>
           </el-col>
           <el-col :xs="24" :lg="10">
-            <div class="schema-panel">
+            <div :class="['schema-panel', { 'panel--pulse': panelPulse.schema }]">
               <div class="schema-panel-header">
                 <h3>字段要求</h3>
                 <span>确保 CSV 列与字段类型匹配</span>
@@ -169,7 +172,9 @@
     </el-card>
 
     <div class="config-panel">
-      <el-card class="merged-config-card glass-panel"> 
+      <el-card
+        :class="['merged-config-card', 'glass-panel', { 'panel--pulse': panelPulse.config }]"
+      > 
         <!-- Row 1: Time Picker, Query Button, Download Buttons -->
         <div class="config-row config-row-1">
           <div class="time-picker-wrapper-outer">
@@ -261,7 +266,10 @@
     </div>
 
     <!-- 图表展示区域 -->
-    <div class="chart-container" v-if="chartData">
+    <div
+      v-if="chartData"
+      :class="['chart-container', { 'panel--pulse': panelPulse.chart }]"
+    >
       <div class="chart-wrapper" :key="chartKey">
         <canvas ref="chartCanvas" style="height: 70vh !important;"></canvas>
       </div>
@@ -269,7 +277,9 @@
 
     <!-- 每日指标区域 -->
     <div class="daily-metrics-container" v-if="showDailyMetricsAnalysis && dailyMetrics">
-      <el-card class="metrics-card glass-panel">
+      <el-card
+        :class="['metrics-card', 'glass-panel', { 'panel--pulse': panelPulse.metrics }]"
+      >
         <div class="metrics-header">
           <h3>每日评估指标</h3>
           <div class="metric-buttons">
@@ -305,7 +315,9 @@
 
     <!-- 合格率分析区域 -->
     <div class="qualification-container" v-if="showQualificationRateAnalysis && qualificationRates && Object.keys(qualificationRates).length > 0">
-      <el-card class="qualification-card glass-panel">
+      <el-card
+        :class="['qualification-card', 'glass-panel', { 'panel--pulse': panelPulse.qualification }]"
+      >
         <div class="qualification-header">
           <h3>预测合格率分析</h3>
         </div>
@@ -431,6 +443,15 @@ export default {
       isQuickTimeSwitching: false, // Flag for quick time range button cooldown
       isUpdatingMetricChart: false, // Added for updateMetricChart lock
       isMetricButtonCooling: false, // 指标按钮的冷却状态标志
+      panelPulse: {
+        upload: false,
+        schema: false,
+        config: false,
+        chart: false,
+        metrics: false,
+        qualification: false,
+      },
+      panelPulseTimers: {},
     }
   },
   computed: {
@@ -514,7 +535,49 @@ export default {
     this.fetchComparisonData();
   },
   methods: {
+    triggerPanelPulse(key, duration = 900) {
+      if (!this.panelPulse || !Object.prototype.hasOwnProperty.call(this.panelPulse, key)) {
+        return;
+      }
+      if (!this.panelPulseTimers) {
+        this.panelPulseTimers = {};
+      }
+      if (this.panelPulseTimers[key]) {
+        clearTimeout(this.panelPulseTimers[key]);
+      }
+      this.panelPulse[key] = true;
+      this.panelPulseTimers[key] = setTimeout(() => {
+        this.panelPulse[key] = false;
+        this.panelPulseTimers[key] = null;
+      }, duration);
+    },
+    clearPanelPulse(key) {
+      if (!this.panelPulse || !Object.prototype.hasOwnProperty.call(this.panelPulse, key)) {
+        return;
+      }
+      if (this.panelPulseTimers && this.panelPulseTimers[key]) {
+        clearTimeout(this.panelPulseTimers[key]);
+        this.panelPulseTimers[key] = null;
+      }
+      this.panelPulse[key] = false;
+    },
+    clearAllPanelPulses() {
+      if (this.panelPulseTimers) {
+        Object.keys(this.panelPulseTimers).forEach(key => {
+          if (this.panelPulseTimers[key]) {
+            clearTimeout(this.panelPulseTimers[key]);
+            this.panelPulseTimers[key] = null;
+          }
+        });
+      }
+      if (this.panelPulse) {
+        Object.keys(this.panelPulse).forEach(key => {
+          this.panelPulse[key] = false;
+        });
+      }
+    },
     async handleWindFarmSelectionChange() {
+      this.clearAllPanelPulses();
       ElMessage.info(`已切换到场站：${this.currentWindFarmDisplay}`);
       this.chartData = null;
       this.dailyMetrics = null;
@@ -588,6 +651,9 @@ export default {
           params: { wind_farm_code: this.selectedWindFarm }
         });
         this.operationalSchema = response.data?.columns || {};
+        if (this.operationalSchema && Object.keys(this.operationalSchema).length) {
+          this.triggerPanelPulse('schema');
+        }
       } catch (error) {
         ElMessage.error('获取表字段信息失败');
         console.error('fetchOperationalTableSchema error:', error);
@@ -617,6 +683,8 @@ export default {
       if (clearMessages) {
         this.operationalUploadResult = null;
         this.operationalUploadError = null;
+        this.clearPanelPulse('upload');
+        this.clearPanelPulse('schema');
       }
     },
     formatFileSize(size) {
@@ -658,11 +726,13 @@ export default {
         this.operationalUploadResult = response.data;
         this.operationalUploadError = null;
         ElMessage.success(response.data?.message || '上传成功');
+        this.triggerPanelPulse('upload');
         this.resetOperationalUploadState();
         await Promise.all([
           this.fetchComparisonData(),
           this.fetchOperationalTableSchema(this.selectedOperationalTable)
         ]);
+        this.triggerPanelPulse('schema');
       } catch (error) {
         console.error('uploadOperationalDataset error:', error);
         this.operationalUploadError = error.response?.data?.error || error.message;
@@ -697,6 +767,7 @@ export default {
 
         const response = await axiosInstance.post('power-compare/data', payload);
         await this.processChartData(response.data); 
+        this.triggerPanelPulse('config');
       } catch (error) {
         this.$message.error('数据获取失败');
         console.error(error);
@@ -763,6 +834,9 @@ export default {
           // The following is a placeholder for the rest of your processChartData, ensure the actual content is there.
           console.log('ProcessChartData - 开始计算每日指标');
           this.dailyMetrics = this.calculateDailyMetrics(apiData); 
+          if (this.dailyMetrics && Object.keys(this.dailyMetrics).length > 0) {
+            this.triggerPanelPulse('metrics');
+          }
           console.log('ProcessChartData - 每日指标计算结果:', this.dailyMetrics);
 
           const { labels, datasets: chartJSDatasets, sortedTimestamps } = this.prepareChartJsDataForMainChart(apiData);
@@ -886,6 +960,8 @@ export default {
             console.error("ProcessChartData - 创建主图表实例时出错:", e);
             return;
           }
+
+      this.triggerPanelPulse('chart');
 
       this.$nextTick(() => {
             if (this.showDailyMetricsAnalysis && this.dailyMetrics) {
@@ -1191,6 +1267,9 @@ export default {
       })
       
       this.qualificationRates = qualificationRates
+      if (this.showQualificationRateAnalysis && this.qualificationRates && Object.keys(this.qualificationRates).length > 0) {
+        this.triggerPanelPulse('qualification');
+      }
     },
 
     updateMetricChart() {
@@ -1830,6 +1909,7 @@ export default {
       
       // 更新图表
       this.updateMetricChart();
+      this.triggerPanelPulse('metrics');
       
       // 3秒后解除冷却
       setTimeout(() => {
@@ -1855,12 +1935,23 @@ export default {
           this.metricChart = null;
       }
     },
+    showQualificationRateAnalysis(newValue) {
+      if (newValue && this.qualificationRates && Object.keys(this.qualificationRates).length > 0) {
+        this.triggerPanelPulse('qualification');
+      }
+    },
     dailyMetrics(newMetrics) {
         if (this.showDailyMetricsAnalysis && newMetrics && Object.keys(newMetrics).length > 0) {
+            this.triggerPanelPulse('metrics');
             this.$nextTick(() => {
                 this.updateMetricChart();
             });
         }
+    },
+    qualificationRates(newRates) {
+      if (newRates && Object.keys(newRates).length > 0 && this.showQualificationRateAnalysis) {
+        this.triggerPanelPulse('qualification');
+      }
     },
     // 监听currentMetric变化时的处理已移至handleMetricChange方法
   },
@@ -1874,6 +1965,7 @@ export default {
       this.metricChart.destroy();
       this.metricChart = null;
     }
+    this.clearAllPanelPulses();
   }
 }
 </script>
@@ -1887,6 +1979,38 @@ export default {
   align-items: stretch;
 }
 
+.panel--pulse {
+  position: relative;
+  border-color: rgba(66, 195, 255, 0.32) !important;
+  box-shadow: 0 24px 60px rgba(34, 246, 170, 0.28);
+  animation: panelPulse 0.9s ease;
+}
+
+.panel--pulse::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: radial-gradient(circle at 20% 20%, rgba(66, 195, 255, 0.28), transparent 60%);
+  opacity: 0.45;
+}
+
+@keyframes panelPulse {
+  0% {
+    box-shadow: 0 0 0 rgba(34, 246, 170, 0.35);
+    border-color: rgba(66, 195, 255, 0.22);
+  }
+  50% {
+    box-shadow: 0 24px 66px rgba(34, 246, 170, 0.45);
+    border-color: rgba(66, 195, 255, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 rgba(34, 246, 170, 0.12);
+    border-color: rgba(66, 195, 255, 0.18);
+  }
+}
+
 .upload-panel,
 .schema-panel,
 .action-card,
@@ -1896,6 +2020,9 @@ export default {
 .visualization-section,
 .qualification-card {
   border-radius: 18px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .card-header {
@@ -2028,6 +2155,9 @@ export default {
   border: 1px solid rgba(66, 195, 255, 0.18);
   border-radius: 18px;
   padding: 24px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .visualization-section {

@@ -1,11 +1,11 @@
 <!-- src/components/AutoPredict.vue -->
 <template>
   <DigitalPage>
-    <div
+  <div 
       class="autopredict"
-      v-loading="loading"
-      element-loading-text="加载中，请稍候..."
-    >
+    v-loading="loading" 
+    element-loading-text="加载中，请稍候..."
+  >
       <header class="autopredict-hero digital-panel">
         <div class="hero-primary">
           <p class="hero-eyebrow">自动调度中心</p>
@@ -13,16 +13,26 @@
           <p class="hero-subtitle">集中管理超短期、短期、中期预测调度</p>
           <div class="hero-meta">
             <span class="digital-status-chip">
-              当前场站：{{ selectedWindFarm || '未选择' }}
+          当前场站：{{ selectedWindFarm || '未选择' }}
             </span>
             <div class="hero-metrics">
               <div class="hero-metric">
                 <span class="hero-metric__label">运行中任务</span>
-                <span class="hero-metric__value">{{ activePredictionCount }}</span>
-              </div>
+                <span
+                  class="hero-metric__value"
+                  :class="{ 'hero-metric__value--pulse': heroMetricPulse.active }"
+                >
+                  <span class="hero-metric__value-inner">{{ activeCountDisplay }}</span>
+        </span>
+      </div>
               <div class="hero-metric">
                 <span class="hero-metric__label">待启用任务</span>
-                <span class="hero-metric__value">{{ pendingPredictionCount }}</span>
+                <span
+                  class="hero-metric__value"
+                  :class="{ 'hero-metric__value--pulse': heroMetricPulse.pending }"
+                >
+                  <span class="hero-metric__value-inner">{{ pendingCountDisplay }}</span>
+                </span>
               </div>
             </div>
           </div>
@@ -38,7 +48,10 @@
             <li
               v-for="snapshot in predictionSnapshots"
               :key="snapshot.name"
-              class="prediction-snapshot__item"
+              :class="[
+                'prediction-snapshot__item',
+                { 'snapshot--pulse': snapshotPulse[snapshot.name] }
+              ]"
             >
               <div class="snapshot-header">
                 <span class="snapshot-title">{{ snapshot.title }}</span>
@@ -57,11 +70,21 @@
       </header>
 
       <section class="prediction-grid">
-        <article
-          v-for="(item, index) in predictions"
-          :key="index"
-          class="prediction-card digital-panel digital-panel--interactive"
-        >
+        <TransitionGroup name="prediction-card" tag="div" class="prediction-grid__inner">
+          <article
+            v-for="item in predictions"
+            :key="item.name"
+            :class="[
+              'prediction-card',
+              'digital-panel',
+              'digital-panel--interactive',
+              {
+                'prediction-card--active': item.status,
+                'prediction-card--inactive': !item.status,
+                'prediction-card--pulse': cardPulse[item.name]
+              }
+            ]"
+          >
           <div class="prediction-card__header">
             <div class="prediction-card__title-group">
               <h3 class="prediction-card__title">{{ item.title }}</h3>
@@ -89,42 +112,43 @@
 
           <div class="prediction-card__actions">
             <div class="action-row">
-              <el-button
-                :type="item.status ? 'success' : 'primary'"
-                @click="showConfirmDialog('startTask', '启用预测任务', `确定要启用${item.title}吗？`, item.name)"
-                :disabled="item.status"
-              >
-                {{ item.status ? '运行中' : '启用' }}
-              </el-button>
+            <el-button 
+              :type="item.status ? 'success' : 'primary'" 
+              @click="showConfirmDialog('startTask', '启用预测任务', `确定要启用${item.title}吗？`, item.name)"
+              :disabled="item.status"
+            >
+              {{ item.status ? '运行中' : '启用' }}
+            </el-button>
 
-              <el-button
-                type="danger"
-                @click="showConfirmDialog('stopTask', '停止预测任务', `确定要停止${item.title}吗？此操作会中断当前预测。`, item.name)"
-                :disabled="!item.status"
-              >
-                停止
-              </el-button>
-            </div>
+            <el-button 
+              type="danger" 
+              @click="showConfirmDialog('stopTask', '停止预测任务', `确定要停止${item.title}吗？此操作会中断当前预测。`, item.name)"
+              :disabled="!item.status"
+            >
+              停止
+            </el-button>
+          </div>
             <div class="action-row">
-              <el-button
-                type="warning"
-                @click="showConfirmDialog('triggerTask', '手动触发', `立即触发一次${item.title}的训练和预测任务？`, item.name)"
-                :disabled="!item.status"
-              >
-                手动触发
-              </el-button>
-              <el-button
-                type="danger"
-                @click="showConfirmDialog('deleteTask', '删除预测任务', `确定要删除${item.title}的调度配置吗？`, item.name)"
-              >
-                删除
-              </el-button>
+            <el-button 
+              type="warning" 
+              @click="showConfirmDialog('triggerTask', '手动触发', `立即触发一次${item.title}的训练和预测任务？`, item.name)"
+              :disabled="!item.status"
+            >
+              手动触发
+            </el-button>
+            <el-button 
+              type="danger" 
+              @click="showConfirmDialog('deleteTask', '删除预测任务', `确定要删除${item.title}的调度配置吗？`, item.name)"
+            >
+              删除
+            </el-button>
               <el-button type="primary" @click="fetchLogs(item.name)">
                 日志
               </el-button>
-            </div>
           </div>
+        </div>
         </article>
+        </TransitionGroup>
       </section>
     </div>
 
@@ -243,6 +267,186 @@ const predictions = reactive([
 const loading = ref(true)
 const { selectedWindFarm } = useWindFarmStore()
 
+const heroMetricPulse = reactive({ active: false, pending: false })
+const heroPulseTimers = { active: null, pending: null }
+const activeCountDisplay = ref(0)
+const pendingCountDisplay = ref(predictions.length)
+const heroMetricAnimations = { active: null, pending: null }
+const snapshotPulse = reactive({})
+const snapshotPulseTimers = {}
+const cardPulse = reactive({})
+const cardPulseTimers = {}
+const previousPredictionState = reactive({})
+const previousTriggeredAt = reactive({})
+let visualsInitialized = false
+
+const heroDisplayRefs = {
+  active: activeCountDisplay,
+  pending: pendingCountDisplay,
+}
+
+const ensurePulseKey = (map, key) => {
+  if (!Object.prototype.hasOwnProperty.call(map, key)) {
+    map[key] = false
+  }
+}
+
+const triggerPulse = (map, timers, key, duration = 900) => {
+  ensurePulseKey(map, key)
+  if (timers[key]) {
+    clearTimeout(timers[key])
+  }
+  map[key] = true
+  timers[key] = setTimeout(() => {
+    map[key] = false
+    timers[key] = null
+  }, duration)
+}
+
+const triggerSnapshotPulse = (key, duration) => triggerPulse(snapshotPulse, snapshotPulseTimers, key, duration)
+const triggerCardPulse = (key, duration) => triggerPulse(cardPulse, cardPulseTimers, key, duration)
+
+const triggerHeroPulse = (key, duration = 900) => {
+  if (!Object.prototype.hasOwnProperty.call(heroMetricPulse, key)) {
+    return
+  }
+  if (heroPulseTimers[key]) {
+    clearTimeout(heroPulseTimers[key])
+  }
+  heroMetricPulse[key] = true
+  heroPulseTimers[key] = setTimeout(() => {
+    heroMetricPulse[key] = false
+    heroPulseTimers[key] = null
+  }, duration)
+}
+
+const animateHeroMetric = (key, targetValue) => {
+  const displayRef = heroDisplayRefs[key]
+  if (!displayRef) {
+    return
+  }
+  const target = Number.isFinite(Number(targetValue)) ? Number(targetValue) : 0
+  if (heroMetricAnimations[key]) {
+    cancelAnimationFrame(heroMetricAnimations[key])
+    heroMetricAnimations[key] = null
+  }
+  const start = Number(displayRef.value) || 0
+  const diff = target - start
+  if (diff === 0) {
+    displayRef.value = target
+    return
+  }
+  const duration = 600
+  const startTime = typeof performance !== 'undefined' ? performance.now() : Date.now()
+  const step = (timestamp) => {
+    const now = timestamp || (typeof performance !== 'undefined' ? performance.now() : Date.now())
+    const progress = Math.min((now - startTime) / duration, 1)
+    const eased = 1 - Math.pow(1 - progress, 3)
+    displayRef.value = Math.round(start + diff * eased)
+    if (progress < 1) {
+      heroMetricAnimations[key] = requestAnimationFrame(step)
+    } else {
+      heroMetricAnimations[key] = null
+    }
+  }
+  triggerHeroPulse(key)
+  heroMetricAnimations[key] = requestAnimationFrame(step)
+}
+
+const updateVisualIndicators = () => {
+  const activeCount = predictions.filter(item => item.status).length
+  const pendingCount = predictions.length - activeCount
+
+  predictions.forEach((prediction) => {
+    ensurePulseKey(cardPulse, prediction.name)
+    ensurePulseKey(snapshotPulse, prediction.name)
+  })
+
+  if (!visualsInitialized) {
+    activeCountDisplay.value = activeCount
+    pendingCountDisplay.value = pendingCount
+    predictions.forEach((prediction) => {
+      previousPredictionState[prediction.name] = prediction.status
+      previousTriggeredAt[prediction.name] = prediction.meta.lastTriggeredAt
+    })
+    visualsInitialized = true
+    return
+  }
+
+  animateHeroMetric('active', activeCount)
+  animateHeroMetric('pending', pendingCount)
+
+  predictions.forEach((prediction) => {
+    const previousStatus = previousPredictionState[prediction.name]
+    const previousTrigger = previousTriggeredAt[prediction.name]
+
+    if (previousStatus !== undefined && previousStatus !== prediction.status) {
+      triggerCardPulse(prediction.name)
+      triggerSnapshotPulse(prediction.name)
+    }
+
+    if (previousTrigger !== undefined && previousTrigger !== prediction.meta.lastTriggeredAt) {
+      triggerCardPulse(prediction.name)
+      triggerSnapshotPulse(prediction.name)
+    }
+
+    previousPredictionState[prediction.name] = prediction.status
+    previousTriggeredAt[prediction.name] = prediction.meta.lastTriggeredAt
+  })
+}
+
+const resetVisualState = () => {
+  Object.keys(heroPulseTimers).forEach((key) => {
+    if (heroPulseTimers[key]) {
+      clearTimeout(heroPulseTimers[key])
+      heroPulseTimers[key] = null
+    }
+    heroMetricPulse[key] = false
+  })
+
+  Object.keys(heroMetricAnimations).forEach((key) => {
+    if (heroMetricAnimations[key]) {
+      cancelAnimationFrame(heroMetricAnimations[key])
+      heroMetricAnimations[key] = null
+    }
+  })
+
+  activeCountDisplay.value = 0
+  pendingCountDisplay.value = predictions.length
+
+  Object.keys(snapshotPulse).forEach((key) => {
+    snapshotPulse[key] = false
+  })
+
+  Object.keys(snapshotPulseTimers).forEach((key) => {
+    if (snapshotPulseTimers[key]) {
+      clearTimeout(snapshotPulseTimers[key])
+    }
+    delete snapshotPulseTimers[key]
+  })
+
+  Object.keys(cardPulse).forEach((key) => {
+    cardPulse[key] = false
+  })
+
+  Object.keys(cardPulseTimers).forEach((key) => {
+    if (cardPulseTimers[key]) {
+      clearTimeout(cardPulseTimers[key])
+    }
+    delete cardPulseTimers[key]
+  })
+
+  Object.keys(previousPredictionState).forEach((key) => {
+    delete previousPredictionState[key]
+  })
+
+  Object.keys(previousTriggeredAt).forEach((key) => {
+    delete previousTriggeredAt[key]
+  })
+
+  visualsInitialized = false
+}
+
 // 定时重启相关变量 - 已移除
 // const scheduleDialogVisible = ref(false)
 // const scheduleTime = ref('')
@@ -315,9 +519,11 @@ onUnmounted(() => {
     clearInterval(intervalId)
     intervalId = null
   }
+  resetVisualState()
 })
 
 watch(selectedWindFarm, () => {
+  resetVisualState()
   fetchStatus()
 })
 
@@ -394,10 +600,14 @@ const fetchStatus = async () => {
       p.meta.lastTriggeredAt = meta[p.name]?.last_triggered_at || meta[p.name]?.lastTriggeredAt || null
       p.meta.scheduleCron = meta[p.name]?.schedule_cron || meta[p.name]?.scheduleCron || null
     })
+    updateVisualIndicators()
   } catch (error) {
     console.error('获取状态失败:', error)
   } finally {
     loading.value = false
+    if (!visualsInitialized) {
+      updateVisualIndicators()
+    }
   }
 }
 
@@ -409,14 +619,6 @@ const predictionSnapshots = computed(() =>
     schedule: item.meta.scheduleCron ? `计划：${item.meta.scheduleCron}` : '计划：未配置',
     lastTriggered: `最近触发：${formatDateTime(item.meta.lastTriggeredAt)}`
   }))
-)
-
-const activePredictionCount = computed(() =>
-  predictions.filter(item => item.status).length
-)
-
-const pendingPredictionCount = computed(() =>
-  predictions.length - activePredictionCount.value
 )
 
 const showConfirmDialog = (action, title, message, params = null) => {
@@ -664,6 +866,31 @@ const handleLogTypeChange = () => {
   color: var(--accent-primary, #38c4ff);
 }
 
+.hero-metric__value--pulse {
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+}
+
+.hero-metric__value-inner {
+  display: inline-block;
+  transform: scale(1);
+  transition: transform 0.3s ease;
+}
+
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
@@ -701,6 +928,10 @@ const handleLogTypeChange = () => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.snapshot--pulse {
+  animation: pulse 1.5s infinite ease-in-out;
 }
 
 .snapshot-header {
@@ -746,6 +977,12 @@ const handleLogTypeChange = () => {
 }
 
 .prediction-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 24px;
+}
+
+.prediction-grid__inner {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 24px;
