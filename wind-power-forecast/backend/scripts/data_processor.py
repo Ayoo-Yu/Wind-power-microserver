@@ -5,41 +5,110 @@ from sklearn.preprocessing import StandardScaler
 from .config import LAGS
 
 lags = LAGS
+
+
+def _normalize_column_name(column_name: str) -> str:
+    """去除列名首尾空格并保持原大小写用于比较。"""
+    return column_name.strip() if isinstance(column_name, str) else ''
+
+
+def _resolve_required_column(data: pd.DataFrame, target: str, aliases=None) -> str:
+    """
+    查找并标准化必需列名称。如果找到别名则重命名为目标列名。
+    未找到时抛出 KeyError。
+    """
+    aliases = aliases or []
+    normalized_map = {_normalize_column_name(col).lower(): col for col in data.columns}
+    search_keys = [_normalize_column_name(target).lower()] + [
+        _normalize_column_name(alias).lower() for alias in aliases
+    ]
+
+    for key in search_keys:
+        if key in normalized_map:
+            original = normalized_map[key]
+            if original != target:
+                data.rename(columns={original: target}, inplace=True)
+            return target
+
+    raise KeyError(target)
+
+
+def _resolve_optional_column(data: pd.DataFrame, target: str, aliases=None):
+    """查找并标准化可选列名称，未找到返回 None。"""
+    try:
+        return _resolve_required_column(data, target, aliases)
+    except KeyError:
+        return None
+
+
 def load_data(file_path):
     """
-    加载数据并处理NaN值
+    加载数据并处理NaN值，顺便清理列名首尾空格。
     """
     data = pd.read_csv(file_path)
+    cleaned_mapping = {col: _normalize_column_name(col) for col in data.columns}
+    if any(new != old for old, new in cleaned_mapping.items()):
+        data.rename(columns=cleaned_mapping, inplace=True)
     data = data.dropna()
     return data
 
+
 def preprocess_data(data):
     """
-    数据预处理：转换时间戳，提取时间特征，分离特征和目标变量
+    数据预处理：转换时间戳，提取时间特征，分离特征和目标变量。
+    支持常见的时间戳别名，如 timestamp、time、datetime 等。
     """
-    data['Timestamp'] = pd.to_datetime(data['Timestamp'])
-    data['Year'] = data['Timestamp'].dt.year
-    data['Month'] = data['Timestamp'].dt.month
-    data['Day'] = data['Timestamp'].dt.day
-    data['Hour'] = data['Timestamp'].dt.hour
-    features = [col for col in data.columns if col not in ['Timestamp','wp_true','ws_all']]
+    timestamp_col = _resolve_required_column(
+        data,
+        'Timestamp',
+        aliases=['timestamp', 'time', 'datetime', 'date']
+    )
+    data[timestamp_col] = pd.to_datetime(data[timestamp_col])
+    data['Year'] = data[timestamp_col].dt.year
+    data['Month'] = data[timestamp_col].dt.month
+    data['Day'] = data[timestamp_col].dt.day
+    data['Hour'] = data[timestamp_col].dt.hour
+
+    wp_true_col = _resolve_required_column(
+        data,
+        'wp_true',
+        aliases=['wp', 'actual_power', 'power', 'true_power']
+    )
+
+    ws_all_col = _resolve_optional_column(
+        data,
+        'ws_all',
+        aliases=['wind_speed', 'ws']
+    )
+
+    exclusion_list = ['Timestamp', wp_true_col]
+    if ws_all_col:
+        exclusion_list.append(ws_all_col)
+
+    features = [col for col in data.columns if col not in exclusion_list]
     X = data[features]
-    y = data['wp_true'].fillna(data['wp_true'].mean())
-    
+    y = data[wp_true_col].fillna(data[wp_true_col].mean())
+
     return X, y
+
 
 def preprocess_data_pre(data):
     """
-    数据预处理：转换时间戳，提取时间特征，分离特征和目标变量
+    数据预处理（预测阶段）：转换时间戳并保留时间序列。
     """
-    data['Timestamp'] = pd.to_datetime(data['Timestamp'])
-    data['Year'] = data['Timestamp'].dt.year
-    data['Month'] = data['Timestamp'].dt.month
-    data['Day'] = data['Timestamp'].dt.day
-    data['Hour'] = data['Timestamp'].dt.hour
+    timestamp_col = _resolve_required_column(
+        data,
+        'Timestamp',
+        aliases=['timestamp', 'time', 'datetime', 'date']
+    )
+    data[timestamp_col] = pd.to_datetime(data[timestamp_col])
+    data['Year'] = data[timestamp_col].dt.year
+    data['Month'] = data[timestamp_col].dt.month
+    data['Day'] = data[timestamp_col].dt.day
+    data['Hour'] = data[timestamp_col].dt.hour
     features = [col for col in data.columns if col not in ['Timestamp']]
     X = data[features]
-    timestamps = data['Timestamp']  # 保存时间戳
+    timestamps = data[timestamp_col]  # 保存时间戳
     return X, timestamps
 
 def split_data(X, y, train_ratio=0.9):

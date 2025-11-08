@@ -39,6 +39,7 @@
             <div class="step-status">
               <h2>步骤一：选择训练集</h2>
               <span v-if="stepCompleted[0]" class="completed-text">已完成</span>
+              <span v-else-if="selectedFile" class="pending-text">已选择</span>
               <el-icon v-if="stepCompleted[0]" class="completed-icon"><Check /></el-icon>
             </div>
             <el-button type="text" class="toggle-button">
@@ -55,6 +56,18 @@
               :uploadText="customUploadText_modeltrain"
               @file-selected="onFileSelected"
             />
+            <transition name="fade-slide">
+              <div v-if="currentFileSummary" class="selected-file-summary">
+                <el-icon class="file-icon"><Document /></el-icon>
+                <div class="file-meta">
+                  <div class="file-name">{{ currentFileSummary.name }}</div>
+                  <div class="file-detail">
+                    大小 {{ formatFileSize(currentFileSummary.size) }}
+                    <span v-if="currentFileSummary.uploadDate"> · {{ currentFileSummary.uploadDate }}</span>
+                  </div>
+                </div>
+              </div>
+            </transition>
             <p class="upload-tip">请上传本系统导出的CSV文件，且不超过500MB</p>
           </div>
         </section>
@@ -244,7 +257,7 @@ import PredictionButtons from './PredictionButtons.vue';
 import LogViewer from './LogViewer.vue';
 import LoadingIndicator from './LoadingIndicator.vue';
 import UploadProgress from './UploadProgress.vue';
-import { InfoFilled, ArrowDown, Check, Refresh } from '@element-plus/icons-vue';
+import { InfoFilled, ArrowDown, Check, Refresh, Document } from '@element-plus/icons-vue';
 import Papa from 'papaparse';
 import axiosInstance from '../api/axios';
 import { getSelectedWindFarmCode } from '@/store/windFarm';
@@ -295,6 +308,7 @@ export default {
     ArrowDown,
     Check,
     Refresh,
+    Document,
   },
   data() {
     return {
@@ -386,16 +400,50 @@ export default {
         },
       ]
     },
+    currentFileSummary() {
+      if (this.selectedFile) {
+        return {
+          name: this.selectedFile.name,
+          size: this.selectedFile.size,
+          uploadDate: this.fileInfo ? this.fileInfo.uploadDate : ''
+        };
+      }
+      if (this.fileInfo) {
+        return {
+          name: this.fileInfo.name,
+          size: this.fileInfo.size,
+          uploadDate: this.fileInfo.uploadDate || ''
+        };
+      }
+      return null;
+    },
   },
   methods: {
     composeDownloadUrl(path) {
       return buildDownloadUrl(this.backendBaseUrl, path);
     },
+    formatFileSize(size) {
+      if (size === 0) {
+        return '0 B';
+      }
+      if (!size) {
+        return '--';
+      }
+      const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+      let index = 0;
+      let current = size;
+      while (current >= 1024 && index < units.length - 1) {
+        current /= 1024;
+        index += 1;
+      }
+      const digits = index === 0 ? 0 : current >= 100 ? 0 : 1;
+      return `${current.toFixed(digits)} ${units[index]}`;
+    },
     triggerStepHighlight(index) {
       if (index < 0 || index >= this.stepHighlights.length) {
         return;
       }
-      this.$set(this.stepHighlights, index, true);
+      this.stepHighlights.splice(index, 1, true);
       if (!Array.isArray(this.stepHighlightTimers)) {
         this.stepHighlightTimers = [];
       }
@@ -403,7 +451,7 @@ export default {
         clearTimeout(this.stepHighlightTimers[index]);
       }
       this.stepHighlightTimers[index] = setTimeout(() => {
-        this.$set(this.stepHighlights, index, false);
+        this.stepHighlights.splice(index, 1, false);
         this.stepHighlightTimers[index] = null;
       }, 1000);
     },
@@ -411,7 +459,7 @@ export default {
       if (index < 0 || index >= this.stepHighlights.length) {
         return;
       }
-      this.$set(this.stepHighlights, index, false);
+      this.stepHighlights.splice(index, 1, false);
       if (this.stepHighlightTimers && this.stepHighlightTimers[index]) {
         clearTimeout(this.stepHighlightTimers[index]);
         this.stepHighlightTimers[index] = null;
@@ -1115,12 +1163,15 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
 }
 
 .left-panel {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 
 .reset-all-button {
@@ -1238,6 +1289,12 @@ export default {
   letter-spacing: 0.08em;
 }
 
+.step-status .pending-text {
+  color: var(--text-secondary);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+
 .step-status .completed-icon {
   color: var(--accent-primary);
   animation: checkmarkPop 0.6s ease;
@@ -1266,6 +1323,51 @@ export default {
   color: var(--text-secondary);
   font-size: 13px;
   text-align: center;
+}
+
+.selected-file-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  background: rgba(12, 38, 68, 0.72);
+  border: 1px solid rgba(66, 195, 255, 0.28);
+  border-radius: 12px;
+}
+
+.file-icon {
+  font-size: 20px;
+  color: var(--accent-primary);
+}
+
+.file-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.file-name {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.file-detail {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.25s ease;
+}
+
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 .log-section {

@@ -194,7 +194,7 @@ def train_model():
                 local_path = os.path.join(root, file)
                 sanitized_metrics_filename = sanitize_filename(file, fallback="metrics.json")
                 object_name = get_metrics_path(
-                    model_identifier=model_version,
+                    model_version,
                     wind_farm_code=wind_farm_code,
                     filename=sanitized_metrics_filename,
                     computed_at=metrics_timestamp,
@@ -211,7 +211,7 @@ def train_model():
         # 如果有评估报告则上传
         if report_path and os.path.exists(report_path):
             report_object_name = get_metrics_path(
-                model_identifier=model_version,
+                model_version,
                 wind_farm_code=wind_farm_code,
                 filename=sanitize_filename("report.txt", fallback="report.txt"),
                 computed_at=metrics_timestamp,

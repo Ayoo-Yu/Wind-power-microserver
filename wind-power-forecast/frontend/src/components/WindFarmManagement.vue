@@ -351,7 +351,7 @@ export default {
     const fetchReadinessMetrics = async () => {
       readinessLoading.value = true
       try {
-        const response = await axiosInstance.get('/report/farms/data-readiness', {
+        const response = await axiosInstance.get('report/farms/data-readiness', {
           validateStatus: status => status < 400 || status === 404 || status === 405,
         })
 

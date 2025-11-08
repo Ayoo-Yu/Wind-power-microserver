@@ -37,7 +37,7 @@ const loadWindFarms = async () => {
   loadError.value = null
 
   try {
-    const response = await axiosInstance.get('/report/farms')
+    const response = await axiosInstance.get('report/farms')
     const farms = Array.isArray(response.data) ? response.data : []
     windFarms.value = farms
 

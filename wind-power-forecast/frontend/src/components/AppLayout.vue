@@ -312,7 +312,7 @@ export default {
           if (token && currentUser.value) {
             console.log('本地有Token和用户，尝试调用/auth/me验证...');
             try {
-              await axiosInstance.get('/auth/me');
+              await axiosInstance.get('auth/me');
               console.log('Token验证成功 (通过/auth/me)');
               isAuthenticated = true; // 验证成功！
             } catch (apiError) {
