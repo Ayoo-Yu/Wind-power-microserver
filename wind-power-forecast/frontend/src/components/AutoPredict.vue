@@ -1,78 +1,131 @@
 <!-- src/components/AutoPredict.vue -->
 <template>
-  <div 
-    class="autopredict-container power-predict-container" 
-    v-loading="loading" 
-    element-loading-text="加载中，请稍候..."
-  >
-    <div class="autopredict-content page-shell">
-      <div class="header-panel glass-panel">
-        <div class="header-text">
-          <h1 class="page-title">自动化预测功能管理</h1>
-          <p class="page-subtitle">集中管理超短期、短期、中期预测调度</p>
+  <DigitalPage>
+    <div
+      class="autopredict"
+      v-loading="loading"
+      element-loading-text="加载中，请稍候..."
+    >
+      <header class="autopredict-hero digital-panel">
+        <div class="hero-primary">
+          <p class="hero-eyebrow">自动调度中心</p>
+          <h1 class="hero-title">自动化预测功能管理</h1>
+          <p class="hero-subtitle">集中管理超短期、短期、中期预测调度</p>
+          <div class="hero-meta">
+            <span class="digital-status-chip">
+              当前场站：{{ selectedWindFarm || '未选择' }}
+            </span>
+            <div class="hero-metrics">
+              <div class="hero-metric">
+                <span class="hero-metric__label">运行中任务</span>
+                <span class="hero-metric__value">{{ activePredictionCount }}</span>
+              </div>
+              <div class="hero-metric">
+                <span class="hero-metric__label">待启用任务</span>
+                <span class="hero-metric__value">{{ pendingPredictionCount }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="hero-actions">
+            <el-button type="primary" :loading="loading" @click="fetchStatus">
+              刷新状态
+            </el-button>
+          </div>
         </div>
-        <span class="status-indicator wind-farm-chip">
-          当前场站：{{ selectedWindFarm || '未选择' }}
-        </span>
-      </div>
+        <div class="hero-secondary">
+          <h3 class="hero-secondary__title">调度概览</h3>
+          <ul class="prediction-snapshot">
+            <li
+              v-for="snapshot in predictionSnapshots"
+              :key="snapshot.name"
+              class="prediction-snapshot__item"
+            >
+              <div class="snapshot-header">
+                <span class="snapshot-title">{{ snapshot.title }}</span>
+                <span
+                  class="snapshot-status"
+                  :class="snapshot.status ? 'is-online' : 'is-offline'"
+                >
+                  {{ snapshot.status ? '运行中' : '待启用' }}
+                </span>
+              </div>
+              <p class="snapshot-meta">{{ snapshot.schedule }}</p>
+              <p class="snapshot-meta">{{ snapshot.lastTriggered }}</p>
+            </li>
+          </ul>
+        </div>
+      </header>
 
-      <div class="prediction-grid">
-        <div 
-          v-for="(item, index) in predictions" 
-          :key="index" 
-          class="prediction-card glass-panel"
+      <section class="prediction-grid">
+        <article
+          v-for="(item, index) in predictions"
+          :key="index"
+          class="prediction-card digital-panel digital-panel--interactive"
         >
-          <div class="prediction-header">
-            <h3>{{ item.title }}</h3>
-            <el-tag :type="item.status ? 'success' : 'info'" effect="plain">
+          <div class="prediction-card__header">
+            <div class="prediction-card__title-group">
+              <h3 class="prediction-card__title">{{ item.title }}</h3>
+              <p class="prediction-card__subtitle">调度标识：{{ item.name }}</p>
+            </div>
+            <el-tag :type="item.status ? 'success' : 'info'" effect="dark">
               {{ item.status ? '已启用' : '未启用' }}
             </el-tag>
           </div>
-          <div class="prediction-meta">
+
+          <div class="prediction-card__meta">
             <div class="meta-line">
               <span class="meta-label">最近触发</span>
-              <span>{{ formatDateTime(item.meta.lastTriggeredAt) || '暂无记录' }}</span>
+              <span class="meta-value">
+                {{ formatDateTime(item.meta.lastTriggeredAt) || '暂无记录' }}
+              </span>
             </div>
             <div class="meta-line">
               <span class="meta-label">计划表达式</span>
-              <span>{{ item.meta.scheduleCron || '默认计划' }}</span>
+              <span class="meta-value">
+                {{ item.meta.scheduleCron || '默认计划' }}
+              </span>
             </div>
           </div>
-          <div class="button-group primary">
-            <el-button 
-              :type="item.status ? 'success' : 'primary'" 
-              @click="showConfirmDialog('startTask', '启用预测任务', `确定要启用${item.title}吗？`, item.name)"
-              :disabled="item.status"
-            >
-              {{ item.status ? '运行中' : '启用' }}
-            </el-button>
 
-            <el-button 
-              type="danger" 
-              @click="showConfirmDialog('stopTask', '停止预测任务', `确定要停止${item.title}吗？此操作会中断当前预测。`, item.name)"
-              :disabled="!item.status"
-            >
-              停止
-            </el-button>
+          <div class="prediction-card__actions">
+            <div class="action-row">
+              <el-button
+                :type="item.status ? 'success' : 'primary'"
+                @click="showConfirmDialog('startTask', '启用预测任务', `确定要启用${item.title}吗？`, item.name)"
+                :disabled="item.status"
+              >
+                {{ item.status ? '运行中' : '启用' }}
+              </el-button>
+
+              <el-button
+                type="danger"
+                @click="showConfirmDialog('stopTask', '停止预测任务', `确定要停止${item.title}吗？此操作会中断当前预测。`, item.name)"
+                :disabled="!item.status"
+              >
+                停止
+              </el-button>
+            </div>
+            <div class="action-row">
+              <el-button
+                type="warning"
+                @click="showConfirmDialog('triggerTask', '手动触发', `立即触发一次${item.title}的训练和预测任务？`, item.name)"
+                :disabled="!item.status"
+              >
+                手动触发
+              </el-button>
+              <el-button
+                type="danger"
+                @click="showConfirmDialog('deleteTask', '删除预测任务', `确定要删除${item.title}的调度配置吗？`, item.name)"
+              >
+                删除
+              </el-button>
+              <el-button type="primary" @click="fetchLogs(item.name)">
+                日志
+              </el-button>
+            </div>
           </div>
-          <div class="button-group secondary">
-            <el-button 
-              type="warning" 
-              @click="showConfirmDialog('triggerTask', '手动触发', `立即触发一次${item.title}的训练和预测任务？`, item.name)"
-              :disabled="!item.status"
-            >
-              手动触发
-            </el-button>
-            <el-button 
-              type="danger" 
-              @click="showConfirmDialog('deleteTask', '删除预测任务', `确定要删除${item.title}的调度配置吗？`, item.name)"
-            >
-              删除
-            </el-button>
-            <el-button type="primary" @click="fetchLogs(item.name)">日志</el-button>
-          </div>
-        </div>
-      </div>
+        </article>
+      </section>
     </div>
 
     <!-- 操作确认对话框 -->
@@ -147,14 +200,15 @@
 
     <!-- 任务历史记录对话框已移除 -->
     <!-- 历史记录详情对话框已移除 -->
-  </div>
+  </DigitalPage>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import axiosInstance from '../api/axios'
 import { useWindFarmStore } from '../store/windFarm'
+import DigitalPage from './common/DigitalPage.vue'
 
 const predictions = reactive([
   {
@@ -347,6 +401,24 @@ const fetchStatus = async () => {
   }
 }
 
+const predictionSnapshots = computed(() =>
+  predictions.map(item => ({
+    name: item.name,
+    title: item.title,
+    status: item.status,
+    schedule: item.meta.scheduleCron ? `计划：${item.meta.scheduleCron}` : '计划：未配置',
+    lastTriggered: `最近触发：${formatDateTime(item.meta.lastTriggeredAt)}`
+  }))
+)
+
+const activePredictionCount = computed(() =>
+  predictions.filter(item => item.status).length
+)
+
+const pendingPredictionCount = computed(() =>
+  predictions.length - activePredictionCount.value
+)
+
 const showConfirmDialog = (action, title, message, params = null) => {
   confirmDialog.action = action
   confirmDialog.title = title
@@ -508,353 +580,271 @@ const handleLogTypeChange = () => {
 </script>
 
 <style scoped>
-/* Styles remain largely the same, but some related to removed dialogs might be implicitly unused */
-.autopredict-container {
-  min-height: 100vh;
-  padding: 40px;
-  position: relative;
-  z-index: 1;
-}
-
-.power-predict-container {
-  min-height: 100vh;
-  background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
-  background-size: 400% 400%;
-  animation: gradient 15s ease infinite;
-  position: relative;
-}
-
-@keyframes gradient {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-.page-title {
-  color: white;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.hero-section {
-  text-align: center;
-  padding: 60px 20px;
-  position: relative;
-}
-
-.hero-section::before {
-  content: "✨";
-  position: absolute;
-  top: 0;
-  left: 0;
-  font-size: 24px;
-  opacity: 0.7;
-}
-
-.hero-section::after {
-  content: "✨";
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  font-size: 24px;
-  opacity: 0.7;
-}
-
-.autopredict-container h2 {
-  font-size: 48px;
-  font-weight: 600;
-  margin-bottom: 40px;
-  text-align: center;
-  color: #1d1d1f;
-  letter-spacing: -0.003em;
-  line-height: 1.1;
-}
-
-.global-buttons {
+.autopredict {
   display: flex;
-  gap: 16px;
-  justify-content: center;
-  margin-bottom: 24px;
+  flex-direction: column;
+  gap: 32px;
 }
 
-.el-button {
-  height: 40px;  
-  padding: 0 20px;
-  font-size: 15px;
-  font-weight: 500;
-  border-radius: 20px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  letter-spacing: -0.01em;
-  border: none;
-  min-width: 100px; 
-}
-
-.el-button--primary {
-  background: #0071e3;
-  color: #ffffff;
-}
-
-.el-button--primary:hover {
-  background: #0077ed;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 113, 227, 0.12);
-}
-
-.el-button--success {
-  background: #34c759;
-  color: #ffffff;
-}
-
-.el-button--success:hover {
-  background: #30b753;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(52, 199, 89, 0.12);
-}
-
-.el-button--danger {
-  background: #ff3b30;
-  color: #ffffff;
-}
-
-.el-button--danger:hover {
-  background: #ff291e;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(255, 59, 48, 0.12);
-}
-
-.el-button--warning {
-  background: #ff9500;
-  color: #ffffff;
-}
-
-.el-button--warning:hover {
-  background: #ff8500;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(255, 149, 0, 0.12);
-}
-
-.el-button--info {
-  background: #8e8e93;
-  color: #ffffff;
-}
-
-.el-button--info:hover {
-  background: #7c7c82;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(142, 142, 147, 0.12);
-}
-
-.el-button.is-disabled,
-.el-button.is-disabled:hover {
-  background: #e5e5ea;
-  color: #8e8e93;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
-
-.button-group {
+.autopredict-hero {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  justify-content: center;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 28px;
+  align-items: stretch;
+}
+
+.hero-primary {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.hero-eyebrow {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.hero-title {
+  margin: 0;
+  font-size: 40px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.hero-subtitle {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
   align-items: center;
-  padding: 12px 16px;
-  margin-bottom: 0;
 }
 
-.button-group .el-button {
-  width: 100%;
-  justify-content: center;
-  min-width: 80px;
+.hero-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
-.el-row {
-  margin: 24px -16px;
-}
-
-.el-col {
-  padding: 0 16px;
-  margin-bottom: 24px;
-}
-
-.el-card {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(10px);
-  border: 1px solid #f0f0f0;
-  border-radius: 20px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
-  padding: 16px;
-}
-
-.el-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
-}
-
-.prediction-card {
-  padding: 30px;
-  border: none;
-}
-
-.prediction-card :deep(.el-card__header) {
-  padding: 0 0 20px 0;
-  border-bottom: 1px solid #f2f2f2;
-}
-
-.prediction-card :deep(.el-card__header span) {
-  font-size: 24px;
-  font-weight: 500;
-  color: #1d1d1f;
-}
-
-.prediction-meta {
+.hero-metric {
+  min-width: 140px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(66, 195, 255, 0.25);
+  background: linear-gradient(150deg, rgba(9, 24, 48, 0.65) 0%, rgba(6, 18, 36, 0.72) 100%);
+  box-shadow: 0 18px 48px rgba(4, 18, 36, 0.35);
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-bottom: 16px;
+}
+
+.hero-metric__label {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.hero-metric__value {
+  font-family: 'Rajdhani', 'Inter', sans-serif;
+  font-size: 32px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-primary, #38c4ff);
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.hero-secondary {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.hero-secondary__title {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.prediction-snapshot {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 16px;
+}
+
+.prediction-snapshot__item {
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(66, 195, 255, 0.2);
+  background: linear-gradient(145deg, rgba(9, 24, 48, 0.9) 0%, rgba(5, 18, 36, 0.82) 100%);
+  box-shadow: 0 20px 48px rgba(2, 16, 42, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.snapshot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.snapshot-title {
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  color: var(--text-primary);
+}
+
+.snapshot-status {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border: 1px solid rgba(66, 195, 255, 0.32);
+  background: rgba(66, 195, 255, 0.12);
+}
+
+.snapshot-status.is-online {
+  border-color: rgba(34, 246, 170, 0.55);
+  background: rgba(34, 246, 170, 0.18);
+  color: #22f6aa;
+}
+
+.snapshot-status.is-offline {
+  border-color: rgba(215, 87, 255, 0.45);
+  background: rgba(215, 87, 255, 0.16);
+  color: #f4a4ff;
+}
+
+.snapshot-meta {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+.prediction-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 24px;
+}
+
+.prediction-card {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 100%;
+}
+
+.prediction-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.prediction-card__title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.prediction-card__title {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.prediction-card__subtitle {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+
+.prediction-card__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .meta-line {
   display: flex;
   justify-content: space-between;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.85);
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
 .meta-label {
-  color: rgba(255, 255, 255, 0.6);
-  margin-right: 4px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
-.el-dialog {
-  border-radius: 20px;
-  overflow: hidden;
-  transform: none !important;
-  margin: 0 auto !important;
-  position: relative;
-  max-width: 90%;
-  top: 50%;
-  margin-top: 0 !important;
+.meta-value {
+  color: var(--text-primary);
+  letter-spacing: 0.08em;
 }
 
-:deep(.el-overlay-dialog) {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: auto;
-}
-
-.el-dialog :deep(.el-dialog__header) {
-  padding: 24px;
-  margin: 0;
-  background: #f5f5f7;
-}
-
-.el-dialog :deep(.el-dialog__title) {
-  font-size: 20px;
-  font-weight: 500;
-  color: #1d1d1f;
-}
-
-.el-dialog :deep(.el-dialog__body) {
-  padding: 24px;
-  text-align: center;
+.prediction-card__actions {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  gap: 14px;
 }
 
-.el-dialog :deep(.el-dialog__body p) {
-  margin: 0;
-  text-align: center;
-  width: 100%;
-}
-
-.el-dialog :deep(.el-dialog__footer) {
-  padding: 16px 24px 24px;
-  text-align: center;
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .dialog-footer-buttons {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  width: 100%;
 }
 
-.dialog-footer-buttons .el-button {
-  margin-left: 0;
-  flex: 0 0 auto;
-  min-width: 100px;
-}
-
-.info-content, .logs-content, .error-content, .history-detail-content {
-  max-height: 600px;
-  overflow-y: auto;
-  background: #fafafa;
-  padding: 24px;
-  border-radius: 12px;
-  font-family: "SF Mono", Monaco, Menlo, Consolas, monospace;
-  font-size: 14px;
-  line-height: 1.5;
-  color: #1d1d1f;
-}
-
-.history-filters {
-  margin-bottom: 24px;
-}
-
-.pagination-container {
-  margin-top: 24px;
-  display: flex;
-  justify-content: center;
+@media (max-width: 1280px) {
+  .autopredict-hero {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 768px) {
-  .autopredict-container {
-    padding: 20px;
+  .prediction-grid {
+    grid-template-columns: 1fr;
   }
 
-  .autopredict-container h2 {
+  .hero-title {
     font-size: 32px;
   }
 
-  .el-button {
-    height: 40px;
-    padding: 0 20px;
-    font-size: 14px;
-  }
-
-  .el-row {
-    gap: 16px;  
-    margin: 0 10px;  
-  }
-  
-  .el-col {
-    margin-bottom: 16px;  
-  }
-  
-  .global-buttons {
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
+  .hero-metric__value {
+    font-size: 26px;
   }
 }
-
-.logs-filters {
-  margin-bottom: 20px;
-  background: #f9f9f9;
-  padding: 16px;
-  border-radius: 8px;
-}
-
-/* Styles for removed dialogs and their contents can be cleaned up if desired */
-/* .task-info-container, .task-status-cards, .script-info-section, .ultra-start-options, .task-date-selector might be unused now */
-
 </style>

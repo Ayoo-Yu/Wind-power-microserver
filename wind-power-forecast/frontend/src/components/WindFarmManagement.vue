@@ -1,54 +1,25 @@
 <template>
-  <div class="windfarm-management-container">
-    <div class="page-shell windfarm-management-content">
-      <div class="header-panel glass-panel">
-        <div class="header-text">
-          <h1 class="page-title">风电场可视化管理</h1>
-          <p class="page-subtitle">集中查看全量风电场的基础信息、运行状态与数据准备度</p>
-        </div>
-        <div class="header-actions">
-          <span class="status-indicator wind-farm-chip">当前场站：{{ currentWindFarmDisplay || '未选择' }}</span>
-          <el-button type="primary" @click="refreshData" :loading="isLoading">
-            <el-icon><Refresh /></el-icon>
-            刷新数据
-          </el-button>
-        </div>
-      </div>
+  <DigitalPage>
+    <DigitalHero
+      eyebrow="WIND FARM OPERATIONS"
+      title="风电场可视化管理"
+      subtitle="集中查看全量风电场的基础信息、运行状态与数据准备度"
+      :metrics="heroMetrics"
+    >
+      <template #meta>
+        <span class="digital-status-chip">当前场站：{{ currentWindFarmDisplay || '未选择' }}</span>
+      </template>
+      <template #actions>
+        <el-button type="primary" @click="refreshData" :loading="isLoading">
+          <el-icon><Refresh /></el-icon>
+          刷新数据
+        </el-button>
+      </template>
+    </DigitalHero>
 
-    <el-row :gutter="20" class="summary-grid">
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card class="summary-card overview glass-panel">
-          <div class="card-label">风电场总数</div>
-          <div class="card-value">{{ totalFarms }}</div>
-          <div class="card-footnote">覆盖所有接入系统的场站</div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card class="summary-card active glass-panel">
-          <div class="card-label">运行中</div>
-          <div class="card-value">{{ activeFarms }}</div>
-          <div class="card-footnote">当前标记为启用的场站</div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card class="summary-card inactive glass-panel">
-          <div class="card-label">待上线</div>
-          <div class="card-value">{{ inactiveFarms }}</div>
-          <div class="card-footnote">需重点关注的停用/未激活场站</div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :lg="6">
-        <el-card class="summary-card capacity glass-panel">
-          <div class="card-label">装机容量 (MW)</div>
-          <div class="card-value">{{ totalCapacity }}</div>
-          <div class="card-footnote">合计容量，来源于场站配置</div>
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <el-row :gutter="20" class="content-grid">
+    <el-row :gutter="24" class="management-grid">
       <el-col :xs="24" :lg="14">
-        <el-card class="panel-card glass-panel">
+        <el-card class="glass-panel" shadow="never">
           <div class="panel-header">
             <h2>风电场列表</h2>
             <div class="panel-actions">
@@ -97,12 +68,15 @@
           </el-table>
         </el-card>
 
-        <el-card class="panel-card readiness-panel glass-panel" v-loading="readinessLoading">
+        <el-card class="glass-panel readiness-panel" v-loading="readinessLoading" shadow="never">
           <div class="panel-header">
             <h2>数据准备度</h2>
             <span class="panel-subtitle">展示训练/预测/仿真数据的上传覆盖情况</span>
           </div>
-          <div class="readiness-container">
+          <div
+            class="readiness-container"
+            :class="{ 'readiness-container--active': hasReadinessData }"
+          >
             <canvas v-if="hasReadinessData" ref="readinessCanvas" class="readiness-chart"></canvas>
             <el-empty v-else description="暂无可用数据" />
           </div>
@@ -110,7 +84,7 @@
       </el-col>
 
       <el-col :xs="24" :lg="10">
-        <el-card class="panel-card map-panel glass-panel">
+        <el-card class="glass-panel map-panel" shadow="never">
           <div class="panel-header">
             <h2>地理分布</h2>
             <span class="panel-subtitle">基于经纬度的场站位置散点图</span>
@@ -121,7 +95,7 @@
           </div>
         </el-card>
 
-        <el-card class="panel-card action-panel glass-panel">
+        <el-card class="glass-panel action-panel" shadow="never">
           <div class="panel-header">
             <h2>快捷操作</h2>
             <span class="panel-subtitle">选择目标场站后快速进入相关模块</span>
@@ -174,8 +148,7 @@
         </el-card>
       </el-col>
     </el-row>
-    </div>
-  </div>
+  </DigitalPage>
 </template>
 
 <script>
@@ -193,11 +166,17 @@ import {
   Legend,
   Title,
 } from 'chart.js'
+import DigitalPage from './common/DigitalPage.vue'
+import DigitalHero from './common/DigitalHero.vue'
 
 Chart.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend, Title)
 
 export default {
   name: 'WindFarmManagement',
+  components: {
+    DigitalPage,
+    DigitalHero,
+  },
   setup() {
     const router = useRouter()
     const keyword = ref('')
@@ -207,6 +186,7 @@ export default {
     const readinessMetrics = ref([])
     const readinessLoading = ref(false)
     const mapContainer = ref(null)
+    const mapAnimationPlayed = ref(false)
     const {
       windFarms,
       isLoading,
@@ -222,6 +202,34 @@ export default {
       const sum = windFarms.value.reduce((acc, farm) => acc + (Number(farm.capacity) || 0), 0)
       return sum.toFixed(1)
     })
+
+    const heroMetrics = computed(() => [
+      {
+        id: 'total',
+        label: '风电场总数',
+        value: totalFarms.value,
+        meta: '覆盖所有接入系统的场站',
+      },
+      {
+        id: 'active',
+        label: '运行中',
+        value: activeFarms.value,
+        meta: '当前标记为启用的场站',
+      },
+      {
+        id: 'inactive',
+        label: '待上线',
+        value: inactiveFarms.value,
+        meta: '需关注的停用/未激活场站',
+      },
+      {
+        id: 'capacity',
+        label: '装机容量',
+        value: totalCapacity.value,
+        unit: 'MW',
+        meta: '合计容量，来源于场站配置',
+      },
+    ])
 
     const currentWindFarmDisplay = computed(() => {
       if (!selectedWindFarm.value) {
@@ -269,15 +277,19 @@ export default {
         return
       }
 
+      const baseMarkerSizes = farmsWithCoords.map(f => Math.max(Math.sqrt(f.capacity) * 2, 8))
+      const targetOpacity = 0.85
       const trace = {
         x: farmsWithCoords.map(f => f.lon),
         y: farmsWithCoords.map(f => f.lat),
         text: farmsWithCoords.map(f => `${f.name || f.code}<br/>装机容量: ${f.capacity} MW<br/>状态: ${f.status}`),
         mode: 'markers',
         marker: {
-          size: farmsWithCoords.map(f => Math.max(Math.sqrt(f.capacity) * 2, 8)),
+          size: mapAnimationPlayed.value
+            ? baseMarkerSizes
+            : baseMarkerSizes.map(size => Math.max(size * 0.45, 6)),
           color: farmsWithCoords.map(f => f.status === '启用' ? '#2ecc71' : '#95a5a6'),
-          opacity: 0.85,
+          opacity: mapAnimationPlayed.value ? targetOpacity : 0.2,
           line: { width: 1, color: '#2c3e50' },
         },
         hovertemplate: '%{text}<extra></extra>',
@@ -291,9 +303,49 @@ export default {
         paper_bgcolor: 'rgba(0,0,0,0)',
         plot_bgcolor: 'rgba(0,0,0,0)',
         hovermode: 'closest',
+        transition: { duration: 500, easing: 'cubic-in-out' },
       }
 
-      Plotly.react(mapContainer.value, [trace], layout, { responsive: true, displaylogo: false })
+      const config = {
+        responsive: true,
+        displaylogo: false,
+        scrollZoom: true,
+        modeBarButtonsToRemove: ['lasso2d', 'select2d']
+      }
+
+      const reactResult = Plotly.react(mapContainer.value, [trace], layout, config)
+
+      Promise.resolve(reactResult)
+        .then(() => {
+          if (!mapAnimationPlayed.value) {
+            mapAnimationPlayed.value = true
+            Plotly.animate(
+              mapContainer.value,
+              {
+                data: [
+                  {
+                    marker: {
+                      size: baseMarkerSizes,
+                      opacity: targetOpacity,
+                    },
+                  },
+                ],
+              },
+              {
+                transition: { duration: 700, easing: 'cubic-in-out' },
+                frame: { duration: 700, redraw: false },
+              }
+            ).catch(() => {
+              /*
+               * Plotly.animate 在部分情况下（如组件卸载）可能被中断，
+               * 这里捕获异常以避免打断流程。
+               */
+            })
+          }
+        })
+        .catch(() => {
+          // ignore animate preparation errors
+        })
     }
 
     const fetchReadinessMetrics = async () => {
@@ -350,6 +402,17 @@ export default {
       const predictionData = readinessMetrics.value.map(item => item.prediction_datasets)
       const simulationData = readinessMetrics.value.map(item => item.simulation_records)
 
+      const animationConfig = {
+        duration: 900,
+        easing: 'easeOutQuart',
+        delay: (context) => {
+          if (context.type === 'data' && context.mode === 'default') {
+            return context.dataIndex * 140 + context.datasetIndex * 80
+          }
+          return 0
+        },
+      }
+
       readinessChart.value = new Chart(readinessCanvas.value.getContext('2d'), {
         type: 'bar',
         data: {
@@ -379,6 +442,17 @@ export default {
           responsive: true,
           indexAxis: 'y',
           maintainAspectRatio: false,
+          animation: animationConfig,
+          animations: {
+            x: {
+              easing: 'easeOutQuart',
+              duration: 700,
+            },
+            y: {
+              easing: 'easeOutQuart',
+              duration: 700,
+            },
+          },
           scales: {
             x: {
               stacked: true,
@@ -480,173 +554,87 @@ export default {
       windFarms,
       navigateTo,
       currentWindFarmDisplay,
+      heroMetrics,
     }
   },
 }
 </script>
 
 <style scoped>
-.windfarm-management-container {
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-.page-shell {
-  background-color: #f5f7ff;
-  border-radius: 24px;
-  padding: 24px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
-}
-
-.header-panel {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 16px;
-  padding: 16px 24px;
-  background-color: #ffffff;
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-}
-
-.header-text {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.page-title {
-  margin: 0;
-  font-size: 28px;
-  font-weight: 700;
-  color: #1f2d3d;
-}
-
-.page-subtitle {
-  margin: 0;
-  color: rgba(31, 45, 61, 0.65);
-  font-size: 14px;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.status-indicator {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1f2d3d;
-  background-color: #e0e6ed;
-  padding: 4px 10px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.wind-farm-chip {
-  background-color: #e0e6ed;
-  color: #1f2d3d;
-}
-
-.summary-grid {
-  margin-bottom: 8px;
-}
-
-.summary-card {
-  border-radius: 16px;
-  border: none;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
-  padding: 16px;
-}
-
-.summary-card .card-label {
-  font-size: 14px;
-  color: rgba(31, 45, 61, 0.6);
-}
-
-.summary-card .card-value {
-  font-size: 28px;
-  font-weight: 700;
-  color: #1f2d3d;
-}
-
-.summary-card .card-footnote {
-  font-size: 12px;
-  color: rgba(31, 45, 61, 0.55);
-  margin-top: 6px;
-}
-
-.summary-card.overview {
-  background: linear-gradient(135deg, #f5f7ff 0%, #edefff 100%);
-}
-
-.summary-card.active {
-  background: linear-gradient(135deg, #e5fff6 0%, #f0fff1 100%);
-}
-
-.summary-card.inactive {
-  background: linear-gradient(135deg, #fff4f4 0%, #ffecec 100%);
-}
-
-.summary-card.capacity {
-  background: linear-gradient(135deg, #f4f9ff 0%, #e8f3ff 100%);
-}
-
-.glass-panel {
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-}
-
-.content-grid {
-  margin-bottom: 16px;
-}
-
-.panel-card {
-  border-radius: 18px;
-  border: none;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.08);
-  margin-bottom: 20px;
+.management-grid {
+  margin-top: 8px;
 }
 
 .panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
 }
 
 .panel-header h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
-  color: #1f2d3d;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-primary);
 }
-
 
 .panel-actions {
   display: flex;
-  gap: 8px;
+  gap: 12px;
+  align-items: center;
 }
 
 .panel-subtitle {
-  font-size: 12px;
-  color: rgba(31, 45, 61, 0.55);
+  font-size: 13px;
+  color: var(--text-secondary);
+  letter-spacing: 0.08em;
 }
 
 .farm-table {
   border-radius: 12px;
   overflow: hidden;
+}
+
+.readiness-panel {
+  margin-top: 24px;
+}
+
+.readiness-container {
+  min-height: 260px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 20px;
+}
+
+.readiness-container::after {
+  content: '';
+  position: absolute;
+  inset: 16px;
+  border-radius: 18px;
+  border: 1px dashed rgba(66, 195, 255, 0.18);
+  background: radial-gradient(circle at 50% 50%, rgba(66, 195, 255, 0.08), transparent 65%);
+  opacity: 0;
+  transition: opacity 0.6s ease;
+  pointer-events: none;
+}
+
+.readiness-container--active::after {
+  opacity: 0.45;
+  animation: readinessPulse 6s ease-in-out infinite;
+}
+
+.readiness-chart {
+  width: 100%;
+  height: 260px;
+  z-index: 1;
 }
 
 .map-container {
@@ -659,71 +647,92 @@ export default {
   height: 260px;
 }
 
-.readiness-panel {
-  margin-top: 20px;
-}
-
-.readiness-container {
-  min-height: 260px;
-  position: relative;
-}
-
-.readiness-chart {
-  width: 100%;
-  height: 260px;
-}
-
-.action-panel {
-  margin-top: 20px;
-}
-
 .action-body {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.action-form {
-  margin-bottom: 4px;
-}
-
 .action-grid {
-  margin-top: 4px;
+  margin-top: 8px;
 }
 
 .action-card {
+  position: relative;
+  overflow: hidden;
   border-radius: 14px;
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease,
+    border-color 0.25s ease;
   min-height: 120px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  background: linear-gradient(150deg, rgba(8, 24, 48, 0.82) 0%, rgba(6, 18, 36, 0.92) 100%);
+  border: 1px solid rgba(66, 195, 255, 0.16);
+  box-shadow: 0 14px 28px rgba(8, 24, 48, 0.35);
+}
+
+.action-card::after {
+  content: '';
+  position: absolute;
+  inset: -40% -120%;
+  background: linear-gradient(115deg, rgba(66, 195, 255, 0.0) 10%, rgba(66, 195, 255, 0.35) 48%, rgba(66, 195, 255, 0.0) 76%);
+  transform: translateX(-120%);
+  opacity: 0;
+  transition: transform 0.6s ease, opacity 0.6s ease;
+  pointer-events: none;
+}
+
+.action-card :deep(.el-card__body) {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
 }
 
 .action-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 18px 36px rgba(87, 109, 234, 0.25);
+  transform: translateY(-6px);
+  box-shadow: 0 22px 44px rgba(8, 24, 48, 0.55);
+  border-color: rgba(66, 195, 255, 0.45);
+}
+
+.action-card:hover::after {
+  opacity: 0.55;
+  transform: translateX(120%);
 }
 
 .action-title {
   font-size: 16px;
   font-weight: 600;
-  color: #1f2d3d;
+  color: var(--text-primary);
 }
 
 .action-desc {
   font-size: 12px;
-  color: rgba(31, 45, 61, 0.6);
+  color: var(--text-secondary);
+}
+
+@keyframes readinessPulse {
+  0% {
+    transform: scale(0.98);
+    opacity: 0.28;
+  }
+  50% {
+    transform: scale(1);
+    opacity: 0.45;
+  }
+  100% {
+    transform: scale(0.98);
+    opacity: 0.28;
+  }
 }
 
 @media (max-width: 1024px) {
-  .windfarm-management-container {
-    padding: 16px;
-  }
-
-  .page-title {
-    font-size: 24px;
+  .management-grid {
+    margin-top: 0;
   }
 }
 </style>

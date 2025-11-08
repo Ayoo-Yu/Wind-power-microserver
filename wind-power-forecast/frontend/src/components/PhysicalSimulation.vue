@@ -1,14 +1,42 @@
 <template>
-  <div class="physical-simulation-container">
-    <div class="content-wrapper">
-      <h1 class="page-title">物理仿真数据展示</h1>
-      <p class="page-subtitle">通过双线性插值计算任意工况下的风机表现</p>
-      <div class="wind-farm-banner">
-        <el-tag type="success" effect="dark">当前场站：{{ currentWindFarmDisplay }}</el-tag>
-      </div>
+  <DigitalPage>
+    <div class="physical-simulation">
+      <section class="simulation-hero digital-panel">
+        <div class="simulation-hero__content">
+          <p class="hero-eyebrow">物理仿真</p>
+          <h1 class="hero-title">物理仿真数据展示</h1>
+          <p class="hero-subtitle">通过双线性插值计算任意工况下的风机表现</p>
+          <div class="hero-meta">
+            <span class="digital-status-chip">当前场站：{{ currentWindFarmDisplay }}</span>
+            <el-tag
+              v-if="selectedFarm"
+              type="info"
+              effect="plain"
+              size="small"
+            >
+              已选择风电场：{{ selectedFarm }}
+            </el-tag>
+          </div>
+        </div>
+        <div class="simulation-hero__metrics">
+          <div
+            v-for="metric in heroMetrics"
+            :key="metric.label"
+            class="simulation-hero-metric"
+          >
+            <span class="metric-label">{{ metric.label }}</span>
+            <span class="metric-value">
+              {{ metric.value }}
+              <span v-if="metric.unit" class="metric-unit">{{ metric.unit }}</span>
+            </span>
+            <span v-if="metric.meta" class="metric-meta">{{ metric.meta }}</span>
+          </div>
+        </div>
+      </section>
 
-      <div class="dataset-upload-section">
-        <el-card class="dataset-upload-card" shadow="hover">
+      <div class="simulation-content">
+        <div class="dataset-upload-section">
+          <el-card class="dataset-upload-card digital-panel" shadow="hover">
           <template #header>
             <div class="dataset-upload-header">
               <div class="header-left">
@@ -131,7 +159,7 @@
       <div class="main-content">
         <!-- 参数设置区域 -->
         <div class="upload-section">
-          <div class="upload-card">
+          <div class="upload-card digital-panel digital-panel--interactive">
             <div class="card-header">
               <h2>选择风电场</h2>
               <div class="step-number">1</div>
@@ -155,7 +183,7 @@
             </div>
           </div>
 
-          <div class="upload-card">
+          <div class="upload-card digital-panel digital-panel--interactive">
             <div class="card-header">
               <h2>设置目标风速</h2>
               <div class="step-number">2</div>
@@ -173,7 +201,7 @@
             </div>
           </div>
 
-          <div class="upload-card">
+          <div class="upload-card digital-panel digital-panel--interactive">
             <div class="card-header">
               <h2>设置目标风向</h2>
               <div class="step-number">3</div>
@@ -194,7 +222,7 @@
 
         <!-- 右侧操作面板 -->
         <div class="right-panel">
-          <div class="action-card">
+          <div class="action-card digital-panel">
             <div v-if="!isReadyForSimulation" class="empty-action-panel">
               <el-icon class="empty-icon"><InfoFilled /></el-icon>
               <p class="empty-text">请完成参数设置后开始仿真计算</p>
@@ -213,7 +241,7 @@
           </div>
 
           <!-- 仿真参数显示 -->
-          <div v-if="selectedFarm" class="status-card">
+          <div v-if="selectedFarm" class="status-card digital-panel">
             <h3>仿真参数</h3>
             <div class="card-content">
               <div class="param-item">
@@ -245,7 +273,7 @@
         
         <div class="results-container">
           <!-- 可视化图表 -->
-          <div class="chart-card">
+          <div class="chart-card digital-panel digital-panel--interactive">
             <div class="card-header">
               <h3>风电场布局及仿真风速分布</h3>
             </div>
@@ -255,7 +283,7 @@
           </div>
 
           <!-- 数据表格 -->
-          <div class="table-card">
+          <div class="table-card digital-panel digital-panel--interactive">
             <div class="card-header">
               <h3>详细仿真数据</h3>
               <el-button type="primary" size="small" @click="exportResults">
@@ -284,7 +312,8 @@
         </div>
       </div>
     </div>
-  </div>
+    </div>
+  </DigitalPage>
 </template>
 
 <script>
@@ -293,10 +322,12 @@ import Plotly from 'plotly.js-dist-min';
 import { ElMessage } from 'element-plus';
 import { InfoFilled, Download, UploadFilled } from '@element-plus/icons-vue';
 import { useWindFarmStore } from '@/store/windFarm';
+import DigitalPage from './common/DigitalPage.vue';
 
 export default {
   name: 'PhysicalSimulation',
   components: {
+    DigitalPage,
     InfoFilled,
     Download,
     UploadFilled,
@@ -394,7 +425,32 @@ export default {
         ...meta,
         state: this.datasetUploadState[key],
       }));
-    }
+    },
+    heroMetrics() {
+      const turbineCount = this.farmTurbines.length;
+      const conditionCount = this.farmConditions.length;
+      const resultCount = this.simulationResults.length;
+      return [
+        {
+          label: '绑定风机',
+          value: turbineCount || '—',
+          unit: turbineCount ? '台' : '',
+          meta: this.selectedFarm ? `场站：${this.selectedFarm}` : '等待选择场站',
+        },
+        {
+          label: '工况节点',
+          value: conditionCount || '—',
+          unit: conditionCount ? '个' : '',
+          meta: conditionCount ? '用于插值的节点' : '尚未上传工况数据',
+        },
+        {
+          label: '仿真结果',
+          value: resultCount || '—',
+          unit: resultCount ? '条' : '',
+          meta: this.loadingSimulation ? '正在计算' : (resultCount ? '最新一次仿真输出' : '尚未运行仿真'),
+        },
+      ];
+    },
   },
   watch: {
     selectedWindFarmCode(newCode, oldCode) {
@@ -842,73 +898,125 @@ export default {
 </script>
 
 <style scoped>
-.physical-simulation-container {
-  min-height: 100vh;
-  background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
-  background-size: 400% 400%;
-  animation: gradient 15s ease infinite;
-  position: relative;
-}
-
-@keyframes gradient {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-.content-wrapper {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 32px 24px;
-  position: relative;
-  z-index: 1;
-}
-
-.page-title {
-  font-size: 32px;
-  font-weight: 700;
-  color: white;
-  margin: 0 0 8px 0;
-  text-align: center;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-.page-subtitle {
-  font-size: 16px;
-  color: rgba(255, 255, 255, 0.9);
-  text-align: center;
-  margin-bottom: 40px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-}
-
-.wind-farm-banner {
-  margin-bottom: 32px;
+.physical-simulation {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.simulation-content {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.simulation-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.95fr);
+  gap: 32px;
+  padding: 32px 36px;
+}
+
+.simulation-hero__content {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.hero-eyebrow {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.36em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.hero-title {
+  margin: 0;
+  font-size: 38px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.hero-subtitle {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.hero-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.simulation-hero__metrics {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  align-content: flex-start;
+}
+
+.simulation-hero-metric {
+  padding: 18px 20px;
+  border-radius: 20px;
+  border: 1px solid rgba(66, 195, 255, 0.26);
+  background: linear-gradient(155deg, rgba(9, 26, 54, 0.78) 0%, rgba(6, 18, 38, 0.9) 100%);
+  box-shadow: 0 24px 58px rgba(3, 18, 44, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.metric-label {
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.metric-value {
+  font-family: 'Rajdhani', 'Inter', sans-serif;
+  font-size: 30px;
+  letter-spacing: 0.12em;
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.metric-unit {
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+
+.metric-meta {
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
 }
 
 .dataset-upload-section {
-  margin-bottom: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 
 .dataset-upload-card {
-  background: rgba(255, 255, 255, 0.96);
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.18);
-  backdrop-filter: blur(18px);
+  padding: 0;
 }
 
 .dataset-upload-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
 }
 
 .dataset-upload-header .header-left {
@@ -917,47 +1025,59 @@ export default {
   gap: 16px;
 }
 
-.dataset-upload-header .icon-bubble {
+.icon-bubble {
   width: 48px;
   height: 48px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.2));
-  display: flex;
+  border-radius: 16px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #576dea;
-  border: 1px solid rgba(87, 109, 234, 0.3);
+  border: 1px solid rgba(66, 195, 255, 0.35);
+  background: linear-gradient(140deg, rgba(66, 195, 255, 0.2) 0%, rgba(34, 246, 170, 0.08) 100%);
+  color: var(--accent-primary);
+  font-size: 20px;
 }
 
-.dataset-upload-header .header-copy {
+.header-copy {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.dataset-upload-header .title {
+.header-copy .title {
   font-size: 18px;
   font-weight: 600;
-  color: #1f2d3d;
+  letter-spacing: 0.08em;
+  color: var(--text-primary);
 }
 
-.dataset-upload-header .subtitle {
-  font-size: 12px;
-  color: rgba(31, 45, 61, 0.6);
+.header-copy .subtitle {
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.dataset-upload-tabs {
+  margin-top: 18px;
 }
 
 .dataset-upload-tabs :deep(.el-tabs__header) {
   background: transparent;
-  border-color: rgba(87, 109, 234, 0.18);
+  border-color: rgba(66, 195, 255, 0.22);
+}
+
+.dataset-upload-tabs :deep(.el-tabs__item) {
+  color: var(--text-secondary);
+  letter-spacing: 0.06em;
 }
 
 .dataset-upload-tabs :deep(.el-tabs__item.is-active) {
-  color: #576dea;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
-.tab-label {
-  font-size: 14px;
+.dataset-upload-tabs :deep(.el-tabs__content) {
+  padding: 0;
 }
 
 .dataset-upload-pane {
@@ -967,33 +1087,31 @@ export default {
 .upload-panel {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(237, 244, 255, 0.98) 100%);
-  border-radius: 16px;
-  padding: 20px;
-  border: 1px solid rgba(87, 109, 234, 0.15);
-  box-shadow: 0 12px 34px rgba(87, 109, 234, 0.12);
+  gap: 18px;
+  padding: 22px;
+  border-radius: 18px;
+  border: 1px solid rgba(66, 195, 255, 0.22);
+  background: linear-gradient(180deg, rgba(6, 22, 44, 0.75) 0%, rgba(4, 18, 36, 0.9) 100%);
+  box-shadow: 0 20px 48px rgba(3, 16, 40, 0.55);
 }
 
 .upload-subtitle {
-  font-size: 14px;
-  color: rgba(31, 45, 61, 0.75);
   margin: 0;
+  font-size: 14px;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
 }
 
 .upload-tips {
   margin: 0;
   padding-left: 18px;
-  color: rgba(31, 45, 61, 0.65);
+  color: var(--text-muted);
   font-size: 13px;
-}
-
-.upload-tips li + li {
-  margin-top: 4px;
+  letter-spacing: 0.04em;
 }
 
 .upload-drop-wrapper {
-  border-radius: 14px;
+  border-radius: 16px;
   overflow: hidden;
 }
 
@@ -1002,16 +1120,16 @@ export default {
 }
 
 .dataset-upload-dropzone :deep(.el-upload-dragger) {
-  border: 1px dashed rgba(87, 109, 234, 0.35);
-  background: rgba(255, 255, 255, 0.96);
+  border: 1px dashed rgba(66, 195, 255, 0.35);
+  background: rgba(6, 24, 50, 0.72);
+  border-radius: 16px;
   padding: 26px;
-  border-radius: 14px;
   transition: all 0.25s ease;
 }
 
 .dataset-upload-dropzone :deep(.el-upload-dragger:hover) {
-  border-color: rgba(87, 109, 234, 0.65);
-  box-shadow: 0 12px 28px rgba(87, 109, 234, 0.18);
+  border-color: rgba(66, 195, 255, 0.65);
+  box-shadow: 0 20px 46px rgba(6, 24, 52, 0.55);
 }
 
 .dropzone-inner {
@@ -1022,358 +1140,288 @@ export default {
 }
 
 .dropzone-icon {
-  font-size: 30px;
-  color: #576dea;
+  font-size: 26px;
+  color: var(--accent-primary);
 }
 
 .dropzone-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1f2d3d;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
 }
 
 .dropzone-desc {
   margin: 0;
   font-size: 12px;
-  color: rgba(31, 45, 61, 0.6);
+  color: var(--text-secondary);
+  letter-spacing: 0.03em;
 }
 
 .selected-file-chip {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 16px;
+  gap: 12px;
+  padding: 12px 16px;
   border-radius: 12px;
-  background: rgba(87, 109, 234, 0.08);
-  border: 1px solid rgba(87, 109, 234, 0.18);
+  border: 1px solid rgba(66, 195, 255, 0.28);
+  background: rgba(66, 195, 255, 0.12);
 }
 
 .selected-file-chip .file-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
-.selected-file-chip .file-name {
+.file-name {
   font-weight: 600;
-  color: #1f2d3d;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
 }
 
-.selected-file-chip .file-size {
+.file-size {
   font-size: 12px;
-  color: rgba(31, 45, 61, 0.55);
+  color: var(--text-secondary);
 }
 
 .upload-actions {
   display: flex;
   gap: 12px;
-  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .dataset-schema-panel {
-  height: 100%;
-  background: rgba(255, 255, 255, 0.96);
-  border-radius: 16px;
-  padding: 20px;
-  border: 1px solid rgba(87, 109, 234, 0.12);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  padding: 22px;
+  border-radius: 18px;
+  border: 1px solid rgba(66, 195, 255, 0.2);
+  background: linear-gradient(180deg, rgba(6, 22, 44, 0.65) 0%, rgba(4, 18, 36, 0.88) 100%);
+  box-shadow: 0 20px 48px rgba(3, 16, 40, 0.5);
 }
 
 .dataset-schema-panel h4 {
-  margin: 0;
+  margin: 0 0 14px;
   font-size: 16px;
-  font-weight: 600;
-  color: #1f2d3d;
+  letter-spacing: 0.08em;
+  color: var(--text-primary);
 }
 
 .dataset-columns {
-  border-radius: 12px;
-  border: 1px solid rgba(87, 109, 234, 0.14);
-  overflow: hidden;
-}
-
-.dataset-columns-head,
-.dataset-column-row {
-  display: grid;
-  grid-template-columns: 140px 1fr;
-  gap: 12px;
-  padding: 12px 16px;
-  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .dataset-columns-head {
-  background: rgba(87, 109, 234, 0.14);
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  opacity: 0.8;
+}
+
+.dataset-column-row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(5, 20, 42, 0.55);
+  border: 1px solid rgba(66, 195, 255, 0.18);
+}
+
+.col-name {
   font-weight: 600;
-  color: #1f2d3d;
+  color: var(--text-primary);
+  letter-spacing: 0.06em;
 }
 
-.dataset-column-row:nth-child(even) {
-  background: rgba(87, 109, 234, 0.06);
-}
-
-.dataset-column-row .col-name {
-  font-weight: 600;
-  color: #1f2d3d;
-}
-
-.dataset-column-row .col-desc {
-  color: rgba(31, 45, 61, 0.7);
-}
-
-.fade-slide-enter-active,
-.fade-slide-leave-active {
-  transition: all 0.2s ease;
-}
-
-.fade-slide-enter-from,
-.fade-slide-leave-to {
-  opacity: 0;
-  transform: translateY(6px);
+.col-desc {
+  color: var(--text-secondary);
+  letter-spacing: 0.03em;
+  font-size: 13px;
 }
 
 .main-content {
   display: grid;
-  grid-template-columns: 1fr 350px;
-  gap: 32px;
-  margin-bottom: 40px;
+  gap: 24px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.9fr);
+  align-items: start;
 }
 
 .upload-section {
   display: flex;
   flex-direction: column;
-  gap: 24px;
-}
-
-.upload-card {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  overflow: hidden;
-  transition: all 0.3s ease;
-}
-
-.upload-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+  gap: 20px;
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 24px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
 .card-header h2 {
-  font-size: 18px;
-  font-weight: 600;
   margin: 0;
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  color: var(--text-primary);
 }
 
 .step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  border: 1px solid rgba(66, 195, 255, 0.4);
+  color: var(--accent-primary);
   font-weight: 600;
   font-size: 14px;
+  letter-spacing: 0.08em;
 }
 
 .card-content {
-  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .right-panel {
   display: flex;
   flex-direction: column;
-  gap: 24px;
-}
-
-.action-card, .status-card {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  overflow: hidden;
+  gap: 20px;
 }
 
 .empty-action-panel {
-  padding: 40px 24px;
-  text-align: center;
-  color: #666;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 12px;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
 }
 
 .empty-icon {
-  font-size: 48px;
-  color: #ddd;
-  margin-bottom: 16px;
+  font-size: 32px;
+  color: var(--accent-primary);
+  opacity: 0.8;
 }
 
 .empty-text {
-  font-size: 14px;
-  line-height: 1.5;
   margin: 0;
 }
 
 .action-buttons {
-  padding: 24px;
-}
-
-.action-button {
-  width: 100%;
-  height: 48px;
-  border: none;
-  border-radius: 12px;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
+  display: flex;
+  justify-content: center;
 }
 
 .predict-button {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-}
-
-.predict-button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+  min-width: 220px;
 }
 
 .status-card h3 {
-  padding: 20px 24px;
-  margin: 0;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  margin: 0 0 16px;
   font-size: 16px;
-  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-primary);
+}
+
+.status-card .card-content {
+  gap: 10px;
 }
 
 .param-item {
   display: flex;
   justify-content: space-between;
-  padding: 12px 0;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.param-item:last-child {
-  border-bottom: none;
+  gap: 12px;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
 }
 
 .param-label {
-  color: #666;
-  font-weight: 500;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 .param-value {
-  color: #333;
-  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .visualization-section {
-  margin-top: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 
 .visualization-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  justify-content: space-between;
 }
 
 .section-title {
-  font-size: 24px;
-  font-weight: 700;
-  color: white;
   margin: 0;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  font-size: 20px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-primary);
 }
 
 .results-container {
   display: grid;
-  grid-template-columns: 1fr 1fr;
   gap: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  align-items: stretch;
 }
 
-.chart-card, .table-card {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  overflow: hidden;
-}
-
-.chart-card .card-header, .table-card .card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px 24px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-}
-
-.chart-card .card-header h3, .table-card .card-header h3 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.chart-container, .table-container {
-  padding: 24px;
-}
-
+.chart-container,
 .table-container {
-  padding: 24px 24px 0 24px; /* 减少底部padding，为表格留出更多空间 */
+  margin-top: 18px;
 }
 
-.chart-container {
-  height: 548px; /* 500px图表 + 48px padding */
+.table-container :deep(.el-table) {
+  --el-table-header-bg-color: rgba(6, 22, 44, 0.9);
 }
 
-.table-container {
-  height: 548px; /* 与图表容器保持相同高度 */
-  display: flex;
-  flex-direction: column;
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.25s ease;
 }
 
-.table-container .el-table {
-  flex: 1;
-  overflow: hidden;
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
 }
 
-@media (max-width: 1200px) {
-  .main-content {
+@media (max-width: 1280px) {
+  .simulation-hero {
     grid-template-columns: 1fr;
   }
-  
-  .results-container {
+
+  .main-content {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 768px) {
-  .content-wrapper {
-    padding: 20px 16px;
+  .simulation-hero {
+    padding: 26px;
   }
-  
-  .page-title {
-    font-size: 24px;
-  }
-  
-  .card-content {
-    padding: 16px;
+
+  .results-container {
+    grid-template-columns: 1fr;
   }
 }
 </style> 

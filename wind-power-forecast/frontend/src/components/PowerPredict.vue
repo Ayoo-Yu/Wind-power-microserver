@@ -1,197 +1,191 @@
 <template>
-  <div class="power-predict-container">
-    <div class="content-wrapper page-shell">
-      <div class="header-panel glass-panel">
-        <div class="header-text">
-          <h1 class="page-title">功率预测</h1>
-          <p class="page-subtitle">多源数据驱动的功率预测流程</p>
-        </div>
-        <span class="status-indicator wind-farm-chip">
-          当前场站：{{ currentWindFarmDisplay || '未选择' }}
-        </span>
-      </div>
+  <DigitalPage>
+    <DigitalHero
+      eyebrow="POWER FORECAST PIPELINE"
+      title="功率预测"
+      subtitle="多源数据驱动的功率预测流程"
+      :metrics="heroMetrics"
+    >
+      <template #meta>
+        <span class="digital-status-chip">当前场站：{{ currentWindFarmDisplay || '未选择' }}</span>
+      </template>
+    </DigitalHero>
 
-      <div class="workflow-layout">
-        <div class="upload-grid">
-          <!-- 数据集上传区域 -->
-          <div class="upload-card glass-panel">
-            <div class="card-header">
-              <h2>选择预测数据集</h2>
-              <div class="step-number">1</div>
-            </div>
-            <div class="card-content">
-              <FileUploader
-                :processing="processing"
-                :acceptedFormats="['csv']"
-                :uploadText="customUploadText_datacsv"
-                @file-selected="onCsvFileSelected"
-              />
-              <FileInfo 
-                :fileInfo="csvfileInfo" 
-                @remove-file="removeSelectedCsvFile"
-                @start-upload="csvHandleManualUpload"
-              />
-            </div>
+    <div class="workflow-layout">
+      <div class="upload-grid">
+        <!-- 数据集上传区域 -->
+        <div class="upload-card glass-panel">
+          <div class="card-header">
+            <h2>选择预测数据集</h2>
+            <div class="step-number">1</div>
           </div>
-
-          <!-- 模型上传区域 -->
-          <div class="upload-card glass-panel">
-            <div class="card-header">
-              <h2>选择预测模型</h2>
-              <div class="step-number">2</div>
-            </div>
-            <div class="card-content">
-              <FileUploader
-                :processing="processing"
-                :acceptedFormats="['joblib']"
-                :uploadText="customUploadText_model"
-                @file-selected="onModelFileSelected"
-                :disabled="!csvfileId"
-              />
-              <FileInfo 
-                :fileInfo="modelfileInfo" 
-                @remove-file="removeSelectedModelFile"
-                @start-upload="modelHandleManualUpload"
-              />
-            </div>
-          </div>
-
-          <!-- 归一化模型上传区域 -->
-          <div class="upload-card glass-panel">
-            <div class="card-header">
-              <h2>选择归一化模型</h2>
-              <div class="step-number">3</div>
-            </div>
-            <div class="card-content">
-              <FileUploader
-                :processing="processing"
-                :acceptedFormats="['joblib']"
-                :uploadText="customUploadText_scaler"
-                @file-selected="onScalerFileSelected"
-                :disabled="!modelfileId"
-              />
-              <FileInfo 
-                :fileInfo="scalerfileInfo"
-                @remove-file="removeSelectedScalerFile"
-                @start-upload="scalerHandleManualUpload"
-              />
-            </div>
+          <div class="card-content">
+            <FileUploader
+              :processing="processing"
+              :acceptedFormats="['csv']"
+              :uploadText="customUploadText_datacsv"
+              @file-selected="onCsvFileSelected"
+            />
+            <FileInfo 
+              :fileInfo="csvfileInfo" 
+              @remove-file="removeSelectedCsvFile"
+              @start-upload="csvHandleManualUpload"
+            />
           </div>
         </div>
 
-        <div class="workflow-sidebar">
-          <!-- 步骤提示 -->
-          <div class="status-card glass-panel">
-            <h3>预测文件ID</h3>
-            <div class="card-content">
-              <StepHintBox 
-                :csvfileid="csvfileId" 
-                :modelfileid="modelfileId" 
-                :scalerfileid="scalerfileId"
-              />
-              
-              <!-- 一键上传按钮 -->
-              <div v-if="selectedCsvFile && selectedModelFile && selectedScalerFile && !csvfileId && !modelfileId && !scalerfileId" class="one-click-upload">
-                <button 
-                  type="button" 
-                  class="action-button one-click-button"
-                  @click="handleOneClickUpload"
-                  :disabled="processing || uploading"
-                >
-                  {{ uploading ? '上传中...' : '一键上传所有文件' }}
-                </button>
-              </div>
-            </div>
+        <!-- 模型上传区域 -->
+        <div class="upload-card glass-panel">
+          <div class="card-header">
+            <h2>选择预测模型</h2>
+            <div class="step-number">2</div>
           </div>
+          <div class="card-content">
+            <FileUploader
+              :processing="processing"
+              :acceptedFormats="['joblib']"
+              :uploadText="customUploadText_model"
+              @file-selected="onModelFileSelected"
+              :disabled="!csvfileId"
+            />
+            <FileInfo 
+              :fileInfo="modelfileInfo" 
+              @remove-file="removeSelectedModelFile"
+              @start-upload="modelHandleManualUpload"
+            />
+          </div>
+        </div>
 
-          <!-- 操作按钮 -->
-          <div class="action-card glass-panel">
-            <div v-if="!csvfileId || !modelfileId || !scalerfileId" class="empty-action-panel">
-              <el-icon class="empty-icon"><InfoFilled /></el-icon>
-              <p class="empty-text">请完成所有文件上传后开始预测</p>
-            </div>
-            <div v-else class="action-buttons">
-              <button 
-                type="button" 
-                class="action-button predict-button"
-                @click="handlePredict"
-                :disabled="processing"
-              >
-                {{ processing ? '预测中...' : '开始预测' }}
-              </button>
-              <button 
-                v-if="downloadUrl"
-                type="button" 
-                class="action-button download-button"
-                @click="downloadFile(downloadUrl)"
-              >
-                下载预测结果
-              </button>
-            </div>
+        <!-- 归一化模型上传区域 -->
+        <div class="upload-card glass-panel">
+          <div class="card-header">
+            <h2>选择归一化模型</h2>
+            <div class="step-number">3</div>
+          </div>
+          <div class="card-content">
+            <FileUploader
+              :processing="processing"
+              :acceptedFormats="['joblib']"
+              :uploadText="customUploadText_scaler"
+              @file-selected="onScalerFileSelected"
+              :disabled="!modelfileId"
+            />
+            <FileInfo 
+              :fileInfo="scalerfileInfo"
+              @remove-file="removeSelectedScalerFile"
+              @start-upload="scalerHandleManualUpload"
+            />
           </div>
         </div>
       </div>
 
-      <!-- 预测结果可视化区域 -->
-      <div v-if="predictions.length > 0" class="visualization-section glass-panel">
-        <div class="visualization-header">
-          <h3 class="section-title">预测结果可视化</h3>
-          <div class="visualization-controls">
-            <el-checkbox v-model="showActualValues" @change="handleShowActualValues">
-              显示实测值对比
-            </el-checkbox>
-            <el-button 
-              v-if="showActualValues && actualValues.length > 0"
-              type="primary"
-              size="small"
-              @click="calculateMetrics"
+      <div class="workflow-sidebar">
+        <!-- 步骤提示 -->
+        <div class="status-card glass-panel">
+          <h3>预测文件ID</h3>
+          <div class="card-content">
+            <StepHintBox 
+              :csvfileid="csvfileId" 
+              :modelfileid="modelfileId" 
+              :scalerfileid="scalerfileId"
+            />
+            <!-- 一键上传按钮 -->
+            <div v-if="selectedCsvFile && selectedModelFile && selectedScalerFile && !csvfileId && !modelfileId && !scalerfileId" class="one-click-upload">
+              <button 
+                type="button" 
+                class="action-button one-click-button"
+                @click="handleOneClickUpload"
+                :disabled="processing || uploading"
+              >
+                {{ uploading ? '上传中...' : '一键上传所有文件' }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="action-card glass-panel">
+          <div v-if="!csvfileId || !modelfileId || !scalerfileId" class="empty-action-panel">
+            <el-icon class="empty-icon"><InfoFilled /></el-icon>
+            <p class="empty-text">请完成所有文件上传后开始预测</p>
+          </div>
+          <div v-else class="action-buttons">
+            <button 
+              type="button" 
+              class="action-button predict-button"
+              @click="handlePredict"
+              :disabled="processing"
             >
-              计算评估指标
+              {{ processing ? '预测中...' : '开始预测' }}
+            </button>
+            <button 
+              v-if="downloadUrl"
+              type="button" 
+              class="action-button download-button"
+              @click="downloadFile(downloadUrl)"
+            >
+              下载预测结果
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 预测结果可视化区域 -->
+    <div v-if="predictions.length > 0" class="visualization-section glass-panel">
+      <div class="visualization-header">
+        <h3 class="section-title">预测结果可视化</h3>
+        <div class="visualization-controls">
+          <el-checkbox v-model="showActualValues" @change="handleShowActualValues">
+            显示实测值对比
+          </el-checkbox>
+          <el-button 
+            v-if="showActualValues && actualValues.length > 0"
+            type="primary"
+            size="small"
+            @click="calculateMetrics"
+          >
+            计算评估指标
+          </el-button>
+        </div>
+      </div>
+      <div class="chart-container">
+        <div ref="chartRef" style="width: 100%; height: 400px;"></div>
+      </div>
+      <div v-if="metrics" class="metrics-container">
+        <div class="metrics-header">
+          <h4>评估指标</h4>
+          <div class="download-metrics">
+            <el-button type="text" size="small" @click="downloadMetrics">
+              <el-icon><Download /></el-icon>
+              导出指标
             </el-button>
           </div>
         </div>
-        
-        <!-- 图表区域 -->
-        <div class="chart-container">
-          <div ref="chartRef" style="width: 100%; height: 400px;"></div>
-        </div>
-
-        <!-- 评估指标展示区域 -->
-        <div v-if="metrics" class="metrics-container">
-          <div class="metrics-header">
-            <h4>评估指标</h4>
-            <div class="download-metrics">
-              <el-button type="text" size="small" @click="downloadMetrics">
-                <el-icon><Download /></el-icon>
-                导出指标
-              </el-button>
-            </div>
+        <div class="metrics-grid">
+          <div class="metric-item">
+            <span class="metric-label">MAE:</span>
+            <span class="metric-value">{{ metrics.mae.toFixed(2) }}</span>
           </div>
-          <div class="metrics-grid">
-            <div class="metric-item">
-              <span class="metric-label">MAE:</span>
-              <span class="metric-value">{{ metrics.mae.toFixed(2) }}</span>
-            </div>
-            <div class="metric-item">
-              <span class="metric-label">MSE:</span>
-              <span class="metric-value">{{ metrics.mse.toFixed(2) }}</span>
-            </div>
-            <div class="metric-item">
-              <span class="metric-label">RMSE:</span>
-              <span class="metric-value">{{ metrics.rmse.toFixed(2) }}</span>
-            </div>
-            <div class="metric-item">
-              <span class="metric-label">ACC:</span>
-              <span class="metric-value">{{ metrics.acc.toFixed(2) }}</span>
-            </div>
-            <div class="metric-item">
-              <span class="metric-label">K:</span>
-              <span class="metric-value">{{ metrics.k.toFixed(2) }}</span>
-            </div>
-            <div class="metric-item">
-              <span class="metric-label">R²:</span>
-              <span class="metric-value">{{ metrics.r2.toFixed(2) }}</span>
-            </div>
+          <div class="metric-item">
+            <span class="metric-label">MSE:</span>
+            <span class="metric-value">{{ metrics.mse.toFixed(2) }}</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">RMSE:</span>
+            <span class="metric-value">{{ metrics.rmse.toFixed(2) }}</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">ACC:</span>
+            <span class="metric-value">{{ metrics.acc.toFixed(2) }}</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">K:</span>
+            <span class="metric-value">{{ metrics.k.toFixed(2) }}</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">R²:</span>
+            <span class="metric-value">{{ metrics.r2.toFixed(2) }}</span>
           </div>
         </div>
       </div>
@@ -220,7 +214,7 @@
         />
       </div>
     </div>
-  </div>
+  </DigitalPage>
 </template>
 
 <script>
@@ -234,6 +228,8 @@ import * as echarts from 'echarts';
 import { ArrowDown, InfoFilled, Download } from '@element-plus/icons-vue';
 import axiosInstance from '../api/axios';
 import { useWindFarmStore } from '@/store/windFarm';
+import DigitalPage from './common/DigitalPage.vue'
+import DigitalHero from './common/DigitalHero.vue'
 
 const rawBaseURL = axiosInstance.defaults && axiosInstance.defaults.baseURL ? axiosInstance.defaults.baseURL : '';
 const API_BASE_PATH = rawBaseURL.replace(/\/$/, '');
@@ -257,6 +253,8 @@ function buildDownloadUrl(basePath, path) {
 export default {
   name: 'PowerPredict',
   components: {
+    DigitalPage,
+    DigitalHero,
     FileUploader,
     FileInfo,
     LogViewer,
@@ -278,7 +276,59 @@ export default {
         return record.farm_name || record.farm_code || this.selectedWindFarm;
       }
       return this.selectedWindFarm;
-    }
+    },
+    heroMetrics() {
+      const datasetStatus = this.csvfileId
+        ? '已就绪'
+        : this.selectedCsvFile
+          ? '待上传'
+          : '未选择'
+
+      const modelStatus = this.modelfileId
+        ? '已就绪'
+        : this.selectedModelFile
+          ? '待上传'
+          : '未选择'
+
+      const scalerStatus = this.scalerfileId
+        ? '已就绪'
+        : this.selectedScalerFile
+          ? '待上传'
+          : '未选择'
+
+      const predictionStatus = this.processing
+        ? 'RUNNING'
+        : this.downloadUrl
+          ? 'COMPLETED'
+          : 'IDLE'
+
+      return [
+        {
+          id: 'dataset',
+          label: '预测数据集',
+          value: datasetStatus,
+          meta: this.csvfileInfo?.name || 'CSV 文件',
+        },
+        {
+          id: 'model',
+          label: '预测模型',
+          value: modelStatus,
+          meta: this.modelfileInfo?.name || 'Model 文件',
+        },
+        {
+          id: 'scaler',
+          label: '归一化模型',
+          value: scalerStatus,
+          meta: this.scalerfileInfo?.name || 'Scaler 文件',
+        },
+        {
+          id: 'status',
+          label: '预测状态',
+          value: predictionStatus,
+          meta: this.predictions.length ? `条目 ${this.predictions.length}` : '等待执行',
+        },
+      ]
+    },
   },
   watch: {
     selectedWindFarm() {

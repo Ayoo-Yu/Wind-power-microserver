@@ -1,25 +1,25 @@
 <template>
-  <div class="system-maintenance">
-    <div class="page-shell system-maintenance-content">
-      <div class="header-panel glass-panel">
-        <div class="header-text">
-          <h1 class="page-title">系统维护</h1>
-          <p class="page-subtitle">实时掌握硬件配置、软件环境以及关键运行参数</p>
-        </div>
-        <span class="status-indicator wind-farm-chip">当前场站：{{ currentWindFarmDisplay || '未选择' }}</span>
-      </div>
+  <DigitalPage>
+    <DigitalHero
+      eyebrow="OPERATIONS CONTROL"
+      title="系统维护中枢"
+      subtitle="实时掌握硬件配置、软件环境以及关键运行参数"
+      :metrics="heroMetrics"
+    >
+      <template #meta>
+        <span class="digital-status-chip">当前场站：{{ currentWindFarmDisplay || '未选择' }}</span>
+      </template>
+    </DigitalHero>
 
-    <!-- 系统信息卡片 -->
-    <div class="system-cards">
-      <!-- 硬件系统信息 -->
-      <el-card class="info-card hardware-card" shadow="hover">
+    <div class="digital-grid digital-grid--two-column">
+      <el-card class="glass-panel" shadow="never">
         <template #header>
           <div class="card-header">
             <el-icon class="card-icon"><Monitor /></el-icon>
             <span class="card-title">硬件系统</span>
-            <el-button 
-              type="primary" 
-              size="small" 
+            <el-button
+              type="primary"
+              size="small"
               @click="refreshHardwareInfo"
               :loading="loadingHardware"
             >
@@ -27,7 +27,7 @@
             </el-button>
           </div>
         </template>
-        
+
         <div class="info-grid">
           <div class="info-item">
             <span class="info-label">CPU</span>
@@ -56,15 +56,14 @@
         </div>
       </el-card>
 
-      <!-- 软件系统信息 -->
-      <el-card class="info-card software-card" shadow="hover">
+      <el-card class="glass-panel" shadow="never">
         <template #header>
           <div class="card-header">
             <el-icon class="card-icon"><Platform /></el-icon>
             <span class="card-title">软件系统</span>
-            <el-button 
-              type="primary" 
-              size="small" 
+            <el-button
+              type="primary"
+              size="small"
               @click="refreshSoftwareInfo"
               :loading="loadingSoftware"
             >
@@ -72,7 +71,7 @@
             </el-button>
           </div>
         </template>
-        
+
         <div class="info-grid">
           <div class="info-item">
             <span class="info-label">操作系统</span>
@@ -101,15 +100,14 @@
         </div>
       </el-card>
 
-      <!-- 运行参数信息 -->
-      <el-card class="info-card runtime-card" shadow="hover">
+      <el-card class="glass-panel runtime-card" shadow="never">
         <template #header>
           <div class="card-header">
             <el-icon class="card-icon"><Setting /></el-icon>
             <span class="card-title">运行参数</span>
-            <el-button 
-              type="primary" 
-              size="small" 
+            <el-button
+              type="primary"
+              size="small"
               @click="refreshRuntimeInfo"
               :loading="loadingRuntime"
             >
@@ -117,8 +115,8 @@
             </el-button>
           </div>
         </template>
-        
-        <div class="info-grid">
+
+        <div class="info-grid info-grid--runtime">
           <div class="info-item">
             <span class="info-label">系统运行时间</span>
             <span class="info-value">{{ runtimeInfo.uptime }}</span>
@@ -126,8 +124,8 @@
           <div class="info-item">
             <span class="info-label">CPU使用率</span>
             <span class="info-value">
-              <el-progress 
-                :percentage="runtimeInfo.cpuUsage" 
+              <el-progress
+                :percentage="runtimeInfo.cpuUsage"
                 :color="getProgressColor(runtimeInfo.cpuUsage)"
                 :show-text="true"
                 :format="(percentage) => `${percentage}%`"
@@ -137,8 +135,8 @@
           <div class="info-item">
             <span class="info-label">内存使用率</span>
             <span class="info-value">
-              <el-progress 
-                :percentage="runtimeInfo.memoryUsage" 
+              <el-progress
+                :percentage="runtimeInfo.memoryUsage"
                 :color="getProgressColor(runtimeInfo.memoryUsage)"
                 :show-text="true"
                 :format="(percentage) => `${percentage}%`"
@@ -148,8 +146,8 @@
           <div class="info-item">
             <span class="info-label">磁盘使用率</span>
             <span class="info-value">
-              <el-progress 
-                :percentage="runtimeInfo.diskUsage" 
+              <el-progress
+                :percentage="runtimeInfo.diskUsage"
                 :color="getProgressColor(runtimeInfo.diskUsage)"
                 :show-text="true"
                 :format="(percentage) => `${percentage}%`"
@@ -168,8 +166,7 @@
       </el-card>
     </div>
 
-    <!-- 系统日志预览 -->
-    <el-card class="log-card" shadow="hover">
+    <el-card class="glass-panel" shadow="never">
       <template #header>
         <div class="card-header">
           <el-icon class="card-icon"><Document /></el-icon>
@@ -181,9 +178,9 @@
               <el-option label="警告" value="warning" />
               <el-option label="信息" value="info" />
             </el-select>
-            <el-button 
-              type="primary" 
-              size="small" 
+            <el-button
+              type="primary"
+              size="small"
               @click="refreshLogs"
               :loading="loadingLogs"
             >
@@ -192,15 +189,15 @@
           </div>
         </div>
       </template>
-      
+
       <div class="log-container">
         <div v-if="logs.length === 0" class="no-logs">
           暂无日志信息
         </div>
         <div v-else class="log-list">
-          <div 
-            v-for="log in filteredLogs" 
-            :key="log.id" 
+          <div
+            v-for="log in filteredLogs"
+            :key="log.id"
             :class="['log-item', `log-${log.level}`]"
           >
             <span class="log-time">{{ log.timestamp }}</span>
@@ -210,8 +207,7 @@
         </div>
       </div>
     </el-card>
-    </div>
-  </div>
+  </DigitalPage>
 </template>
 
 <script>
@@ -225,10 +221,14 @@ import {
   Setting,
   Document
 } from '@element-plus/icons-vue'
+import DigitalPage from './common/DigitalPage.vue'
+import DigitalHero from './common/DigitalHero.vue'
 
 export default {
   name: 'SystemMaintenance',
   components: {
+    DigitalPage,
+    DigitalHero,
     Monitor,
     Platform,
     Setting,
@@ -280,6 +280,27 @@ export default {
       connections: 0,
       lastUpdate: '获取中...'
     })
+
+    const heroMetrics = computed(() => [
+      {
+        id: 'uptime',
+        label: '运行时间',
+        value: runtimeInfo.value.uptime || '--',
+        meta: '系统在线',
+      },
+      {
+        id: 'cpuUsage',
+        label: 'CPU 使用率',
+        value: runtimeInfo.value.cpuUsage != null ? `${runtimeInfo.value.cpuUsage}%` : '--',
+        meta: '实时监控',
+      },
+      {
+        id: 'connections',
+        label: '活跃连接',
+        value: runtimeInfo.value.connections ?? 0,
+        meta: '当前会话',
+      },
+    ])
 
     // 日志相关
     const selectedLogLevel = ref('all')
@@ -389,6 +410,7 @@ export default {
       hardwareInfo,
       softwareInfo,
       runtimeInfo,
+      heroMetrics,
       selectedLogLevel,
       logs,
       filteredLogs,
@@ -403,180 +425,127 @@ export default {
 </script>
 
 <style scoped>
-.system-maintenance {
-  padding: 24px;
-  background: transparent;
-  min-height: 100vh;
-  position: relative;
-}
-
-.page-header {
-  margin-bottom: 32px;
-  text-align: center;
-  position: relative;
-  z-index: 1;
-}
-
-.page-title {
-  font-size: 32px;
-  font-weight: 700;
-  color: #ffffff;
-  margin: 0 0 12px 0;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  letter-spacing: 1px;
-}
-
-.page-description {
-  font-size: 18px;
-  color: rgba(255, 255, 255, 0.9);
-  margin: 0;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
-}
-
-.wind-farm-banner {
-  margin-top: 12px;
-  display: flex;
-  justify-content: center;
-}
-
-.system-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
-  gap: 24px;
-  margin-bottom: 24px;
-  position: relative;
-  z-index: 1;
-}
-
-.info-card {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(15px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 20px;
-  transition: all 0.3s ease;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-}
-
-.info-card:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
-  background: rgba(255, 255, 255, 0.98);
-}
-
 .card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-weight: 600;
-  color: #2c3e50;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .card-icon {
-  font-size: 20px;
-  margin-right: 8px;
+  font-size: 22px;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(56, 196, 255, 0.12);
+  color: #38c4ff;
+  box-shadow: 0 12px 24px rgba(56, 196, 255, 0.18);
 }
 
 .card-title {
-  flex: 1;
-  font-size: 18px;
-}
-
-.hardware-card .card-icon {
-  color: #409eff;
-}
-
-.software-card .card-icon {
-  color: #67c23a;
-}
-
-.runtime-card .card-icon {
-  color: #e6a23c;
-}
-
-.info-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
-}
-
-.info-item {
-  display: flex;
-  flex-direction: column;
-  padding: 16px;
-  background: rgba(248, 249, 250, 0.8);
-  border-radius: 12px;
-  transition: background 0.3s ease;
-}
-
-.info-item:hover {
-  background: rgba(248, 249, 250, 1);
-}
-
-.info-label {
-  font-size: 14px;
-  color: #909399;
-  margin-bottom: 8px;
-  font-weight: 500;
-}
-
-.info-value {
-  font-size: 16px;
-  color: #2c3e50;
   font-weight: 600;
-  line-height: 1.4;
-}
-
-.log-card {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(15px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 20px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  position: relative;
-  z-index: 1;
+  font-size: 20px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-primary);
 }
 
 .log-controls {
   display: flex;
   align-items: center;
+  gap: 12px;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 18px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  background: rgba(4, 18, 36, 0.72);
+  border: 1px solid rgba(56, 196, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(56, 196, 255, 0.05);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.info-item:hover {
+  transform: translateY(-2px);
+  box-shadow: inset 0 0 0 1px rgba(56, 196, 255, 0.18);
+}
+
+.info-label {
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.info-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+}
+
+.info-grid--runtime .info-item {
+  min-height: 120px;
+  justify-content: space-between;
+}
+
+.info-grid--runtime .info-item :deep(.el-progress) {
+  width: 100%;
+}
+
+.runtime-card {
+  grid-column: 1 / -1;
 }
 
 .log-container {
-  max-height: 400px;
+  max-height: 420px;
   overflow-y: auto;
 }
 
 .no-logs {
   text-align: center;
-  color: #909399;
-  font-size: 16px;
-  padding: 40px;
+  color: var(--text-secondary);
+  padding: 48px 0;
 }
 
 .log-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
 .log-item {
   display: flex;
   align-items: center;
-  padding: 12px 16px;
-  border-radius: 8px;
-  font-size: 14px;
-  line-height: 1.4;
-  transition: background 0.3s ease;
+  gap: 16px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: rgba(4, 18, 36, 0.72);
+  border-left: 4px solid rgba(56, 196, 255, 0.18);
+  box-shadow: 0 12px 24px rgba(3, 13, 30, 0.35);
 }
 
-.log-item:hover {
-  background: rgba(248, 249, 250, 1);
+.log-item.log-warning {
+  border-left-color: rgba(230, 162, 60, 0.6);
+}
+
+.log-item.log-error {
+  border-left-color: rgba(245, 108, 108, 0.6);
 }
 
 .log-time {
   flex-shrink: 0;
   width: 140px;
-  color: #909399;
+  color: var(--text-secondary);
   font-family: 'Courier New', monospace;
 }
 
@@ -589,95 +558,31 @@ export default {
 
 .log-message {
   flex: 1;
-  color: #2c3e50;
+  color: var(--text-primary);
   margin-left: 16px;
 }
 
-.log-info {
-  background: rgba(64, 158, 255, 0.1);
+.log-container::-webkit-scrollbar {
+  width: 6px;
 }
 
-.log-info .log-level {
-  color: #409eff;
+.log-container::-webkit-scrollbar-track {
+  background: rgba(4, 18, 36, 0.6);
+  border-radius: 3px;
 }
 
-.log-warning {
-  background: rgba(230, 162, 60, 0.1);
+.log-container::-webkit-scrollbar-thumb {
+  background: rgba(56, 196, 255, 0.35);
+  border-radius: 3px;
 }
 
-.log-warning .log-level {
-  color: #e6a23c;
+.log-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 196, 255, 0.5);
 }
 
-.log-error {
-  background: rgba(245, 108, 108, 0.1);
-}
-
-.log-error .log-level {
-  color: #f56c6c;
-}
-
-/* 进度条样式调整 */
-:deep(.el-progress-bar__outer) {
-  background-color: rgba(0, 0, 0, 0.1);
-}
-
-/* 背景动画 */
-@keyframes gradient {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
+@media (max-width: 1280px) {
+  .runtime-card {
+    grid-column: auto;
   }
 }
-
-/* 为.system-maintenance添加伪元素背景 */
-.system-maintenance::before {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
-  background-size: 400% 400%;
-  animation: gradient 15s ease infinite;
-  z-index: -1;
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .system-cards {
-    grid-template-columns: 1fr;
-  }
-  
-  .info-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .log-controls {
-    flex-direction: column;
-    gap: 8px;
-    align-items: stretch;
-  }
-  
-  .log-item {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-  }
-  
-  .log-time,
-  .log-level {
-    width: auto;
-  }
-  
-  .log-message {
-    margin-left: 0;
-  }
-}
-</style> 
+</style>

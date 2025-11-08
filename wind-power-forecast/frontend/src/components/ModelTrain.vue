@@ -1,21 +1,26 @@
 <template>
-  <div class="model-train-container">
-    <!-- 页面标题和重置按钮区域 -->
-    <div class="header-section">
-      <h1 class="page-title">模型训练</h1>
-      <el-button 
-        class="reset-all-button" 
-        type="primary" 
-        @click="confirmResetAll"
-        :disabled="!hasAnyData"
-      >
-        <el-icon><Refresh /></el-icon>
-        重新训练
-      </el-button>
-    </div>
-
-    <!-- Hero Section 装饰在标题之后 -->
-    <div class="hero-section"></div>
+  <DigitalPage>
+    <DigitalHero
+      eyebrow="MODEL TRAINING"
+      title="模型训练"
+      subtitle="四步向导上传数据、配置模型并启动训练"
+      :metrics="heroMetrics"
+    >
+      <template #meta>
+        <span class="digital-status-chip">当前场站：{{ currentWindFarmDisplay }}</span>
+      </template>
+      <template #actions>
+        <el-button
+          class="reset-all-button" 
+          type="primary" 
+          @click="confirmResetAll"
+          :disabled="!hasAnyData"
+        >
+          <el-icon><Refresh /></el-icon>
+          重新训练
+        </el-button>
+      </template>
+    </DigitalHero>
 
     <!-- 主体内容区域：左右两栏 -->
     <div class="content-area">
@@ -198,7 +203,7 @@
         </div>
       </div>
     </section>
-  </div>
+  </DigitalPage>
 </template>
 
 <script>
@@ -216,6 +221,8 @@ import Papa from 'papaparse';
 import axiosInstance from '../api/axios';
 import { getSelectedWindFarmCode } from '@/store/windFarm';
 import { Chart, CategoryScale, LinearScale, LineElement, PointElement, Title, Tooltip, Legend, LineController } from 'chart.js';
+import DigitalPage from './common/DigitalPage.vue'
+import DigitalHero from './common/DigitalHero.vue'
 const rawBaseURL = axiosInstance.defaults && axiosInstance.defaults.baseURL ? axiosInstance.defaults.baseURL : '';
 const API_BASE_PATH = rawBaseURL.replace(/\/$/, '');
 const SOCKET_BASE_URL = window.location.origin;
@@ -247,6 +254,8 @@ Chart.register(
 export default {
   name: 'ModelTrain',
   components: {
+    DigitalPage,
+    DigitalHero,
     FileUploader,
     FileInfo,
     ModelSelector,
@@ -296,7 +305,54 @@ export default {
   computed: {
     hasAnyData() {
       return !!(this.fileId || this.selectedFile || this.selectedModel || this.fileInfo || this.logs || this.chartData);
-    }
+    },
+    currentWindFarmDisplay() {
+      return getSelectedWindFarmCode() || '未选择'
+    },
+    heroMetrics() {
+      const datasetStatus = this.fileId
+        ? '已就绪'
+        : this.selectedFile
+          ? '待上传'
+          : '未选择'
+
+      const modelStatus = this.selectedModel
+        ? (typeof this.selectedModel === 'string' ? this.selectedModel : this.selectedModel?.name || '已选择')
+        : '未选择'
+
+      const progressStatus = this.processing
+        ? 'RUNNING'
+        : this.predictionReady || this.downloadUrl || this.reportDownloadUrl
+          ? 'READY'
+          : 'IDLE'
+
+      return [
+        {
+          id: 'dataset',
+          label: '训练数据集',
+          value: datasetStatus,
+          meta: this.fileInfo?.name || '训练集文件',
+        },
+        {
+          id: 'model',
+          label: '模型配置',
+          value: modelStatus,
+          meta: this.selectedModel && this.selectedModel?.version ? `版本 ${this.selectedModel.version}` : '选择模型与参数',
+        },
+        {
+          id: 'ratio',
+          label: '训练集占比',
+          value: `${Math.round((this.trainRatio || 0) * 100)}%`,
+          meta: '数据划分',
+        },
+        {
+          id: 'status',
+          label: '训练状态',
+          value: progressStatus,
+          meta: this.logs ? '日志已生成' : '等待任务',
+        },
+      ]
+    },
   },
   methods: {
     composeDownloadUrl(path) {
@@ -974,497 +1030,187 @@ export default {
 </script>
 
 <style scoped>
-.model-train-container {
-  min-height: 100vh;
-  padding: 20px;
-  background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
-  background-size: 400% 400%;
-  animation: gradient 15s ease infinite;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-@keyframes gradient {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-.header-section {
-  width: 100%;
-  max-width: 800px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  position: relative;
-}
-
-.reset-all-button {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  padding: 8px 16px;
-  font-size: 14px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  transition: all 0.3s ease;
-}
-
-.reset-all-button:hover {
-  transform: translateY(-50%) translateX(-2px);
-}
-
-.reset-all-button :deep(.el-icon) {
-  font-size: 16px;
-}
-
-.page-title {
-  color: white;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  font-size: 28px;
-  margin: 0;
-  text-align: center;
-  flex: 1;
-}
-
 .content-area {
-  width: 100%;
-  max-width: 800px;
-  margin: 0 auto 40px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 
 .left-panel {
-  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  width: 100%;
+}
+
+.reset-all-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .panel-section {
-  background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.05);
-  border-radius: 12px;
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  width: 100%;
-  box-sizing: border-box;
+  background: rgba(6, 18, 36, 0.82);
+  border: 1px solid rgba(66, 195, 255, 0.18);
+  border-radius: 16px;
+  box-shadow: 0 24px 48px rgba(3, 13, 30, 0.5);
   overflow: hidden;
-  will-change: max-height;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
 
 .panel-section:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-3px);
+  box-shadow: 0 28px 58px rgba(3, 13, 30, 0.58);
 }
 
 .panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
+  padding: 18px 22px;
   cursor: pointer;
-  background: #ffffff;
-  border-bottom: 1px solid transparent;
-  transition: all 0.3s ease;
+  border-bottom: 1px solid rgba(66, 195, 255, 0.12);
 }
 
-.panel-section.is-collapsed .panel-header {
-  border-bottom-color: transparent;
-}
-
-.panel-section:not(.is-collapsed) .panel-header {
-  border-bottom-color: rgba(0, 0, 0, 0.06);
-}
-
-.panel-content {
-  padding: 20px;
-  opacity: 1;
-  transition: opacity 0.3s ease;
-}
-
-.panel-section.is-collapsed .panel-content {
-  opacity: 0;
-  height: 0;
-  padding: 0;
-  overflow: hidden;
-}
-
-.panel-section h2 {
+.panel-header h2 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #1d1d1f;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  color: var(--text-primary);
+  letter-spacing: 0.08em;
 }
 
-.panel-section .toggle-button {
-  color: #606266;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
+.panel-content {
+  padding: 20px 22px;
+}
+
+.panel-section.is-collapsed .panel-content {
   padding: 0;
 }
 
+.panel-section .toggle-button {
+  color: var(--text-secondary);
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .panel-section .toggle-icon {
-  margin-left: 4px;
   transition: transform 0.3s ease;
-  font-size: 12px;
 }
 
 .panel-section .toggle-icon.is-rotate {
   transform: rotate(180deg);
 }
 
-.panel-section.is-collapsed {
-  background: #f8f9fa;
-  max-height: 56px;
-  transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: max-height;
-}
-
-.panel-section:not(.is-collapsed) {
-  max-height: 800px;
-  transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: max-height;
-}
-
-.panel-section.is-collapsed.completed .panel-header {
-  background: #f0f9ff;
-}
-
-.panel-header .step-status {
+.step-status {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .step-status .completed-text {
-  color: #0077ED;
+  color: var(--accent-primary);
   font-size: 13px;
-  opacity: 0;
-  transform: translateX(-10px);
-  transition: all 0.3s ease;
 }
 
-.panel-section.is-collapsed.completed .step-status .completed-text {
-  opacity: 1;
-  transform: translateX(0);
-}
-
-.step-status .completed-icon {
-  color: #0077ED;
-  font-size: 16px;
-  opacity: 0;
-  transform: scale(0.8);
-  transition: all 0.3s ease;
-}
-
-.panel-section.is-collapsed.completed .step-status .completed-icon {
-  opacity: 1;
-  transform: scale(1);
-}
-
-.upload-tip {
-  color: #606266;
-  margin-top: 8px;
-  font-size: 12px;
-  text-align: center;
-}
-
-.hero-section {
-  text-align: center;
-  padding: 20px;
-  position: relative;
-  margin-bottom: 20px;
-}
-
-.hero-section::before,
-.hero-section::after {
-  font-size: 18px;
-  opacity: 0.5;
-}
-
-.charts-section {
-  width: 100%;
-  max-width: 800px;
-  margin: 0 auto;
-  background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  padding: 20px;
-  border-radius: 12px;
-  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.05);
-  box-sizing: border-box;
-}
-
-.charts-section h2 {
-  margin: 0 0 16px;
-  font-size: 16px;
-  font-weight: 600;
-  color: #1d1d1f;
-}
-
-.chart-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 20px;
-  margin: 0;
-}
-
-.chart-wrapper {
-  aspect-ratio: 16/9;
-  background: #fff;
-  border-radius: 8px;
-  padding: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.04);
-  min-height: 200px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
-}
-
-.empty-operation-panel, .empty-log-panel {
+.empty-operation-panel,
+.empty-log-panel {
   padding: 20px;
   min-height: 80px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  background: #f8f9fa;
-  border-radius: 8px;
-  border: 1px dashed #e4e7ed;
+  background: rgba(4, 18, 36, 0.6);
+  border-radius: 12px;
+  border: 1px dashed rgba(66, 195, 255, 0.2);
 }
 
 .empty-icon {
   font-size: 20px;
-  color: #909399;
+  color: var(--text-secondary);
   margin-bottom: 8px;
 }
 
 .empty-text {
-  color: #909399;
+  color: var(--text-secondary);
   font-size: 13px;
   text-align: center;
-  margin: 0;
 }
 
-/* 日志面板样式优化 */
 .log-section {
   position: fixed;
-  bottom: 0;
-  right: 16px;
+  bottom: 32px;
+  right: 32px;
   width: 360px;
-  background: #ffffff;
-  border-radius: 8px 8px 0 0;
-  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  z-index: 1000;
-  max-height: 40px;
+  max-height: 66px;
   overflow: hidden;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 0;
+  background: rgba(6, 18, 36, 0.82);
+  border: 1px solid rgba(66, 195, 255, 0.18);
+  border-radius: 18px 18px 12px 12px;
+  box-shadow: 0 24px 48px rgba(3, 13, 30, 0.6);
+  transition: max-height 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 1200;
 }
 
-.log-expanded {
-  max-height: 360px;
+.log-section.log-expanded {
+  max-height: 420px;
 }
 
 .log-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 8px 16px;
-  cursor: pointer;
-  background: linear-gradient(90deg, #0077ED, #00A2FF);
-  border-radius: 8px 8px 0 0;
-  height: 40px;
-}
-
-.log-header .section-title {
-  color: white;
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.toggle-button {
-  color: white !important;
-  font-size: 13px;
-  padding: 0;
-}
-
-.toggle-icon {
-  margin-left: 4px;
-  transition: transform 0.3s ease;
-  font-size: 12px;
-}
-
-.toggle-icon.is-rotate {
-  transform: rotate(180deg);
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: rgba(6, 18, 36, 0.92);
+  border-bottom: 1px solid rgba(66, 195, 255, 0.18);
 }
 
 .log-content-wrapper {
-  padding: 12px;
-  max-height: 320px;
+  padding: 18px 20px;
+  max-height: 340px;
   overflow-y: auto;
-  font-size: 13px;
-  line-height: 1.5;
-  color: #1d1d1f;
-  background-color: #ffffff;
 }
 
-/* 为不同类型的日志消息设置不同的颜色 */
-:deep(.log-content) {
-  .system-message {
-    color: #606266;
-    font-style: italic;
-  }
-  
-  .error-message {
-    color: #f56c6c;
-  }
-  
-  .success-message {
-    color: #67c23a;
-  }
-  
-  .warning-message {
-    color: #e6a23c;
-  }
-  
-  /* 普通日志消息 */
-  .log-message {
-    color: #1d1d1f;
-  }
-}
-
-@media (max-width: 840px) {
-  .content-area {
-    margin-bottom: 60px;
-  }
-  
-  .content-area,
-  .charts-section {
-    max-width: 100%;
-    padding: 16px;
-  }
-  
-  .chart-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 768px) {
-  .model-train-container {
-    padding: 16px;
-  }
-  
-  .header-section {
-    flex-direction: column;
-    gap: 16px;
-    align-items: stretch;
-  }
-  
-  .reset-all-button {
-    position: static;
-    transform: none;
-    width: 100%;
-    justify-content: center;
-  }
-  
-  .page-title {
-    text-align: center;
-    font-size: 24px;
-  }
-  
-  .panel-section {
-    padding: 16px;
-  }
-  
-  .log-section {
-    width: calc(100% - 32px);
-    right: 16px;
-  }
-}
-
-/* 自定义滚动条样式 */
 .log-content-wrapper::-webkit-scrollbar {
-  width: 4px;
-}
-
-.log-content-wrapper::-webkit-scrollbar-track {
-  background: #f5f5f5;
-  border-radius: 2px;
+  width: 6px;
 }
 
 .log-content-wrapper::-webkit-scrollbar-thumb {
-  background: #ddd;
-  border-radius: 2px;
+  background: rgba(56, 196, 255, 0.35);
+  border-radius: 3px;
 }
 
-.log-content-wrapper::-webkit-scrollbar-thumb:hover {
-  background: #ccc;
+.charts-section {
+  background: rgba(6, 18, 36, 0.82);
+  border: 1px solid rgba(66, 195, 255, 0.18);
+  border-radius: 18px;
+  padding: 24px;
+  box-shadow: 0 26px 52px rgba(3, 13, 30, 0.55);
 }
 
-/* 统一按钮样式 */
-:deep(.el-button) {
-  --el-button-bg-color: #0077ED !important;
-  --el-button-border-color: transparent !important;
-  --el-button-text-color: #ffffff !important;
-  --el-button-hover-text-color: #ffffff !important;
-  --el-button-hover-bg-color: #1890ff !important;
-  --el-button-hover-border-color: transparent !important;
-  --el-button-active-bg-color: #0062d1 !important;
-  --el-button-active-border-color: transparent !important;
-  --el-button-disabled-bg-color: #a8d4ff !important;
-  --el-button-disabled-border-color: transparent !important;
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
 }
 
-:deep(.el-button--primary),
-:deep(.el-button--success),
-:deep(.el-button--default) {
-  color: #ffffff !important;
-  background-color: #0077ED !important;
-  border-color: transparent !important;
-  outline: none !important;
+.chart-wrapper {
+  aspect-ratio: 16 / 9;
+  background: rgba(4, 18, 36, 0.6);
+  border: 1px solid rgba(66, 195, 255, 0.14);
+  border-radius: 12px;
+  padding: 12px;
 }
 
-:deep(.el-button--primary:hover),
-:deep(.el-button--success:hover),
-:deep(.el-button--default:hover) {
-  background-color: #1890ff !important;
-  border-color: transparent !important;
-  outline: none !important;
-}
-
-:deep(.el-button--primary:active),
-:deep(.el-button--success:active),
-:deep(.el-button--default:active) {
-  background-color: #0062d1 !important;
-  border-color: transparent !important;
-  outline: none !important;
-}
-
-:deep(.el-button--primary.is-disabled),
-:deep(.el-button--success.is-disabled),
-:deep(.el-button--default.is-disabled) {
-  background-color: #a8d4ff !important;
-  border-color: transparent !important;
-  outline: none !important;
+@media (max-width: 1024px) {
+  .log-section {
+    left: 16px;
+    right: 16px;
+    width: auto;
+  }
 }
 </style>
 

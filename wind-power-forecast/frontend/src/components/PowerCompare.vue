@@ -1,342 +1,340 @@
 <template>
-  <div class="power-compare-container power-predict-container">
-    <div class="page-shell power-compare-content">
-      <div class="header-panel glass-panel">
-        <div class="header-text">
-          <h1 class="page-title">数据可视化与下载</h1>
-          <p class="page-subtitle">多维对比预测与实测，洞察模型表现与上报状态</p>
+  <DigitalPage>
+    <DigitalHero
+      eyebrow="DATA INSIGHT CENTER"
+      title="数据可视化与下载"
+      subtitle="多维对比预测与实测，洞察模型表现与上报状态"
+      :metrics="heroMetrics"
+    >
+      <template #meta>
+        <div class="digital-hero__meta">
+          <span class="digital-status-chip">当前场站：{{ currentWindFarmDisplay || '未选择' }}</span>
+          <el-button 
+            icon="Refresh" 
+            circle 
+            class="refresh-button"
+            @click="refreshPage"
+            :loading="loading"
+          />
         </div>
-        <div class="header-actions">
-          <span class="status-indicator wind-farm-chip">当前场站：{{ currentWindFarmDisplay || '未选择' }}</span>
-          <el-tooltip content="刷新页面" placement="top">
-            <el-button 
-              icon="Refresh" 
-              circle 
-              class="refresh-button"
-              @click="refreshPage"
-              :loading="loading"
-            />
-          </el-tooltip>
-        </div>
-      </div>
+      </template>
+    </DigitalHero>
 
-      <el-card class="operational-upload-card glass-panel" shadow="never">
-        <template #header>
-          <div class="card-header">
-            <div class="card-header-title">
-              <span class="icon-bubble">
-                <el-icon><UploadFilled /></el-icon>
-              </span>
-              <div class="card-header-copy">
-                <span class="card-title">运营数据上传</span>
-                <span class="card-subtitle">将 CSV 文件直接导入当前场站的数据域</span>
+    <el-card class="operational-upload-card glass-panel" shadow="never">
+      <template #header>
+        <div class="card-header">
+          <div class="card-header-title">
+            <span class="icon-bubble">
+              <el-icon><UploadFilled /></el-icon>
+            </span>
+            <div class="card-header-copy">
+              <span class="card-title">运营数据上传</span>
+              <span class="card-subtitle">将 CSV 文件直接导入当前场站的数据域</span>
+            </div>
+          </div>
+          <el-tag type="info" effect="dark" size="small">当前场站：{{ currentWindFarmDisplay }}</el-tag>
+        </div>
+      </template>
+      <div class="operational-upload-body">
+        <el-row class="operational-upload-grid" :gutter="24">
+          <el-col :xs="24" :lg="14">
+            <div class="upload-panel">
+              <div class="upload-steps">
+                <span class="tip-badge">操作提示</span>
+                <ul>
+                  <li>选择上传的数据类型，并在右侧查看字段要求</li>
+                  <li>拖拽或点击导入 CSV 文件，列名需与字段保持一致</li>
+                  <li>提交后系统将自动附带当前风场标识</li>
+                </ul>
+              </div>
+
+              <el-form label-position="top" class="operational-form">
+                <el-form-item label="数据类型">
+                  <el-select
+                    v-model="selectedOperationalTable"
+                    placeholder="选择要上传的数据表"
+                    clearable
+                    filterable
+                    :loading="operationalSchemaLoading && !operationalSchema"
+                    @change="handleOperationalTableChange"
+                  >
+                    <el-option
+                      v-for="table in operationalTables"
+                      :key="table"
+                      :label="operationalTableDescriptions[table] || table"
+                      :value="table"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-form>
+
+              <p class="table-description">{{ operationalTableDescription }}</p>
+
+              <div class="upload-drop-wrapper">
+                <el-upload
+                  class="operational-upload-dropzone"
+                  drag
+                  :limit="1"
+                  :auto-upload="false"
+                  :file-list="operationalUpload.fileList"
+                  :on-change="handleOperationalFileChange"
+                  :on-remove="handleOperationalFileRemove"
+                  accept=".csv"
+                >
+                  <div class="dropzone-inner">
+                    <el-icon class="dropzone-icon"><UploadFilled /></el-icon>
+                    <div class="dropzone-title">拖拽或点击上传 CSV 文件</div>
+                    <p class="dropzone-desc">系统将自动绑定「{{ currentWindFarmDisplay }}」</p>
+                  </div>
+                </el-upload>
+              </div>
+
+              <transition name="fade-slide">
+                <div v-if="operationalUpload.file" class="selected-file-chip">
+                  <span class="file-icon">
+                    <el-icon><Document /></el-icon>
+                  </span>
+                  <div class="file-meta">
+                    <span class="file-name">{{ operationalUpload.file.name }}</span>
+                    <span class="file-size">{{ formatFileSize(operationalUpload.file.size) }}</span>
+                  </div>
+                  <el-button type="text" size="small" @click="resetOperationalUploadState({ clearMessages: true })">更换文件</el-button>
+                </div>
+              </transition>
+
+              <div class="operational-upload-actions">
+                <el-button type="primary" size="large" :loading="operationalUpload.uploading" @click="uploadOperationalDataset">上传数据</el-button>
+                <el-button size="large" @click="resetOperationalUploadState({ clearMessages: true })">清空</el-button>
+              </div>
+
+              <transition name="fade-slide">
+                <el-alert
+                  v-if="operationalUploadResult"
+                  type="success"
+                  :title="operationalUploadResult.message || '上传成功'"
+                  show-icon
+                  closable
+                  @close="operationalUploadResult = null"
+                />
+              </transition>
+              <transition name="fade-slide">
+                <el-alert
+                  v-if="operationalUploadError"
+                  type="error"
+                  :title="operationalUploadError"
+                  show-icon
+                  closable
+                  @close="operationalUploadError = null"
+                />
+              </transition>
+            </div>
+          </el-col>
+          <el-col :xs="24" :lg="10">
+            <div class="schema-panel">
+              <div class="schema-panel-header">
+                <h3>字段要求</h3>
+                <span>确保 CSV 列与字段类型匹配</span>
+              </div>
+              <div class="schema-panel-body">
+                <div v-if="operationalSchemaLoading" class="schema-loading">
+                  <el-skeleton :rows="6" animated />
+                </div>
+                <el-table
+                  v-else-if="operationalSchemaRows.length"
+                  :data="operationalSchemaRows"
+                  class="schema-table"
+                  border
+                  size="small"
+                >
+                  <el-table-column prop="name" label="字段名" width="140" />
+                  <el-table-column label="字段说明">
+                    <template #default="{ row }">
+                      <div class="schema-info">
+                        <span class="schema-type">{{ row.meta?.type || '未知类型' }}</span>
+                        <span v-if="row.meta?.comment" class="schema-comment">{{ row.meta.comment }}</span>
+                        <span class="schema-required">
+                          {{ row.meta?.nullable ? '可为空' : '必填' }}
+                          <span v-if="row.meta?.primary_key" class="schema-primary">主键</span>
+                        </span>
+                      </div>
+                    </template>
+                  </el-table-column>
+                </el-table>
+                <el-empty v-else description="请选择数据类型以查看字段信息" />
               </div>
             </div>
-            <el-tag type="info" effect="dark" size="small">当前场站：{{ currentWindFarmDisplay }}</el-tag>
+          </el-col>
+        </el-row>
+      </div>
+    </el-card>
+
+    <div class="config-panel">
+      <el-card class="merged-config-card glass-panel"> 
+        <!-- Row 1: Time Picker, Query Button, Download Buttons -->
+        <div class="config-row config-row-1">
+          <div class="time-picker-wrapper-outer">
+            <span class="label">选择时间范围：</span>
+            <el-date-picker
+              v-model="timeRange"
+              type="datetimerange"
+              range-separator="至"
+              start-placeholder="开始时间"
+              end-placeholder="结束时间"
+              value-format="YYYY-MM-DD HH:mm:ss"
+              class="time-range-picker-element" 
+            />
           </div>
-        </template>
-        <div class="operational-upload-body">
-          <el-row class="operational-upload-grid" :gutter="24">
-            <el-col :xs="24" :lg="14">
-              <div class="upload-panel">
-                <div class="upload-steps">
-                  <span class="tip-badge">操作提示</span>
-                  <ul>
-                    <li>选择上传的数据类型，并在右侧查看字段要求</li>
-                    <li>拖拽或点击导入 CSV 文件，列名需与字段保持一致</li>
-                    <li>提交后系统将自动附带当前风场标识</li>
-                  </ul>
-                </div>
+          <el-button-group class="quick-time-select-buttons" style="margin-left: 10px; margin-right: 10px;">
+            <el-button type="info" plain size="small" @click="setQuickTimeRange('today')" :disabled="isQuickTimeSwitching">今日</el-button>
+            <el-button type="info" plain size="small" @click="setQuickTimeRange('3d')" :disabled="isQuickTimeSwitching">近三天</el-button>
+            <el-button type="info" plain size="small" @click="setQuickTimeRange('1w')" :disabled="isQuickTimeSwitching">近一周</el-button>
+            <el-button type="info" plain size="small" @click="setQuickTimeRange('1m')" :disabled="isQuickTimeSwitching">近一个月</el-button>
+          </el-button-group>
+          <el-button 
+            type="primary" 
+            @click="fetchComparisonData"
+            :loading="loading"
+            class="query-button"
+          >
+            查询数据
+          </el-button>
+          <el-button-group class="download-buttons download-buttons-row1">
+            <el-button 
+              type="success" 
+              @click="downloadCSV"
+              :disabled="!exportData.comparison"
+            >
+              数据下载
+            </el-button>
+            <el-button 
+              type="success" 
+              @click="downloadMetricsCSV"
+              :disabled="!exportData.metrics"
+            >
+              指标下载
+            </el-button>
+            <el-button 
+              type="success" 
+              @click="downloadSVG"
+              :disabled="!chartData"
+            >
+              功率图下载
+            </el-button>
+            <el-button 
+              type="success" 
+              @click="downloadMetricSVG"
+              :disabled="!dailyMetrics"
+            >
+              指标图下载
+            </el-button>
+            <el-button
+              type="success"
+              @click="showDailyMetricsAnalysis = !showDailyMetricsAnalysis"
+            >
+              {{ showDailyMetricsAnalysis ? '隐藏' : '显示' }}每日指标
+            </el-button>
+            <el-button
+              type="success"
+              @click="showQualificationRateAnalysis = !showQualificationRateAnalysis"
+              :disabled="!qualificationRates || Object.keys(qualificationRates).length === 0"
+            >
+              {{ showQualificationRateAnalysis ? '隐藏' : '显示' }}合格率分析
+            </el-button>
+          </el-button-group>
+        </div>
 
-                <el-form label-position="top" class="operational-form">
-                  <el-form-item label="数据类型">
-                    <el-select
-                      v-model="selectedOperationalTable"
-                      placeholder="选择要上传的数据表"
-                      clearable
-                      filterable
-                      :loading="operationalSchemaLoading && !operationalSchema"
-                      @change="handleOperationalTableChange"
-                    >
-                      <el-option
-                        v-for="table in operationalTables"
-                        :key="table"
-                        :label="operationalTableDescriptions[table] || table"
-                        :value="table"
-                      />
-                    </el-select>
-                  </el-form-item>
-                </el-form>
-
-                <p class="table-description">{{ operationalTableDescription }}</p>
-
-                <div class="upload-drop-wrapper">
-                  <el-upload
-                    class="operational-upload-dropzone"
-                    drag
-                    :limit="1"
-                    :auto-upload="false"
-                    :file-list="operationalUpload.fileList"
-                    :on-change="handleOperationalFileChange"
-                    :on-remove="handleOperationalFileRemove"
-                    accept=".csv"
-                  >
-                    <div class="dropzone-inner">
-                      <el-icon class="dropzone-icon"><UploadFilled /></el-icon>
-                      <div class="dropzone-title">拖拽或点击上传 CSV 文件</div>
-                      <p class="dropzone-desc">系统将自动绑定「{{ currentWindFarmDisplay }}」</p>
-                    </div>
-                  </el-upload>
-                </div>
-
-                <transition name="fade-slide">
-                  <div v-if="operationalUpload.file" class="selected-file-chip">
-                    <span class="file-icon">
-                      <el-icon><Document /></el-icon>
-                    </span>
-                    <div class="file-meta">
-                      <span class="file-name">{{ operationalUpload.file.name }}</span>
-                      <span class="file-size">{{ formatFileSize(operationalUpload.file.size) }}</span>
-                    </div>
-                    <el-button type="text" size="small" @click="resetOperationalUploadState({ clearMessages: true })">更换文件</el-button>
-                  </div>
-                </transition>
-
-                <div class="operational-upload-actions">
-                  <el-button type="primary" size="large" :loading="operationalUpload.uploading" @click="uploadOperationalDataset">上传数据</el-button>
-                  <el-button size="large" @click="resetOperationalUploadState({ clearMessages: true })">清空</el-button>
-                </div>
-
-                <transition name="fade-slide">
-                  <el-alert
-                    v-if="operationalUploadResult"
-                    type="success"
-                    :title="operationalUploadResult.message || '上传成功'"
-                    show-icon
-                    closable
-                    @close="operationalUploadResult = null"
-                  />
-                </transition>
-                <transition name="fade-slide">
-                  <el-alert
-                    v-if="operationalUploadError"
-                    type="error"
-                    :title="operationalUploadError"
-                    show-icon
-                    closable
-                    @close="operationalUploadError = null"
-                  />
-                </transition>
-              </div>
-            </el-col>
-            <el-col :xs="24" :lg="10">
-              <div class="schema-panel">
-                <div class="schema-panel-header">
-                  <h3>字段要求</h3>
-                  <span>确保 CSV 列与字段类型匹配</span>
-                </div>
-                <div class="schema-panel-body">
-                  <div v-if="operationalSchemaLoading" class="schema-loading">
-                    <el-skeleton :rows="6" animated />
-                  </div>
-                  <el-table
-                    v-else-if="operationalSchemaRows.length"
-                    :data="operationalSchemaRows"
-                    class="schema-table"
-                    border
-                    size="small"
-                  >
-                    <el-table-column prop="name" label="字段名" width="140" />
-                    <el-table-column label="字段说明">
-                      <template #default="{ row }">
-                        <div class="schema-info">
-                          <span class="schema-type">{{ row.meta?.type || '未知类型' }}</span>
-                          <span v-if="row.meta?.comment" class="schema-comment">{{ row.meta.comment }}</span>
-                          <span class="schema-required">
-                            {{ row.meta?.nullable ? '可为空' : '必填' }}
-                            <span v-if="row.meta?.primary_key" class="schema-primary">主键</span>
-                          </span>
-                        </div>
-                      </template>
-                    </el-table-column>
-                  </el-table>
-                  <el-empty v-else description="请选择数据类型以查看字段信息" />
-                </div>
-              </div>
-            </el-col>
-          </el-row>
+        <!-- Row 2: Type Select -->
+        <div class="config-row config-row-2">
+          <div class="type-checkbox-group type-checkbox-group-row2">
+            <span class="label">选择展示类型：</span>
+            <el-checkbox-group v-model="selectedTypes" class="type-selector-group">
+              <el-checkbox label="实测值" />
+              <el-checkbox label="超短期预测" />
+              <el-checkbox label="短期预测" />
+              <el-checkbox label="中期预测" />
+              <el-checkbox label="短期风速预测" />
+              <el-checkbox label="中期风速预测" />
+            </el-checkbox-group>
+          </div>
         </div>
       </el-card>
-
-      <!-- 时间选择与配置区域 -->
-      <div class="config-panel">
-        <el-card class="merged-config-card"> 
-          <!-- Row 1: Time Picker, Query Button, Download Buttons -->
-          <div class="config-row config-row-1">
-            <div class="time-picker-wrapper-outer">
-              <span class="label">选择时间范围：</span>
-              <el-date-picker
-                v-model="timeRange"
-                type="datetimerange"
-                range-separator="至"
-                start-placeholder="开始时间"
-                end-placeholder="结束时间"
-                value-format="YYYY-MM-DD HH:mm:ss"
-                class="time-range-picker-element" 
-              />
-            </div>
-            <el-button-group class="quick-time-select-buttons" style="margin-left: 10px; margin-right: 10px;">
-              <el-button type="info" plain size="small" @click="setQuickTimeRange('today')" :disabled="isQuickTimeSwitching">今日</el-button>
-              <el-button type="info" plain size="small" @click="setQuickTimeRange('3d')" :disabled="isQuickTimeSwitching">近三天</el-button>
-              <el-button type="info" plain size="small" @click="setQuickTimeRange('1w')" :disabled="isQuickTimeSwitching">近一周</el-button>
-              <el-button type="info" plain size="small" @click="setQuickTimeRange('1m')" :disabled="isQuickTimeSwitching">近一个月</el-button>
-            </el-button-group>
-            <el-button 
-              type="primary" 
-              @click="fetchComparisonData"
-              :loading="loading"
-              class="query-button"
-            >
-              查询数据
-            </el-button>
-            <el-button-group class="download-buttons download-buttons-row1">
-              <el-button 
-                type="success" 
-                @click="downloadCSV"
-                :disabled="!exportData.comparison"
-              >
-                数据下载
-              </el-button>
-              <el-button 
-                type="success" 
-                @click="downloadMetricsCSV"
-                :disabled="!exportData.metrics"
-              >
-                指标下载
-              </el-button>
-              <el-button 
-                type="success" 
-                @click="downloadSVG"
-                :disabled="!chartData"
-              >
-                功率图下载
-              </el-button>
-              <el-button 
-                type="success" 
-                @click="downloadMetricSVG"
-                :disabled="!dailyMetrics"
-              >
-                指标图下载
-              </el-button>
-              <el-button
-                type="success"
-                @click="showDailyMetricsAnalysis = !showDailyMetricsAnalysis"
-              >
-                {{ showDailyMetricsAnalysis ? '隐藏' : '显示' }}每日指标
-              </el-button>
-              <el-button
-                type="success"
-                @click="showQualificationRateAnalysis = !showQualificationRateAnalysis"
-                :disabled="!qualificationRates || Object.keys(qualificationRates).length === 0"
-              >
-                {{ showQualificationRateAnalysis ? '隐藏' : '显示' }}合格率分析
-              </el-button>
-            </el-button-group>
-          </div>
-
-          <!-- Row 2: Type Select -->
-          <div class="config-row config-row-2">
-            <div class="type-checkbox-group type-checkbox-group-row2">
-              <span class="label">选择展示类型：</span>
-              <el-checkbox-group v-model="selectedTypes" class="type-selector-group">
-                <el-checkbox label="实测值" />
-                <el-checkbox label="超短期预测" />
-                <el-checkbox label="短期预测" />
-                <el-checkbox label="中期预测" />
-                <el-checkbox label="短期风速预测" />
-                <el-checkbox label="中期风速预测" />
-              </el-checkbox-group>
-            </div>
-          </div>
-        </el-card>
-      </div>
-
-      <!-- 图表展示区域 -->
-      <div class="chart-container" v-if="chartData">
-        <div class="chart-wrapper" :key="chartKey">
-          <canvas ref="chartCanvas" style="height: 70vh !important;"></canvas>
-        </div>
-      </div>
-
-      <!-- 每日指标区域 -->
-      <div class="daily-metrics-container" v-if="showDailyMetricsAnalysis && dailyMetrics">
-        <el-card class="metrics-card">
-          <div class="metrics-header">
-            <h3>每日评估指标</h3>
-            <div class="metric-buttons">
-              <el-radio-group v-model="currentMetric" @change="handleMetricChange">
-                <el-radio-button label="acc" :disabled="isMetricButtonCooling">ACC (%)</el-radio-button>
-                <el-radio-button label="mae" :disabled="isMetricButtonCooling">MAE (MW)</el-radio-button>
-                <el-radio-button label="mse" :disabled="isMetricButtonCooling">MSE (MW²)</el-radio-button>
-                <el-radio-button label="rmse" :disabled="isMetricButtonCooling">RMSE (MW)</el-radio-button>
-                <el-radio-button label="k" :disabled="isMetricButtonCooling">K值</el-radio-button>
-                <el-radio-button label="pe" :disabled="isMetricButtonCooling">Pe (MW)</el-radio-button>
-              </el-radio-group>
-            </div>
-          </div>
-          <div class="metrics-chart-wrapper">
-            <canvas 
-              ref="metricChart" 
-              style="width: 100%; height: 100%; display: block;"
-            ></canvas>
-          </div>
-        </el-card>
-      </div>
-
-      <!-- 数据提示区域 -->
-      <div class="empty-data-container" v-if="!chartData">
-        <el-card class="empty-data-card">
-          <div class="empty-data-content">
-            <el-icon class="empty-icon"><PieChart /></el-icon>
-            <h3>暂无数据</h3>
-            <p class="empty-text">请选择时间范围并点击查询数据按钮</p>
-          </div>
-        </el-card>
-      </div>
-
-      <!-- 合格率分析区域 -->
-      <div class="qualification-container" v-if="showQualificationRateAnalysis && qualificationRates && Object.keys(qualificationRates).length > 0">
-        <el-card class="qualification-card">
-          <div class="qualification-header">
-            <h3>预测合格率分析</h3>
-          </div>
-          <div class="qualification-content">
-            <div v-for="(data, type) in qualificationRates" :key="type" class="qualification-item">
-              <div class="qualification-type">
-                <span class="type-label">{{ type }}</span>
-                <span class="threshold-label">合格标准: K值 > {{ data.threshold }}</span>
-              </div>
-              <el-progress 
-                :percentage="data.rate" 
-                :color="getQualificationColor(data.rate)"
-                :format="percent => `${percent.toFixed(1)}%`"
-                :stroke-width="18"
-              />
-              <div class="qualification-details">
-                <span>合格天数: {{ data.qualifiedDays }}/{{ data.totalDays }}</span>
-              </div>
-            </div>
-          </div>
-        </el-card>
-      </div>
-
-      <!-- 加载状态 -->
-      <LoadingIndicator 
-        :visible="loading" 
-        message="数据加载中..."
-      />
     </div>
-  </div>
+
+    <!-- 图表展示区域 -->
+    <div class="chart-container" v-if="chartData">
+      <div class="chart-wrapper" :key="chartKey">
+        <canvas ref="chartCanvas" style="height: 70vh !important;"></canvas>
+      </div>
+    </div>
+
+    <!-- 每日指标区域 -->
+    <div class="daily-metrics-container" v-if="showDailyMetricsAnalysis && dailyMetrics">
+      <el-card class="metrics-card glass-panel">
+        <div class="metrics-header">
+          <h3>每日评估指标</h3>
+          <div class="metric-buttons">
+            <el-radio-group v-model="currentMetric" @change="handleMetricChange">
+              <el-radio-button label="acc" :disabled="isMetricButtonCooling">ACC (%)</el-radio-button>
+              <el-radio-button label="mae" :disabled="isMetricButtonCooling">MAE (MW)</el-radio-button>
+              <el-radio-button label="mse" :disabled="isMetricButtonCooling">MSE (MW²)</el-radio-button>
+              <el-radio-button label="rmse" :disabled="isMetricButtonCooling">RMSE (MW)</el-radio-button>
+              <el-radio-button label="k" :disabled="isMetricButtonCooling">K值</el-radio-button>
+              <el-radio-button label="pe" :disabled="isMetricButtonCooling">Pe (MW)</el-radio-button>
+            </el-radio-group>
+          </div>
+        </div>
+        <div class="metrics-chart-wrapper">
+          <canvas 
+            ref="metricChart" 
+            style="width: 100%; height: 100%; display: block;"
+          ></canvas>
+        </div>
+      </el-card>
+    </div>
+
+    <!-- 数据提示区域 -->
+    <div class="empty-data-container" v-if="!chartData">
+      <el-card class="empty-data-card glass-panel">
+        <div class="empty-data-content">
+          <el-icon class="empty-icon"><PieChart /></el-icon>
+          <h3>暂无数据</h3>
+          <p class="empty-text">请选择时间范围并点击查询数据按钮</p>
+        </div>
+      </el-card>
+    </div>
+
+    <!-- 合格率分析区域 -->
+    <div class="qualification-container" v-if="showQualificationRateAnalysis && qualificationRates && Object.keys(qualificationRates).length > 0">
+      <el-card class="qualification-card glass-panel">
+        <div class="qualification-header">
+          <h3>预测合格率分析</h3>
+        </div>
+        <div class="qualification-content">
+          <div v-for="(data, type) in qualificationRates" :key="type" class="qualification-item">
+            <div class="qualification-type">
+              <span class="type-label">{{ type }}</span>
+              <span class="threshold-label">合格标准: K值 > {{ data.threshold }}</span>
+            </div>
+            <el-progress 
+              :percentage="data.rate" 
+              :color="getQualificationColor(data.rate)"
+              :format="percent => `${percent.toFixed(1)}%`"
+              :stroke-width="18"
+            />
+            <div class="qualification-details">
+              <span>合格天数: {{ data.qualifiedDays }}/{{ data.totalDays }}</span>
+            </div>
+          </div>
+        </div>
+      </el-card>
+    </div>
+
+    <!-- 加载状态 -->
+    <LoadingIndicator 
+      :visible="loading" 
+      message="数据加载中..."
+    />
+  </DigitalPage>
 </template>
 
 <script>
@@ -346,6 +344,8 @@ import axiosInstance from '../api/axios'
 import { ElMessage } from 'element-plus'
 import { useWindFarmStore } from '@/store/windFarm'
 import { UploadFilled, Document } from '@element-plus/icons-vue'
+import DigitalPage from './common/DigitalPage.vue'
+import DigitalHero from './common/DigitalHero.vue'
 
 Chart.register(
   CategoryScale,
@@ -370,6 +370,8 @@ export default {
   components: {
     UploadFilled,
     Document,
+    DigitalPage,
+    DigitalHero,
   },
   data() {
     return {
@@ -444,6 +446,43 @@ export default {
         return record.farm_name || record.farm_code || this.selectedWindFarm;
       }
       return this.selectedWindFarm;
+    },
+    heroMetrics() {
+      const compareReady = !!this.chartData
+      const uploadReady = !!(this.operationalUploadResult || this.operationalUpload.file)
+
+      return [
+        {
+          id: 'timeRange',
+          label: '时间范围',
+          value: this.timeRangeFormatted,
+          meta: '当前查询范围',
+        },
+        {
+          id: 'types',
+          label: '展示类型',
+          value: this.selectedTypes.length,
+          meta: '预测/实测曲线',
+        },
+        {
+          id: 'compare',
+          label: '对比数据',
+          value: compareReady ? 'READY' : 'PENDING',
+          meta: compareReady ? '图表已生成' : '等待查询',
+        },
+        {
+          id: 'uploads',
+          label: '运营数据上传',
+          value: uploadReady ? '配置中' : '未上传',
+          meta: this.selectedOperationalTable || '未选择表',
+        },
+      ]
+    },
+    timeRangeFormatted() {
+      if (!Array.isArray(this.timeRange) || this.timeRange.length !== 2 || !this.timeRange[0] || !this.timeRange[1]) {
+        return '未选择'
+      }
+      return `${this.timeRange[0].slice(5, 16)} ~ ${this.timeRange[1].slice(5, 16)}`
     },
     operationalTableDescription() {
       if (!this.selectedOperationalTable) {
@@ -1840,100 +1879,31 @@ export default {
 </script>
 
 <style scoped>
-.power-compare-container {
-  min-height: 100vh;
-  position: relative;
-  padding: 40px;
-  color: #fff;
-  overflow: hidden;  /* 确保背景动画不会溢出 */
+.operational-upload-body {
+  padding: 8px 6px 20px;
 }
 
-.refresh-button {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  z-index: 1000; /*确保在其他元素之上*/
-  background-color: rgba(255, 255, 255, 0.8) !important; /* 确保背景颜色不被全局样式覆盖 */
-  border: 1px solid #dcdfe6 !important; /* 添加边框以增加可见性 */
-  color: #606266 !important; /* 图标颜色 */
+.operational-upload-grid {
+  align-items: stretch;
 }
 
-.refresh-button:hover {
-  background-color: rgba(240, 240, 240, 0.9) !important;
-  border-color: #c0c4cc !important;
-  color: #303133 !important;
-}
-
-/* 添加背景容器样式 */
-.background-container {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: -1;
-}
-
-/* 添加动画背景样式 */
-.animated-background {
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: linear-gradient(
-    135deg,
-    #43cea2 0%,
-    #185a9d 50%,
-    #43cea2 100%
-  );
-  animation: gradient 15s ease infinite;
-  transform-origin: center center;
-  z-index: -1;
-}
-
-/* 添加背景动画关键帧 */
-@keyframes gradient {
-  0% {
-    transform: rotate(0deg);
-  }
-  50% {
-    transform: rotate(180deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-.page-title {
-  color: #ffffff;
-  font-size: 32px;
-  font-weight: 600;
-  margin-bottom: 40px;
-  text-align: center;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.wind-farm-banner {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 24px;
-}
-
-.operational-upload-card {
-  margin-bottom: 24px;
-  background: rgba(255, 255, 255, 0.96);
+.upload-panel,
+.schema-panel,
+.action-card,
+.merged-config-card,
+.metrics-card,
+.qualifications-card,
+.visualization-section,
+.qualification-card {
   border-radius: 18px;
-  box-shadow: 0 16px 40px rgba(0, 41, 102, 0.1);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.45);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px 0;
+  gap: 14px;
+  flex-wrap: wrap;
 }
 
 .card-header-title {
@@ -1946,7 +1916,7 @@ export default {
   width: 44px;
   height: 44px;
   border-radius: 12px;
-  background: linear-gradient(135deg, rgba(33, 150, 243, 0.18), rgba(76, 175, 80, 0.18));
+  background: rgba(33, 150, 243, 0.18);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1963,30 +1933,12 @@ export default {
 .card-title {
   font-size: 18px;
   font-weight: 600;
-  color: #1f2d3d;
+  color: var(--text-primary);
 }
 
 .card-subtitle {
   font-size: 12px;
-  color: rgba(31, 45, 61, 0.55);
-}
-
-.operational-upload-body {
-  padding: 8px 6px 20px;
-}
-
-.operational-upload-grid {
-  align-items: stretch;
-}
-
-.upload-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(243, 249, 255, 0.95) 100%);
-  border: 1px solid rgba(47, 128, 237, 0.08);
-  border-radius: 16px;
-  padding: 20px;
+  color: var(--text-secondary);
 }
 
 .upload-steps {
@@ -1994,17 +1946,6 @@ export default {
   border: 1px dashed rgba(79, 152, 255, 0.3);
   border-radius: 12px;
   padding: 14px 16px;
-}
-
-.upload-steps ul {
-  margin: 8px 0 0;
-  padding-left: 16px;
-  color: rgba(31, 45, 61, 0.72);
-  line-height: 1.55;
-}
-
-.upload-steps li + li {
-  margin-top: 6px;
 }
 
 .tip-badge {
@@ -2019,33 +1960,9 @@ export default {
   letter-spacing: 0.4px;
 }
 
-.operational-form {
-  margin-top: -4px;
-}
-
-.operational-form :deep(.el-form-item) {
-  margin-bottom: 0;
-}
-
-.operational-form :deep(.el-select) {
-  width: 100%;
-}
-
-.table-description {
-  color: rgba(31, 45, 61, 0.65);
-  font-size: 13px;
-  background: rgba(47, 128, 237, 0.06);
-  border-radius: 12px;
-  padding: 10px 14px;
-}
-
 .upload-drop-wrapper {
   border-radius: 14px;
   overflow: hidden;
-}
-
-.operational-upload-dropzone {
-  width: 100%;
 }
 
 .operational-upload-dropzone :deep(.el-upload) {
@@ -2053,16 +1970,10 @@ export default {
 }
 
 .operational-upload-dropzone :deep(.el-upload-dragger) {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.08);
   border: 1px dashed rgba(47, 128, 237, 0.35);
   border-radius: 14px;
   padding: 26px;
-  transition: border-color 0.25s ease, box-shadow 0.25s ease;
-}
-
-.operational-upload-dropzone :deep(.el-upload-dragger:hover) {
-  border-color: rgba(47, 128, 237, 0.6);
-  box-shadow: 0 12px 28px rgba(47, 128, 237, 0.12);
 }
 
 .dropzone-inner {
@@ -2072,21 +1983,18 @@ export default {
   gap: 8px;
 }
 
-.dropzone-icon {
-  font-size: 28px;
-  color: #2f80ed;
-}
-
 .dropzone-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1f2d3d;
+  color: var(--text-primary);
 }
 
-.dropzone-desc {
-  font-size: 12px;
-  color: rgba(31, 45, 61, 0.6);
-  margin: 0;
+.table-description {
+  color: var(--text-secondary);
+  font-size: 13px;
+  background: rgba(47, 128, 237, 0.06);
+  border-radius: 12px;
+  padding: 10px 14px;
 }
 
 .selected-file-chip {
@@ -2099,525 +2007,97 @@ export default {
   border: 1px solid rgba(47, 128, 237, 0.12);
 }
 
-.file-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: rgba(47, 128, 237, 0.12);
-  color: #2f80ed;
-}
-
-.file-meta {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.file-name {
-  font-weight: 600;
-  color: #1f2d3d;
-  word-break: break-all;
-}
-
-.file-size {
-  font-size: 12px;
-  color: rgba(31, 45, 61, 0.55);
-}
-
-.operational-upload-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-.operational-upload-actions .el-button {
-  min-width: 120px;
-}
-
-.schema-panel {
-  height: 100%;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(239, 246, 255, 0.98) 100%);
-  border: 1px solid rgba(47, 128, 237, 0.12);
-  border-radius: 16px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  box-shadow: 0 12px 32px rgba(0, 41, 102, 0.08);
-}
-
 .schema-panel-header {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-}
-
-.schema-panel-header h3 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: #1f2d3d;
-}
-
-.schema-panel-header span {
-  font-size: 12px;
-  color: rgba(31, 45, 61, 0.55);
+  gap: 6px;
 }
 
 .schema-panel-body {
-  flex: 1;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(6, 18, 36, 0.7);
   border-radius: 14px;
-  border: 1px solid rgba(47, 128, 237, 0.08);
   padding: 12px 10px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
-}
-
-.schema-loading {
-  padding: 8px 0;
-}
-
-.schema-table {
-  max-height: 280px;
-  overflow-y: auto;
-  border-radius: 12px;
-  background: transparent;
-}
-
-.schema-table :deep(.el-table) {
-  background: transparent;
-}
-
-.schema-table :deep(.el-table__header-wrapper) {
-  border-radius: 10px 10px 0 0;
-  overflow: hidden;
-}
-
-.schema-table :deep(.el-table__header-wrapper th) {
-  background: rgba(47, 128, 237, 0.12) !important;
-  color: #1f2d3d;
-  font-weight: 600;
-}
-
-.schema-table :deep(.el-table__cell) {
-  padding: 12px 16px;
-  font-size: 13px;
-}
-
-.schema-table :deep(.el-table__body tr:nth-child(odd) td) {
-  background: rgba(47, 128, 237, 0.04) !important;
-}
-
-.schema-table :deep(.el-table__body tr:hover > td) {
-  background: rgba(47, 128, 237, 0.08) !important;
-}
-
-.schema-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.schema-type {
-  font-weight: 600;
-  color: #1f2d3d;
-}
-
-.schema-comment {
-  font-size: 12px;
-  color: rgba(31, 45, 61, 0.6);
-}
-
-.schema-required {
-  font-size: 12px;
-  color: rgba(31, 45, 61, 0.55);
-}
-
-.schema-primary {
-  color: #f56c6c;
-  margin-left: 4px;
-}
-
-.fade-slide-enter-active,
-.fade-slide-leave-active {
-  transition: all 0.25s ease;
-}
-
-.fade-slide-enter-from,
-.fade-slide-leave-to {
-  opacity: 0;
-  transform: translateY(6px);
 }
 
 .config-panel {
-  margin-bottom: 24px;
-}
-
-.merged-config-card {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(10px);
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px; /* Consistent gap between rows */
-}
-
-.config-row {
-  display: flex;
-  align-items: center; 
-  gap: 16px; 
-  flex-wrap: wrap; 
-}
-
-.config-row-1 .time-picker-wrapper-outer {
-  display: flex;
-  align-items: center;
-  gap: 8px; 
-}
-
-.time-range-picker-element {
-  min-width: 300px; /* Give date picker enough space */
-}
-
-.download-buttons-row1 {
-  margin-left: 16px; /* Add some space if query button is not pushing it far enough */
-  /* Or use flex-grow on an element or justify-content on parent if more complex spacing is needed */
-}
-
-/* Row 2: Type Select */
-.config-row-2 .type-checkbox-group-row2 {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%; /* Allow it to take full width for its checkboxes */
-}
-
-/* Row 3: Horizon Select */
-.config-row-3 .horizon-select-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%; /* Allow it to take full width for its checkboxes */
-}
-
-/* General styling for checkbox groups within rows */
-.type-selector-group, .horizon-selector-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px 15px; /* row-gap column-gap */
-}
-
-.type-selector-group .el-checkbox,
-.horizon-selector-group .el-checkbox {
-  margin-right: 0px !important; /* Override Element Plus default if any */
-  margin-left: 0 !important; 
-}
-
-/* Label styling remains the same */
-.label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  color: #333;
-  font-weight: 500;
-  white-space: nowrap;
+  margin: 28px 0;
 }
 
 .chart-container {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(10px);
+  background: rgba(6, 18, 36, 0.78);
+  border: 1px solid rgba(66, 195, 255, 0.18);
+  border-radius: 18px;
   padding: 24px;
-  height: 75vh;
-  margin-top: 20px;
+}
+
+.visualization-section {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 28px;
+}
+
+.visualization-header,
+.metrics-header,
+.qualification-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.metrics-container,
+.qualification-card {
+  background: rgba(6, 18, 36, 0.78);
+  border: 1px solid rgba(66, 195, 255, 0.18);
+  border-radius: 18px;
+  padding: 24px;
+}
+
+.metrics-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.metric-item {
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: rgba(8, 22, 44, 0.85);
+  border: 1px solid rgba(66, 195, 255, 0.18);
+}
+
+.action-button,
+.download-buttons .el-button,
+.predict-button,
+.download-button {
+  border-radius: 12px;
 }
 
 .chart-wrapper {
-  width: 100%;
-  height: 100%;
-  position: relative;
-}
-
-.empty-chart {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  color: #909399;
-}
-
-.empty-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
-}
-
-canvas {
-  width: 100% !important;
-  height: 100% !important;
-}
-
-:deep(.chartjs-size-monitor) {
-  width: 100% !important;
-  height: 100% !important;
-}
-
-.daily-metrics-container {
-  margin-top: 24px;
-}
-
-.metrics-card {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(8, 22, 44, 0.85);
   border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(10px);
-}
-
-.metrics-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.metrics-header h3 {
-  margin: 0;
-  color: #333;
-}
-
-.metric-buttons {
-  display: flex;
-  gap: 10px;
+  padding: 16px;
+  border: 1px solid rgba(66, 195, 255, 0.18);
 }
 
 .metrics-chart-wrapper {
-  height: 500px;
-  min-height: 400px;
-  position: relative;
-  width: 100%;
-  background: white;
-  padding: 20px;
-  overflow: hidden;
+  height: 480px;
 }
 
-.metrics-chart-wrapper canvas {
-  width: 100% !important;
-  height: 100% !important;
-  display: block !important;
+.log-section {
+  margin-top: 24px;
 }
 
-.download-buttons {
-  display: flex;
-  gap: 8px;
-}
-
-.download-buttons .el-button {
-  padding: 8px 15px;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  white-space: nowrap;
-}
-
-.el-button--primary {
-  padding: 8px 20px;
-  font-size: 13px;
-  font-weight: 500;
-}
-
+.daily-metrics-container,
 .qualification-container {
   margin-top: 24px;
 }
 
-.qualification-card {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(10px);
-  padding: 20px;
-}
-
-.qualification-header {
-  margin-bottom: 20px;
-}
-
-.qualification-header h3 {
-  margin: 0;
-  color: #333;
-}
-
-.qualification-content {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 20px;
-}
-
-.qualification-item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.qualification-type {
-  margin-bottom: 10px;
-}
-
-.type-label {
-  font-weight: 500;
-}
-
-.threshold-label {
-  color: #909399;
-}
-
-.qualification-details {
-  margin-top: 10px;
-}
-
-.daily-qualification-table {
-  margin-top: 20px;
-}
-
-.daily-qualification-cell {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.big-item {
-  flex: 1 0 100%;
-  margin-bottom: 20px;
-  background-color: rgba(255, 255, 255, 0.8);
-  border-radius: 12px;
-  padding: 15px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-}
-
-.qualification-chart {
-  padding: 20px;
-  height: 100%;
-  overflow-y: auto;
-}
-
-.qualification-type {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 15px;
-}
-
-.type-label {
-  font-size: 16px;
-  font-weight: 600;
-  color: #333;
-}
-
-.threshold-label {
-  padding: 4px 10px;
-  background: #f5f7fa;
-  border-radius: 12px;
-  font-size: 14px;
-}
-
-.qualification-details {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 10px;
-  font-size: 14px;
-  color: #666;
-}
-
-.daily-qualification-table {
-  margin-top: 30px;
-  background-color: rgba(255, 255, 255, 0.8);
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-}
-
-.daily-qualification-table h4 {
-  margin-top: 0;
-  margin-bottom: 15px;
-  color: #333;
-  font-size: 16px;
-}
-
-.daily-qualification-cell {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-:deep(.el-table) {
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-:deep(.el-table th) {
-  background-color: #f5f7fa;
-  color: #333;
-  font-weight: 600;
-}
-
-:deep(.el-progress-bar__inner) {
-  transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-:deep(.el-progress) {
-  margin-bottom: 5px;
-}
-
-:deep(.el-progress-bar__outer) {
-  border-radius: 12px;
-  background-color: rgba(0, 0, 0, 0.05);
-}
-
-/* 添加空数据提示样式 */
-.empty-data-container {
-  margin-top: 30px;
-}
-
-.empty-data-card {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(10px);
-}
-
-.empty-data-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 80px 20px;
-  color: #909399;
-  text-align: center;
-}
-
-.empty-icon {
-  font-size: 60px;
-  margin-bottom: 20px;
-  color: #DCDFE6;
-}
-
-.empty-data-content h3 {
-  font-size: 18px;
-  font-weight: 500;
-  margin: 0 0 10px 0;
-}
-
-.empty-text {
-  font-size: 14px;
-  line-height: 1.5;
-  margin: 0;
+@media (max-width: 1280px) {
+  .workflow-layout {
+    grid-template-columns: 1fr;
+  }
 }
 </style> 

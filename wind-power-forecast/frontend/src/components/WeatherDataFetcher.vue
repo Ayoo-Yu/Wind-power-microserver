@@ -1,237 +1,240 @@
 <template>
-  <div class="weather-data-fetcher">
-    <!-- 动态渐变背景 -->
-    <div class="gradient-background"></div>
-    
-    <!-- 页面标题 -->
-    <div class="page-header">
-      <h1 class="page-title">气象预报数据拉取</h1>
-      <p class="page-description">配置SSH连接，实现气象预报数据的定时拉取、处理和上传</p>
-      <div class="wind-farm-banner">
-        <el-tag type="success" effect="dark">当前场站：{{ currentWindFarmDisplay }}</el-tag>
+  <DigitalPage>
+    <DigitalHero
+      eyebrow="WEATHER DATA PIPELINE"
+      title="气象预报数据拉取"
+      subtitle="配置SSH连接，实现气象预报数据的定时拉取、处理和上传"
+      :metrics="heroMetrics"
+    >
+      <template #meta>
+        <span class="digital-status-chip">当前场站：{{ currentWindFarmDisplay }}</span>
+      </template>
+    </DigitalHero>
+
+    <div class="digital-grid">
+      <div class="digital-grid digital-grid--two-column">
+        <el-card class="glass-panel" shadow="never">
+          <template #header>
+            <div class="card-header">
+              <el-icon class="card-icon"><Connection /></el-icon>
+              <span class="card-title">SSH连接配置</span>
+              <el-button
+                type="primary"
+                size="small"
+                @click="showConnectionDialog = true"
+              >
+                添加连接
+              </el-button>
+            </div>
+          </template>
+
+          <div class="connection-list">
+            <el-table
+              :data="connections"
+              style="width: 100%"
+              v-loading="loadingConnections"
+            >
+              <el-table-column prop="name" label="连接名称" header-align="center" align="center" />
+              <el-table-column prop="host" label="服务器地址" header-align="center" align="center" />
+              <el-table-column prop="port" label="端口" max-width="120" header-align="center" align="center" />
+              <el-table-column prop="username" label="用户名" header-align="center" align="center" />
+              <el-table-column prop="auth_type" label="认证方式" max-width="120" header-align="center" align="center">
+                <template #default="scope">
+                  <el-tag :type="scope.row.auth_type === 'password' ? 'primary' : 'success'">
+                    {{ scope.row.auth_type === 'password' ? '密码' : '密钥' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="status" label="状态" max-width="120" header-align="center" align="center">
+                <template #default="scope">
+                  <el-tag :type="scope.row.status === 'connected' ? 'success' : 'danger'">
+                    {{ scope.row.status === 'connected' ? '已连接' : '断开' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" max-width="280" header-align="center" align="center">
+                <template #default="scope">
+                  <div class="action-buttons-container">
+                    <el-button
+                      size="small"
+                      type="info"
+                      @click="testConnection(scope.row)"
+                      :loading="scope.row.testing"
+                      class="action-btn-mini"
+                    >
+                      测试连接
+                    </el-button>
+                    <el-button
+                      size="small"
+                      type="primary"
+                      @click="editConnection(scope.row)"
+                      class="action-btn-mini"
+                    >
+                      编辑
+                    </el-button>
+                    <el-button
+                      size="small"
+                      type="danger"
+                      @click="deleteConnection(scope.row)"
+                      class="action-btn-mini"
+                    >
+                      删除
+                    </el-button>
+                  </div>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </el-card>
+
+        <el-card class="glass-panel" shadow="never">
+          <template #header>
+            <div class="card-header">
+              <div class="header-left">
+                <el-icon class="card-icon"><Timer /></el-icon>
+                <span class="card-title">调度器状态</span>
+                <div class="header-status">
+                  <div class="status-item">
+                    <span class="status-label">运行状态:</span>
+                    <el-tag :type="schedulerInfo.is_running ? 'success' : 'danger'" size="small">
+                      {{ schedulerInfo.is_running ? '运行中' : '已停止' }}
+                    </el-tag>
+                  </div>
+                  <div class="status-item">
+                    <span class="status-label">已调度任务:</span>
+                    <el-tag type="primary" size="small">{{ schedulerInfo.total_jobs || 0 }} 个</el-tag>
+                  </div>
+                </div>
+              </div>
+              <div class="scheduler-actions">
+                <el-button
+                  type="info"
+                  size="small"
+                  @click="checkSchedulerStatus"
+                  :loading="checkingScheduler"
+                >
+                  检查状态
+                </el-button>
+                <el-button
+                  type="warning"
+                  size="small"
+                  @click="restartScheduler"
+                  :loading="restartingScheduler"
+                >
+                  重启调度器
+                </el-button>
+              </div>
+            </div>
+          </template>
+
+          <div v-if="schedulerInfo.jobs && schedulerInfo.jobs.length > 0" class="scheduled-jobs">
+            <div class="jobs-title">已调度的任务:</div>
+            <div class="jobs-list">
+              <div v-for="job in schedulerInfo.jobs" :key="job.id" class="job-item">
+                <span class="job-name">{{ job.name }}</span>
+                <span class="job-next-run">下次执行: {{ formatNextRunTime(job.next_run_time) }}</span>
+              </div>
+            </div>
+          </div>
+        </el-card>
       </div>
+
+      <el-card class="glass-panel" shadow="never">
+        <template #header>
+          <div class="card-header">
+            <el-icon class="card-icon"><Download /></el-icon>
+            <span class="card-title">数据拉取任务</span>
+            <el-button
+              type="primary"
+              size="small"
+              @click="showTaskDialog = true"
+            >
+              创建任务
+            </el-button>
+          </div>
+        </template>
+
+        <div class="task-list">
+          <el-table
+            :data="tasks"
+            style="width: 100%"
+            v-loading="loadingTasks"
+          >
+            <el-table-column prop="name" label="任务名称" max-width="140" header-align="center" align="center" />
+            <el-table-column prop="connection_name" label="连接" max-width="160" header-align="center" align="center" />
+            <el-table-column prop="schedule" label="执行频率" max-width="140" header-align="center" align="center">
+              <template #default="scope">
+                {{ getScheduleDescription(scope.row.schedule) }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="status" label="状态" max-width="120" header-align="center" align="center">
+              <template #default="scope">
+                <el-tag :type="getTaskStatusType(scope.row.status, scope.row.enabled)">
+                  {{ getTaskStatusText(scope.row.status, scope.row.enabled) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="last_run" label="最后执行" max-width="200" header-align="center" align="center" />
+            <el-table-column label="操作" max-width="320" fixed="right" header-align="center" align="center">
+              <template #default="scope">
+                <div class="action-buttons-container">
+                  <el-button
+                    size="mini"
+                    type="info"
+                    @click="runTask(scope.row)"
+                    :loading="scope.row.running"
+                    class="action-btn-mini"
+                  >
+                    立即执行
+                  </el-button>
+                  <el-button
+                    size="mini"
+                    type="primary"
+                    @click="viewTaskLogs(scope.row)"
+                    class="action-btn-mini"
+                  >
+                    查看日志
+                  </el-button>
+                  <el-button
+                    size="mini"
+                    :type="scope.row.enabled ? 'warning' : 'success'"
+                    @click="toggleTask(scope.row)"
+                    class="action-btn-mini"
+                  >
+                    {{ scope.row.enabled ? '停用' : '启用' }}
+                  </el-button>
+                  <el-button
+                    size="mini"
+                    type="primary"
+                    @click="editTask(scope.row)"
+                    class="action-btn-mini"
+                  >
+                    编辑
+                  </el-button>
+                  <el-button
+                    size="mini"
+                    type="danger"
+                    @click="deleteTask(scope.row)"
+                    class="action-btn-mini"
+                  >
+                    删除
+                  </el-button>
+                </div>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </el-card>
     </div>
 
-    <!-- SSH连接配置卡片 -->
-    <el-card class="config-card" shadow="hover">
-      <template #header>
-        <div class="card-header">
-          <el-icon class="card-icon"><Connection /></el-icon>
-          <span class="card-title">SSH连接配置</span>
-          <el-button 
-            type="primary" 
-            size="small" 
-            @click="showConnectionDialog = true"
-          >
-            添加连接
-          </el-button>
-        </div>
-      </template>
-      
-      <div class="connection-list">
-        <el-table 
-          :data="connections" 
-          style="width: 100%"
-          v-loading="loadingConnections"
-        >
-          <el-table-column prop="name" label="连接名称" header-align="center" align="center"/>
-          <el-table-column prop="host" label="服务器地址" header-align="center" align="center"/>
-          <el-table-column prop="port" label="端口" max-width="120" header-align="center" align="center"/>
-          <el-table-column prop="username" label="用户名" header-align="center" align="center"/>
-          <el-table-column prop="auth_type" label="认证方式" max-width="120" header-align="center" align="center">
-            <template #default="scope">
-              <el-tag :type="scope.row.auth_type === 'password' ? 'primary' : 'success'">
-                {{ scope.row.auth_type === 'password' ? '密码' : '密钥' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="status" label="状态" max-width="120" header-align="center" align="center">
-            <template #default="scope">
-              <el-tag :type="scope.row.status === 'connected' ? 'success' : 'danger'">
-                {{ scope.row.status === 'connected' ? '已连接' : '断开' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" max-width="280" header-align="center" align="center">
-            <template #default="scope">
-              <div class="button-group">
-                <el-button 
-                  size="small" 
-                  type="info"
-                  @click="testConnection(scope.row)"
-                  :loading="scope.row.testing"
-                >
-                  测试连接
-                </el-button>
-                <el-button 
-                  size="small" 
-                  type="primary" 
-                  @click="editConnection(scope.row)"
-                >
-                  编辑
-                </el-button>
-                <el-button 
-                  size="small" 
-                  type="danger" 
-                  @click="deleteConnection(scope.row)"
-                >
-                  删除
-                </el-button>
-              </div>
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
-    </el-card>
-
-    <!-- 调度器状态卡片 -->
-    <el-card class="scheduler-card" shadow="hover" style="margin-top: 20px;">
-      <template #header>
-                          <div class="card-header">
-           <div class="header-left">
-             <el-icon class="card-icon"><Timer /></el-icon>
-             <span class="card-title">调度器状态</span>
-             <div class="header-status">
-               <div class="status-item">
-                 <span class="status-label">运行状态:</span>
-                 <el-tag :type="schedulerInfo.is_running ? 'success' : 'danger'" size="small">
-                   {{ schedulerInfo.is_running ? '运行中' : '已停止' }}
-                 </el-tag>
-               </div>
-               <div class="status-item">
-                 <span class="status-label">已调度任务:</span>
-                 <el-tag type="primary" size="small">{{ schedulerInfo.total_jobs || 0 }} 个</el-tag>
-               </div>
-             </div>
-           </div>
-           <div class="scheduler-actions">
-             <el-button 
-               type="info" 
-               size="small" 
-               @click="checkSchedulerStatus"
-               :loading="checkingScheduler"
-             >
-               检查状态
-             </el-button>
-             <el-button 
-               type="warning" 
-               size="small" 
-               @click="restartScheduler"
-               :loading="restartingScheduler"
-             >
-               重启调度器
-             </el-button>
-           </div>
-         </div>
-       </template>
-       
-              <div v-if="schedulerInfo.jobs && schedulerInfo.jobs.length > 0" class="scheduled-jobs">
-         <div class="jobs-title">已调度的任务:</div>
-         <div class="jobs-list">
-           <div v-for="job in schedulerInfo.jobs" :key="job.id" class="job-item">
-             <span class="job-name">{{ job.name }}</span>
-             <span class="job-next-run">下次执行: {{ formatNextRunTime(job.next_run_time) }}</span>
-           </div>
-         </div>
-       </div>
-    </el-card>
-
-    <!-- 数据拉取任务卡片 -->
-    <el-card class="task-card" shadow="hover" style="margin-top: 20px;">
-      <template #header>
-        <div class="card-header">
-          <el-icon class="card-icon"><Download /></el-icon>
-          <span class="card-title">数据拉取任务</span>
-          <el-button 
-            type="primary" 
-            size="small" 
-            @click="showTaskDialog = true"
-          >
-            创建任务
-          </el-button>
-        </div>
-      </template>
-      
-      <div class="task-list">
-        <el-table 
-          :data="tasks" 
-          style="width: 100%"
-          v-loading="loadingTasks"
-        >
-          <el-table-column prop="name" label="任务名称" max-width="70" header-align="center" align="center"/>
-          <el-table-column prop="connection_name" label="连接" max-width="70" header-align="center" align="center"/>
-          <el-table-column prop="schedule" label="执行频率" max-width="70" header-align="center" align="center">
-            <template #default="scope">
-              {{ getScheduleDescription(scope.row.schedule) }}
-            </template>
-          </el-table-column>
-          <el-table-column prop="status" label="状态" max-width="70" header-align="center" align="center">
-            <template #default="scope">
-              <el-tag :type="getTaskStatusType(scope.row.status, scope.row.enabled)">
-                {{ getTaskStatusText(scope.row.status, scope.row.enabled) }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="last_run" label="最后执行" max-width="120" header-align="center" align="center"/>
-          <el-table-column label="操作" max-width="280" fixed="right" header-align="center" align="center">
-            <template #default="scope">
-              <div class="action-buttons-container">
-                <el-button 
-                  size="mini" 
-                  type="info"
-                  @click="runTask(scope.row)"
-                  :loading="scope.row.running"
-                  class="action-btn-mini"
-                >
-                  立即执行
-                </el-button>
-                <el-button 
-                  size="mini" 
-                  type="primary"
-                  @click="viewTaskLogs(scope.row)"
-                  class="action-btn-mini"
-                >
-                  查看日志
-                </el-button>
-                <el-button 
-                  size="mini" 
-                  :type="scope.row.enabled ? 'warning' : 'success'"
-                  @click="toggleTask(scope.row)"
-                  class="action-btn-mini"
-                >
-                  {{ scope.row.enabled ? '停用' : '启用' }}
-                </el-button>
-                <el-button 
-                  size="mini" 
-                  type="primary" 
-                  @click="editTask(scope.row)"
-                  class="action-btn-mini"
-                >
-                  编辑
-                </el-button>
-                <el-button 
-                  size="mini" 
-                  type="danger" 
-                  @click="deleteTask(scope.row)"
-                  class="action-btn-mini"
-                >
-                  删除
-                </el-button>
-              </div>
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
-    </el-card>
-
     <!-- SSH连接配置对话框 -->
-    <el-dialog 
-      v-model="showConnectionDialog" 
+    <el-dialog
+      v-model="showConnectionDialog"
       :title="editingConnection ? '编辑SSH连接' : '添加SSH连接'"
       width="600px"
     >
-      <el-form 
-        :model="connectionForm" 
+      <el-form
+        :model="connectionForm"
         :rules="connectionRules"
         ref="connectionFormRef"
         label-width="120px"
@@ -254,35 +257,35 @@
             <el-radio value="key">密钥认证</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item 
-          v-if="connectionForm.auth_type === 'password'" 
-          label="密码" 
+        <el-form-item
+          v-if="connectionForm.auth_type === 'password'"
+          label="密码"
           prop="password"
         >
-          <el-input 
-            v-model="connectionForm.password" 
-            type="password" 
-            show-password 
+          <el-input
+            v-model="connectionForm.password"
+            type="password"
+            show-password
             placeholder="SSH密码"
           />
         </el-form-item>
-        <el-form-item 
-          v-if="connectionForm.auth_type === 'key'" 
-          label="私钥路径" 
+        <el-form-item
+          v-if="connectionForm.auth_type === 'key'"
+          label="私钥路径"
           prop="private_key_path"
         >
           <div class="file-input-group">
-            <el-input 
-              v-model="connectionForm.private_key_path" 
+            <el-input
+              v-model="connectionForm.private_key_path"
               placeholder="服务器上的私钥文件路径，或点击右侧按钮选择本地文件"
             />
             <el-button type="primary" @click="selectPrivateKeyFile">
               <el-icon><Folder /></el-icon>
               选择文件
             </el-button>
-            <input 
+            <input
               ref="fileInput"
-              type="file" 
+              type="file"
               style="display: none"
               accept=".pem,.key,.ppk,*"
               @change="handleFileSelect"
@@ -294,25 +297,25 @@
             </el-text>
           </div>
         </el-form-item>
-        <el-form-item 
-          v-if="connectionForm.auth_type === 'key'" 
-          label="私钥密码" 
+        <el-form-item
+          v-if="connectionForm.auth_type === 'key'"
+          label="私钥密码"
           prop="key_passphrase"
         >
-          <el-input 
-            v-model="connectionForm.key_passphrase" 
-            type="password" 
-            show-password 
+          <el-input
+            v-model="connectionForm.key_passphrase"
+            type="password"
+            show-password
             placeholder="私钥密码（如有）"
           />
         </el-form-item>
       </el-form>
-      
+
       <template #footer>
         <div class="dialog-footer">
           <el-button @click="showConnectionDialog = false">取消</el-button>
-          <el-button 
-            type="primary" 
+          <el-button
+            type="primary"
             @click="saveConnection"
             :loading="savingConnection"
           >
@@ -323,13 +326,13 @@
     </el-dialog>
 
     <!-- 数据拉取任务配置对话框 -->
-    <el-dialog 
-      v-model="showTaskDialog" 
+    <el-dialog
+      v-model="showTaskDialog"
       :title="editingTask ? '编辑拉取任务' : '创建拉取任务'"
       width="800px"
     >
-      <el-form 
-        :model="taskForm" 
+      <el-form
+        :model="taskForm"
         :rules="taskRules"
         ref="taskFormRef"
         label-width="140px"
@@ -339,8 +342,8 @@
         </el-form-item>
         <el-form-item label="SSH连接" prop="connection_id">
           <el-select v-model="taskForm.connection_id" placeholder="选择SSH连接">
-            <el-option 
-              v-for="conn in connections" 
+            <el-option
+              v-for="conn in connections"
               :key="conn.id"
               :label="conn.name"
               :value="conn.id"
@@ -364,168 +367,89 @@
             <el-option label="自定义模式" value="custom" />
           </el-select>
         </el-form-item>
-        <el-form-item 
-          v-if="taskForm.path_pattern === 'custom'" 
-          label="自定义模式" 
-          prop="custom_path_pattern"
-        >
-          <el-input 
-            v-model="taskForm.custom_path_pattern" 
-            placeholder="YYYY_MMDDHHNN"
-          />
+        <el-form-item label="文件名模式" prop="file_pattern">
+          <el-input v-model="taskForm.file_pattern" placeholder="*.csv" />
           <div class="form-tip">
             <el-text type="info" size="small">
-              📝 支持变量: YYYY(年) MM(月) DD(日) HH(时) NN(分) SS(秒)
+              💡 文件名匹配模式，例如 "*.csv" 或 "data_*.txt"
             </el-text>
           </div>
         </el-form-item>
-        <el-form-item label="时间选择策略" prop="time_strategy">
-          <el-radio-group v-model="taskForm.time_strategy">
-            <el-radio value="latest">最新数据</el-radio>
-            <el-radio value="specific">指定时间</el-radio>
-            <el-radio value="range">时间范围</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item 
-          v-if="taskForm.time_strategy === 'specific'" 
-          label="指定时间" 
-          prop="specific_time"
-        >
-          <el-date-picker
-            v-model="taskForm.specific_time"
-            type="datetime"
-            placeholder="选择具体时间"
-            format="YYYY-MM-DD HH:mm"
-            value-format="YYYY-MM-DD HH:mm:ss"
-          />
-        </el-form-item>
-        <el-form-item 
-          v-if="taskForm.time_strategy === 'range'" 
-          label="时间范围" 
-          prop="time_range"
-        >
-          <el-date-picker
-            v-model="taskForm.time_range"
-            type="datetimerange"
-            range-separator="至"
-            start-placeholder="开始时间"
-            end-placeholder="结束时间"
-            format="YYYY-MM-DD HH:mm"
-            value-format="YYYY-MM-DD HH:mm:ss"
-          />
-        </el-form-item>
-        <el-form-item label="可用时间目录">
-          <el-button 
-            type="info" 
-            size="small" 
-            @click="checkAvailableDirectories"
-            :loading="checkingDirectories"
-            :disabled="!taskForm.connection_id || !taskForm.remote_path"
-          >
-            检查可用目录
-          </el-button>
-          <div v-if="availableDirectories.length > 0" class="available-dirs">
-            <el-tag 
-              v-for="dir in showAllDirectories ? availableDirectories : availableDirectories.slice(0, 4)" 
-              :key="dir.name"
-              size="small"
-              style="margin: 2px;"
-            >
-              {{ dir.name }}
-            </el-tag>
-            <span v-if="availableDirectories.length > 4" class="more-dirs">
-              <el-button 
-                v-if="!showAllDirectories"
-                type="primary" 
-                link 
-                size="small"
-                @click="showAllDirectories = true"
-              >
-                ...等{{ availableDirectories.length - 4 }}个 (点击展开)
-              </el-button>
-              <el-button 
-                v-else
-                type="primary" 
-                link 
-                size="small"
-                @click="showAllDirectories = false"
-              >
-                收起
-              </el-button>
-            </span>
+        <el-form-item label="执行频率" prop="schedule">
+          <el-input v-model="taskForm.schedule" placeholder="0 */6 * * *" />
+          <div class="form-tip">
+            <el-text type="info" size="small">
+              💡 使用标准的cron表达式，例如 "0 */6 * * *" 表示每6小时执行一次
+            </el-text>
           </div>
         </el-form-item>
-        <el-form-item label="文件名模式" prop="file_pattern">
-          <el-input v-model="taskForm.file_pattern" placeholder="*.nc, *.grib, *.txt等" />
+        <el-form-item label="自定义频率" prop="custom_schedule">
+          <el-input v-model="taskForm.custom_schedule" placeholder="例如: 0 0 * * *" />
+          <div class="form-tip">
+            <el-text type="info" size="small">
+              💡 如果选择"自定义频率"，请在此输入具体的cron表达式
+            </el-text>
+          </div>
         </el-form-item>
-        <el-form-item label="执行频率" prop="schedule">
-          <el-select v-model="taskForm.schedule" placeholder="选择执行频率">
-            <el-option label="每小时" value="0 * * * *" />
-            <el-option label="每6小时" value="0 */6 * * *" />
-            <el-option label="每12小时" value="0 */12 * * *" />
-            <el-option label="每天" value="0 0 * * *" />
-            <el-option label="自定义" value="custom" />
-          </el-select>
-        </el-form-item>
-        <el-form-item 
-          v-if="taskForm.schedule === 'custom'" 
-          label="Cron表达式" 
-          prop="custom_schedule"
-        >
-          <el-input v-model="taskForm.custom_schedule" placeholder="0 0 * * *" />
-        </el-form-item>
-        <el-form-item label="数据处理">
+        <el-form-item label="处理选项" prop="processing_options">
           <el-checkbox-group v-model="taskForm.processing_options">
-            <el-checkbox value="integrity_check">数据完整性校验</el-checkbox>
-            <el-checkbox value="interpolation">数据订正</el-checkbox>
-          </el-checkbox-group>
-        </el-form-item>
-        <el-form-item label="去重设置">
-          <el-checkbox-group v-model="taskForm.deduplication_options">
-            <el-checkbox value="skip_existing" checked>跳过已存在文件</el-checkbox>
-            <el-checkbox value="check_size">验证文件大小</el-checkbox>
-            <el-checkbox value="check_mtime">检查修改时间</el-checkbox>
-            <el-checkbox value="force_reprocess">强制重新处理</el-checkbox>
+            <el-checkbox label="完整性检查" />
+            <el-checkbox label="数据清洗" />
+            <el-checkbox label="数据转换" />
+            <el-checkbox label="数据验证" />
           </el-checkbox-group>
           <div class="form-tip">
             <el-text type="info" size="small">
-              🔄 智能去重：避免重复下载相同文件，提高拉取效率
+              💡 选择需要执行的处理步骤
+            </el-text>
+          </div>
+        </el-form-item>
+        <el-form-item label="去重选项" prop="deduplication_options">
+          <el-checkbox-group v-model="taskForm.deduplication_options">
+            <el-checkbox label="跳过已存在" />
+            <el-checkbox label="覆盖已存在" />
+            <el-checkbox label="仅记录差异" />
+          </el-checkbox-group>
+          <div class="form-tip">
+            <el-text type="info" size="small">
+              💡 选择数据去重策略
             </el-text>
           </div>
         </el-form-item>
         <el-form-item label="保存路径" prop="save_path">
-          <el-input 
-            v-model="taskForm.save_path" 
-            placeholder="气象数据本地保存路径"
-          />
+          <el-input v-model="taskForm.save_path" placeholder="D:\\weather_data\\{date}\\" />
           <div class="form-tip">
             <el-text type="info" size="small">
-              💡 Windows示例: D:\weather_data\  Linux示例: /data/weather/  
-              支持变量: {date} 自动替换为日期
+              💡 程序会将拉取到的文件保存到此路径，{date} 会替换为实际日期
             </el-text>
           </div>
         </el-form-item>
-        <el-form-item label="超时时间(秒)" prop="timeout">
-          <el-input-number v-model="taskForm.timeout" :min="30" :max="3600" />
+        <el-form-item label="超时时间 (秒)" prop="timeout">
+          <el-input-number v-model="taskForm.timeout" :min="1" :max="3600" />
+          <div class="form-tip">
+            <el-text type="info" size="small">
+              💡 任务执行超时时间，超过则视为失败
+            </el-text>
+          </div>
         </el-form-item>
         <el-form-item label="重试次数" prop="retry_count">
-          <el-input-number v-model="taskForm.retry_count" :min="0" :max="5" />
+          <el-input-number v-model="taskForm.retry_count" :min="0" :max="10" />
+          <div class="form-tip">
+            <el-text type="info" size="small">
+              💡 任务执行失败后的重试次数
+            </el-text>
+          </div>
         </el-form-item>
         <el-form-item label="任务描述" prop="description">
-          <el-input 
-            v-model="taskForm.description" 
-            type="textarea" 
-            :rows="3"
-            placeholder="任务说明"
-          />
+          <el-input type="textarea" v-model="taskForm.description" placeholder="任务的简要描述" />
         </el-form-item>
       </el-form>
-      
+
       <template #footer>
         <div class="dialog-footer">
           <el-button @click="showTaskDialog = false">取消</el-button>
-          <el-button 
-            type="primary" 
+          <el-button
+            type="primary"
             @click="saveTask"
             :loading="savingTask"
           >
@@ -536,8 +460,8 @@
     </el-dialog>
 
     <!-- 任务日志查看对话框 -->
-    <el-dialog 
-      v-model="showLogsDialog" 
+    <el-dialog
+      v-model="showLogsDialog"
       title="任务执行日志"
       width="1000px"
       :close-on-click-modal="false"
@@ -554,9 +478,9 @@
             <el-option label="警告" value="warning" />
             <el-option label="错误" value="error" />
           </el-select>
-          <el-button 
-            size="small" 
-            type="primary" 
+          <el-button
+            size="small"
+            type="primary"
             @click="fetchTaskLogs"
             :loading="loadingLogs"
           >
@@ -564,20 +488,20 @@
           </el-button>
         </div>
       </div>
-      
+
       <div class="logs-content" v-loading="loadingLogs">
         <div v-if="taskLogs.length === 0" class="no-logs">
           <el-empty description="暂无日志记录" />
         </div>
         <div v-else class="logs-list">
-          <div 
-            v-for="log in taskLogs" 
+          <div
+            v-for="log in taskLogs"
             :key="log.id"
             :class="['log-item', `log-${log.level}`]"
           >
             <div class="log-header">
-              <el-tag 
-                :type="getLogLevelType(log.level)" 
+              <el-tag
+                :type="getLogLevelType(log.level)"
                 size="small"
               >
                 {{ getLogLevelText(log.level) }}
@@ -589,14 +513,14 @@
           </div>
         </div>
       </div>
-      
+
       <template #footer>
         <div class="dialog-footer">
           <el-button @click="showLogsDialog = false">关闭</el-button>
         </div>
       </template>
     </el-dialog>
-  </div>
+  </DigitalPage>
 </template>
 
 <script>
@@ -610,10 +534,14 @@ import {
   Folder,
   Timer
 } from '@element-plus/icons-vue'
+import DigitalPage from './common/DigitalPage.vue'
+import DigitalHero from './common/DigitalHero.vue'
 
 export default {
   name: 'WeatherDataFetcher',
   components: {
+    DigitalPage,
+    DigitalHero,
     Connection,
     Download,
     Folder,
@@ -644,6 +572,27 @@ export default {
       jobs: [],
       total_jobs: 0
     })
+
+    const heroMetrics = computed(() => [
+      {
+        id: 'connections',
+        label: '已配置连接',
+        value: connections.value.length || 0,
+        meta: '活跃 SSH',
+      },
+      {
+        id: 'tasks',
+        label: '任务队列',
+        value: tasks.value.length || 0,
+        meta: '自动编排',
+      },
+      {
+        id: 'scheduler',
+        label: '调度器',
+        value: schedulerInfo.value.is_running ? 'RUNNING' : 'STOPPED',
+        meta: `已调度 ${schedulerInfo.value.total_jobs || 0} 项`,
+      },
+    ])
     
     // 加载状态
     const loadingConnections = ref(false)
@@ -1318,6 +1267,7 @@ export default {
       currentTaskName,
       logLevel,
       schedulerInfo,
+      heroMetrics,
       // 加载状态
       loadingConnections,
       loadingTasks,
@@ -1374,328 +1324,58 @@ export default {
 </script>
 
 <style scoped>
-.weather-data-fetcher {
-  position: relative;
-  min-height: 100vh;
-  padding: 20px;
-  overflow: hidden;
-}
-
-/* 动态渐变背景 */
-.gradient-background {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
-  background-size: 400% 400%;
-  animation: gradientShift 15s ease infinite;
-  z-index: -1;
-}
-
-@keyframes gradientShift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-/* 页面标题 */
-.page-header {
-  text-align: center;
-  margin-bottom: 30px;
-  color: white;
-  text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-  position: relative;
-  z-index: 1;
-}
-
-.page-title {
-  font-size: 42px;
-  font-weight: 600;
-  margin-bottom: 10px;
-  letter-spacing: -0.003em;
-  color: white;
-  margin: 0 0 10px 0;
-}
-
-.page-description {
-  font-size: 18px;
-  opacity: 0.9;
-  margin: 0;
-  color: white;
-}
-
-.wind-farm-banner {
-  margin-top: 12px;
-  display: flex;
-  justify-content: center;
-}
-
-/* 卡片样式 */
-:deep(.el-card) {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(15px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 20px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  margin-bottom: 24px;
-  transition: all 0.3s ease;
-  position: relative;
-  z-index: 1;
-}
-
-:deep(.el-card):hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
-  background: rgba(255, 255, 255, 0.98);
-}
-
-:deep(.el-card__header) {
-  padding: 20px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-  border-radius: 20px 20px 0 0;
-}
-
-:deep(.el-card__body) {
-  padding: 20px;
-}
-
 .card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-  min-height: 40px;
 }
 
 .header-left {
   display: flex;
   align-items: center;
   gap: 16px;
-  flex: 1;
   flex-wrap: wrap;
 }
 
 .card-icon {
-  font-size: 20px;
-  color: #409eff;
-  padding: 8px;
-  background: rgba(64, 158, 255, 0.1);
-  border-radius: 8px;
+  font-size: 22px;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(56, 196, 255, 0.12);
+  color: #38c4ff;
+  box-shadow: 0 12px 24px rgba(56, 196, 255, 0.18);
 }
 
 .card-title {
   font-weight: 600;
-  color: #2c3e50;
-  font-size: 18px;
+  font-size: 20px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-primary);
 }
 
 .header-status {
   display: flex;
-  gap: 16px;
   align-items: center;
-  margin-left: 20px;
+  gap: 16px;
   flex-wrap: wrap;
 }
 
-/* 表格样式 */
-:deep(.el-table) {
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  background: rgba(255, 255, 255, 0.9);
-  font-size: 14px;
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
 }
 
-:deep(.el-table__header) {
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-}
-
-:deep(.el-table th) {
-  background: transparent;
-  color: #2c3e50;
-  font-weight: 600;
-  border-bottom: 2px solid #dee2e6;
-}
-
-:deep(.el-table .el-table__row:hover) {
-  background: rgba(64, 158, 255, 0.05);
-}
-
-/* 标签样式 */
-:deep(.el-tag) {
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  border: none;
-}
-
-:deep(.el-tag--primary) {
-  background: linear-gradient(135deg, #409eff, #66b3ff);
-  color: white;
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.3);
-}
-
-:deep(.el-tag--success) {
-  background: linear-gradient(135deg, #67c23a, #85ce61);
-  color: white;
-  box-shadow: 0 2px 8px rgba(103, 194, 58, 0.3);
-}
-
-:deep(.el-tag--danger) {
-  background: linear-gradient(135deg, #f56c6c, #f78989);
-  color: white;
-  box-shadow: 0 2px 8px rgba(245, 108, 108, 0.3);
-}
-
-:deep(.el-tag--warning) {
-  background: linear-gradient(135deg, #e6a23c, #ebb563);
-  color: white;
-  box-shadow: 0 2px 8px rgba(230, 162, 60, 0.3);
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0% {
-    box-shadow: 0 2px 8px rgba(230, 162, 60, 0.3);
-  }
-  50% {
-    box-shadow: 0 4px 16px rgba(230, 162, 60, 0.5);
-  }
-  100% {
-    box-shadow: 0 2px 8px rgba(230, 162, 60, 0.3);
-  }
-}
-
-/* 按钮样式 */
-:deep(.el-button) {
-  border-radius: 8px;
-  font-weight: 500;
-  transition: all 0.3s ease;
-  border: none;
-}
-
-:deep(.el-button:hover) {
-  transform: translateY(-1px);
-}
-
-:deep(.el-button--primary) {
-  background: linear-gradient(135deg, #409eff, #66b3ff);
-  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
-}
-
-:deep(.el-button--primary:hover) {
-  background: linear-gradient(135deg, #3a8ee6, #5daaff);
-  box-shadow: 0 6px 16px rgba(64, 158, 255, 0.4);
-}
-
-:deep(.el-button--success) {
-  background: linear-gradient(135deg, #67c23a, #85ce61);
-  box-shadow: 0 4px 12px rgba(103, 194, 58, 0.3);
-}
-
-:deep(.el-button--warning) {
-  background: linear-gradient(135deg, #e6a23c, #ebb563);
-  box-shadow: 0 4px 12px rgba(230, 162, 60, 0.3);
-}
-
-:deep(.el-button--danger) {
-  background: linear-gradient(135deg, #f56c6c, #f78989);
-  box-shadow: 0 4px 12px rgba(245, 108, 108, 0.3);
-}
-
-:deep(.el-button--info) {
-  background: linear-gradient(135deg, #909399, #b1b3b8);
-  color: white;
-  box-shadow: 0 4px 12px rgba(144, 147, 153, 0.3);
-  border: none;
-}
-
-:deep(.el-button--info:hover) {
-  background: linear-gradient(135deg, #82848a, #a6a9ad);
-  box-shadow: 0 6px 16px rgba(144, 147, 153, 0.4);
-}
-
-/* 对话框样式 */
-:deep(.el-dialog) {
-  border-radius: 20px;
-  overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
-  background: rgba(255, 255, 255, 0.98);
-  backdrop-filter: blur(20px);
-}
-
-:deep(.el-dialog__header) {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 24px;
-  margin: 0;
-  border: none;
-}
-
-:deep(.el-dialog__title) {
-  font-size: 20px;
-  font-weight: 600;
-  color: white;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-
-:deep(.el-dialog__body) {
-  padding: 24px;
-  background: rgba(255, 255, 255, 0.95);
-}
-
-/* 表单样式 */
-:deep(.el-form-item) {
-  margin-bottom: 20px;
-}
-
-:deep(.el-form-item__label) {
-  font-weight: 600;
-  color: #2c3e50;
-  font-size: 14px;
-}
-
-:deep(.el-input__wrapper) {
-  border-radius: 8px;
-  border: 1px solid #e1e8f0;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
-  transition: all 0.3s ease;
-}
-
-:deep(.el-input__wrapper:hover) {
-  border-color: #409eff;
-  box-shadow: 0 4px 8px rgba(64, 158, 255, 0.1);
-}
-
-:deep(.el-input__wrapper.is-focus) {
-  border-color: #409eff;
-  box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.1);
-}
-
-:deep(.el-textarea__inner) {
-  border-radius: 8px;
-  border: 1px solid #e1e8f0;
-  transition: all 0.3s ease;
-}
-
-:deep(.el-textarea__inner:hover) {
-  border-color: #409eff;
-}
-
-:deep(.el-textarea__inner:focus) {
-  border-color: #409eff;
-  box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.1);
+.scheduler-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .connection-list,
@@ -1703,21 +1383,78 @@ export default {
   margin-top: 16px;
 }
 
-/* 对话框底部按钮 */
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 12px;
-  padding-top: 20px;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
-}
-
-/* 文件输入组样式 */
-.file-input-group {
+.action-buttons-container {
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 4px 0;
+}
+
+.action-btn-mini {
+  margin: 0 !important;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  min-width: 64px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: 0.04em;
+}
+
+.action-btn-mini:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(32, 120, 255, 0.25);
+}
+
+.scheduled-jobs {
+  background: rgba(12, 46, 86, 0.45);
+  border: 1px solid rgba(56, 196, 255, 0.18);
+  border-radius: 16px;
+  padding: 16px;
+  margin-top: 20px;
+}
+
+.jobs-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.1em;
+  margin-bottom: 12px;
+}
+
+.jobs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.job-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(4, 18, 36, 0.72);
+  font-size: 13px;
+}
+
+.job-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.job-next-run {
+  color: var(--text-secondary);
+  font-family: 'Courier New', monospace;
+}
+
+.file-input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .file-input-group .el-input {
@@ -1733,185 +1470,112 @@ export default {
   gap: 4px;
 }
 
-/* 表单提示样式 */
 .form-tip {
   margin-top: 8px;
-  padding: 8px 12px;
-  background: rgba(64, 158, 255, 0.05);
-  border-radius: 6px;
-  border-left: 3px solid #409eff;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(32, 96, 148, 0.18);
+  border-left: 3px solid rgba(56, 196, 255, 0.45);
 }
 
-/* 按钮组样式 */
-.button-group {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.button-group .el-button {
-  margin: 0;
-}
-
-/* 操作按钮容器样式 - 防止分行 */
-.action-buttons-container {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  flex-wrap: nowrap;
-  justify-content: center;
-  padding: 4px 0;
-}
-
-.action-btn-mini {
-  margin: 0 !important;
-  padding: 4px 8px;
-  border-radius: 3px;
-  font-size: 11px;
-  min-width: 50px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  white-space: nowrap;
-  line-height: 1;
-  box-sizing: border-box;
-}
-
-.action-btn-mini:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
-}
-
-/* 可用目录样式 */
 .available-dirs {
   margin-top: 8px;
-  padding: 8px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  backdrop-filter: blur(10px);
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(4, 18, 36, 0.76);
+  border: 1px solid rgba(56, 196, 255, 0.12);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .more-dirs {
-  color: #909399;
+  color: var(--text-secondary);
   font-size: 12px;
-  margin-left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .weather-data-fetcher {
-    padding: 16px;
-  }
-  
-  .page-title {
-    font-size: 32px;
-  }
-  
-  .page-description {
-    font-size: 16px;
-  }
-  
-  .card-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-  
-  .header-left {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-  
-  .header-status {
-    margin-left: 0;
-    gap: 12px;
-    width: 100%;
-    justify-content: flex-start;
-  }
-  
-  :deep(.el-table) {
-    font-size: 12px;
-  }
-  
-  :deep(.el-button) {
-    font-size: 12px;
-    padding: 6px 12px;
-  }
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(56, 196, 255, 0.12);
 }
 
-/* 日志查看样式 */
 .logs-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   margin-bottom: 16px;
   padding-bottom: 12px;
-  border-bottom: 2px solid #e1e8f0;
+  border-bottom: 1px solid rgba(56, 196, 255, 0.12);
 }
 
 .logs-title {
-  font-size: 16px;
-  color: #2c3e50;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-primary);
 }
 
 .logs-filters {
   display: flex;
-  gap: 8px;
   align-items: center;
+  gap: 10px;
 }
 
 .logs-content {
   max-height: 600px;
   overflow-y: auto;
-  padding: 4px;
+  padding-right: 8px;
 }
 
 .no-logs {
   text-align: center;
-  padding: 40px 0;
-  color: #909399;
+  color: var(--text-secondary);
+  padding: 48px 0;
 }
 
 .logs-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
 .log-item {
-  padding: 12px 16px;
-  border-radius: 8px;
-  border-left: 4px solid #e1e8f0;
-  background: rgba(255, 255, 255, 0.8);
-  transition: all 0.2s ease;
+  padding: 14px 18px;
+  border-radius: 12px;
+  border-left: 4px solid rgba(56, 196, 255, 0.18);
+  background: rgba(4, 18, 36, 0.72);
+  box-shadow: 0 10px 20px rgba(3, 13, 30, 0.3);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .log-item:hover {
-  background: rgba(255, 255, 255, 1);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+  box-shadow: 0 14px 28px rgba(3, 13, 30, 0.35);
 }
 
 .log-item.log-success {
-  border-left-color: #67c23a;
-  background: rgba(103, 194, 58, 0.05);
+  border-left-color: rgba(34, 246, 170, 0.6);
+  background: rgba(14, 42, 38, 0.7);
 }
 
 .log-item.log-warning {
-  border-left-color: #e6a23c;
-  background: rgba(230, 162, 60, 0.05);
+  border-left-color: rgba(230, 162, 60, 0.6);
+  background: rgba(48, 32, 6, 0.7);
 }
 
 .log-item.log-error {
-  border-left-color: #f56c6c;
-  background: rgba(245, 108, 108, 0.05);
+  border-left-color: rgba(245, 108, 108, 0.6);
+  background: rgba(48, 10, 14, 0.72);
 }
 
 .log-item.log-info {
-  border-left-color: #409eff;
-  background: rgba(64, 158, 255, 0.05);
+  border-left-color: rgba(56, 196, 255, 0.6);
 }
 
 .log-header {
@@ -1923,111 +1587,53 @@ export default {
 
 .log-time {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
   font-family: 'Courier New', monospace;
 }
 
 .log-message {
   font-size: 14px;
-  color: #2c3e50;
-  font-weight: 500;
+  font-weight: 600;
+  color: var(--text-primary);
   margin-bottom: 4px;
 }
 
 .log-details {
   font-size: 12px;
-  color: #606266;
-  background: rgba(0, 0, 0, 0.02);
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.18);
   padding: 8px 12px;
-  border-radius: 4px;
+  border-radius: 8px;
   font-family: 'Courier New', monospace;
   white-space: pre-wrap;
   word-break: break-all;
 }
 
-/* 调度器状态样式 */
-
-.scheduler-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-
-
-.status-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-
-.status-label {
-  font-weight: 600;
-  color: #2c3e50;
-  font-size: 13px;
-}
-
-.scheduled-jobs {
-  background: rgba(64, 158, 255, 0.05);
-  border-radius: 8px;
-  padding: 12px;
-  border: 1px solid rgba(64, 158, 255, 0.1);
-  margin-top: 12px;
-}
-
-.jobs-title {
-  font-weight: 600;
-  color: #2c3e50;
-  margin-bottom: 8px;
-  font-size: 14px;
-}
-
-.jobs-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.job-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px 12px;
-  background: rgba(255, 255, 255, 0.8);
-  border-radius: 6px;
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  font-size: 12px;
-}
-
-.job-name {
-  font-weight: 500;
-  color: #2c3e50;
-  flex: 1;
-}
-
-.job-next-run {
-  color: #909399;
-  font-family: 'Courier New', monospace;
-}
-
-/* 滚动条样式 */
 .logs-content::-webkit-scrollbar {
   width: 8px;
 }
 
 .logs-content::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 4px;
+  background: rgba(4, 18, 36, 0.6);
 }
 
 .logs-content::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+  background: rgba(56, 196, 255, 0.35);
   border-radius: 4px;
 }
 
 .logs-content::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  background: rgba(56, 196, 255, 0.5);
 }
-</style> 
+
+@media (max-width: 768px) {
+  .scheduler-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .action-buttons-container {
+    justify-content: flex-start;
+  }
+}
+</style>
