@@ -115,26 +115,29 @@
           <span class="status-indicator header-status">系统在线</span>
         </div>
         <div class="header-right">
-          <el-select
-            v-model="selectedWindFarm"
-            size="small"
-            class="wind-farm-select"
-            :loading="isWindFarmLoading"
-            placeholder="选择场站"
-            filterable
-          >
-            <el-option
-              v-for="farm in windFarms"
-              :key="farm.farm_code || farm.farm_name"
-              :label="farm.farm_name ? `${farm.farm_name}${farm.farm_code ? ` (${farm.farm_code})` : ''}` : (farm.farm_code || '默认场站')"
-              :value="farm.farm_code || farm.farm_name || 'default-farm'"
-            />
-            <el-option
-              v-if="!windFarms.length"
-              :value="selectedWindFarm"
-              :label="selectedWindFarmName"
-            />
-          </el-select>
+          <div class="wind-farm-wrapper">
+            <span class="wind-farm-label">当前风电场</span>
+            <el-select
+              v-model="selectedWindFarm"
+              size="small"
+              class="wind-farm-select"
+              :loading="isWindFarmLoading"
+              placeholder="选择场站"
+              filterable
+            >
+              <el-option
+                v-for="farm in windFarms"
+                :key="farm.farm_code || farm.farm_name"
+                :label="farm.farm_name || farm.farm_code || '默认风电场'"
+                :value="farm.farm_code || farm.farm_name || 'default-farm'"
+              />
+              <el-option
+                v-if="!windFarms.length"
+                :value="selectedWindFarm"
+                :label="selectedWindFarmName"
+              />
+            </el-select>
+          </div>
           <el-dropdown @command="handleCommand">
             <span class="user-profile">
               <el-avatar :size="32" class="avatar">{{ userInitial }}</el-avatar>
@@ -223,7 +226,7 @@ export default {
       const farm = findWindFarmByCode(code)
       if (farm) {
         if (farm.farm_name && farm.farm_code) {
-          return `${farm.farm_name} (${farm.farm_code})`
+          return `${farm.farm_name}`
         }
         return farm.farm_name || farm.farm_code
       }
@@ -756,17 +759,37 @@ export default {
 .header-right {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  padding-right: 16px;
+}
+
+.wind-farm-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.wind-farm-label {
+  font-size: 14px;
+  letter-spacing: 0.12em;
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .wind-farm-select {
-  min-width: 240px;
+  flex: 0 0 auto;
+  min-width: 180px;
+  max-width: 160px;
 }
 
 .wind-farm-select :deep(.el-input__wrapper) {
-  min-height: 42px;
+  min-height: 46px;
   background: rgba(5, 15, 34, 0.82) !important;
   border-radius: 14px !important;
+  font-size: 16px;
+  padding: 0 14px !important;
 }
 
 .wind-farm-select :deep(.el-select__caret) {
@@ -778,12 +801,14 @@ export default {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 16px;
+  padding: 8px 14px;
   border-radius: 999px;
   background: rgba(5, 16, 34, 0.8);
   border: 1px solid rgba(56, 196, 255, 0.24);
   box-shadow: 0 10px 30px rgba(4, 20, 40, 0.45);
   transition: all 0.25s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .user-profile::before {
@@ -814,8 +839,9 @@ export default {
 .username {
   font-size: 14px;
   font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  white-space: nowrap;
   color: var(--text-primary);
 }
 

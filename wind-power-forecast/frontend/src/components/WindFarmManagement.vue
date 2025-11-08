@@ -19,7 +19,7 @@
 
     <el-row :gutter="24" class="management-grid">
       <el-col :xs="24" :lg="14">
-        <el-card class="glass-panel" shadow="never">
+        <el-card class="glass-panel list-panel" shadow="never">
           <div class="panel-header">
             <h2>风电场列表</h2>
             <div class="panel-actions">
@@ -62,7 +62,15 @@
             </el-table-column>
             <el-table-column label="操作" width="140" fixed="right">
               <template #default="{ row }">
-                <el-button type="primary" text size="small" @click="jumpToFarm(row)">查看详情</el-button>
+                <div class="table-actions">
+                  <el-button
+                    class="table-action-button"
+                    size="small"
+                    @click="jumpToFarm(row)"
+                  >
+                    查看详情
+                  </el-button>
+                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -563,6 +571,30 @@ export default {
 <style scoped>
 .management-grid {
   margin-top: 8px;
+  align-items: stretch;
+}
+
+.management-grid :deep(.el-col) {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.glass-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: rgba(6, 18, 36, 0.86);
+  border: 1px solid rgba(66, 195, 255, 0.18);
+  box-shadow: 0 16px 45px rgba(4, 12, 28, 0.45);
+}
+
+.glass-panel :deep(.el-card__body) {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  flex: 1;
+  padding: 20px;
 }
 
 .panel-header {
@@ -587,6 +619,8 @@ export default {
   display: flex;
   gap: 12px;
   align-items: center;
+  position: relative;
+  z-index: 1;
 }
 
 .panel-subtitle {
@@ -595,9 +629,129 @@ export default {
   letter-spacing: 0.08em;
 }
 
-.farm-table {
+.list-panel {
+  position: relative;
+}
+
+.list-panel::after {
+  content: '';
+  position: absolute;
+  inset: 72px 12px 12px 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(66, 195, 255, 0.12);
+  pointer-events: none;
+}
+
+.list-panel :deep(.el-card__body) {
+  padding-top: 18px;
+  gap: 16px;
+}
+
+.list-panel .panel-header {
+  margin-top: -6px;
+  margin-bottom: 12px;
+}
+
+.list-panel .panel-actions {
+  margin-top: -2px;
+}
+
+.list-panel :deep(.el-input__wrapper) {
+  background: rgba(8, 24, 48, 0.78);
   border-radius: 12px;
+  border: 1px solid rgba(66, 195, 255, 0.22);
+  box-shadow: none;
+}
+
+.list-panel :deep(.el-input__inner) {
+  color: var(--text-primary);
+  background-color: transparent;
+  box-shadow: none;
+}
+
+.list-panel :deep(.el-input__inner::placeholder) {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.list-panel :deep(.el-table__cell) {
+  text-align: center;
+}
+
+.list-panel :deep(.el-table__cell .cell) {
+  justify-content: center;
+}
+
+.farm-table {
+  flex: 1;
+  border-radius: 16px;
   overflow: hidden;
+  background: rgba(4, 16, 34, 0.75);
+  border: 1px solid rgba(66, 195, 255, 0.12);
+  box-shadow: inset 0 0 18px rgba(4, 16, 34, 0.35);
+}
+
+.list-panel :deep(.el-table) {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.list-panel :deep(.el-table__inner-wrapper::before) {
+  display: none;
+}
+
+.list-panel :deep(.el-table__header th) {
+  background: rgba(8, 28, 60, 0.6);
+  color: var(--text-secondary);
+  border-color: rgba(66, 195, 255, 0.1);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.list-panel :deep(.el-table tr) {
+  background: transparent;
+}
+
+.list-panel :deep(.el-table__row:hover > td) {
+  background: rgba(56, 196, 255, 0.12);
+}
+
+.list-panel :deep(.el-table td) {
+  border-bottom-color: rgba(66, 195, 255, 0.08);
+}
+
+.list-panel :deep(.el-table__body tr.el-table__row--striped td) {
+  background: rgba(4, 26, 52, 0.45);
+}
+
+.table-actions {
+  display: flex;
+  justify-content: center;
+}
+
+.table-action-button {
+  background: rgba(66, 195, 255, 0.18);
+  border: 1px solid rgba(66, 195, 255, 0.38);
+  border-radius: 12px;
+  color: var(--text-primary);
+  padding: 0 16px;
+  min-width: 96px;
+  transition:
+    background 0.25s ease,
+    border-color 0.25s ease,
+    color 0.25s ease,
+    transform 0.25s ease;
+}
+
+.table-action-button:hover,
+.table-action-button:focus-visible {
+  background: rgba(66, 195, 255, 0.28);
+  border-color: rgba(66, 195, 255, 0.6);
+  transform: translateY(-1px);
+}
+
+.table-action-button:focus-visible {
+  outline: 2px solid rgba(66, 195, 255, 0.6);
+  outline-offset: 2px;
 }
 
 .readiness-panel {
@@ -642,6 +796,10 @@ export default {
   position: relative;
 }
 
+.map-panel {
+  min-height: 360px;
+}
+
 .map-scatter {
   width: 100%;
   height: 260px;
@@ -651,6 +809,23 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.action-panel {
+  min-height: 360px;
+}
+
+.action-panel :deep(.el-form-item__label) {
+  color: var(--text-secondary);
+  letter-spacing: 0.08em;
+}
+
+.action-panel :deep(.el-select .el-input__wrapper) {
+  background: rgba(9, 28, 52, 0.75);
+  border-radius: 12px;
+  border: 1px solid rgba(66, 195, 255, 0.2);
+  box-shadow: inset 0 0 12px rgba(4, 16, 36, 0.35);
+  color: var(--text-primary);
 }
 
 .action-grid {

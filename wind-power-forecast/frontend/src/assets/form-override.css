@@ -124,6 +124,12 @@
   min-height: 38px;
 }
 
+.el-input__inner {
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
 .el-input__suffix-inner,
 .el-input__prefix {
   color: var(--text-muted) !important;
