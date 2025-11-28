@@ -25,8 +25,8 @@ services:
       - "5000:5000"
     environment:
       - FLASK_ENV=development
-      - DB_HOST=kingbase       # 使用金仓数据库服务名称
-      - DB_PORT=54321          # 金仓数据库端口
+      - DB_HOST=kingbase       # 使用金仓数据库服务名称a
+      - DB_PORT=54321          # 金仓数据库端口a
       - DB_USER=system         # 金仓默认用户
       - DB_PASSWORD=12345678ab # 金仓默认密码
       - DB_NAME=windpower      # 连接到windpower数据库

@@ -39,6 +39,10 @@ COPY wind-power-forecast/backend/environment.yml .
 RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ && \
     pip config set global.trusted-host mirrors.aliyun.com
 
+RUN conda config --set show_channel_urls yes && \
+    conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/free/ && \
+    conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main/ && \
+    conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge/
 # 创建Conda环境
 RUN conda env create -f environment.yml && conda clean --all --yes
 
