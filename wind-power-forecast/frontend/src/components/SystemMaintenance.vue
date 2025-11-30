@@ -223,7 +223,7 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount, markRaw } from 'vue'
 import { ElMessage } from 'element-plus'
 import axiosInstance from '../api/axios'
 import { useWindFarmStore } from '@/store/windFarm'
@@ -397,14 +397,18 @@ export default {
         return
       }
       const ctx = runtimeChartCanvas.value.getContext('2d')
-      runtimeTrendChart.value = new Chart(ctx, {
+      const labels = [...runtimeHistory.value.labels]
+      const cpuData = [...runtimeHistory.value.cpu]
+      const memoryData = [...runtimeHistory.value.memory]
+      const diskData = [...runtimeHistory.value.disk]
+      runtimeTrendChart.value = markRaw(new Chart(ctx, {
         type: 'line',
         data: {
-          labels: runtimeHistory.value.labels,
+          labels,
           datasets: [
             {
               label: 'CPU%',
-              data: runtimeHistory.value.cpu,
+              data: cpuData,
               borderColor: '#38c4ff',
               backgroundColor: buildGradient(ctx, '#38c4ff'),
               fill: true,
@@ -413,7 +417,7 @@ export default {
             },
             {
               label: '内存%',
-              data: runtimeHistory.value.memory,
+              data: memoryData,
               borderColor: '#22f6aa',
               backgroundColor: buildGradient(ctx, '#22f6aa'),
               fill: true,
@@ -422,7 +426,7 @@ export default {
             },
             {
               label: '磁盘%',
-              data: runtimeHistory.value.disk,
+              data: diskData,
               borderColor: '#ffaf45',
               backgroundColor: buildGradient(ctx, '#ffaf45'),
               fill: true,
@@ -484,7 +488,7 @@ export default {
             easing: 'easeOutCubic',
           },
         },
-      })
+      }))
     }
 
     const updateRuntimeChart = () => {
