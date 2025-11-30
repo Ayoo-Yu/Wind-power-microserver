@@ -45,16 +45,43 @@ def batch_add_turbines():
             return jsonify({"error": f"Missing required columns in CSV: {', '.join(missing)}"}), 400
         
         records_to_upsert = df.to_dict(orient='records')
-        
+
         with db_session() as session:
-            # 使用应用层逻辑处理upsert，避免数据库约束问题
+            # 先根据 CSV 统计每个场站在本次导入中应当保留的风机编号集合
+            farm_to_turbines = {}
+            for rec in records_to_upsert:
+                farm_name = rec.get('farm_name')
+                turbine_number = rec.get('turbine_number')
+                if not farm_name or turbine_number is None:
+                    continue
+                farm_key = str(farm_name).strip()
+                num_key = str(turbine_number).strip()
+                if not farm_key or not num_key:
+                    continue
+                farm_to_turbines.setdefault(farm_key, set()).add(num_key)
+
+            # 对于 CSV 中出现的每个场站：删除该场站下所有“不在 CSV 集合内”的风机及其读数，实现“先删旧再重建”
+            for farm_name, turbine_numbers in farm_to_turbines.items():
+                if not turbine_numbers:
+                    continue
+                turbines_to_delete = session.query(Turbine).filter(
+                    Turbine.farm_name == farm_name,
+                    ~Turbine.turbine_number.in_(list(turbine_numbers)),
+                ).all()
+
+                for turbine in turbines_to_delete:
+                    # 先删除该风机下的读数，再删除风机本身，避免外键约束冲突
+                    session.query(Reading).filter(Reading.turbine_id == turbine.turbine_id).delete(synchronize_session=False)
+                    session.delete(turbine)
+
+            # 使用应用层逻辑处理 upsert：存在则更新，不存在则插入
             for record in records_to_upsert:
                 # 查找现有记录
                 existing = session.query(Turbine).filter_by(
                     farm_name=record['farm_name'],
                     turbine_number=record['turbine_number']
                 ).first()
-                
+
                 if existing:
                     # 更新现有记录
                     for key, value in record.items():
@@ -63,6 +90,7 @@ def batch_add_turbines():
                 else:
                     # 插入新记录
                     session.add(Turbine(**record))
+                    session.flush()
             session.commit()
 
     except Exception as e:
@@ -93,6 +121,10 @@ def batch_add_conditions():
         if not all(col in df.columns for col in required_columns):
             missing = [col for col in required_columns if col not in df.columns]
             return jsonify({"error": f"Missing required columns in CSV: {', '.join(missing)}"}), 400
+        # condition_id 是数据库自增主键，如果 CSV 中携带该列，可能与已有主键冲突
+        # 这里显式丢弃 CSV 里的 condition_id，让数据库自行分配主键，避免 UniqueViolation
+        if 'condition_id' in df.columns:
+            df = df.drop(columns=['condition_id'])
 
         records_to_upsert = df.to_dict(orient='records')
     
@@ -112,6 +144,7 @@ def batch_add_conditions():
                 else:
                     # Insert new
                     session.add(Condition(**record))
+                    session.flush()
             session.commit()
     except Exception as e:
         current_app.logger.error(f"An unexpected error occurred while processing the CSV: {e}")
@@ -158,6 +191,7 @@ def batch_add_readings():
                 else:
                     # 插入新记录
                     session.add(Reading(**record))
+                    session.flush()
             session.commit()
     except Exception as e:
         current_app.logger.error(f"An unexpected error occurred while processing the CSV: {e}")

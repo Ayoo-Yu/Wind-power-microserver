@@ -63,8 +63,19 @@ const selectedWindFarm = computed({
   set: value => setSelectedWindFarm(value),
 })
 
+const normalizeCode = (value) => {
+  if (value === null || value === undefined) return ''
+  return String(value).trim()
+}
+
 const findWindFarmByCode = (code) => {
-  return windFarms.value.find(farm => farm.farm_code === code)
+  const target = normalizeCode(code)
+  if (!target) return undefined
+  return windFarms.value.find((farm) => {
+    const byCode = normalizeCode(farm.farm_code)
+    const byName = normalizeCode(farm.farm_name)
+    return byCode === target || byName === target
+  })
 }
 
 export const useWindFarmStore = () => ({

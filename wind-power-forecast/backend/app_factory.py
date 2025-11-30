@@ -26,6 +26,7 @@ except ImportError:  # 在作为脚本运行时回退到绝对导入
     from config import Config, MINIO_CONFIG
 from connection_middleware import register_middleware
 from database_config import Base, engine, minio_client
+from db_maintenance import sync_conditions_sequence
 try:
     from .db_models import Dataset
 except ImportError:  # 在作为脚本运行时回退到绝对导入
@@ -304,6 +305,11 @@ def _initialize_resources(app: Flask) -> None:
                     print("✅ 初始用户和角色创建完成")
                 except Exception as exc:  # pragma: no cover
                     print(f"警告: 初始用户创建失败: {exc}")
+                try:
+                    sync_conditions_sequence()
+                    print("✅ conditions 主键序列已自动校正")
+                except Exception as exc:  # pragma: no cover
+                    print(f"警告: conditions 主键序列校正失败: {exc}")
             except Exception as exc:  # pragma: no cover
                 print(f"警告: 数据库表创建失败: {exc}")
         else:

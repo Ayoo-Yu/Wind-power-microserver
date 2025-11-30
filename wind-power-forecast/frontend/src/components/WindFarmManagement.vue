@@ -496,6 +496,7 @@ export default {
       const code = farm.farm_code || farm.farm_name
       if (code) {
         setSelectedWindFarm(code)
+        actionFarmCode.value = code
       }
       router.push({ name: 'ReportManagement' })
     }
@@ -512,7 +513,19 @@ export default {
         await loadWindFarms()
       }
       if (!actionFarmCode.value && windFarms.value.length) {
-        actionFarmCode.value = windFarms.value[0].farm_code || windFarms.value[0].farm_name
+        const initialCode = selectedWindFarm.value
+        if (initialCode) {
+          const matched = windFarms.value.find(
+            farm => farm.farm_code === initialCode || farm.farm_name === initialCode,
+          )
+          if (matched) {
+            actionFarmCode.value = matched.farm_code || matched.farm_name
+          } else {
+            actionFarmCode.value = windFarms.value[0].farm_code || windFarms.value[0].farm_name
+          }
+        } else {
+          actionFarmCode.value = windFarms.value[0].farm_code || windFarms.value[0].farm_name
+        }
       }
       await fetchReadinessMetrics()
       nextTick(() => drawFarmMap())
@@ -528,6 +541,29 @@ export default {
         updateReadinessChart()
       }
     }, { deep: true })
+
+    watch(selectedWindFarm, (newCode) => {
+      if (!newCode) {
+        return
+      }
+      const match = windFarms.value.find(
+        farm => farm.farm_code === newCode || farm.farm_name === newCode,
+      )
+      if (!match) {
+        return
+      }
+      const value = match.farm_code || match.farm_name
+      if (actionFarmCode.value !== value) {
+        actionFarmCode.value = value
+      }
+    })
+
+    watch(actionFarmCode, (newCode) => {
+      if (!newCode) {
+        return
+      }
+      setSelectedWindFarm(newCode)
+    })
 
     watch(readinessMetrics, () => {
       nextTick(() => updateReadinessChart())
