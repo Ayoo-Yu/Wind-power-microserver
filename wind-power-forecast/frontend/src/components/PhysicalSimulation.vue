@@ -1567,6 +1567,21 @@ export default {
   flex-wrap: wrap;
 }
 
+.upload-actions :deep(.el-button) {
+  border-radius: 12px;
+}
+
+.upload-actions :deep(.el-button:not(.el-button--primary)) {
+  background: rgba(6, 22, 44, 0.9);
+  border: 1px solid rgba(66, 195, 255, 0.26);
+  color: var(--text-primary);
+}
+
+.upload-actions :deep(.el-button:not(.el-button--primary):hover) {
+  border-color: rgba(66, 195, 255, 0.55);
+  box-shadow: 0 0 18px rgba(66, 195, 255, 0.35);
+}
+
 .dataset-schema-panel {
   padding: 22px;
   border-radius: 18px;
@@ -1632,6 +1647,19 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+.upload-section :deep(.el-select .el-input__wrapper),
+.upload-section :deep(.el-input__wrapper) {
+  background: rgba(6, 22, 44, 0.9);
+  border-radius: 12px;
+  border: 1px solid rgba(66, 195, 255, 0.32);
+  box-shadow: 0 18px 46px rgba(3, 16, 40, 0.7);
+}
+
+.upload-section :deep(.el-select .el-input__inner),
+.upload-section :deep(.el-input__inner) {
+  color: var(--text-primary);
 }
 
 .card-header {

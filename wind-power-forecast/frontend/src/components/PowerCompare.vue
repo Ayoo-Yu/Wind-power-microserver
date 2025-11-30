@@ -2097,8 +2097,8 @@ export default {
 }
 
 .operational-upload-dropzone :deep(.el-upload-dragger) {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px dashed rgba(47, 128, 237, 0.35);
+  background: rgba(6, 24, 50, 0.72);
+  border: 1px dashed rgba(66, 195, 255, 0.35);
   border-radius: 14px;
   padding: 26px;
 }
@@ -2124,6 +2124,21 @@ export default {
   padding: 10px 14px;
 }
 
+.operational-form :deep(.el-form-item) {
+  margin-bottom: 10px;
+}
+
+.operational-form :deep(.el-select .el-input__wrapper) {
+  background: rgba(6, 22, 44, 0.9);
+  border-radius: 12px;
+  border: 1px solid rgba(66, 195, 255, 0.32);
+  box-shadow: 0 18px 46px rgba(3, 16, 40, 0.65);
+}
+
+.operational-form :deep(.el-select .el-input__inner) {
+  color: var(--text-primary);
+}
+
 .selected-file-chip {
   display: flex;
   align-items: center;
@@ -2132,6 +2147,27 @@ export default {
   border-radius: 12px;
   background: rgba(47, 128, 237, 0.07);
   border: 1px solid rgba(47, 128, 237, 0.12);
+}
+
+.operational-upload-actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 10px;
+}
+
+.operational-upload-actions :deep(.el-button) {
+  border-radius: 12px;
+}
+
+.operational-upload-actions :deep(.el-button:not(.el-button--primary)) {
+  background: rgba(6, 22, 44, 0.9);
+  border: 1px solid rgba(66, 195, 255, 0.26);
+  color: var(--text-primary);
+}
+
+.operational-upload-actions :deep(.el-button:not(.el-button--primary):hover) {
+  border-color: rgba(66, 195, 255, 0.55);
+  box-shadow: 0 0 18px rgba(66, 195, 255, 0.35);
 }
 
 .schema-panel-header {

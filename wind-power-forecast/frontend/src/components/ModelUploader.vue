@@ -79,17 +79,26 @@ export default {
 
 <style scoped>
 .upload-demo {
-  border: 1px dashed #d9d9d9;
+  width: 100%;
+  border: 1px dashed rgba(56, 196, 255, 0.38);
+  border-radius: 14px;
   padding: 20px;
   text-align: center;
   cursor: pointer;
+  background: rgba(6, 18, 36, 0.78);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+}
+.upload-demo:hover {
+  border-color: rgba(56, 196, 255, 0.8);
+  box-shadow: 0 0 24px rgba(56, 196, 255, 0.45);
+  background: rgba(6, 18, 36, 0.95);
 }
 .el-upload__text {
   font-size: 14px;
-  color: #666;
+  color: var(--text-primary);
 }
 .el-upload__tip {
   font-size: 12px;
-  color: #999;
+  color: var(--text-secondary);
 }
 </style>

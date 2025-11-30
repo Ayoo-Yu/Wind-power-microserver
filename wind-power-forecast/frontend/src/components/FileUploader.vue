@@ -138,30 +138,32 @@ export default {
 .upload-dragger {
   width: 100%;
   height: auto;
-  background: #ffffff;
-  border: 2px dashed #dcdfe6;
-  border-radius: 12px;
+  background: rgba(6, 18, 36, 0.78);
+  border: 1px dashed rgba(56, 196, 255, 0.38);
+  border-radius: 14px;
   cursor: pointer;
   position: relative;
   overflow: hidden;
-  transition: all 0.3s;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
 }
 
 .upload-dragger:hover:not(.is-disabled) {
-  border-color: #409eff;
-  background: #f5f7fa;
+  border-color: rgba(56, 196, 255, 0.8);
+  box-shadow: 0 0 24px rgba(56, 196, 255, 0.45);
+  background: rgba(6, 18, 36, 0.95);
 }
 
 .upload-dragger.is-dragover {
-  background-color: #f5f7fa;
-  border-color: #409eff;
+  background: rgba(6, 18, 36, 0.95);
+  border-color: rgba(56, 196, 255, 0.9);
+  box-shadow: 0 0 26px rgba(56, 196, 255, 0.55);
 }
 
 .upload-dragger.is-disabled {
   cursor: not-allowed;
-  background: #f5f7fa;
-  border-color: #e4e7ed;
-  opacity: 0.7;
+  background: rgba(4, 12, 26, 0.75);
+  border-color: rgba(56, 196, 255, 0.18);
+  opacity: 0.6;
 }
 
 .upload-content {
@@ -171,18 +173,18 @@ export default {
 
 .el-icon--upload {
   font-size: 48px;
-  color: #8c939d;
+  color: #38c4ff;
   margin-bottom: 16px;
 }
 
 .upload-text {
-  color: #606266;
+  color: var(--text-primary);
   font-size: 14px;
   margin-bottom: 8px;
 }
 
 .upload-tip {
-  color: #86868b;
+  color: var(--text-secondary);
   font-size: 12px;
 }
 </style>

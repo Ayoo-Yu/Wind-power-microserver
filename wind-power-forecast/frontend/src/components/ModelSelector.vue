@@ -273,19 +273,19 @@ export default {
   align-items: center;
   justify-content: center;
   padding: 32px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  border: 1px dashed #dcdfe6;
+  background: rgba(6, 18, 36, 0.88);
+  border-radius: 14px;
+  border: 1px dashed rgba(66, 195, 255, 0.32);
 }
 
 .empty-icon {
   font-size: 24px;
-  color: #909399;
+  color: var(--accent-primary);
   margin-bottom: 12px;
 }
 
 .empty-text {
-  color: #909399;
+  color: var(--text-secondary);
   font-size: 14px;
   text-align: center;
   margin: 0;
@@ -301,11 +301,40 @@ export default {
   width: 120px;
   text-align: right;
   margin-right: 10px;
+  color: var(--text-secondary);
 }
 
 /* 新增placeholder样式 */
 :deep(.el-input__inner::placeholder) {
   color: #909399;
   opacity: 1;
+}
+
+.model-selector :deep(.el-select .el-input__wrapper),
+.model-selector :deep(.el-input__wrapper),
+.model-selector :deep(.el-input-number .el-input__wrapper) {
+  background: rgba(6, 22, 44, 0.9);
+  border-radius: 12px;
+  border: 1px solid rgba(66, 195, 255, 0.28);
+  box-shadow: 0 18px 46px rgba(3, 16, 40, 0.7);
+}
+
+.model-selector :deep(.el-input__inner),
+.model-selector :deep(.el-input-number .el-input__inner) {
+  color: var(--text-primary);
+}
+
+.model-selector :deep(.el-slider__runway) {
+  background: rgba(6, 22, 44, 0.85);
+  border-radius: 999px;
+}
+
+.model-selector :deep(.el-slider__bar) {
+  background: linear-gradient(90deg, #38c4ff, #22f6aa);
+}
+
+.model-selector :deep(.el-slider__button) {
+  border-color: rgba(56, 196, 255, 0.9);
+  box-shadow: 0 0 0 4px rgba(56, 196, 255, 0.25);
 }
 </style>

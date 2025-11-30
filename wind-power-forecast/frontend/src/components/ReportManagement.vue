@@ -2478,100 +2478,6 @@ export default {
 
 .current-windfarm-indicator {
   margin-top: 12px;
-  display: flex;
-  justify-content: center;
-}
-
-/* 内容容器 */
-.content-container {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  position: relative;
-  z-index: 1;
-}
-
-/* 信息卡片 */
-.info-card {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border-radius: 15px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-}
-
-.info-card :deep(.el-card__header) {
-  background: transparent;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-weight: 600;
-  color: #333;
-  flex-wrap: nowrap;
-  gap: 10px;
-}
-
-.card-header i {
-  margin-right: 8px;
-  color: #409EFF;
-}
-
-.card-header > div {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: nowrap;
-  min-width: 0;
-  flex-shrink: 0;
-}
-
-/* 确保选择框和按钮在同一行 */
-.card-header .el-select {
-  min-width: 120px;
-  width: auto;
-}
-
-.card-header .el-button {
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-/* 查询表单 */
-.query-form {
-  margin-bottom: 20px;
-  padding: 20px;
-  background: rgba(240, 248, 255, 0.8);
-  border-radius: 8px;
-  border: 1px solid rgba(64, 158, 255, 0.2);
-}
-
-/* 表格样式 */
-.info-card :deep(.el-table) {
-  background: transparent;
-}
-
-.info-card :deep(.el-table__header) {
-  background: rgba(248, 249, 250, 0.8);
-}
-
-.info-card :deep(.el-table__body tr:hover > td) {
-  background-color: rgba(64, 158, 255, 0.1) !important;
-}
-
-/* 对话框样式 */
-:deep(.el-dialog) {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border-radius: 15px;
-}
-
-:deep(.el-dialog__header) {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
   border-radius: 15px 15px 0 0;
   margin: 0;
   padding: 20px;
@@ -3410,6 +3316,21 @@ export default {
   margin: 0 !important;
 }
 
+.log-query-form :deep(.el-button) {
+  border-radius: 999px;
+}
+
+.log-query-form :deep(.el-button:not(.el-button--primary):not(.el-button--success):not(.el-button--warning):not(.el-button--danger):not(.el-button--info)) {
+  background: rgba(6, 22, 44, 0.9);
+  border: 1px solid rgba(66, 195, 255, 0.26);
+  color: var(--text-primary);
+}
+
+.log-query-form :deep(.el-button:not(.el-button--primary):not(.el-button--success):not(.el-button--warning):not(.el-button--danger):not(.el-button--info):hover) {
+  border-color: rgba(66, 195, 255, 0.55);
+  box-shadow: 0 0 18px rgba(66, 195, 255, 0.35);
+}
+
 /* 响应式日志查询 */
 @media (max-width: 1200px) {
   .log-query-controls {
@@ -3421,4 +3342,47 @@ export default {
     width: 100%;
   }
 }
-</style> 
+
+/* 深色主题统一：选择框、调度器文本、统计卡片 */
+.report-management :deep(.el-select .el-input__wrapper),
+.report-management :deep(.el-date-editor .el-input__wrapper) {
+  background: rgba(6, 22, 44, 0.9) !important;
+  border-radius: 12px;
+  border: 1px solid rgba(66, 195, 255, 0.28) !important;
+  box-shadow: 0 18px 46px rgba(3, 16, 40, 0.65);
+}
+
+.report-management :deep(.el-select .el-input__inner),
+.report-management :deep(.el-date-editor .el-input__inner) {
+  color: var(--text-primary) !important;
+}
+
+.report-management .scheduler-info .info-label {
+  color: var(--text-secondary);
+}
+
+.report-management .scheduler-info .info-value {
+  color: var(--text-primary);
+}
+
+.report-management .stat-box {
+  background: rgba(8, 22, 44, 0.92);
+  border-radius: 14px;
+  border: 1px solid rgba(66, 195, 255, 0.24);
+  box-shadow: 0 20px 48px rgba(3, 16, 40, 0.6);
+  transition: all 0.3s ease;
+}
+
+.report-management .stat-box:hover {
+  box-shadow: 0 26px 60px rgba(3, 16, 40, 0.75);
+}
+
+.report-management .stat-label {
+  color: var(--text-secondary);
+}
+
+.report-management .stat-value {
+  color: var(--text-primary);
+}
+
+</style>
