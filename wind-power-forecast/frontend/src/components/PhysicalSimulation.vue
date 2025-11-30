@@ -57,112 +57,42 @@
               <el-tag type="info" effect="dark" size="small">当前场站：{{ currentWindFarmDisplay }}</el-tag>
             </div>
           </template>
-          <el-tabs v-model="activeUploadTab" class="dataset-upload-tabs" type="border-card">
-            <el-tab-pane
-              v-for="entry in datasetUploadEntries"
-              :key="entry.key"
-              :name="entry.key"
-            >
-              <template #label>
-                <span class="tab-label">{{ entry.title }}</span>
-              </template>
-              <el-row :gutter="24" class="dataset-upload-pane">
-                <el-col :xs="24" :lg="14">
-                  <div
-                    :class="['upload-panel', { 'panel--pulse': datasetPanelPulse[entry.key] }]"
-                  >
-                    <p class="upload-subtitle">{{ entry.subtitle }}</p>
-                    <ul class="upload-tips">
-                      <li v-for="tip in entry.tips" :key="tip">{{ tip }}</li>
-                    </ul>
-                    <div class="upload-drop-wrapper">
-                      <el-upload
-                        class="dataset-upload-dropzone"
-                        drag
-                        :auto-upload="false"
-                        accept=".csv"
-                        :limit="1"
-                        :show-file-list="false"
-                        :file-list="entry.state.fileList"
-                        @change="(file, fileList) => handleDatasetFileChange(entry.key, file, fileList)"
-                        @remove="() => handleDatasetFileRemove(entry.key)"
-                      >
-                        <div class="dropzone-inner">
-                          <el-icon class="dropzone-icon"><UploadFilled /></el-icon>
-                          <div class="dropzone-title">拖拽或点击上传 CSV 文件</div>
-                          <p class="dropzone-desc">系统会自动绑定当前场站「{{ currentWindFarmDisplay }}」</p>
-                        </div>
-                      </el-upload>
-                    </div>
-
-                    <transition name="fade-slide">
-                      <div v-if="entry.state.file" class="selected-file-chip">
-                        <div class="file-info">
-                          <span class="file-name">{{ entry.state.file.name }}</span>
-                          <span class="file-size">{{ (entry.state.file.size / 1024).toFixed(1) }} KB</span>
-                        </div>
-                        <el-button type="text" size="small" @click="resetDatasetUploadState(entry.key, { clearMessages: true })">更换文件</el-button>
-                      </div>
-                    </transition>
-
-                    <div class="upload-actions">
-                      <el-button
-                        type="primary"
-                        size="large"
-                        :loading="entry.state.uploading"
-                        @click="submitDatasetUpload(entry.key)"
-                      >
-                        {{ entry.state.uploading ? '上传中...' : '上传数据' }}
-                      </el-button>
-                      <el-button size="large" @click="resetDatasetUploadState(entry.key, { clearMessages: true })">清空</el-button>
-                    </div>
-
-                    <transition name="fade-slide">
-                      <el-alert
-                        v-if="entry.state.result"
-                        type="success"
-                        :title="entry.state.result?.message || '上传成功'"
-                        show-icon
-                        closable
-                        @close="entry.state.result = null"
-                      />
-                    </transition>
-                    <transition name="fade-slide">
-                      <el-alert
-                        v-if="entry.state.error"
-                        type="error"
-                        :title="entry.state.error"
-                        show-icon
-                        closable
-                        @close="entry.state.error = null"
-                      />
-                    </transition>
-                  </div>
-                </el-col>
-                <el-col :xs="24" :lg="10">
-                  <div
-                    :class="['dataset-schema-panel', { 'panel--pulse': datasetPanelPulse[`${entry.key}Schema`] }]"
-                  >
-                    <h4>必备字段</h4>
-                    <div class="dataset-columns">
-                      <div class="dataset-columns-head">
-                        <span>字段名</span>
-                        <span>说明</span>
-                      </div>
-                      <div
-                        v-for="col in entry.columns"
-                        :key="entry.key + col.name"
-                        class="dataset-column-row"
-                      >
-                        <span class="col-name">{{ col.name }}</span>
-                        <span class="col-desc">{{ col.description }}</span>
-                      </div>
-                    </div>
-                  </div>
-                </el-col>
-              </el-row>
-            </el-tab-pane>
-          </el-tabs>
+          <div class="bulk-upload-section dark-glass-panel">
+            <div class="bulk-upload-info">
+              <h4>一键上传三类数据</h4>
+              <p>一次性选择风机基础、工况条件、仿真读数三个 CSV 文件，系统会自动识别类型并按顺序导入当前场站。</p>
+            </div>
+            <div class="bulk-upload-controls">
+              <el-upload
+                class="bulk-upload-dropzone"
+                drag
+                multiple
+                :auto-upload="false"
+                accept=".csv"
+                :file-list="bulkUploadFileList"
+                :show-file-list="true"
+                @change="handleBulkUploadChange"
+                @remove="handleBulkUploadRemove"
+              >
+                <div class="dropzone-inner">
+                  <el-icon class="dropzone-icon"><UploadFilled /></el-icon>
+                  <div class="dropzone-title">拖拽或点击选择最多 3 个 CSV 文件</div>
+                  <p class="dropzone-desc">建议文件名包含“turbine/风机”、“condition/工况”、“reading/读数”以便自动识别。</p>
+                </div>
+              </el-upload>
+              <div class="bulk-upload-actions">
+                <el-button
+                  type="primary"
+                  size="default"
+                  :loading="bulkUploadUploading"
+                  @click="submitBulkUpload"
+                >
+                  {{ bulkUploadUploading ? '批量上传中...' : '一键上传三类数据' }}
+                </el-button>
+                <el-button size="default" @click="resetBulkUpload">清空</el-button>
+              </div>
+            </div>
+          </div>
         </el-card>
       </div>
 
@@ -425,10 +355,15 @@ export default {
           title: '仿真读数数据',
           subtitle: '与工况及风机关联的测点/仿真输出',
           endpoint: 'physical_simulation/readings/batch',
-          tips: ['condition_id 与 turbine_id 需已存在', '未提供的列保持原值不变'],
+          tips: [
+            '推荐使用自然键模式：通过场站名 + 风机编号 + 风速 + 风向 自动关联工况与风机',
+            'CSV 中如同时包含 condition_id/turbine_id 也会被兼容处理，但不再推荐使用',
+          ],
           columns: [
-            { name: 'condition_id', description: '关联工况条件 ID' },
-            { name: 'turbine_id', description: '关联风机 ID' },
+            { name: 'farm_name', description: '风电场名称（需与列表一致）' },
+            { name: 'turbine_number', description: '风机编号（同场站内唯一）' },
+            { name: 'wind_speed', description: '环境风速 (m/s)' },
+            { name: 'wind_direction', description: '环境风向 (°)' },
             { name: 'turbine_wind_speed', description: '风机入流风速 (m/s)' },
             { name: 'power_output', description: '风机输出功率 (kW，可选)' },
           ],
@@ -439,6 +374,7 @@ export default {
         conditions: { file: null, fileList: [], uploading: false, result: null, error: null },
         readings: { file: null, fileList: [], uploading: false, result: null, error: null },
       },
+      
       heroMetricDisplay: {
         turbines: 0,
         conditions: 0,
@@ -479,8 +415,12 @@ export default {
         table: false,
       },
       stepPulseTimers: {},
+      bulkUploadFiles: [],
+      bulkUploadFileList: [],
+      bulkUploadUploading: false,
     };
   },
+  
   computed: {
     selectedWindFarmCode() {
       return this.windFarmStore.selectedWindFarm.value;
@@ -773,18 +713,29 @@ export default {
     },
     async submitDatasetUpload(key) {
       const state = this.datasetUploadState[key];
-      const meta = this.datasetUploadMeta[key];
-      if (!meta || !state) {
+      if (!state) {
         ElMessage.error('未知的数据集类型');
         return;
       }
-      if (!state.file) {
-        ElMessage.warning('请先选择要上传的 CSV 文件');
-        return;
+      await this.uploadDatasetInternal(key, state.file);
+    },
+    async uploadDatasetInternal(key, file, options = {}) {
+      const state = this.datasetUploadState[key];
+      const meta = this.datasetUploadMeta[key];
+      const { silentWhenNoFile = false, clearFileAfter = true } = options;
+      if (!meta || !state) {
+        ElMessage.error('未知的数据集类型');
+        return false;
+      }
+      if (!file) {
+        if (!silentWhenNoFile) {
+          ElMessage.warning('请先选择要上传的 CSV 文件');
+        }
+        return false;
       }
 
       const formData = new FormData();
-      formData.append('file', state.file);
+      formData.append('file', file);
       if (this.selectedWindFarmCode) {
         formData.append('wind_farm_code', this.selectedWindFarmCode);
       }
@@ -799,8 +750,10 @@ export default {
         });
         state.result = response.data;
         state.error = null;
-        state.file = null;
-        state.fileList = [];
+        if (clearFileAfter) {
+          state.file = null;
+          state.fileList = [];
+        }
         ElMessage.success(response.data?.message || `${meta.title}上传成功`);
 
         this.triggerDatasetPulse('card');
@@ -812,16 +765,144 @@ export default {
         } else {
           await this.fetchFarmNames();
         }
+        return true;
       } catch (error) {
         console.error('submitDatasetUpload error:', error);
         const message = error.response?.data?.error || error.message || '上传失败';
         state.error = message;
         state.result = null;
         ElMessage.error(message);
+        return false;
       } finally {
         state.uploading = false;
       }
     },
+    handleBulkUploadChange(uploadFile, uploadFiles) {
+      this.bulkUploadFileList = uploadFiles;
+      this.bulkUploadFiles = uploadFiles.map((item) => item.raw || item);
+      this.triggerDatasetPulse('card');
+    },
+    handleBulkUploadRemove(uploadFile, uploadFiles) {
+      this.bulkUploadFileList = uploadFiles;
+      this.bulkUploadFiles = uploadFiles.map((item) => item.raw || item);
+    },
+    resetBulkUpload() {
+      this.bulkUploadFiles = [];
+      this.bulkUploadFileList = [];
+    },
+    readCsvHeader(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const text = event.target?.result || '';
+            const firstLine = text
+              .split(/\r?\n/)
+              .find((line) => line.trim().length > 0) || '';
+            const headers = firstLine
+              .split(',')
+              .map((h) => h.trim().replace(/^"|"$/g, ''));
+            resolve(headers);
+          } catch (err) {
+            reject(err);
+          }
+        };
+        reader.onerror = () => reject(reader.error);
+        const blob = file.slice ? file.slice(0, 4096) : file;
+        reader.readAsText(blob);
+      });
+    },
+    async detectDatasetType(file) {
+      const name = (file.name || '').toLowerCase();
+      if (name.includes('turbine') || name.includes('风机')) {
+        return 'turbines';
+      }
+      if (name.includes('condition') || name.includes('工况')) {
+        return 'conditions';
+      }
+      if (name.includes('reading') || name.includes('读数')) {
+        return 'readings';
+      }
+
+      try {
+        const headers = await this.readCsvHeader(file);
+        const headerSet = new Set(headers.map((h) => h.toLowerCase()));
+        if (headerSet.has('turbine_number') && headerSet.has('longitude') && headerSet.has('latitude')) {
+          return 'turbines';
+        }
+        if (headerSet.has('wind_speed') && headerSet.has('wind_direction') && !headerSet.has('turbine_wind_speed')) {
+          return 'conditions';
+        }
+        if (headerSet.has('turbine_wind_speed')) {
+          return 'readings';
+        }
+      } catch (error) {
+        console.error('解析 CSV 表头失败:', error);
+      }
+      return null;
+    },
+    async submitBulkUpload() {
+      if (!this.bulkUploadFiles || this.bulkUploadFiles.length === 0) {
+        ElMessage.warning('请先选择要上传的 CSV 文件');
+        return;
+      }
+      if (!this.selectedWindFarmCode && !this.selectedFarm) {
+        ElMessage.warning('请先选择风电场（可在场站管理页或本页左上角下拉框中选择）');
+        return;
+      }
+
+      const mapping = {};
+      const unclassified = [];
+      for (const file of this.bulkUploadFiles) {
+        const type = await this.detectDatasetType(file);
+        if (!type) {
+          unclassified.push(file.name || '未命名文件');
+          continue;
+        }
+        if (mapping[type]) {
+          ElMessage.error(`检测到多个属于「${this.datasetUploadMeta[type].title}」的数据文件，请只保留一个。`);
+          return;
+        }
+        mapping[type] = file;
+      }
+
+      if (!mapping.turbines || !mapping.conditions || !mapping.readings) {
+        ElMessage.error('需要同时包含风机基础数据、工况条件数据和仿真读数数据三类 CSV 文件，请检查。');
+        if (unclassified.length) {
+          console.warn('未能识别类型的文件:', unclassified);
+        }
+        return;
+      }
+
+      this.bulkUploadUploading = true;
+      try {
+        const okT = await this.uploadDatasetInternal('turbines', mapping.turbines, {
+          clearFileAfter: false,
+          silentWhenNoFile: true,
+        });
+        const okC = await this.uploadDatasetInternal('conditions', mapping.conditions, {
+          clearFileAfter: false,
+          silentWhenNoFile: true,
+        });
+        const okR = await this.uploadDatasetInternal('readings', mapping.readings, {
+          clearFileAfter: false,
+          silentWhenNoFile: true,
+        });
+
+        if (okT && okC && okR) {
+          ElMessage.success('三类数据已全部上传并刷新');
+          this.resetBulkUpload();
+        } else {
+          ElMessage.warning('部分数据上传失败，请查看具体错误提示。');
+        }
+      } catch (error) {
+        console.error('批量上传仿真数据失败:', error);
+        ElMessage.error('批量上传仿真数据失败，请检查控制台日志。');
+      } finally {
+        this.bulkUploadUploading = false;
+      }
+    },
+    
     async reloadForSelectedWindFarm() {
       this.clearAllPulses();
       this.targetWindSpeed = null;
@@ -1385,6 +1466,76 @@ export default {
 
 .dataset-upload-card {
   padding: 0;
+}
+
+.bulk-upload-section {
+  margin-top: 18px;
+  padding: 22px;
+  border-radius: 18px;
+  border: 1px solid rgba(66, 195, 255, 0.22);
+  background: linear-gradient(180deg, rgba(6, 22, 44, 0.75) 0%, rgba(4, 18, 36, 0.9) 100%);
+  box-shadow: 0 20px 48px rgba(3, 16, 40, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.bulk-upload-info h4 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  color: var(--text-primary);
+}
+
+.bulk-upload-info p {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.bulk-upload-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.bulk-upload-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.bulk-upload-actions :deep(.el-button) {
+  border-radius: 12px;
+}
+
+.bulk-upload-actions :deep(.el-button:not(.el-button--primary)) {
+  background: rgba(6, 22, 44, 0.9);
+  border: 1px solid rgba(66, 195, 255, 0.26);
+  color: var(--text-primary);
+}
+
+.bulk-upload-actions :deep(.el-button:not(.el-button--primary):hover) {
+  border-color: rgba(66, 195, 255, 0.55);
+  box-shadow: 0 0 18px rgba(66, 195, 255, 0.35);
+}
+
+.bulk-upload-dropzone :deep(.el-upload) {
+  width: 100%;
+}
+
+.bulk-upload-dropzone :deep(.el-upload-dragger) {
+  border: 1px dashed rgba(66, 195, 255, 0.35);
+  background: rgba(6, 24, 50, 0.72);
+  border-radius: 16px;
+  padding: 26px;
+  transition: all 0.25s ease;
+}
+
+.bulk-upload-dropzone :deep(.el-upload-dragger:hover) {
+  border-color: rgba(66, 195, 255, 0.65);
+  box-shadow: 0 20px 46px rgba(6, 24, 52, 0.55);
 }
 
 .dataset-upload-header {

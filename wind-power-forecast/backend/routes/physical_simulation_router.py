@@ -154,10 +154,20 @@ def batch_add_conditions():
 
 @physical_simulation_bp.route('/readings/batch', methods=['POST'])
 def batch_add_readings():
-    """Batch add or update readings from a CSV file."""
+    """Batch add or update readings from a CSV file.
+
+    支持两种模式：
+    1）推荐的“自然键”模式：使用 farm_name + turbine_number + wind_speed + wind_direction
+        - 必需列：farm_name, turbine_number, wind_speed, wind_direction, turbine_wind_speed
+        - 可选列：power_output
+        - 后端会根据自然键自动查找 Condition / Turbine，并对 (condition_id, turbine_id) 做 upsert
+
+    2）兼容旧版的 ID 模式：直接提供 condition_id, turbine_id
+        - 必需列：condition_id, turbine_id, turbine_wind_speed
+    """
     if 'file' not in request.files:
         return jsonify({"error": "No file part in the request"}), 400
-    
+
     file = request.files['file']
     if file.filename == '':
         return jsonify({"error": "No file selected for uploading"}), 400
@@ -167,37 +177,136 @@ def batch_add_readings():
 
     try:
         df = read_csv_with_fallback(file.stream)
-        required_columns = ['condition_id', 'turbine_id', 'turbine_wind_speed']
-        if not all(col in df.columns for col in required_columns):
-            missing = [col for col in required_columns if col not in df.columns]
-            return jsonify({"error": f"Missing required columns in CSV: {', '.join(missing)}"}), 400
-            
-        readings_to_upsert = df.to_dict(orient='records')
 
-        with db_session() as session:
-            # 使用应用层逻辑处理upsert，避免重复数据问题
-            for record in readings_to_upsert:
-                # 查找现有记录
-                existing = session.query(Reading).filter_by(
-                    condition_id=record['condition_id'],
-                    turbine_id=record['turbine_id']
-                ).first()
-                
-                if existing:
-                    # 更新现有记录
-                    for key, value in record.items():
-                        if hasattr(existing, key):
-                            setattr(existing, key, value)
-                else:
-                    # 插入新记录
-                    session.add(Reading(**record))
-                    session.flush()
-            session.commit()
+        # 判断是使用“自然键模式”还是旧版 ID 模式
+        natural_key_cols = {'farm_name', 'turbine_number', 'wind_speed', 'wind_direction'}
+        id_key_cols = {'condition_id', 'turbine_id'}
+
+        has_natural_keys = natural_key_cols.issubset(df.columns)
+        has_id_keys = id_key_cols.issubset(df.columns)
+
+        if has_natural_keys:
+            # 自然键模式：使用 farm_name + turbine_number + wind_speed + wind_direction
+            required_columns = ['farm_name', 'turbine_number', 'wind_speed', 'wind_direction', 'turbine_wind_speed']
+            if not all(col in df.columns for col in required_columns):
+                missing = [col for col in required_columns if col not in df.columns]
+                return jsonify({"error": f"Missing required columns in CSV (natural-key mode): {', '.join(missing)}"}), 400
+
+            records = df.to_dict(orient='records')
+
+            with db_session() as session:
+                # 预加载涉及到的所有 Condition 和 Turbine，减少 N+1 查询
+                farm_names = sorted({str(r['farm_name']).strip() for r in records if r.get('farm_name')})
+                turbines_by_key = {}
+                if farm_names:
+                    turbines = session.query(Turbine).filter(Turbine.farm_name.in_(farm_names)).all()
+                    for t in turbines:
+                        key = (str(t.farm_name).strip(), str(t.turbine_number).strip())
+                        turbines_by_key[key] = t
+
+                conditions_by_key = {}
+                if farm_names:
+                    conditions = session.query(Condition).filter(Condition.farm_name.in_(farm_names)).all()
+                    for c in conditions:
+                        key = (str(c.farm_name).strip(), float(c.wind_speed), float(c.wind_direction))
+                        conditions_by_key[key] = c
+
+                created = 0
+                updated = 0
+                skipped_missing_condition = 0
+                skipped_missing_turbine = 0
+
+                for rec in records:
+                    farm_name = str(rec.get('farm_name') or '').strip()
+                    turbine_number = str(rec.get('turbine_number') or '').strip()
+                    try:
+                        ws = float(rec.get('wind_speed'))
+                        wd = float(rec.get('wind_direction'))
+                    except (TypeError, ValueError):
+                        skipped_missing_condition += 1
+                        continue
+
+                    cond_key = (farm_name, ws, wd)
+                    turb_key = (farm_name, turbine_number)
+
+                    condition = conditions_by_key.get(cond_key)
+                    if not condition:
+                        skipped_missing_condition += 1
+                        continue
+
+                    turbine = turbines_by_key.get(turb_key)
+                    if not turbine:
+                        skipped_missing_turbine += 1
+                        continue
+
+                    payload = {
+                        'condition_id': condition.condition_id,
+                        'turbine_id': turbine.turbine_id,
+                        'turbine_wind_speed': rec.get('turbine_wind_speed'),
+                        'power_output': rec.get('power_output'),
+                    }
+
+                    existing = session.query(Reading).filter_by(
+                        condition_id=payload['condition_id'],
+                        turbine_id=payload['turbine_id'],
+                    ).first()
+
+                    if existing:
+                        for key, value in payload.items():
+                            if value is not None and hasattr(existing, key):
+                                setattr(existing, key, value)
+                        updated += 1
+                    else:
+                        session.add(Reading(**payload))
+                        session.flush()
+                        created += 1
+
+                session.commit()
+
+            return jsonify({
+                "message": f"Successfully upserted readings from {file.filename} (natural-key mode).",
+                "created": created,
+                "updated": updated,
+                "skipped_missing_condition": skipped_missing_condition,
+                "skipped_missing_turbine": skipped_missing_turbine,
+            }), 201
+
+        if has_id_keys:
+            # 兼容旧版：直接使用 condition_id + turbine_id
+            required_columns = ['condition_id', 'turbine_id', 'turbine_wind_speed']
+            if not all(col in df.columns for col in required_columns):
+                missing = [col for col in required_columns if col not in df.columns]
+                return jsonify({"error": f"Missing required columns in CSV (id mode): {', '.join(missing)}"}), 400
+
+            readings_to_upsert = df.to_dict(orient='records')
+
+            with db_session() as session:
+                for record in readings_to_upsert:
+                    existing = session.query(Reading).filter_by(
+                        condition_id=record['condition_id'],
+                        turbine_id=record['turbine_id']
+                    ).first()
+
+                    if existing:
+                        for key, value in record.items():
+                            if hasattr(existing, key):
+                                setattr(existing, key, value)
+                    else:
+                        session.add(Reading(**record))
+                        session.flush()
+                session.commit()
+
+            return jsonify({"message": f"Successfully upserted {len(readings_to_upsert)} readings from {file.filename} (id mode)."}), 201
+
+        # 两种必需列集都不满足，返回友好错误
+        return jsonify({
+            "error": "Invalid CSV columns",
+            "details": "Expected either natural-key columns (farm_name, turbine_number, wind_speed, wind_direction, turbine_wind_speed) or id columns (condition_id, turbine_id, turbine_wind_speed)",
+        }), 400
+
     except Exception as e:
         current_app.logger.error(f"An unexpected error occurred while processing the CSV: {e}")
         return jsonify({"error": "An unexpected error occurred during processing.", "details": str(e)}), 500
-
-    return jsonify({"message": f"Successfully upserted {len(readings_to_upsert)} readings from {file.filename}."}), 201
 
 @physical_simulation_bp.route('/turbines', methods=['GET'])
 def get_turbines():
