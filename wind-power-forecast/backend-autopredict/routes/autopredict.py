@@ -1106,17 +1106,35 @@ def resurrect():
             # 获取PM2状态并更新全局字典，但不返回响应
             _update_prediction_status()
             record_task_history('all', 'resurrect', 'success', '恢复PM2配置')
-            return jsonify({"message": "成功恢复PM2配置"}), 200
+            legacy_data = {"message": "成功恢复PM2配置"}
+            return api_success(
+                data=legacy_data,
+                message=legacy_data["message"],
+                legacy=legacy_data
+            )
         except Exception as e:
             error_msg = f"恢复配置后更新状态失败: {str(e)}\n{traceback.format_exc()}"
             print(error_msg)
             record_task_history('all', 'resurrect', 'warning', error_msg)
             # 尽管更新状态失败，但resurrect命令已经成功执行，所以仍然返回成功
-            return jsonify({"message": "PM2配置已恢复，但更新状态失败", "warning": "状态可能不准确，请刷新页面"}), 200
+            legacy_data = {
+                "message": "PM2配置已恢复，但更新状态失败",
+                "warning": "状态可能不准确，请刷新页面"
+            }
+            return api_success(
+                data=legacy_data,
+                message=legacy_data["message"],
+                legacy=legacy_data
+            )
     else:
         error_msg = f"恢复PM2配置失败: {result}"
         record_task_history('all', 'resurrect', 'failed', error_msg)
-        return jsonify({"error": error_msg}), 500
+        return api_error(
+            "恢复PM2配置失败",
+            code=1500,
+            status_code=500,
+            details=error_msg
+        )
 
 # 添加一个内部函数用于更新状态，但不返回HTTP响应
 def _update_prediction_status():
@@ -1193,17 +1211,27 @@ def get_task_history():
                     'user': item.user
                 })
             
-            return jsonify({
+            legacy_data = {
                 'total': total,
                 'offset': offset,
                 'limit': limit,
                 'data': result
-            })
+            }
+            return api_success(
+                data=legacy_data,
+                message='获取任务历史成功',
+                legacy=legacy_data
+            )
         
     except Exception as e:
         error_msg = f"获取任务历史记录出错: {str(e)}\n{traceback.format_exc()}"
         print(error_msg)
-        return jsonify({'error': error_msg}), 500
+        return api_error(
+            '获取任务历史记录失败',
+            code=1500,
+            status_code=500,
+            details=error_msg
+        )
 
 # 查询任务状态（训练、预测、参数优化）
 @autopredict_bp.route('/task_status', methods=['GET'])
@@ -1224,7 +1252,7 @@ def get_task_status():
         param_opt_day = param_opt_day_map.get(prediction_type, 5)
     
     if not prediction_type or prediction_type not in prediction_status:
-        return jsonify({'error': '无效的预测类型'}), 400
+        return api_error('无效的预测类型', code=1001, status_code=400)
     
     # 初始化状态对象
     status = {
@@ -1243,7 +1271,7 @@ def get_task_status():
         try:
             selected_date = datetime.datetime.strptime(date_str, '%Y%m%d')
         except ValueError:
-            return jsonify({'error': '日期格式无效，请使用YYYYMMDD格式'}), 400
+            return api_error('日期格式无效，请使用YYYYMMDD格式', code=1001, status_code=400)
         
         is_today = selected_date.date() == datetime.datetime.now().date()
         is_current_week = (datetime.datetime.now() - selected_date).days < 7
@@ -1371,11 +1399,7 @@ def get_task_status():
                 # 假设完成标志文件名为 YYYYMMDD_predict_done.flag
                 predict_flag_path = os.path.join(predict_flag_dir, f"{date_str}_predict_done.flag")
 
-                # --- 添加调试日志 ---
-                print(f"DEBUG: Checking for prediction flag: {predict_flag_path}")
                 flag_exists = os.path.exists(predict_flag_path)
-                print(f"DEBUG: Flag exists result: {flag_exists}")
-                # --- 结束调试日志 ---
 
                 if flag_exists: # 使用变量简化后续判断
                     status['prediction'] = True 
@@ -1393,13 +1417,10 @@ def get_task_status():
                          status['prediction'] = True # 任务状态是存在的 (运行中)
                          # predictionCompleted 保持 False
 
-        # --- 添加调试日志 ---
-        print(f"DEBUG: Final status for {prediction_type} on {date_str}: {status}")
-        # --- 结束调试日志 ---
-        return jsonify({'status': status})
+        legacy_data = {'status': status}
+        return api_success(data=legacy_data, message='获取任务状态成功', legacy=legacy_data)
     except Exception as e:
-        print(f"获取任务状态失败: {str(e)}")
-        return jsonify({'error': '获取任务状态失败', 'details': str(e)}), 500
+        return api_error('获取任务状态失败', code=1500, status_code=500, details=str(e))
 
 
 
