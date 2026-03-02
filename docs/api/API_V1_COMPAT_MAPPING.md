@@ -20,6 +20,8 @@ This document defines the M1 compatibility mapping from legacy endpoints to `/ap
 | Report preview/manual | `/api/report/preview-report` `/api/report/manual-report` | `/api/v1/report/preview-report` `/api/v1/report/manual-report` | Implemented | Same payload contracts via compat bridge. |
 | Report scheduler | `/api/report/scheduler/*` | `/api/v1/report/scheduler/*` | Implemented | Supports `start`, `stop`, `status`. |
 | Report statistics | `/api/report/statistics` | `/api/v1/report/statistics` | Implemented | Daily and monthly quality metrics. |
+| Physical simulation query | `/physical_simulation/{conditions|turbines|readings}` | `/api/v1/physical-simulation/{conditions|turbines|readings}` | Implemented | Supports `farm_name`, `condition_id`, `turbine_id` query parameters. |
+| Physical simulation batch import | `/physical_simulation/{turbines|conditions|readings}/batch` | `/api/v1/physical-simulation/{turbines|conditions|readings}/batch` | Implemented | CSV batch import endpoints are available in v1 compat namespace. |
 
 ## AutoPredict Backend (Port 5001 / local 18081)
 

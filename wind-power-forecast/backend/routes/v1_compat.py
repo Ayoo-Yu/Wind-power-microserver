@@ -18,6 +18,14 @@ from routes.report_management_router import (
     stop_scheduler,
     get_scheduler_status
 )
+from routes.physical_simulation_router import (
+    batch_add_turbines,
+    batch_add_conditions,
+    batch_add_readings,
+    get_turbines,
+    get_conditions,
+    get_readings
+)
 
 v1_compat_bp = Blueprint("v1_compat", __name__, url_prefix="/api/v1")
 
@@ -147,3 +155,33 @@ def stop_report_scheduler_v1():
 @v1_compat_bp.route("/report/scheduler/status", methods=["GET"])
 def get_report_scheduler_status_v1():
     return get_scheduler_status()
+
+
+@v1_compat_bp.route("/physical-simulation/turbines/batch", methods=["POST"])
+def batch_add_turbines_v1():
+    return batch_add_turbines()
+
+
+@v1_compat_bp.route("/physical-simulation/conditions/batch", methods=["POST"])
+def batch_add_conditions_v1():
+    return batch_add_conditions()
+
+
+@v1_compat_bp.route("/physical-simulation/readings/batch", methods=["POST"])
+def batch_add_readings_v1():
+    return batch_add_readings()
+
+
+@v1_compat_bp.route("/physical-simulation/turbines", methods=["GET"])
+def get_turbines_v1():
+    return get_turbines()
+
+
+@v1_compat_bp.route("/physical-simulation/conditions", methods=["GET"])
+def get_conditions_v1():
+    return get_conditions()
+
+
+@v1_compat_bp.route("/physical-simulation/readings", methods=["GET"])
+def get_readings_v1():
+    return get_readings()
