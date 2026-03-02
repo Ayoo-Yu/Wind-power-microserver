@@ -14,4 +14,5 @@ This document defines the first-round mapping from legacy endpoints to `/api/v1/
 - Legacy endpoints remain valid during compatibility window (2 release cycles).
 - `/api/v1/*` is the target namespace for future evolution.
 - Any added mapping must update this table in the same change set.
-
+- Autopredict multi-station contract is documented in:
+  `docs/api/AUTOPREDICT_MULTI_STATION_CONTRACT.md`

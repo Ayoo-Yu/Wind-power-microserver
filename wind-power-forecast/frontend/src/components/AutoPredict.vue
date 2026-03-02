@@ -124,6 +124,7 @@ import { ref, reactive, inject, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import axiosInstance from '../api/axios'
 import farmService from '../utils/farmService'
+import { getAutoPredictStatus, controlAutoPredict, getAutoPredictLogs } from '../api/autopredictApi'
 
 const isAnimatedBackground = inject('isAnimatedBackground');
 
@@ -279,11 +280,7 @@ apiClient.interceptors.response.use(
 const fetchStatus = async () => {
   loading.value = true
   try {
-    const res = await apiClient.get('/api/status', {
-      params: {
-        farm_code: currentFarm.value
-      }
-    })
+    const res = await getAutoPredictStatus(currentFarm.value)
     predictions.forEach(p => {
       p.status = res.data[p.name] || false
     })
@@ -324,10 +321,7 @@ const handleControl = async (name, action) => {
   console.log('handleControl invoked', name, action)
   loading.value = true
   try {
-    const res = await apiClient.post(`/api/${action}`, {
-      type: name,
-      farm_code: currentFarm.value
-    })
+    const res = await controlAutoPredict(action, name, currentFarm.value)
     if (res.data.warning) {
       ElMessage.warning(res.data.warning)
     } else {
@@ -367,19 +361,17 @@ const fetchLogs = async (name) => {
 const fetchLogsByFilter = async () => {
   loading.value = true
   try {
-    const params = {
-      type: currentPrediction,
-      logType: logsFilters.logType || 'train',
-      date: logsFilters.date || new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-      lines: 500,
-      farm_code: currentFarm.value
-    }
+    const queryDate = logsFilters.date || new Date().toISOString().slice(0, 10).replace(/-/g, '')
     if (logsFilters.logType === 'param') {
       // params.param_opt_day = getParamOptDay(currentPrediction) // getParamOptDay is removed
       // If param logs are specific to a day derived from task type, adjust or remove this logic
       // For now, removing it if getParamOptDay is fully removed
     }
-    const res = await apiClient.get('/api/logs', { params })
+    const res = await getAutoPredictLogs(currentPrediction, currentFarm.value, {
+      logType: logsFilters.logType || 'train',
+      date: queryDate,
+      lines: 500
+    })
     logsContent.value = res.data.logs || '暂无日志信息'
   } catch (error) {
     console.error('获取日志失败:', error)
