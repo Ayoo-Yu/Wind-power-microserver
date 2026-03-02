@@ -26,6 +26,8 @@ prediction_status = {
 }
 # 添加线程锁以确保线程安全
 status_lock = threading.Lock()
+action_lock = threading.Lock()
+inflight_actions = set()
 
 DEFAULT_FARM_CODE = "DEFAULT_FARM"
 
@@ -512,6 +514,24 @@ def api_error(message, code=1500, status_code=400, details=None, legacy=None):
         payload.update(legacy)
     return jsonify(payload), status_code
 
+
+def build_action_key(farm_code, prediction_type, action):
+    return f"{farm_code}:{prediction_type}:{action}"
+
+
+def try_acquire_action_lock(farm_code, prediction_type, action):
+    key = build_action_key(farm_code, prediction_type, action)
+    with action_lock:
+        if key in inflight_actions:
+            return False, key
+        inflight_actions.add(key)
+        return True, key
+
+
+def release_action_lock(action_key):
+    with action_lock:
+        inflight_actions.discard(action_key)
+
 def query_pm2_state(script_path):
     """
     查询 pm2 中指定脚本的运行状态，
@@ -657,86 +677,96 @@ def start_prediction():
         return api_error(error_msg, code=1004, status_code=400)
 
     process_name = build_process_name(farm_code, prediction_type)
-
-    # 检查同场站同类型任务是否已运行（允许不同场站并行）
-    if is_process_online(process_name):
-        with status_lock:  # 获取锁
-            prediction_status[prediction_type] = True
-        record_task_history(prediction_type, 'start', 'success', f'场站 {farm_code} 进程已在运行中: {process_name}')
-        legacy_data = {'status': True, 'farm_code': farm_code}
-        return api_success(
-            data=legacy_data,
-            message=f'{prediction_type} 预测任务已经在运行 (场站: {farm_code})',
-            legacy=legacy_data
+    acquired, action_key = try_acquire_action_lock(farm_code, prediction_type, 'start')
+    if not acquired:
+        return api_error(
+            f'任务操作冲突: {prediction_type} ({farm_code}) 正在执行启动操作',
+            code=1005,
+            status_code=409
         )
 
-    # 使用动态确定的Python解释器路径，并传递环境变量
-    success, result = safe_pm2_command([
-        'start', script_path,
-        '--name', process_name,
-        '--interpreter', python_interpreter,
-        '--merge-logs'  # 合并日志以便调试
-    ])
+    try:
+        # 检查同场站同类型任务是否已运行（允许不同场站并行）
+        if is_process_online(process_name):
+            with status_lock:  # 获取锁
+                prediction_status[prediction_type] = True
+            record_task_history(prediction_type, 'start', 'success', f'场站 {farm_code} 进程已在运行中: {process_name}')
+            legacy_data = {'status': True, 'farm_code': farm_code}
+            return api_success(
+                data=legacy_data,
+                message=f'{prediction_type} 预测任务已经在运行 (场站: {farm_code})',
+                legacy=legacy_data
+            )
 
-    if success:
-        # 启动命令执行成功，但需要验证进程是否真的启动
-        verify_success, _ = safe_pm2_command(['list'])
-        if verify_success:
-            # 再次检查当前场站进程状态
-            if is_process_online(process_name):
-                with status_lock:  # 获取锁
-                    prediction_status[prediction_type] = True
-                record_task_history(prediction_type, 'start', 'success', f'场站 {farm_code} 进程启动成功: {process_name}')
-                legacy_data = {
-                    'message': f'{prediction_type} 预测任务已启动 (场站: {farm_code})',
-                    'output': result.stdout if hasattr(result, 'stdout') else '',
-                    'farm_code': farm_code  # 返回场站信息
-                }
-                return api_success(
-                    data={
+        # 使用动态确定的Python解释器路径，并传递环境变量
+        success, result = safe_pm2_command([
+            'start', script_path,
+            '--name', process_name,
+            '--interpreter', python_interpreter,
+            '--merge-logs'  # 合并日志以便调试
+        ])
+
+        if success:
+            # 启动命令执行成功，但需要验证进程是否真的启动
+            verify_success, _ = safe_pm2_command(['list'])
+            if verify_success:
+                # 再次检查当前场站进程状态
+                if is_process_online(process_name):
+                    with status_lock:  # 获取锁
+                        prediction_status[prediction_type] = True
+                    record_task_history(prediction_type, 'start', 'success', f'场站 {farm_code} 进程启动成功: {process_name}')
+                    legacy_data = {
+                        'message': f'{prediction_type} 预测任务已启动 (场站: {farm_code})',
                         'output': result.stdout if hasattr(result, 'stdout') else '',
-                        'farm_code': farm_code
-                    },
-                    message=f'{prediction_type} 预测任务已启动 (场站: {farm_code})',
-                    legacy=legacy_data
-                )
-            else:
-                # 命令成功但进程可能没有正常启动
-                warning_msg = f'{prediction_type} 启动命令成功，但进程可能未正常运行 (场站: {farm_code})'
-                record_task_history(prediction_type, 'start', 'warning', warning_msg)
-                legacy_data = {
-                    'warning': warning_msg,
-                    'output': result.stdout if hasattr(result, 'stdout') else '',
-                    'farm_code': farm_code
-                }
-                return api_success(
-                    data={
+                        'farm_code': farm_code  # 返回场站信息
+                    }
+                    return api_success(
+                        data={
+                            'output': result.stdout if hasattr(result, 'stdout') else '',
+                            'farm_code': farm_code
+                        },
+                        message=f'{prediction_type} 预测任务已启动 (场站: {farm_code})',
+                        legacy=legacy_data
+                    )
+                else:
+                    # 命令成功但进程可能没有正常启动
+                    warning_msg = f'{prediction_type} 启动命令成功，但进程可能未正常运行 (场站: {farm_code})'
+                    record_task_history(prediction_type, 'start', 'warning', warning_msg)
+                    legacy_data = {
                         'warning': warning_msg,
                         'output': result.stdout if hasattr(result, 'stdout') else '',
                         'farm_code': farm_code
-                    },
+                    }
+                    return api_success(
+                        data={
+                            'warning': warning_msg,
+                            'output': result.stdout if hasattr(result, 'stdout') else '',
+                            'farm_code': farm_code
+                        },
+                        message=warning_msg,
+                        status_code=202,
+                        legacy=legacy_data
+                    )
+            else:
+                warning_msg = f'{prediction_type} 启动命令成功，但无法验证进程状态'
+                record_task_history(prediction_type, 'start', 'warning', warning_msg)
+                legacy_data = {
+                    'warning': warning_msg,
+                    'output': result.stdout if hasattr(result, 'stdout') else ''
+                }
+                return api_success(
+                    data=legacy_data,
                     message=warning_msg,
                     status_code=202,
                     legacy=legacy_data
                 )
         else:
-            warning_msg = f'{prediction_type} 启动命令成功，但无法验证进程状态'
-            record_task_history(prediction_type, 'start', 'warning', warning_msg)
-            legacy_data = {
-                'warning': warning_msg,
-                'output': result.stdout if hasattr(result, 'stdout') else ''
-            }
-            return api_success(
-                data=legacy_data,
-                message=warning_msg,
-                status_code=202,
-                legacy=legacy_data
-            )
-    else:
-        # 启动命令执行失败
-        error_msg = f'启动任务失败: {result}'
-        record_task_history(prediction_type, 'start', 'failed', error_msg)
-        return api_error('启动任务失败', code=1500, status_code=500, details=str(result))
+            # 启动命令执行失败
+            error_msg = f'启动任务失败: {result}'
+            record_task_history(prediction_type, 'start', 'failed', error_msg)
+            return api_error('启动任务失败', code=1500, status_code=500, details=str(result))
+    finally:
+        release_action_lock(action_key)
 
 # 停止预测任务
 @autopredict_bp.route('/stop', methods=['POST'])
@@ -752,6 +782,14 @@ def stop_prediction():
     if not prediction_type or prediction_type not in prediction_status:
         return api_error('无效的预测类型', code=1001, status_code=400)
     
+    acquired, action_key = try_acquire_action_lock(farm_code, prediction_type, 'stop')
+    if not acquired:
+        return api_error(
+            f'任务操作冲突: {prediction_type} ({farm_code}) 正在执行停止操作',
+            code=1005,
+            status_code=409
+        )
+
     try:
         # 正常停止单个脚本
         process_name = build_process_name(farm_code, prediction_type)
@@ -781,6 +819,8 @@ def stop_prediction():
         error_msg = f'停止预测任务异常: {str(e)}'
         record_task_history(prediction_type, 'stop', 'failed', error_msg)
         return api_error('停止预测任务失败', code=1500, status_code=500, details=str(e))
+    finally:
+        release_action_lock(action_key)
 # 设置定时重启任务
 @autopredict_bp.route('/schedule', methods=['POST'])
 @autopredict_bp.route('/v1/autopredict/schedule', methods=['POST'])
@@ -847,6 +887,14 @@ def delete_prediction():
     if not prediction_type or prediction_type not in prediction_status:
         return api_error('无效的预测类型', code=1001, status_code=400)
 
+    acquired, action_key = try_acquire_action_lock(farm_code, prediction_type, 'delete')
+    if not acquired:
+        return api_error(
+            f'任务操作冲突: {prediction_type} ({farm_code}) 正在执行删除操作',
+            code=1005,
+            status_code=409
+        )
+
     try:
         process_name = build_process_name(farm_code, prediction_type)
 
@@ -874,6 +922,8 @@ def delete_prediction():
         error_msg = f'删除预测任务异常: {str(e)}'
         record_task_history(prediction_type, 'delete', 'failed', error_msg)
         return api_error('从PM2删除预测任务失败', code=1500, status_code=500, details=str(e))
+    finally:
+        release_action_lock(action_key)
 # 保存当前 PM2 任务配置
 @autopredict_bp.route('/save', methods=['POST'])
 @autopredict_bp.route('/v1/autopredict/save', methods=['POST'])

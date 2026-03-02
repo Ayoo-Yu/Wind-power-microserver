@@ -34,6 +34,7 @@ It applies to the autopredict backend endpoints proxied from frontend `/api/*` r
 ## Validation Rule
 - Backend validates `farm_code` against active farm list from database (`wind_farms`).
 - Invalid `farm_code` must return `400`.
+- Concurrent duplicate operation on same `farm_code + prediction_type + action` returns `409` with conflict code.
 
 ## Process Naming Rule
 - PM2 process names use pattern:
