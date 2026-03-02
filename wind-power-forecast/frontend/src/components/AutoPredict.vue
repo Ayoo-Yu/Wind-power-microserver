@@ -123,6 +123,7 @@
 import { ref, reactive, inject, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import axiosInstance from '../api/axios'
+import farmService from '../utils/farmService'
 
 const isAnimatedBackground = inject('isAnimatedBackground');
 
@@ -207,13 +208,21 @@ const confirmDialog = reactive({
 
 const POLLING_INTERVAL = 60000
 let intervalId = null
+const currentFarm = ref(farmService.getCurrentFarm())
+
+const handleFarmChanged = (farmCode) => {
+  currentFarm.value = farmCode
+  fetchStatus()
+}
 
 onMounted(() => {
+  farmService.addListener(handleFarmChanged)
   fetchStatus()
   intervalId = setInterval(fetchStatus, POLLING_INTERVAL)
 })
 
 onUnmounted(() => {
+  farmService.removeListener(handleFarmChanged)
   if (intervalId) {
     clearInterval(intervalId)
     intervalId = null
@@ -270,7 +279,11 @@ apiClient.interceptors.response.use(
 const fetchStatus = async () => {
   loading.value = true
   try {
-    const res = await apiClient.get('/api/status')
+    const res = await apiClient.get('/api/status', {
+      params: {
+        farm_code: currentFarm.value
+      }
+    })
     predictions.forEach(p => {
       p.status = res.data[p.name] || false
     })
@@ -311,7 +324,10 @@ const handleControl = async (name, action) => {
   console.log('handleControl invoked', name, action)
   loading.value = true
   try {
-    const res = await apiClient.post(`/api/${action}`, { type: name })
+    const res = await apiClient.post(`/api/${action}`, {
+      type: name,
+      farm_code: currentFarm.value
+    })
     if (res.data.warning) {
       ElMessage.warning(res.data.warning)
     } else {
@@ -355,7 +371,8 @@ const fetchLogsByFilter = async () => {
       type: currentPrediction,
       logType: logsFilters.logType || 'train',
       date: logsFilters.date || new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-      lines: 500
+      lines: 500,
+      farm_code: currentFarm.value
     }
     if (logsFilters.logType === 'param') {
       // params.param_opt_day = getParamOptDay(currentPrediction) // getParamOptDay is removed
