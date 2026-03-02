@@ -28,6 +28,16 @@
         <el-button size="small" @click="selectAllFleetFarms">全选</el-button>
         <el-button size="small" @click="clearFleetFarmSelection">清空</el-button>
       </div>
+      <div class="fleet-matrix-row">
+        <el-checkbox-group v-model="selectedBatchTypes">
+          <el-checkbox label="supershort">超短期</el-checkbox>
+          <el-checkbox label="short">短期</el-checkbox>
+          <el-checkbox label="medium">中期</el-checkbox>
+        </el-checkbox-group>
+        <el-button type="primary" size="small" :loading="matrixControlLoading" @click="handleControlMatrix('start')">选中场站+类型 批量启用</el-button>
+        <el-button type="warning" size="small" :loading="matrixControlLoading" @click="handleControlMatrix('stop')">选中场站+类型 批量停止</el-button>
+        <el-button type="danger" size="small" :loading="matrixControlLoading" @click="handleControlMatrix('delete')">选中场站+类型 批量删除</el-button>
+      </div>
       <div class="fleet-list">
         <div class="fleet-item" v-for="farm in fleetStatus" :key="farm.farm_code">
           <div class="fleet-name">{{ farm.farm_name }} ({{ farm.farm_code }})</div>
@@ -182,6 +192,7 @@
       </div>
       <el-table :data="filteredBatchResultItems" border size="small" style="width: 100%">
         <el-table-column prop="farm_code" label="场站编码" min-width="150" />
+        <el-table-column prop="type" label="预测类型" width="110" />
         <el-table-column prop="status_code" label="HTTP状态" width="100" />
         <el-table-column label="结果" width="100">
           <template #default="scope">
@@ -208,7 +219,7 @@
 import { ref, reactive, computed, inject, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import farmService from '../utils/farmService'
-import { getAutoPredictStatus, getAutoPredictStatusAll, controlAutoPredict, controlAutoPredictAll, getAutoPredictLogs } from '../api/autopredictApi'
+import { getAutoPredictStatus, getAutoPredictStatusAll, getAutoPredictOverview, controlAutoPredict, controlAutoPredictAll, controlAutoPredictMatrix, getAutoPredictLogs } from '../api/autopredictApi'
 
 const isAnimatedBackground = inject('isAnimatedBackground');
 
@@ -259,6 +270,8 @@ const logsFilters = reactive({
 const fleetStatus = ref([])
 const fleetLoading = ref(false)
 const selectedFleetFarmCodes = ref([])
+const selectedBatchTypes = ref(['supershort', 'short', 'medium'])
+const matrixControlLoading = ref(false)
 
 const errorDialogVisible = ref(false)
 const errorDetails = ref('')
@@ -406,7 +419,12 @@ const fetchStatus = async () => {
 const fetchFleetStatus = async () => {
   fleetLoading.value = true
   try {
-    const res = await getAutoPredictStatusAll()
+    let res
+    try {
+      res = await getAutoPredictOverview()
+    } catch (overviewError) {
+      res = await getAutoPredictStatusAll()
+    }
     const payload = res.data?.data || res.data || {}
     const items = Array.isArray(payload.items) ? payload.items : []
     fleetStatus.value = items
@@ -590,6 +608,70 @@ const handleControlAll = async (name, action) => {
   }
 }
 
+const handleControlMatrix = async (action) => {
+  if (matrixControlLoading.value) {
+    ElMessage.warning('矩阵批量操作正在处理中，请稍候')
+    return
+  }
+
+  const targetFarmCodes = Array.isArray(selectedFleetFarmCodes.value)
+    ? selectedFleetFarmCodes.value.filter(Boolean)
+    : []
+  const targetTypes = Array.isArray(selectedBatchTypes.value)
+    ? selectedBatchTypes.value.filter(Boolean)
+    : []
+
+  if (targetFarmCodes.length === 0) {
+    ElMessage.warning('请至少选择一个场站')
+    return
+  }
+  if (targetTypes.length === 0) {
+    ElMessage.warning('请至少选择一个预测类型')
+    return
+  }
+
+  matrixControlLoading.value = true
+  loading.value = true
+  try {
+    const res = await controlAutoPredictMatrix(action, targetTypes, targetFarmCodes)
+    const payload = res.data?.data || res.data || {}
+    const summary = payload.summary || {}
+    const success = Number(summary.success || 0)
+    const total = Number(summary.total || (targetFarmCodes.length * targetTypes.length))
+    const failed = Number(summary.failed || 0)
+
+    batchResult.action = action
+    batchResult.type = targetTypes.join(',')
+    batchResult.summary = { total, success, failed }
+    batchResult.items = Array.isArray(payload.items) ? payload.items : []
+    batchResultFarmFilter.value = ''
+    batchResultDialogVisible.value = true
+
+    if (failed > 0) {
+      ElMessage.warning(`矩阵批量${action}完成：成功 ${success}/${total}，失败 ${failed}`)
+    } else {
+      ElMessage.success(`矩阵批量${action}完成：成功 ${success}/${total}`)
+    }
+    await fetchStatus()
+    await fetchFleetStatus()
+  } catch (error) {
+    if (error?.response?.status === 409) {
+      ElMessage.warning(error?.response?.data?.message || '矩阵批量操作冲突，请稍后再试')
+      return
+    }
+    if (error.response && error.response.data) {
+      const errorData = error.response.data
+      showErrorDialog(
+        `矩阵批量${action}失败`,
+        errorData.details || errorData.error || error.message
+      )
+    }
+  } finally {
+    matrixControlLoading.value = false
+    loading.value = false
+  }
+}
+
 // 瀹氭椂閲嶅惎鏂规硶 (showScheduleDialog, setSchedule) 宸茬Щ闄?
 // 淇濆瓨/鍔犺浇/鍒犻櫎 PM2 閰嶇疆鏂规硶 (saveSettings, resurrectConfig, clearSavedConfig) 宸茬Щ闄?
 // 鏌ヨ鑴氭湰璇︽儏鏂规硶 (fetchScriptInfo) 宸茬Щ闄?
@@ -720,6 +802,14 @@ const handleLogTypeChange = () => {
   gap: 8px;
   align-items: center;
   margin-bottom: 10px;
+}
+
+.fleet-matrix-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
 }
 
 .fleet-farm-select {
@@ -1061,6 +1151,11 @@ const handleLogTypeChange = () => {
   }
 
   .fleet-filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .fleet-matrix-row {
     flex-direction: column;
     align-items: stretch;
   }

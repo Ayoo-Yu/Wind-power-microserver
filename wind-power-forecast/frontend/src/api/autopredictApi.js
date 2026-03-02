@@ -115,6 +115,15 @@ export function controlAutoPredictAll(action, predictionType, farmCodes = []) {
   return autopredictPost('control_all', payload, 'control_all')
 }
 
+export function controlAutoPredictMatrix(action, predictionTypes = [], farmCodes = []) {
+  const payload = {
+    action,
+    types: Array.isArray(predictionTypes) ? predictionTypes : [],
+    farm_codes: Array.isArray(farmCodes) ? farmCodes : []
+  }
+  return autopredictPost('control_matrix', payload, 'control_matrix')
+}
+
 export function getAutoPredictLogs(predictionType, farmCode, options = {}) {
   const params = {
     type: predictionType,
@@ -132,6 +141,10 @@ export function getAutoPredictHistory(params = {}) {
 
 export function getAutoPredictStatusAll() {
   return autopredictGet('status_all', 'status_all', {})
+}
+
+export function getAutoPredictOverview() {
+  return autopredictGet('overview', 'overview', {})
 }
 
 export function getAutoPredictTaskStatus(predictionType, date, farmCode, extraParams = {}) {

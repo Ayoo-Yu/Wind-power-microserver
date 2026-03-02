@@ -19,7 +19,9 @@ This document defines the M1 compatibility mapping from legacy endpoints to `/ap
 | Farms | `/api/farms` | `/api/v1/autopredict/farms` | Implemented | Returns active farms from `wind_farms`, aligned with farm-code validation. |
 | Runtime status | `/api/status` | `/api/v1/autopredict/status` | Implemented | v1 and legacy share same handler logic. |
 | Fleet status | `/api/status_all` | `/api/v1/autopredict/status_all` | Implemented | Returns status snapshot for all active farms. |
+| Fleet overview | `/api/overview` | `/api/v1/autopredict/overview` | Implemented | Returns fleet status with per-farm running task count. |
 | Fleet control | `/api/control_all` | `/api/v1/autopredict/control_all` | Implemented | Batch `start/stop/delete` for same prediction type across selected farms. |
+| Fleet matrix control | `/api/control_matrix` | `/api/v1/autopredict/control_matrix` | Implemented | Batch `start/stop/delete` across selected farms and selected prediction types. |
 | Start task | `/api/start` | `/api/v1/autopredict/start` | Implemented | v1 and legacy share same handler logic. |
 | Stop task | `/api/stop` | `/api/v1/autopredict/stop` | Implemented | v1 and legacy share same handler logic. |
 | Schedule restart | `/api/schedule` | `/api/v1/autopredict/schedule` | Implemented | v1 and legacy share same handler logic. |

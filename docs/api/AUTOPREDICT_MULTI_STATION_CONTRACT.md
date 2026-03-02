@@ -18,7 +18,9 @@ It applies to the autopredict backend endpoints proxied from frontend `/api/*` r
 | `/api/farms` | `GET` | N/A | Returns active farms from `wind_farms` as selector source-of-truth. |
 | `/api/status` | `GET` | Query by `farm_code` | Returns current task statuses and `farm_code`. |
 | `/api/status_all` | `GET` | N/A | Returns all active farms with per-farm task status snapshot. |
+| `/api/overview` | `GET` | N/A | Returns all active farms with per-farm status and `running_count`. |
 | `/api/control_all` | `POST` | Body `farm_codes[]` (optional) | Batch `start/stop/delete` for one prediction type; omitted farm list means all active farms. |
+| `/api/control_matrix` | `POST` | Body `farm_codes[]` + `types[]` | Batch `start/stop/delete` over farm and prediction-type matrix. |
 | `/api/start` | `POST` | Body `farm_code` | Starts task process as `<farm_code>_<script_name>`. |
 | `/api/stop` | `POST` | Body `farm_code` | Stops only the scoped process. |
 | `/api/delete` | `POST` | Body `farm_code` | Deletes only the scoped process in PM2. |
