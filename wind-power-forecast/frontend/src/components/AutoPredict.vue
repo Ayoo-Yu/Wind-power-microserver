@@ -132,6 +132,36 @@
       </template>
     </el-dialog>
 
+    <el-dialog
+      title="批量操作结果明细"
+      v-model="batchResultDialogVisible"
+      width="70%"
+    >
+      <div class="batch-summary">
+        <el-tag type="info">类型：{{ batchResult.type || '-' }}</el-tag>
+        <el-tag type="primary">动作：{{ batchResult.action || '-' }}</el-tag>
+        <el-tag type="success">成功：{{ batchResult.summary?.success || 0 }}</el-tag>
+        <el-tag type="danger">失败：{{ batchResult.summary?.failed || 0 }}</el-tag>
+      </div>
+      <el-table :data="batchResult.items || []" border size="small" style="width: 100%">
+        <el-table-column prop="farm_code" label="场站编码" min-width="150" />
+        <el-table-column prop="status_code" label="HTTP状态" width="100" />
+        <el-table-column label="结果" width="100">
+          <template #default="scope">
+            <el-tag :type="scope.row.success ? 'success' : 'danger'">
+              {{ scope.row.success ? '成功' : '失败' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="message" label="消息" min-width="260" show-overflow-tooltip />
+      </el-table>
+      <template #footer>
+        <div class="dialog-footer-buttons">
+          <el-button type="primary" @click="batchResultDialogVisible = false">关闭</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
     <!-- 浠诲姟鍘嗗彶璁板綍瀵硅瘽妗嗗凡绉婚櫎 -->
     <!-- 鍘嗗彶璁板綍璇︽儏瀵硅瘽妗嗗凡绉婚櫎 -->
   </div>
@@ -195,6 +225,13 @@ const fleetLoading = ref(false)
 const errorDialogVisible = ref(false)
 const errorDetails = ref('')
 const errorTitle = ref('鎿嶄綔澶辫触')
+const batchResultDialogVisible = ref(false)
+const batchResult = reactive({
+  action: '',
+  type: '',
+  summary: { total: 0, success: 0, failed: 0 },
+  items: []
+})
 
 const confirmDialog = reactive({
   visible: false,
@@ -413,6 +450,16 @@ const handleControlAll = async (name, action) => {
     const success = Number(summary.success || 0)
     const total = Number(summary.total || targetFarmCodes.length || 0)
     const failed = Number(summary.failed || 0)
+
+    batchResult.action = action
+    batchResult.type = name
+    batchResult.summary = {
+      total,
+      success,
+      failed
+    }
+    batchResult.items = Array.isArray(payload.items) ? payload.items : []
+    batchResultDialogVisible.value = true
 
     if (failed > 0) {
       ElMessage.warning(`批量${action}完成：成功 ${success}/${total}，失败 ${failed}`)
@@ -724,6 +771,13 @@ const handleLogTypeChange = () => {
 .batch-actions {
   grid-template-columns: repeat(3, 1fr);
   padding-top: 8px;
+}
+
+.batch-summary {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .el-row {
