@@ -162,7 +162,25 @@
         <el-tag type="success">成功：{{ batchResult.summary?.success || 0 }}</el-tag>
         <el-tag type="danger">失败：{{ batchResult.summary?.failed || 0 }}</el-tag>
       </div>
-      <el-table :data="batchResult.items || []" border size="small" style="width: 100%">
+      <div class="batch-result-toolbar">
+        <el-select
+          v-model="batchResultFarmFilter"
+          clearable
+          filterable
+          placeholder="按场站筛选明细"
+          class="batch-result-filter"
+        >
+          <el-option
+            v-for="farmCode in batchResultFarmOptions"
+            :key="farmCode"
+            :label="farmCode"
+            :value="farmCode"
+          />
+        </el-select>
+        <el-button @click="batchResultFarmFilter = ''">清空筛选</el-button>
+        <el-button type="warning" @click="exportFailedBatchItems">导出失败场站</el-button>
+      </div>
+      <el-table :data="filteredBatchResultItems" border size="small" style="width: 100%">
         <el-table-column prop="farm_code" label="场站编码" min-width="150" />
         <el-table-column prop="status_code" label="HTTP状态" width="100" />
         <el-table-column label="结果" width="100">
@@ -187,7 +205,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, inject, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, inject, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import farmService from '../utils/farmService'
 import { getAutoPredictStatus, getAutoPredictStatusAll, controlAutoPredict, controlAutoPredictAll, getAutoPredictLogs } from '../api/autopredictApi'
@@ -246,11 +264,24 @@ const errorDialogVisible = ref(false)
 const errorDetails = ref('')
 const errorTitle = ref('鎿嶄綔澶辫触')
 const batchResultDialogVisible = ref(false)
+const batchResultFarmFilter = ref('')
 const batchResult = reactive({
   action: '',
   type: '',
   summary: { total: 0, success: 0, failed: 0 },
   items: []
+})
+const batchResultFarmOptions = computed(() => {
+  const items = Array.isArray(batchResult.items) ? batchResult.items : []
+  return Array.from(new Set(items.map(item => item.farm_code).filter(Boolean)))
+})
+const filteredBatchResultItems = computed(() => {
+  const items = Array.isArray(batchResult.items) ? batchResult.items : []
+  const farmCode = batchResultFarmFilter.value
+  if (!farmCode) {
+    return items
+  }
+  return items.filter(item => item.farm_code === farmCode)
 })
 
 const confirmDialog = reactive({
@@ -403,6 +434,34 @@ const clearFleetFarmSelection = () => {
   selectedFleetFarmCodes.value = []
 }
 
+const exportFailedBatchItems = () => {
+  const items = Array.isArray(batchResult.items) ? batchResult.items : []
+  const failedItems = items.filter(item => !item.success)
+  if (failedItems.length === 0) {
+    ElMessage.info('没有失败场站可导出')
+    return
+  }
+
+  const header = ['farm_code', 'status_code', 'code', 'message']
+  const rows = failedItems.map(item => [
+    item.farm_code || '',
+    String(item.status_code ?? ''),
+    String(item.code ?? ''),
+    String(item.message ?? '').replace(/"/g, '""')
+  ])
+  const csv = [header.join(','), ...rows.map(row => `${row[0]},${row[1]},${row[2]},"${row[3]}"`)].join('\n')
+  const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `batch_failed_${batchResult.type || 'unknown'}_${Date.now()}.csv`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+  ElMessage.success(`已导出失败场站 ${failedItems.length} 条`)
+}
+
 const showConfirmDialog = (action, title, message, params = null) => {
   confirmDialog.action = action
   confirmDialog.title = title
@@ -503,6 +562,7 @@ const handleControlAll = async (name, action) => {
       failed
     }
     batchResult.items = Array.isArray(payload.items) ? payload.items : []
+    batchResultFarmFilter.value = ''
     batchResultDialogVisible.value = true
 
     if (failed > 0) {
@@ -836,6 +896,17 @@ const handleLogTypeChange = () => {
   flex-wrap: wrap;
 }
 
+.batch-result-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.batch-result-filter {
+  min-width: 240px;
+}
+
 .el-row {
   margin: 24px -16px;
 }
@@ -997,6 +1068,15 @@ const handleLogTypeChange = () => {
   .fleet-farm-select {
     min-width: 100%;
     max-width: 100%;
+  }
+
+  .batch-result-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .batch-result-filter {
+    min-width: 100%;
   }
 }
 
