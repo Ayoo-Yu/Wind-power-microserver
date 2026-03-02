@@ -239,11 +239,10 @@ export default {
 
 .features-section {
   display: grid;
-  /* Updated to handle 4 cards in a 1x4 layout on larger screens */
-  grid-template-columns: repeat(4, 1fr); 
+  grid-template-columns: repeat(2, 1fr);
   gap: 40px;
   padding: 0 40px;
-  max-width: 1440px;
+  max-width: 1080px;
   margin: 0 auto 80px;
 }
 
@@ -289,39 +288,6 @@ export default {
   color: #2CB14A;
 }
 
-.feature-card:nth-child(3) .icon-wrapper {
-  background: linear-gradient(135deg, #AF52DE 0%, #9F44D3 100%);
-}
-
-.feature-card:nth-child(3)::before {
-  color: #AF52DE;
-}
-
-.feature-card:nth-child(3) .learn-more-btn {
-  color: #AF52DE;
-}
-
-.feature-card:nth-child(3) .learn-more-btn:hover {
-  color: #9941C8;
-}
-
-/* Styling for the new 4th card - using a new color scheme */
-.feature-card:nth-child(4) .icon-wrapper {
-  background: linear-gradient(135deg, #FF9500 0%, #FFB340 100%); /* Orange gradient */
-}
-
-.feature-card:nth-child(4)::before {
-  color: #FF9500; /* Orange color for pseudo-element */
-}
-
-.feature-card:nth-child(4) .learn-more-btn {
-  color: #FF9500; /* Orange color for button text */
-}
-
-.feature-card:nth-child(4) .learn-more-btn:hover {
-  color: #E68600; /* Darker orange on hover */
-}
-
 .feature-card:nth-child(1):hover {
   transform: translateY(-8px);
   box-shadow: 0 12px 48px rgba(0, 119, 237, 0.12);
@@ -330,16 +296,6 @@ export default {
 .feature-card:nth-child(2):hover {
   transform: translateY(-8px);
   box-shadow: 0 12px 48px rgba(52, 199, 89, 0.12);
-}
-
-.feature-card:nth-child(3):hover {
-  transform: translateY(-8px);
-  box-shadow: 0 12px 48px rgba(175, 82, 222, 0.12);
-}
-
-.feature-card:nth-child(4):hover {
-  transform: translateY(-8px);
-  box-shadow: 0 12px 48px rgba(255, 149, 0, 0.12); /* Shadow color for the 4th card */
 }
 
 .icon-wrapper {
@@ -440,7 +396,7 @@ export default {
 /* 响应式设计 */
 @media (max-width: 1200px) {
   .features-section {
-    grid-template-columns: repeat(2, 1fr); /* Stays 2x2 for medium screens */
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 

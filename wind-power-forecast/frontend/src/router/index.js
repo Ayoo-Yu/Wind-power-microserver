@@ -30,13 +30,11 @@ const routes = [
       },
       {
         path: 'modeltrain',
-        name: 'ModelTrain',
-        redirect: { name: 'AutoPredict' }
+        redirect: '/autopredict'
       },
       {
         path: 'powerpredict',
-        name: 'PowerPredict',
-        redirect: { name: 'AutoPredict' }
+        redirect: '/autopredict'
       },
       {
         path: 'autopredict',
