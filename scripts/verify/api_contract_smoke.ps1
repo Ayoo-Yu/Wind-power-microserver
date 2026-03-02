@@ -25,10 +25,27 @@ function Assert-True {
 function Invoke-Json {
     param(
         [string]$Method,
-        [string]$Url
+        [string]$Url,
+        [hashtable]$Body = $null
     )
+    $requestBody = $null
+    $requestBodyBytes = $null
+    if ($Body -ne $null) {
+        $requestBody = ($Body | ConvertTo-Json -Compress)
+        $requestBodyBytes = [System.Text.Encoding]::UTF8.GetBytes($requestBody)
+    }
     try {
-        $resp = Invoke-WebRequest -UseBasicParsing -Method $Method -Uri $Url -TimeoutSec 10
+        $invokeArgs = @{
+            UseBasicParsing = $true
+            Method = $Method
+            Uri = $Url
+            TimeoutSec = 10
+        }
+        if ($requestBodyBytes -ne $null) {
+            $invokeArgs["Body"] = $requestBodyBytes
+            $invokeArgs["ContentType"] = "application/json; charset=utf-8"
+        }
+        $resp = Invoke-WebRequest @invokeArgs
         return @{
             StatusCode = [int]$resp.StatusCode
             Raw = $resp.Content
@@ -42,7 +59,11 @@ function Invoke-Json {
             if ([string]::IsNullOrWhiteSpace($raw)) {
                 $tmp = [System.IO.Path]::GetTempFileName()
                 try {
-                    $status = curl.exe -s -o $tmp -w "%{http_code}" -X $Method $Url
+                    if ($requestBody -ne $null) {
+                        $status = curl.exe -s -o $tmp -w "%{http_code}" -X $Method -H "Content-Type: application/json" -d $requestBody $Url
+                    } else {
+                        $status = curl.exe -s -o $tmp -w "%{http_code}" -X $Method $Url
+                    }
                     $raw = Get-Content $tmp -Raw
                     return @{
                         StatusCode = [int]$status
@@ -170,6 +191,26 @@ if ($taskInvalidV1.StatusCode -eq 400) {
     Write-Host "[INFO] Auto /api/v1/autopredict/task_status(invalid) is auth-protected in current environment (401)."
 }
 
+# 9) New v1 control-plane endpoint guards
+$scriptInfoInvalidV1 = Invoke-Json -Method "GET" -Url "$AutoBaseUrl/api/v1/autopredict/script_info?type=invalid_type&farm_code=$farmCode"
+Assert-True -Name "Auto /api/v1/autopredict/script_info(invalid) status 400" -Condition ($scriptInfoInvalidV1.StatusCode -eq 400) -FailMessage "HTTP $($scriptInfoInvalidV1.StatusCode) body=$($scriptInfoInvalidV1.Raw)"
+Assert-Envelope -Name "Auto /api/v1/autopredict/script_info(invalid)" -Resp $scriptInfoInvalidV1
+
+$scheduleInvalidV1 = Invoke-Json -Method "POST" -Url "$AutoBaseUrl/api/v1/autopredict/schedule" -Body @{
+    type = "invalid_type"
+    time = "00:00"
+    farm_code = $farmCode
+}
+Assert-True -Name "Auto /api/v1/autopredict/schedule(invalid) status 400" -Condition ($scheduleInvalidV1.StatusCode -eq 400) -FailMessage "HTTP $($scheduleInvalidV1.StatusCode) body=$($scheduleInvalidV1.Raw)"
+Assert-Envelope -Name "Auto /api/v1/autopredict/schedule(invalid)" -Resp $scheduleInvalidV1
+
+$deleteInvalidV1 = Invoke-Json -Method "POST" -Url "$AutoBaseUrl/api/v1/autopredict/delete" -Body @{
+    type = "invalid_type"
+    farm_code = $farmCode
+}
+Assert-True -Name "Auto /api/v1/autopredict/delete(invalid) status 400" -Condition ($deleteInvalidV1.StatusCode -eq 400) -FailMessage "HTTP $($deleteInvalidV1.StatusCode) body=$($deleteInvalidV1.Raw)"
+Assert-Envelope -Name "Auto /api/v1/autopredict/delete(invalid)" -Resp $deleteInvalidV1
+
 Write-Host ""
 if ($failures -eq 0) {
     Write-Host "API contract smoke verification PASSED." -ForegroundColor Green
@@ -178,3 +219,7 @@ if ($failures -eq 0) {
 
 Write-Host "API contract smoke verification FAILED with $failures issue(s)." -ForegroundColor Red
 exit 1
+# 3.1) Auto v1 health envelope
+$autoV1Health = Invoke-Json -Method "GET" -Url "$AutoBaseUrl/api/v1/health"
+Assert-True -Name "Auto /api/v1/health status" -Condition ($autoV1Health.StatusCode -eq 200) -FailMessage "HTTP $($autoV1Health.StatusCode) body=$($autoV1Health.Raw)"
+Assert-Envelope -Name "Auto /api/v1/health" -Resp $autoV1Health

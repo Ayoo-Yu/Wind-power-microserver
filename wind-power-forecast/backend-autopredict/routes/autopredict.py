@@ -553,7 +553,7 @@ def get_status():
 @autopredict_bp.route('/start', methods=['POST'])
 @autopredict_bp.route('/v1/autopredict/start', methods=['POST'])
 def start_prediction():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     prediction_type = data.get('type')
     farm_code = resolve_farm_code(data.get('farm_code'))
 
@@ -674,7 +674,7 @@ def start_prediction():
 @autopredict_bp.route('/stop', methods=['POST'])
 @autopredict_bp.route('/v1/autopredict/stop', methods=['POST'])
 def stop_prediction():
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     prediction_type = data.get('type')
     farm_code = resolve_farm_code(data.get('farm_code'))
     
@@ -714,8 +714,9 @@ def stop_prediction():
         return api_error('停止预测任务失败', code=1500, status_code=500, details=str(e))
 # 设置定时重启任务
 @autopredict_bp.route('/schedule', methods=['POST'])
+@autopredict_bp.route('/v1/autopredict/schedule', methods=['POST'])
 def schedule_restart():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     prediction_type = data.get('type')
     farm_code = resolve_farm_code(data.get('farm_code'))
     schedule_time = data.get('time')  # 格式应为 HH:mm
@@ -763,8 +764,9 @@ def schedule_restart():
         return api_error('设置定时重启失败', code=1500, status_code=500, details=str(result))
 # 从 PM2 中删除任务
 @autopredict_bp.route('/delete', methods=['POST'])
+@autopredict_bp.route('/v1/autopredict/delete', methods=['POST'])
 def delete_prediction():
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     prediction_type = data.get('type')
     farm_code = resolve_farm_code(data.get('farm_code'))
     if not prediction_type or prediction_type not in prediction_status:
@@ -801,6 +803,7 @@ def delete_prediction():
         return api_error('从PM2删除预测任务失败', code=1500, status_code=500, details=str(e))
 # 保存当前 PM2 任务配置
 @autopredict_bp.route('/save', methods=['POST'])
+@autopredict_bp.route('/v1/autopredict/save', methods=['POST'])
 def save_pm2_config():
     success, result = safe_pm2_command(['save'])
     
@@ -814,6 +817,7 @@ def save_pm2_config():
 
 # 删除PM2保存的配置文件（新增）
 @autopredict_bp.route('/clearsave', methods=['POST'])
+@autopredict_bp.route('/v1/autopredict/clearsave', methods=['POST'])
 def clear_pm2_save():
     success, result = safe_pm2_command(['cleardump'])
     
@@ -827,6 +831,7 @@ def clear_pm2_save():
 
 # 查询指定脚本的详细 PM2 信息
 @autopredict_bp.route('/script_info', methods=['GET'])
+@autopredict_bp.route('/v1/autopredict/script_info', methods=['GET'])
 def get_script_info():
     prediction_type = request.args.get('type')
     farm_code = resolve_farm_code(request.args.get('farm_code'))

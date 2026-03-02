@@ -19,8 +19,13 @@ This document defines the M1 compatibility mapping from legacy endpoints to `/ap
 | Runtime status | `/api/status` | `/api/v1/autopredict/status` | Implemented | v1 and legacy share same handler logic. |
 | Start task | `/api/start` | `/api/v1/autopredict/start` | Implemented | v1 and legacy share same handler logic. |
 | Stop task | `/api/stop` | `/api/v1/autopredict/stop` | Implemented | v1 and legacy share same handler logic. |
+| Schedule restart | `/api/schedule` | `/api/v1/autopredict/schedule` | Implemented | v1 and legacy share same handler logic. |
+| Delete task | `/api/delete` | `/api/v1/autopredict/delete` | Implemented | v1 and legacy share same handler logic. |
 | Logs | `/api/logs` | `/api/v1/autopredict/logs` | Implemented | v1 and legacy share same handler logic. |
 | Resurrect PM2 | `/api/resurrect` | `/api/v1/autopredict/resurrect` | Implemented | v1 and legacy share same handler logic. |
+| Save PM2 dump | `/api/save` | `/api/v1/autopredict/save` | Implemented | v1 and legacy share same handler logic. |
+| Clear PM2 dump | `/api/clearsave` | `/api/v1/autopredict/clearsave` | Implemented | v1 and legacy share same handler logic. |
+| Script info | `/api/script_info` | `/api/v1/autopredict/script_info` | Implemented | v1 and legacy share same handler logic. |
 | Task history | `/api/history` | `/api/v1/autopredict/history` | Implemented | v1 and legacy share same handler logic. |
 | Task status | `/api/task_status` | `/api/v1/autopredict/task_status` | Implemented | Handles missing `param` dir for short/medium safely. |
 
