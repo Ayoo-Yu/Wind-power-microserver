@@ -614,8 +614,9 @@ def start_prediction():
 # 停止预测任务
 @autopredict_bp.route('/stop', methods=['POST'])
 def stop_prediction():
-    data = request.json
+    data = request.json or {}
     prediction_type = data.get('type')
+    farm_code = resolve_farm_code(data.get('farm_code'))
     
     if not prediction_type or prediction_type not in prediction_status:
         return jsonify({'error': '无效的预测类型'}), 400
@@ -624,8 +625,9 @@ def stop_prediction():
         # 正常停止单个脚本
         script_path = scripts[prediction_type]
         script_name = os.path.splitext(os.path.basename(script_path))[0]  # 去掉.py后缀
+        process_name = f"{farm_code}_{script_name}"
         
-        success, result = safe_pm2_command(['stop', script_name])
+        success, result = safe_pm2_command(['stop', process_name])
             
         if success:
             with status_lock:  # 获取锁
@@ -633,11 +635,12 @@ def stop_prediction():
             # 更新全局状态
             _update_prediction_status()
             
-            message = f'{script_name} 已停止'
+            message = f'{process_name} 已停止'
             record_task_history(prediction_type, 'stop', 'success', message)
             
             return jsonify({
-                'message': f'{prediction_type}预测任务已停止'
+                'message': f'{prediction_type}预测任务已停止 (场站: {farm_code})',
+                'farm_code': farm_code
             })
         else:
             error_msg = f'停止任务失败: {result}'
@@ -661,6 +664,7 @@ def stop_prediction():
 def schedule_restart():
     data = request.get_json() or {}
     prediction_type = data.get('type')
+    farm_code = resolve_farm_code(data.get('farm_code'))
     schedule_time = data.get('time')  # 格式应为 HH:mm
 
     if prediction_type not in prediction_status:
@@ -677,7 +681,7 @@ def schedule_restart():
 
     script_path = scripts[prediction_type]
     # 使用 os.path.splitext 获取脚本文件名，去掉.py后缀作为进程名称
-    process_name = os.path.splitext(os.path.basename(script_path))[0]
+    process_name = f"{farm_code}_{os.path.splitext(os.path.basename(script_path))[0]}"
     
     # 先停止现有进程
     stop_success, _ = safe_pm2_command(['stop', process_name])
@@ -699,7 +703,10 @@ def schedule_restart():
             'success', 
             f'设置定时重启: {schedule_time}'
         )
-        return jsonify({'message': f'为 {prediction_type} 设置了每日 {schedule_time} 的定时重启'})
+        return jsonify({
+            'message': f'为 {prediction_type} 设置了每日 {schedule_time} 的定时重启 (场站: {farm_code})',
+            'farm_code': farm_code
+        })
     else:
         error_msg = f'设置定时重启失败: {result}'
         record_task_history(prediction_type, 'schedule', 'failed', error_msg)
@@ -708,16 +715,18 @@ def schedule_restart():
 # 从 PM2 中删除任务
 @autopredict_bp.route('/delete', methods=['POST'])
 def delete_prediction():
-    data = request.json
+    data = request.json or {}
     prediction_type = data.get('type')
+    farm_code = resolve_farm_code(data.get('farm_code'))
     if not prediction_type or prediction_type not in prediction_status:
         return jsonify({'error': '无效的预测类型'}), 400
     
     try:
         script_path = scripts[prediction_type]
         script_name = os.path.splitext(os.path.basename(script_path))[0]  # 去掉.py后缀
+        process_name = f"{farm_code}_{script_name}"
         
-        success, result = safe_pm2_command(['delete', script_name])
+        success, result = safe_pm2_command(['delete', process_name])
         
         if success:
             with status_lock:  # 获取锁
@@ -725,11 +734,12 @@ def delete_prediction():
             # 更新全局状态
             _update_prediction_status()
             
-            message = f'{script_name} 已从PM2删除'
+            message = f'{process_name} 已从PM2删除'
             record_task_history(prediction_type, 'delete', 'success', message)
             
             return jsonify({
-                'message': f'{prediction_type}预测任务已从PM2删除'
+                'message': f'{prediction_type}预测任务已从PM2删除 (场站: {farm_code})',
+                'farm_code': farm_code
             })
         else:
             error_msg = f'删除任务失败: {result}'
@@ -778,12 +788,13 @@ def clear_pm2_save():
 @autopredict_bp.route('/script_info', methods=['GET'])
 def get_script_info():
     prediction_type = request.args.get('type')
+    farm_code = resolve_farm_code(request.args.get('farm_code'))
     if not prediction_type or prediction_type not in prediction_status:
         return jsonify({'error': '无效的预测类型'}), 400
 
     try:
         # 获取进程名称（去掉.py后缀）
-        process_name = os.path.splitext(os.path.basename(scripts[prediction_type]))[0]
+        process_name = f"{farm_code}_{os.path.splitext(os.path.basename(scripts[prediction_type]))[0]}"
         print(f"正在查询进程: {process_name}")  # 调试日志
         
         # 先检查进程是否存在
