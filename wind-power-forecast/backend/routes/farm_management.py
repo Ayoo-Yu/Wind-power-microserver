@@ -34,6 +34,38 @@ def get_farms():
         logger.error(f"获取风电场列表失败: {e}")
         return jsonify({'message': '获取风电场列表失败'}), 500
 
+@farm_management_bp.route('/api/farms/<farm_code>', methods=['GET'])  # legacy path compatibility
+@farm_management_bp.route('/farms/<farm_code>', methods=['GET'])
+@jwt_required()
+def get_farm_by_code(farm_code):
+    """根据场站编码获取单场站信息"""
+    try:
+        normalized_code = (farm_code or '').strip()
+        if not normalized_code:
+            return jsonify({'message': '缺少场站编码'}), 400
+
+        with db_session() as session:
+            farm = session.query(WindFarm).filter(
+                WindFarm.farm_code == normalized_code,
+                WindFarm.deleted_at == None
+            ).first()
+
+            if not farm:
+                return jsonify({'message': '风电场不存在'}), 404
+
+            return jsonify({
+                'farm_code': farm.farm_code,
+                'farm_name': farm.farm_name,
+                'capacity': float(farm.capacity) if farm.capacity else 0.0,
+                'location': farm.location,
+                'is_active': farm.is_active,
+                'created_at': farm.created_at.isoformat() if farm.created_at else None,
+                'updated_at': farm.updated_at.isoformat() if farm.updated_at else None
+            })
+    except Exception as e:
+        logger.error(f"获取风电场详情失败: {e}")
+        return jsonify({'message': '获取风电场详情失败'}), 500
+
 @farm_management_bp.route('/api/farms', methods=['POST'])  # legacy path compatibility
 @farm_management_bp.route('/farms', methods=['POST'])
 @jwt_required()
@@ -173,6 +205,8 @@ def toggle_farm(farm_code):
 
 @farm_management_bp.route('/api/farms/<farm_code>/stats', methods=['GET'])  # legacy path compatibility
 @farm_management_bp.route('/farms/<farm_code>/stats', methods=['GET'])
+@farm_management_bp.route('/api/farms/<farm_code>/statistics', methods=['GET'])  # compatibility alias
+@farm_management_bp.route('/farms/<farm_code>/statistics', methods=['GET'])  # compatibility alias
 @jwt_required()
 def get_farm_stats(farm_code):
     """获取风电场统计信息"""

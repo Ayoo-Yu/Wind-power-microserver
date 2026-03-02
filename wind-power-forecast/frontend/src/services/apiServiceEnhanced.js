@@ -1,26 +1,36 @@
 ﻿// src/services/apiServiceEnhanced.js
-import axios from 'axios'
+import axiosInstance from '../api/axios'
+import { getPowerCompareData as getPowerCompareDataCompat } from '../api/powerCompareApi'
 import farmService from '../utils/farmService'
-
-let backendBaseUrl
-if (window.location.hostname !== 'localhost') {
-  backendBaseUrl = `http://${window.location.hostname}:5000`
-} else {
-  backendBaseUrl = 'http://localhost:5000'
-}
 
 const createFarmAwareData = (data = {}) => ({
   ...data,
   farm_code: farmService.getCurrentFarm()
 })
 
-const createFarmAwareConfig = (config = {}) => {
-  const farmAwareConfig = { ...config }
-  if (!farmAwareConfig.params) {
-    farmAwareConfig.params = {}
+const createFarmAwareConfig = (params = {}, config = {}) => ({
+  ...config,
+  params: {
+    ...(config.params || {}),
+    ...(params || {}),
+    farm_code: farmService.getCurrentFarm()
   }
-  farmAwareConfig.params.farm_code = farmService.getCurrentFarm()
-  return farmAwareConfig
+})
+
+function shouldFallbackToLegacy(error) {
+  const status = error?.response?.status
+  return !error?.response || status === 404 || status === 405
+}
+
+async function withLegacyFallback(v1Call, legacyCall) {
+  try {
+    return await v1Call()
+  } catch (error) {
+    if (shouldFallbackToLegacy(error)) {
+      return legacyCall()
+    }
+    throw error
+  }
 }
 
 export const getPowerCompareData = async (
@@ -33,50 +43,55 @@ export const getPowerCompareData = async (
     end: endTime,
     types
   })
-  return axios.post(`${backendBaseUrl}/power-compare/data`, requestData)
+  return getPowerCompareDataCompat(requestData)
 }
 
 export const getDatasets = async (params = {}) => {
-  const config = createFarmAwareConfig(params)
-  return axios.get(`${backendBaseUrl}/api/datasets`, config)
+  return axiosInstance.get('/api/datasets', createFarmAwareConfig(params))
 }
 
 export const getDatasetById = async (datasetId) => {
-  const config = createFarmAwareConfig()
-  return axios.get(`${backendBaseUrl}/api/datasets/${datasetId}`, config)
+  return axiosInstance.get(`/api/datasets/${datasetId}`, createFarmAwareConfig())
 }
 
 export const getPredictions = async (params = {}) => {
-  const config = createFarmAwareConfig(params)
-  return axios.get(`${backendBaseUrl}/api/predictions`, config)
+  return axiosInstance.get('/api/predictions', createFarmAwareConfig(params))
 }
 
 export const getPredictionById = async (predictionId) => {
-  const config = createFarmAwareConfig()
-  return axios.get(`${backendBaseUrl}/api/predictions/${predictionId}`, config)
+  return axiosInstance.get(`/api/predictions/${predictionId}`, createFarmAwareConfig())
 }
 
 export const getSystemStatus = async () => {
-  const config = createFarmAwareConfig()
-  return axios.get(`${backendBaseUrl}/system/status`, config)
+  return axiosInstance.get('/system/status', createFarmAwareConfig())
 }
 
 export const getFarmList = async () => {
-  return axios.get(`${backendBaseUrl}/api/farms`)
+  return withLegacyFallback(
+    () => axiosInstance.get('/api/v1/farms'),
+    () => axiosInstance.get('/api/farms')
+  )
 }
 
 export const getFarmInfo = async (farmCode) => {
-  return axios.get(`${backendBaseUrl}/api/farms/${farmCode}`)
+  const normalizedFarmCode = String(farmCode || '').trim()
+  return withLegacyFallback(
+    () => axiosInstance.get(`/api/v1/farms/${encodeURIComponent(normalizedFarmCode)}`),
+    () => axiosInstance.get(`/api/farms/${encodeURIComponent(normalizedFarmCode)}`)
+  )
 }
 
 export const getFarmStatistics = async (farmCode, params = {}) => {
+  const normalizedFarmCode = String(farmCode || '').trim()
   const config = createFarmAwareConfig(params)
-  return axios.get(`${backendBaseUrl}/api/farms/${farmCode}/statistics`, config)
+  return withLegacyFallback(
+    () => axiosInstance.get(`/api/v1/farms/${encodeURIComponent(normalizedFarmCode)}/stats`, config),
+    () => axiosInstance.get(`/api/farms/${encodeURIComponent(normalizedFarmCode)}/stats`, config)
+  )
 }
 
 export const getPredictionStatistics = async (params = {}) => {
-  const config = createFarmAwareConfig(params)
-  return axios.get(`${backendBaseUrl}/api/statistics/predictions`, config)
+  return axiosInstance.get('/api/statistics/predictions', createFarmAwareConfig(params))
 }
 
 export const filterCurrentFarmData = (data) => farmService.filterCurrentFarmData(data)

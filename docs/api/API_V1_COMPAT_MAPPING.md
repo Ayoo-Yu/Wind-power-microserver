@@ -8,6 +8,8 @@ This document defines the M1 compatibility mapping from legacy endpoints to `/ap
 |---|---|---|---|---|
 | Health | `/health` | `/api/v1/health` | Implemented | v1 returns unified envelope; legacy remains available. |
 | Farms (list) | `/api/farms` | `/api/v1/farms` | Implemented | v1 currently bridges to existing farms handler. |
+| Farm detail | `/api/farms/{farm_code}` | `/api/v1/farms/{farm_code}` | Implemented | Returns single farm metadata by farm code. |
+| Farm stats | `/api/farms/{farm_code}/stats` | `/api/v1/farms/{farm_code}/stats` | Implemented | `/statistics` alias remains supported for compatibility. |
 | Auth | `/auth/*` | `/api/v1/auth/*` | Implemented | v1 and legacy share the same auth handlers via blueprint alias. |
 | Fleet compare metrics | `/power-compare/fleet_metrics` | `/api/v1/power-compare/fleet_metrics` | Implemented | Multi-station MAE/RMSE/MSE aggregation by prediction type. |
 | Fleet compare series | `/power-compare/fleet_series` | `/api/v1/power-compare/fleet_series` | Implemented | Multi-station overlay series for predicted/actual curves by prediction type. |
