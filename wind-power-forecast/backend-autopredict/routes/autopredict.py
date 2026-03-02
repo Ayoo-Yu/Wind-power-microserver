@@ -1301,19 +1301,21 @@ def get_task_status():
         param_opt_date = selected_date - datetime.timedelta(days=days_diff)
         param_opt_date_str = param_opt_date.strftime('%Y%m%d')
         
-        # 查找参数优化完成标志
-        param_flag_path = os.path.join(log_dirs[prediction_type]['param'], f"{param_opt_date_str}_param_opt_done.flag")
-        
-        # 如果找不到精确日期的标志文件，尝试查找当周的标志文件（兼容现有逻辑）
-        if not os.path.exists(param_flag_path):
-            # 计算该参数优化日所在周的周一
-            param_opt_monday = param_opt_date - datetime.timedelta(days=param_opt_date.weekday())
-            monday_str = param_opt_monday.strftime('%Y%m%d')
-            param_flag_path = os.path.join(log_dirs[prediction_type]['param'], f"{monday_str}_param_opt_done.flag")
-        
-        if os.path.exists(param_flag_path):
-            status['paramOpt'] = True
-            status['paramOptTime'] = datetime.datetime.fromtimestamp(os.path.getmtime(param_flag_path)).strftime('%Y-%m-%d %H:%M:%S')
+        # 查找参数优化完成标志（兼容 short/medium 未配置 param 目录）
+        param_log_dir = log_dirs[prediction_type].get('param')
+        if param_log_dir:
+            param_flag_path = os.path.join(param_log_dir, f"{param_opt_date_str}_param_opt_done.flag")
+
+            # 如果找不到精确日期的标志文件，尝试查找当周的标志文件（兼容现有逻辑）
+            if not os.path.exists(param_flag_path):
+                # 计算该参数优化日所在周的周一
+                param_opt_monday = param_opt_date - datetime.timedelta(days=param_opt_date.weekday())
+                monday_str = param_opt_monday.strftime('%Y%m%d')
+                param_flag_path = os.path.join(param_log_dir, f"{monday_str}_param_opt_done.flag")
+
+            if os.path.exists(param_flag_path):
+                status['paramOpt'] = True
+                status['paramOptTime'] = datetime.datetime.fromtimestamp(os.path.getmtime(param_flag_path)).strftime('%Y-%m-%d %H:%M:%S')
         
         # 检查预测任务状态
         if prediction_type == 'supershort':
