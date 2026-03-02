@@ -1,29 +1,34 @@
-import os
+﻿import os
 from minio import Minio
 from minio.commonconfig import ENABLED
 import json
 from dotenv import load_dotenv
 
-# 加载环境变量
+# 鍔犺浇鐜鍙橀噺
 load_dotenv()
 
-# 获取环境变量，如果不存在则使用默认值
-DB_HOST = os.environ.get('DB_HOST', 'localhost')  # 改为localhost
-DB_PORT = os.environ.get('DB_PORT', '54321')
-DB_USER = os.environ.get('DB_USER', 'system')
-DB_PASSWORD = os.environ.get('DB_PASSWORD', '12345678ab')
-DB_NAME = os.environ.get('DB_NAME', 'windpower')
+# 统一去掉环境变量首尾空格，避免连接串解析失败
+def _env(name, default):
+    value = os.environ.get(name, default)
+    return str(value).strip() if value is not None else str(default).strip()
 
-# MinIO配置
-MINIO_ENDPOINT = os.environ.get('MINIO_ENDPOINT', 'minio')
-MINIO_PORT = os.environ.get('MINIO_PORT', '9900')
-MINIO_ACCESS_KEY = os.environ.get('MINIO_ACCESS_KEY', 'minioadmin')
-MINIO_SECRET_KEY = os.environ.get('MINIO_SECRET_KEY', 'minioadmin')
-MINIO_SECURE = os.environ.get('MINIO_SECURE', 'False').lower() == 'true'
+# 鑾峰彇鐜鍙橀噺锛屽鏋滀笉瀛樺湪鍒欎娇鐢ㄩ粯璁ゅ€?
+DB_HOST = _env('DB_HOST', 'localhost')  # 鏀逛负localhost
+DB_PORT = _env('DB_PORT', '54321')
+DB_USER = _env('DB_USER', 'system')
+DB_PASSWORD = _env('DB_PASSWORD', '12345678ab')
+DB_NAME = _env('DB_NAME', 'windpower')
 
-# 打印配置信息用于调试
-print(f"数据库连接配置: {DB_HOST}:{DB_PORT}/{DB_NAME}")
-print(f"MinIO连接配置: {'https' if MINIO_SECURE else 'http'}://{MINIO_ENDPOINT}:{MINIO_PORT}")
+# MinIO閰嶇疆
+MINIO_ENDPOINT = _env('MINIO_ENDPOINT', 'minio')
+MINIO_PORT = _env('MINIO_PORT', '9900')
+MINIO_ACCESS_KEY = _env('MINIO_ACCESS_KEY', 'minioadmin')
+MINIO_SECRET_KEY = _env('MINIO_SECRET_KEY', 'minioadmin')
+MINIO_SECURE = _env('MINIO_SECURE', 'False').lower() == 'true'
+
+# 鎵撳嵃閰嶇疆淇℃伅鐢ㄤ簬璋冭瘯
+print(f"鏁版嵁搴撹繛鎺ラ厤缃? {DB_HOST}:{DB_PORT}/{DB_NAME}")
+print(f"MinIO杩炴帴閰嶇疆: {'https' if MINIO_SECURE else 'http'}://{MINIO_ENDPOINT}:{MINIO_PORT}")
 
 KINGBASE_CONFIG = {
     "host": DB_HOST,
@@ -102,16 +107,16 @@ class Config:
         'metrics_dir': os.path.join(BASE_DIR, 'saved_metrics')
     }
 
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'your-secret-key')
+    SECRET_KEY = _env('SECRET_KEY', 'your-secret-key')
     SQLALCHEMY_DATABASE_URI = f"postgresql+kingbase://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    DEBUG = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
+    DEBUG = _env('FLASK_DEBUG', 'True').lower() == 'true'
     SESSION_TYPE = 'filesystem'
     SESSION_PERMANENT = False
-    PERMANENT_SESSION_LIFETIME = 1800  # 30分钟
+    PERMANENT_SESSION_LIFETIME = 1800  # 30鍒嗛挓
 
 def set_bucket_policy(client, bucket_name, policy):
-    """更精确的策略配置"""
+    """鏇寸簿纭殑绛栫暐閰嶇疆"""
     if policy == "private":
         policy_json = json.dumps({
             "Version": "2012-10-17",
@@ -154,3 +159,4 @@ def set_bucket_policy(client, bucket_name, policy):
             }]
         })
     client.set_bucket_policy(bucket_name, policy_json)
+

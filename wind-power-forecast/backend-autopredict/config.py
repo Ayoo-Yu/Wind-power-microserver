@@ -1,37 +1,42 @@
-import os
+﻿import os
 from minio import Minio
 from minio.commonconfig import ENABLED
 import json
 from dotenv import load_dotenv
 
-# 加载环境变量
+# 鍔犺浇鐜鍙橀噺
 load_dotenv()
 
-# 获取环境变量，如果不存在则使用默认值
-DB_HOST = os.environ.get('DB_HOST', 'kingbase')
-DB_PORT = os.environ.get('DB_PORT', '54321')
-DB_USER = os.environ.get('DB_USER', 'system')
-DB_PASSWORD = os.environ.get('DB_PASSWORD', '12345678ab')
-DB_NAME = os.environ.get('DB_NAME', 'windpower')
+# 统一去掉环境变量首尾空格，避免连接串解析失败
+def _env(name, default):
+    value = os.environ.get(name, default)
+    return str(value).strip() if value is not None else str(default).strip()
 
-# MinIO配置
-MINIO_ENDPOINT = os.environ.get('MINIO_ENDPOINT', 'minio')
-MINIO_PORT = os.environ.get('MINIO_PORT', '9900')
-MINIO_ACCESS_KEY = os.environ.get('MINIO_ACCESS_KEY', 'minioadmin')
-MINIO_SECRET_KEY = os.environ.get('MINIO_SECRET_KEY', 'minioadmin')
-MINIO_SECURE = os.environ.get('MINIO_SECURE', 'False').lower() == 'true'
+# 鑾峰彇鐜鍙橀噺锛屽鏋滀笉瀛樺湪鍒欎娇鐢ㄩ粯璁ゅ€?
+DB_HOST = _env('DB_HOST', 'kingbase')
+DB_PORT = _env('DB_PORT', '54321')
+DB_USER = _env('DB_USER', 'system')
+DB_PASSWORD = _env('DB_PASSWORD', '12345678ab')
+DB_NAME = _env('DB_NAME', 'windpower')
 
-# 打印配置信息用于调试
-print(f"数据库连接配置: {DB_HOST}:{DB_PORT}/{DB_NAME}")
-print(f"MinIO连接配置: {'https' if MINIO_SECURE else 'http'}://{MINIO_ENDPOINT}:{MINIO_PORT}")
+# MinIO閰嶇疆
+MINIO_ENDPOINT = _env('MINIO_ENDPOINT', 'minio')
+MINIO_PORT = _env('MINIO_PORT', '9900')
+MINIO_ACCESS_KEY = _env('MINIO_ACCESS_KEY', 'minioadmin')
+MINIO_SECRET_KEY = _env('MINIO_SECRET_KEY', 'minioadmin')
+MINIO_SECURE = _env('MINIO_SECURE', 'False').lower() == 'true'
+
+# 鎵撳嵃閰嶇疆淇℃伅鐢ㄤ簬璋冭瘯
+print(f"鏁版嵁搴撹繛鎺ラ厤缃? {DB_HOST}:{DB_PORT}/{DB_NAME}")
+print(f"MinIO杩炴帴閰嶇疆: {'https' if MINIO_SECURE else 'http'}://{MINIO_ENDPOINT}:{MINIO_PORT}")
 
 # Database Configuration
 # For local development, set DB_HOST_OVERRIDE and DB_PORT_OVERRIDE environment variables.
 # Example for local: DB_HOST_OVERRIDE=localhost, DB_PORT_OVERRIDE=54321
 # Docker containers will use defaults (service names) if these env vars are not set.
 KINGBASE_CONFIG = {
-    'host': os.environ.get('DB_HOST_OVERRIDE', DB_HOST),
-    'port': int(os.environ.get('DB_PORT_OVERRIDE', DB_PORT)),
+    'host': _env('DB_HOST_OVERRIDE', DB_HOST),
+    'port': int(_env('DB_PORT_OVERRIDE', DB_PORT)),
     'user': DB_USER,
     'password': DB_PASSWORD, # Consider better secret management
     'database': DB_NAME,
@@ -45,8 +50,8 @@ MINIO_HOST_DEFAULT = 'minio'
 MINIO_PORT_DEFAULT_INTERNAL = 9000 # MinIO service listens on 9000 internally
 
 MINIO_CONFIG = {
-    'endpoint_host': os.environ.get('MINIO_HOST_OVERRIDE', MINIO_ENDPOINT),
-    'endpoint_port': int(os.environ.get('MINIO_PORT_OVERRIDE', MINIO_PORT)),
+    'endpoint_host': _env('MINIO_HOST_OVERRIDE', MINIO_ENDPOINT),
+    'endpoint_port': int(_env('MINIO_PORT_OVERRIDE', MINIO_PORT)),
     'access_key': MINIO_ACCESS_KEY,
     'secret_key': MINIO_SECRET_KEY,
     'secure': MINIO_SECURE,
@@ -75,7 +80,7 @@ class Config:
     MAX_CONTENT_LENGTH = 200 * 1024 * 1024  # 200MB
     ALLOWED_EXTENSIONS = {'csv', 'xlsx', 'xls', 'pkl', 'json', 'joblib', 'h5', 'hdf5', 'pb', 'pt', 'pth'}
     
-    # 添加脚本路径配置
+    # 娣诲姞鑴氭湰璺緞閰嶇疆
     AUTOSCRIPT_BASE_DIR = os.path.join(BASE_DIR, 'auto_scripts', 'scripts')
     SCRIPT_PATHS = {
         'short': os.path.join(AUTOSCRIPT_BASE_DIR, 'short', 'scheduler_short.py'),
@@ -83,7 +88,7 @@ class Config:
         'supershort': os.path.join(AUTOSCRIPT_BASE_DIR, 'supershort', 'scheduler_supershort.py'),
     }
     
-    # 添加日志目录配置
+    # 娣诲姞鏃ュ織鐩綍閰嶇疆
     LOG_DIRS = {
         'short': {
             'base': os.path.join(AUTOSCRIPT_BASE_DIR, 'short', 'logs'),
@@ -138,16 +143,16 @@ class Config:
         'metrics_dir': os.path.join(BASE_DIR, 'saved_metrics')
     }
 
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'your-secret-key')
+    SECRET_KEY = _env('SECRET_KEY', 'your-secret-key')
     SQLALCHEMY_DATABASE_URI = f"postgresql+kingbase://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    DEBUG = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
+    DEBUG = _env('FLASK_DEBUG', 'True').lower() == 'true'
     SESSION_TYPE = 'filesystem'
     SESSION_PERMANENT = False
-    PERMANENT_SESSION_LIFETIME = 1800  # 30分钟
+    PERMANENT_SESSION_LIFETIME = 1800  # 30鍒嗛挓
 
 def set_bucket_policy(client, bucket_name, policy):
-    """更精确的策略配置"""
+    """鏇寸簿纭殑绛栫暐閰嶇疆"""
     policy_json_str = None # Initialize to None
 
     if policy == "private":
@@ -212,12 +217,13 @@ def set_bucket_policy(client, bucket_name, policy):
         }
         policy_json_str = json.dumps(policy_data)
     else:
-        print(f"警告: 未知的存储桶策略类型 '{policy}' (存储桶: {bucket_name}). 将不会设置策略.")
+        print(f"璀﹀憡: 鏈煡鐨勫瓨鍌ㄦ《绛栫暐绫诲瀷 '{policy}' (瀛樺偍妗? {bucket_name}). 灏嗕笉浼氳缃瓥鐣?")
 
     if policy_json_str:
         try:
             client.set_bucket_policy(bucket_name, policy_json_str)
-            print(f"[OK] 成功为存储桶 '{bucket_name}' 设置策略: '{policy}'")
+            print(f"[OK] 鎴愬姛涓哄瓨鍌ㄦ《 '{bucket_name}' 璁剧疆绛栫暐: '{policy}'")
         except Exception as e:
-            print(f"[ERROR] 为存储桶 '{bucket_name}' (策略: '{policy}') 设置策略失败: {e}")
+            print(f"[ERROR] 涓哄瓨鍌ㄦ《 '{bucket_name}' (绛栫暐: '{policy}') 璁剧疆绛栫暐澶辫触: {e}")
     # else: policy_json_str is None, so we do nothing (already warned)
+
