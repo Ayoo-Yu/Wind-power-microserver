@@ -60,12 +60,14 @@ foreach ($doc in $docFiles) {
     Assert-True -Name "No microservice keyword in $doc" -Condition (-not $hasKeyword) -FailMessage "Keyword found"
 }
 
-# 3) app.py contains /api/v1/health route
+# 3) app.py contains v1 health/auth compatibility routes
 $appPath = Join-Path $root "wind-power-forecast\backend\app.py"
 if (Test-Path $appPath) {
     $appText = Get-Content -Raw -Path $appPath
     $hasV1Health = $appText -match "/api/v1/health"
+    $hasV1Auth = $appText -match "/api/v1/auth"
     Assert-True -Name "app.py has /api/v1/health" -Condition $hasV1Health -FailMessage "Route missing"
+    Assert-True -Name "app.py has /api/v1/auth" -Condition $hasV1Auth -FailMessage "Route missing"
 } else {
     Assert-True -Name "app.py exists" -Condition $false -FailMessage "Missing file at $appPath"
 }
@@ -88,4 +90,3 @@ if ($failures -eq 0) {
 
 Write-Host "M1 verification FAILED with $failures issue(s)." -ForegroundColor Red
 exit 1
-

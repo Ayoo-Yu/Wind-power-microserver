@@ -10,7 +10,6 @@ def get_farms_v1():
     """
     v1 compat bridge:
     - `/api/v1/farms` reuses current `/api/farms` handler behavior.
-    - `/api/auth/*` stays on legacy paths for now (pending migration).
+    - `/api/v1/auth/*` is registered as alias of legacy auth blueprint in app.py.
     """
     return get_farms()
-

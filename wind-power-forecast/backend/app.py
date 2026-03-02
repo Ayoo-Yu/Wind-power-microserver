@@ -130,7 +130,10 @@ app.register_blueprint(autotask_bp, url_prefix='/')
 app.register_blueprint(actual_power_bp)
 app.register_blueprint(prediction2database_bp)
 app.register_blueprint(power_compare_bp)
+# Legacy auth namespace (kept for compatibility)
 app.register_blueprint(auth_bp, url_prefix='/auth')
+# v1 auth namespace (compat bridge to same handlers)
+app.register_blueprint(auth_bp, url_prefix='/api/v1/auth', name='auth_v1')
 app.register_blueprint(user_bp, url_prefix='/api/user')  # 注册用户路由蓝图，使用 /api/user 前缀
 app.register_blueprint(example_bp, url_prefix='/api/example')  # 注册示例路由
 # 新增：注册特征上传蓝图

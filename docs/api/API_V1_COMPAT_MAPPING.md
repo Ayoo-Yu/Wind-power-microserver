@@ -8,7 +8,7 @@ This document defines the M1 compatibility mapping from legacy endpoints to `/ap
 |---|---|---|---|---|
 | Health | `/health` | `/api/v1/health` | Implemented | v1 returns unified envelope; legacy remains available. |
 | Farms (list) | `/api/farms` | `/api/v1/farms` | Implemented | v1 currently bridges to existing farms handler. |
-| Auth | `/auth/*` | `/api/v1/auth/*` | Pending | Legacy auth path retained in M1. |
+| Auth | `/auth/*` | `/api/v1/auth/*` | Implemented | v1 and legacy share the same auth handlers via blueprint alias. |
 
 ## AutoPredict Backend (Port 5001 / local 18081)
 
