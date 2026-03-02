@@ -862,7 +862,22 @@
 import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, Setting, Delete, View, Plus, Refresh, Search, RefreshLeft } from '@element-plus/icons-vue'
-import axios from '../api/axios'
+import {
+  getReportFarms,
+  getReportConfigs,
+  getReportSchedulerStatus,
+  startReportScheduler,
+  stopReportScheduler,
+  getReportLogs,
+  createReportFarm,
+  updateReportFarm,
+  createReportConfig,
+  updateReportConfig,
+  deleteReportConfig,
+  previewReport as previewReportApi,
+  manualReport as manualReportApi,
+  getReportStatistics
+} from '../api/reportApi'
 
 export default {
   name: 'ReportManagement',
@@ -1178,7 +1193,7 @@ export default {
       farmsLoading.value = true
       try {
         console.log('开始获取风电场站列表...')
-        const response = await axios.get('/api/report/farms')
+        const response = await getReportFarms()
         console.log('风电场站列表响应:', response.data)
         windFarms.value = response.data
       } catch (error) {
@@ -1204,9 +1219,7 @@ export default {
           params.farm_id = selectedFarmId.value
         }
         
-        const response = await axios.get('/api/report/configs', {
-          params
-        })
+        const response = await getReportConfigs(params)
         reportConfigs.value = response.data.map(config => ({
           ...config,
           reporting: false // 添加手动上报状态
@@ -1222,7 +1235,7 @@ export default {
     // 获取调度器状态
     const fetchSchedulerStatus = async () => {
       try {
-        const response = await axios.get('/api/report/scheduler/status')
+        const response = await getReportSchedulerStatus()
         schedulerStatus.value = response.data
       } catch (error) {
         console.error('获取调度器状态失败:', error)
@@ -1234,7 +1247,7 @@ export default {
     const startScheduler = async () => {
       schedulerLoading.value = true
       try {
-        const response = await axios.post('/api/report/scheduler/start')
+        const response = await startReportScheduler()
         ElMessage.success(response.data.message)
         await fetchSchedulerStatus()
       } catch (error) {
@@ -1249,7 +1262,7 @@ export default {
     const stopScheduler = async () => {
       schedulerLoading.value = true
       try {
-        const response = await axios.post('/api/report/scheduler/stop')
+        const response = await stopReportScheduler()
         ElMessage.success(response.data.message)
         await fetchSchedulerStatus()
       } catch (error) {
@@ -1291,9 +1304,7 @@ export default {
           params.end_date = logQuery.dateRange[1]
         }
         
-        const response = await axios.get('/api/report/logs', {
-          params
-        })
+        const response = await getReportLogs(params)
         
         reportLogs.value = response.data.logs
         logPagination.total = response.data.total
@@ -1323,11 +1334,11 @@ export default {
       try {
         if (farmForm.id) {
           // 更新
-          await axios.put(`/api/report/farms/${farmForm.id}`, farmForm)
+          await updateReportFarm(farmForm.id, farmForm)
           ElMessage.success('场站更新成功')
         } else {
           // 创建
-          await axios.post('/api/report/farms', farmForm)
+          await createReportFarm(farmForm)
           ElMessage.success('场站创建成功')
         }
         farmDialogVisible.value = false
@@ -1415,11 +1426,11 @@ export default {
         
         if (configForm.id) {
           // 更新
-          await axios.put(`/api/report/configs/${configForm.id}`, saveData)
+          await updateReportConfig(configForm.id, saveData)
           ElMessage.success('配置更新成功')
         } else {
           // 创建
-          await axios.post('/api/report/configs', saveData)
+          await createReportConfig(saveData)
           ElMessage.success('配置创建成功')
         }
         configDialogVisible.value = false
@@ -1471,7 +1482,7 @@ export default {
     // 切换配置启用状态
     const toggleConfig = async (config) => {
       try {
-        await axios.put(`/api/report/configs/${config.id}`, {
+        await updateReportConfig(config.id, {
           is_enabled: config.is_enabled
         })
         ElMessage.success(config.is_enabled ? '配置已启用' : '配置已禁用')
@@ -1489,7 +1500,7 @@ export default {
           type: 'warning'
         })
         
-        await axios.delete(`/api/report/configs/${config.id}`)
+        await deleteReportConfig(config.id)
         
         ElMessage.success('配置删除成功')
         await fetchConfigs()
@@ -1505,9 +1516,7 @@ export default {
     const previewReport = async (config) => {
       previewLoading.value = true
       try {
-        const response = await axios.post('/api/report/preview-report', {
-          config_id: config.id
-        })
+        const response = await previewReportApi(config.id)
         
         previewData.value = response.data
         let dataToEdit = response.data.payload.data || []
@@ -1879,7 +1888,7 @@ export default {
           payload.data = getAllDataForSubmit()
         }
         
-        await axios.post('/api/report/manual-report', payload)
+        await manualReportApi(payload)
         
         ElMessage.success(`手动上报执行成功${useCustomData ? '（使用自定义数据）' : ''}`)
         previewDialogVisible.value = false
@@ -2172,7 +2181,7 @@ export default {
           params.month = statsQuery.month
         }
 
-        const response = await axios.get('/api/report/statistics', { params })
+        const response = await getReportStatistics(params)
         
         // 设置今日统计
         dailyStats.value = response.data.today_stats || { completeness_rate: null, timeliness_rate: null }

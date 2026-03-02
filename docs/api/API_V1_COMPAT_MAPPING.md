@@ -14,6 +14,12 @@ This document defines the M1 compatibility mapping from legacy endpoints to `/ap
 | Fleet compare metrics | `/power-compare/fleet_metrics` | `/api/v1/power-compare/fleet_metrics` | Implemented | Multi-station MAE/RMSE/MSE aggregation by prediction type. |
 | Fleet compare series | `/power-compare/fleet_series` | `/api/v1/power-compare/fleet_series` | Implemented | Multi-station overlay series for predicted/actual curves by prediction type. |
 | Power compare main data | `/power-compare/data` | `/api/v1/power-compare/data` | Implemented | Main comparison timeseries endpoint now available in v1 compat bridge. |
+| Report farms (list/create/update) | `/api/report/farms*` | `/api/v1/report/farms*` | Implemented | Includes list, create, and update by farm id. |
+| Report configs (CRUD) | `/api/report/configs*` | `/api/v1/report/configs*` | Implemented | Includes list/create/update/delete by config id. |
+| Report logs | `/api/report/logs` | `/api/v1/report/logs` | Implemented | Supports same query filters and paging. |
+| Report preview/manual | `/api/report/preview-report` `/api/report/manual-report` | `/api/v1/report/preview-report` `/api/v1/report/manual-report` | Implemented | Same payload contracts via compat bridge. |
+| Report scheduler | `/api/report/scheduler/*` | `/api/v1/report/scheduler/*` | Implemented | Supports `start`, `stop`, `status`. |
+| Report statistics | `/api/report/statistics` | `/api/v1/report/statistics` | Implemented | Daily and monthly quality metrics. |
 
 ## AutoPredict Backend (Port 5001 / local 18081)
 
