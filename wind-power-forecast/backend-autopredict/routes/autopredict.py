@@ -31,6 +31,15 @@ inflight_actions = set()
 
 DEFAULT_FARM_CODE = "DEFAULT_FARM"
 
+
+def normalize_farm_code(farm_code):
+    if farm_code is None:
+        return None
+    if not isinstance(farm_code, str):
+        farm_code = str(farm_code)
+    cleaned = farm_code.strip()
+    return cleaned or None
+
 # 获取当前文件所在目录
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -365,7 +374,19 @@ def get_active_farm_codes():
 
             rows = db.execute(text(query_sql)).fetchall()
 
-        farm_codes = [row[0] for row in rows if row and row[0]]
+        farm_codes = []
+        seen_codes = set()
+        for row in rows:
+            if not row:
+                continue
+            code = normalize_farm_code(row[0])
+            if not code:
+                continue
+            key = code.lower()
+            if key in seen_codes:
+                continue
+            seen_codes.add(key)
+            farm_codes.append(code)
         if not farm_codes:
             return [DEFAULT_FARM_CODE]
         return farm_codes
@@ -412,14 +433,23 @@ def get_active_farms():
 
             rows = db.execute(text(query_sql)).fetchall()
 
-        farms = [
-            {
-                'farm_code': row[0],
-                'farm_name': row[1] if row[1] else row[0]
-            }
-            for row in rows
-            if row and row[0]
-        ]
+        farms = []
+        seen_codes = set()
+        for row in rows:
+            if not row:
+                continue
+            code = normalize_farm_code(row[0])
+            if not code:
+                continue
+            key = code.lower()
+            if key in seen_codes:
+                continue
+            seen_codes.add(key)
+            farm_name = row[1].strip() if isinstance(row[1], str) and row[1].strip() else code
+            farms.append({
+                'farm_code': code,
+                'farm_name': farm_name
+            })
         if not farms:
             return [{'farm_code': DEFAULT_FARM_CODE, 'farm_name': DEFAULT_FARM_CODE}]
         return farms
@@ -429,9 +459,11 @@ def get_active_farms():
 
 
 def is_valid_farm_code(farm_code):
-    if not farm_code:
+    normalized_code = normalize_farm_code(farm_code)
+    if not normalized_code:
         return False
-    return farm_code in set(get_active_farm_codes())
+    active_code_lookup = {code.lower(): code for code in get_active_farm_codes()}
+    return normalized_code.lower() in active_code_lookup
 
 
 def resolve_farm_code(raw_farm_code):
@@ -440,13 +472,17 @@ def resolve_farm_code(raw_farm_code):
     - 为空时使用 DEFAULT_FARM_CODE（若存在），否则使用首个有效场站
     - 非空时原样返回
     """
-    if raw_farm_code:
-        return raw_farm_code
-
     active_farms = get_active_farm_codes()
-    if DEFAULT_FARM_CODE in active_farms:
-        return DEFAULT_FARM_CODE
-    return active_farms[0]
+    active_code_lookup = {code.lower(): code for code in active_farms}
+    normalized_code = normalize_farm_code(raw_farm_code)
+
+    if normalized_code:
+        return active_code_lookup.get(normalized_code.lower(), normalized_code)
+
+    default_code = active_code_lookup.get(DEFAULT_FARM_CODE.lower())
+    if default_code:
+        return default_code
+    return active_farms[0] if active_farms else DEFAULT_FARM_CODE
 
 
 def get_script_name(prediction_type):
