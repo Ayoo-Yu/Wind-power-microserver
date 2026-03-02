@@ -89,21 +89,13 @@ set /a "_max_wait=90"
 
 echo [INFO] Waiting for %_name% (%_url%)...
 :wait_http_loop
-for /f %%i in ('curl.exe -s -o NUL -w "%%{http_code}" "%_url%"') do set "_http_code=%%i"
-if "%_http_code%"=="200" (
-  echo [OK] %_name% is ready (HTTP %_http_code%).
-  exit /b 0
-)
-if "%_http_code%"=="400" (
-  echo [OK] %_name% is ready (HTTP %_http_code%).
-  exit /b 0
-)
-if "%_http_code%"=="403" (
-  echo [OK] %_name% is ready (HTTP %_http_code%).
+powershell -NoProfile -Command "$ok=$false; try { $r=Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 '%_url%'; $code=[int]$r.StatusCode; if(@(200,400,403) -contains $code){$ok=$true} } catch { if($_.Exception.Response){ $code=[int]$_.Exception.Response.StatusCode.value__; if(@(200,400,403) -contains $code){$ok=$true} } }; if($ok){exit 0}else{exit 1}"
+if %ERRORLEVEL% EQU 0 (
+  echo [OK] %_name% is ready.
   exit /b 0
 )
 if %_elapsed% GEQ %_max_wait% (
-  echo [ERROR] Timeout waiting for %_name%, last HTTP code: %_http_code%
+  echo [ERROR] Timeout waiting for %_name%.
   exit /b 1
 )
 timeout /t 2 > nul
