@@ -599,7 +599,23 @@
 <script>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import axiosInstance from '../api/axios'
+import {
+  getWeatherConnections,
+  getWeatherTasks,
+  createWeatherConnection,
+  updateWeatherConnection,
+  testWeatherConnection,
+  deleteWeatherConnection,
+  runWeatherTask,
+  toggleWeatherTask,
+  createWeatherTask,
+  updateWeatherTask,
+  deleteWeatherTask,
+  checkWeatherDirectories,
+  getWeatherTaskLogs,
+  getWeatherSchedulerStatus,
+  restartWeatherScheduler
+} from '../api/weatherFetchApi'
 import {
   Connection,
   Download,
@@ -734,7 +750,7 @@ export default {
     const fetchConnections = async () => {
       loadingConnections.value = true
       try {
-        const response = await axiosInstance.get('/api/weather-fetch/connections')
+        const response = await getWeatherConnections()
         connections.value = response.data
       } catch (error) {
         console.error('获取连接列表失败:', error)
@@ -747,7 +763,7 @@ export default {
     const fetchTasks = async () => {
       loadingTasks.value = true
       try {
-        const response = await axiosInstance.get('/api/weather-fetch/tasks')
+        const response = await getWeatherTasks()
         tasks.value = response.data
       } catch (error) {
         console.error('获取任务列表失败:', error)
@@ -761,7 +777,7 @@ export default {
     const testConnection = async (connection) => {
       connection.testing = true
       try {
-        const response = await axiosInstance.post(`/api/weather-fetch/connections/${connection.id}/test`)
+        const response = await testWeatherConnection(connection.id)
         if (response.data.success) {
           ElMessage.success('连接测试成功')
           connection.status = 'connected'
@@ -793,7 +809,7 @@ export default {
           type: 'warning'
         })
         
-        await axiosInstance.delete(`/api/weather-fetch/connections/${connection.id}`)
+        await deleteWeatherConnection(connection.id)
         ElMessage.success('连接删除成功')
         fetchConnections()
       } catch (error) {
@@ -811,13 +827,11 @@ export default {
         await connectionFormRef.value.validate()
         savingConnection.value = true
         
-        const url = editingConnection.value 
-          ? `/api/weather-fetch/connections/${connectionForm.id}`
-          : '/api/weather-fetch/connections'
-        
-        const method = editingConnection.value ? 'put' : 'post'
-        
-        await axiosInstance[method](url, connectionForm)
+        if (editingConnection.value) {
+          await updateWeatherConnection(connectionForm.id, connectionForm)
+        } else {
+          await createWeatherConnection(connectionForm)
+        }
         
         ElMessage.success(editingConnection.value ? '连接更新成功' : '连接添加成功')
         showConnectionDialog.value = false
@@ -851,7 +865,7 @@ export default {
     const runTask = async (task) => {
       task.running = true
       try {
-        await axiosInstance.post(`/api/weather-fetch/tasks/${task.id}/run`)
+        await runWeatherTask(task.id)
         ElMessage.success('任务执行已启动')
         fetchTasks()
       } catch (error) {
@@ -864,7 +878,7 @@ export default {
     
     const toggleTask = async (task) => {
       try {
-        await axiosInstance.post(`/api/weather-fetch/tasks/${task.id}/toggle`)
+        await toggleWeatherTask(task.id)
         ElMessage.success(task.enabled ? '任务已停用' : '任务已启用')
         fetchTasks()
       } catch (error) {
@@ -911,7 +925,7 @@ export default {
           type: 'warning'
         })
         
-        await axiosInstance.delete(`/api/weather-fetch/tasks/${task.id}`)
+        await deleteWeatherTask(task.id)
         ElMessage.success('任务删除成功')
         fetchTasks()
       } catch (error) {
@@ -929,12 +943,6 @@ export default {
         await taskFormRef.value.validate()
         savingTask.value = true
         
-        const url = editingTask.value 
-          ? `/api/weather-fetch/tasks/${taskForm.id}`
-          : '/api/weather-fetch/tasks'
-        
-        const method = editingTask.value ? 'put' : 'post'
-        
         // 准备提交数据，确保时间格式正确
         const submitData = { ...taskForm }
         
@@ -943,7 +951,11 @@ export default {
           delete submitData.time_range
         }
         
-        await axiosInstance[method](url, submitData)
+        if (editingTask.value) {
+          await updateWeatherTask(taskForm.id, submitData)
+        } else {
+          await createWeatherTask(submitData)
+        }
         
         ElMessage.success(editingTask.value ? '任务更新成功' : '任务创建成功')
         showTaskDialog.value = false
@@ -1016,7 +1028,7 @@ export default {
       
       try {
         checkingDirectories.value = true
-        const response = await axiosInstance.post('/api/weather-fetch/check-directories', {
+        const response = await checkWeatherDirectories({
           connection_id: taskForm.connection_id,
           base_path: taskForm.remote_path,
           path_pattern: taskForm.path_pattern || 'YYYY_MMDDHHNN',
@@ -1089,11 +1101,9 @@ export default {
       
       loadingLogs.value = true
       try {
-        const response = await axiosInstance.get(`/api/weather-fetch/tasks/${currentTaskId.value}/logs`, {
-          params: {
-            level: logLevel.value || undefined,
-            per_page: 100
-          }
+        const response = await getWeatherTaskLogs(currentTaskId.value, {
+          level: logLevel.value || undefined,
+          per_page: 100
         })
         taskLogs.value = response.data.logs || []
       } catch (error) {
@@ -1155,7 +1165,7 @@ export default {
     const checkSchedulerStatus = async () => {
       checkingScheduler.value = true
       try {
-        const response = await axiosInstance.get('/api/weather-fetch/scheduler/status')
+        const response = await getWeatherSchedulerStatus()
         schedulerInfo.value = response.data
         ElMessage.success('调度器状态更新成功')
       } catch (error) {
@@ -1178,7 +1188,7 @@ export default {
         })
         
         restartingScheduler.value = true
-        const response = await axiosInstance.post('/api/weather-fetch/scheduler/restart')
+        const response = await restartWeatherScheduler()
         schedulerInfo.value = response.data.status
         ElMessage.success('调度器重启成功')
         

@@ -32,6 +32,25 @@ from routes.system_info_router import (
     get_runtime_info,
     get_system_logs
 )
+from routes.weather_fetch_router import (
+    get_connections as get_weather_connections,
+    create_connection as create_weather_connection,
+    update_connection as update_weather_connection,
+    delete_connection as delete_weather_connection,
+    test_connection as test_weather_connection,
+    get_tasks as get_weather_tasks,
+    create_task as create_weather_task,
+    update_task as update_weather_task,
+    delete_task as delete_weather_task,
+    toggle_task as toggle_weather_task,
+    run_task as run_weather_task,
+    get_logs as get_weather_logs,
+    get_task_logs as get_weather_task_logs,
+    get_scheduler_status as get_weather_scheduler_status,
+    get_stats as get_weather_stats,
+    check_directories as check_weather_directories,
+    restart_scheduler as restart_weather_scheduler
+)
 
 v1_compat_bp = Blueprint("v1_compat", __name__, url_prefix="/api/v1")
 
@@ -211,3 +230,88 @@ def get_system_runtime_v1():
 @v1_compat_bp.route("/system/logs", methods=["GET"])
 def get_system_logs_v1():
     return get_system_logs()
+
+
+@v1_compat_bp.route("/weather-fetch/connections", methods=["GET"])
+def get_weather_connections_v1():
+    return get_weather_connections()
+
+
+@v1_compat_bp.route("/weather-fetch/connections", methods=["POST"])
+def create_weather_connection_v1():
+    return create_weather_connection()
+
+
+@v1_compat_bp.route("/weather-fetch/connections/<int:connection_id>", methods=["PUT"])
+def update_weather_connection_v1(connection_id):
+    return update_weather_connection(connection_id)
+
+
+@v1_compat_bp.route("/weather-fetch/connections/<int:connection_id>", methods=["DELETE"])
+def delete_weather_connection_v1(connection_id):
+    return delete_weather_connection(connection_id)
+
+
+@v1_compat_bp.route("/weather-fetch/connections/<int:connection_id>/test", methods=["POST"])
+def test_weather_connection_v1(connection_id):
+    return test_weather_connection(connection_id)
+
+
+@v1_compat_bp.route("/weather-fetch/tasks", methods=["GET"])
+def get_weather_tasks_v1():
+    return get_weather_tasks()
+
+
+@v1_compat_bp.route("/weather-fetch/tasks", methods=["POST"])
+def create_weather_task_v1():
+    return create_weather_task()
+
+
+@v1_compat_bp.route("/weather-fetch/tasks/<int:task_id>", methods=["PUT"])
+def update_weather_task_v1(task_id):
+    return update_weather_task(task_id)
+
+
+@v1_compat_bp.route("/weather-fetch/tasks/<int:task_id>", methods=["DELETE"])
+def delete_weather_task_v1(task_id):
+    return delete_weather_task(task_id)
+
+
+@v1_compat_bp.route("/weather-fetch/tasks/<int:task_id>/toggle", methods=["POST"])
+def toggle_weather_task_v1(task_id):
+    return toggle_weather_task(task_id)
+
+
+@v1_compat_bp.route("/weather-fetch/tasks/<int:task_id>/run", methods=["POST"])
+def run_weather_task_v1(task_id):
+    return run_weather_task(task_id)
+
+
+@v1_compat_bp.route("/weather-fetch/logs", methods=["GET"])
+def get_weather_logs_v1():
+    return get_weather_logs()
+
+
+@v1_compat_bp.route("/weather-fetch/tasks/<int:task_id>/logs", methods=["GET"])
+def get_weather_task_logs_v1(task_id):
+    return get_weather_task_logs(task_id)
+
+
+@v1_compat_bp.route("/weather-fetch/scheduler/status", methods=["GET"])
+def get_weather_scheduler_status_v1():
+    return get_weather_scheduler_status()
+
+
+@v1_compat_bp.route("/weather-fetch/stats", methods=["GET"])
+def get_weather_stats_v1():
+    return get_weather_stats()
+
+
+@v1_compat_bp.route("/weather-fetch/check-directories", methods=["POST"])
+def check_weather_directories_v1():
+    return check_weather_directories()
+
+
+@v1_compat_bp.route("/weather-fetch/scheduler/restart", methods=["POST"])
+def restart_weather_scheduler_v1():
+    return restart_weather_scheduler()

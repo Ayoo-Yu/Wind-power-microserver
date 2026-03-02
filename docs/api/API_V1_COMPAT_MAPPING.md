@@ -23,6 +23,10 @@ This document defines the M1 compatibility mapping from legacy endpoints to `/ap
 | Physical simulation query | `/physical_simulation/{conditions|turbines|readings}` | `/api/v1/physical-simulation/{conditions|turbines|readings}` | Implemented | Supports `farm_name`, `condition_id`, `turbine_id` query parameters. |
 | Physical simulation batch import | `/physical_simulation/{turbines|conditions|readings}/batch` | `/api/v1/physical-simulation/{turbines|conditions|readings}/batch` | Implemented | CSV batch import endpoints are available in v1 compat namespace. |
 | System maintenance info | `/api/system/{hardware|software|runtime|logs}` | `/api/v1/system/{hardware|software|runtime|logs}` | Implemented | Reuses existing system info handlers via v1 compat bridge. |
+| Weather fetch connections | `/api/weather-fetch/connections*` | `/api/v1/weather-fetch/connections*` | Implemented | Includes list/create/update/delete/test connection endpoints. |
+| Weather fetch tasks | `/api/weather-fetch/tasks*` | `/api/v1/weather-fetch/tasks*` | Implemented | Includes list/create/update/delete/toggle/run and task logs endpoints. |
+| Weather fetch scheduler | `/api/weather-fetch/scheduler/*` | `/api/v1/weather-fetch/scheduler/*` | Implemented | Supports `status` and `restart`. |
+| Weather fetch utility | `/api/weather-fetch/check-directories` `/api/weather-fetch/stats` | `/api/v1/weather-fetch/check-directories` `/api/v1/weather-fetch/stats` | Implemented | Directory probe and task statistics endpoints. |
 
 ## AutoPredict Backend (Port 5001 / local 18081)
 
