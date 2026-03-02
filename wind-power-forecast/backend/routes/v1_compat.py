@@ -26,6 +26,12 @@ from routes.physical_simulation_router import (
     get_conditions,
     get_readings
 )
+from routes.system_info_router import (
+    get_hardware_info,
+    get_software_info,
+    get_runtime_info,
+    get_system_logs
+)
 
 v1_compat_bp = Blueprint("v1_compat", __name__, url_prefix="/api/v1")
 
@@ -185,3 +191,23 @@ def get_conditions_v1():
 @v1_compat_bp.route("/physical-simulation/readings", methods=["GET"])
 def get_readings_v1():
     return get_readings()
+
+
+@v1_compat_bp.route("/system/hardware", methods=["GET"])
+def get_system_hardware_v1():
+    return get_hardware_info()
+
+
+@v1_compat_bp.route("/system/software", methods=["GET"])
+def get_system_software_v1():
+    return get_software_info()
+
+
+@v1_compat_bp.route("/system/runtime", methods=["GET"])
+def get_system_runtime_v1():
+    return get_runtime_info()
+
+
+@v1_compat_bp.route("/system/logs", methods=["GET"])
+def get_system_logs_v1():
+    return get_system_logs()

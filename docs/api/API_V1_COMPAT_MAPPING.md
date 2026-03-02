@@ -22,6 +22,7 @@ This document defines the M1 compatibility mapping from legacy endpoints to `/ap
 | Report statistics | `/api/report/statistics` | `/api/v1/report/statistics` | Implemented | Daily and monthly quality metrics. |
 | Physical simulation query | `/physical_simulation/{conditions|turbines|readings}` | `/api/v1/physical-simulation/{conditions|turbines|readings}` | Implemented | Supports `farm_name`, `condition_id`, `turbine_id` query parameters. |
 | Physical simulation batch import | `/physical_simulation/{turbines|conditions|readings}/batch` | `/api/v1/physical-simulation/{turbines|conditions|readings}/batch` | Implemented | CSV batch import endpoints are available in v1 compat namespace. |
+| System maintenance info | `/api/system/{hardware|software|runtime|logs}` | `/api/v1/system/{hardware|software|runtime|logs}` | Implemented | Reuses existing system info handlers via v1 compat bridge. |
 
 ## AutoPredict Backend (Port 5001 / local 18081)
 

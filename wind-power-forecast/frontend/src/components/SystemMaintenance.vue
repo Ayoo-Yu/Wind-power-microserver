@@ -213,7 +213,12 @@
 <script>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import axiosInstance from '../api/axios'
+import {
+  getSystemHardware,
+  getSystemSoftware,
+  getSystemRuntime,
+  getSystemLogs
+} from '../api/systemApi'
 import {
   Monitor,
   Platform,
@@ -289,7 +294,7 @@ export default {
     const refreshHardwareInfo = async () => {
       loadingHardware.value = true
       try {
-        const response = await axiosInstance.get('/api/system/hardware')
+        const response = await getSystemHardware()
         hardwareInfo.value = response.data
         ElMessage.success('硬件信息已更新')
       } catch (error) {
@@ -304,7 +309,7 @@ export default {
     const refreshSoftwareInfo = async () => {
       loadingSoftware.value = true
       try {
-        const response = await axiosInstance.get('/api/system/software')
+        const response = await getSystemSoftware()
         softwareInfo.value = response.data
         ElMessage.success('软件信息已更新')
       } catch (error) {
@@ -319,7 +324,7 @@ export default {
     const refreshRuntimeInfo = async () => {
       loadingRuntime.value = true
       try {
-        const response = await axiosInstance.get('/api/system/runtime')
+        const response = await getSystemRuntime()
         runtimeInfo.value = response.data
         ElMessage.success('运行参数已更新')
       } catch (error) {
@@ -334,7 +339,7 @@ export default {
     const refreshLogs = async () => {
       loadingLogs.value = true
       try {
-        const response = await axiosInstance.get('/api/system/logs')
+        const response = await getSystemLogs()
         logs.value = response.data
         ElMessage.success('日志已更新')
       } catch (error) {
