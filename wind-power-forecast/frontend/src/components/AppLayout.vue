@@ -124,7 +124,7 @@
 import { ref, computed, provide, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import axiosInstance from '../api/axios'
+import { getCurrentUser } from '../api/auth'
 import { isAuthReady, isAuthLoading } from '../store/authReady' // 导入认证状态
 
 // 引入 Element Plus 图标
@@ -251,7 +251,7 @@ export default {
           if (token && currentUser.value) {
             console.log('本地有Token和用户，尝试调用/api/auth/me验证...');
             try {
-              await axiosInstance.get('/api/auth/me');
+              await getCurrentUser();
               console.log('Token验证成功 (通过/api/auth/me)');
               isAuthenticated = true; // 验证成功！
             } catch (apiError) {
