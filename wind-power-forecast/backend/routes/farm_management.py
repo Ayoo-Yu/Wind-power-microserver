@@ -11,7 +11,8 @@ logger = logging.getLogger(__name__)
 # 创建场站管理蓝图
 farm_management_bp = Blueprint('farm_management', __name__)
 
-@farm_management_bp.route('/api/farms', methods=['GET'])
+@farm_management_bp.route('/api/farms', methods=['GET'])  # legacy path compatibility
+@farm_management_bp.route('/farms', methods=['GET'])
 @jwt_required()
 def get_farms():
     """获取所有风电场列表"""
@@ -33,7 +34,8 @@ def get_farms():
         logger.error(f"获取风电场列表失败: {e}")
         return jsonify({'message': '获取风电场列表失败'}), 500
 
-@farm_management_bp.route('/api/farms', methods=['POST'])
+@farm_management_bp.route('/api/farms', methods=['POST'])  # legacy path compatibility
+@farm_management_bp.route('/farms', methods=['POST'])
 @jwt_required()
 def create_farm():
     """创建新的风电场"""
@@ -80,7 +82,8 @@ def create_farm():
         logger.error(f"创建风电场失败: {e}")
         return jsonify({'message': '创建风电场失败'}), 500
 
-@farm_management_bp.route('/api/farms/<farm_code>', methods=['PUT'])
+@farm_management_bp.route('/api/farms/<farm_code>', methods=['PUT'])  # legacy path compatibility
+@farm_management_bp.route('/farms/<farm_code>', methods=['PUT'])
 @jwt_required()
 def update_farm(farm_code):
     """更新风电场信息"""
@@ -114,7 +117,8 @@ def update_farm(farm_code):
         logger.error(f"更新风电场失败: {e}")
         return jsonify({'message': '更新风电场失败'}), 500
 
-@farm_management_bp.route('/api/farms/<farm_code>', methods=['DELETE'])
+@farm_management_bp.route('/api/farms/<farm_code>', methods=['DELETE'])  # legacy path compatibility
+@farm_management_bp.route('/farms/<farm_code>', methods=['DELETE'])
 @jwt_required()
 def delete_farm(farm_code):
     """删除风电场（软删除）"""
@@ -138,7 +142,8 @@ def delete_farm(farm_code):
         logger.error(f"删除风电场失败: {e}")
         return jsonify({'message': '删除风电场失败'}), 500
 
-@farm_management_bp.route('/api/farms/<farm_code>/toggle', methods=['POST'])
+@farm_management_bp.route('/api/farms/<farm_code>/toggle', methods=['POST'])  # legacy path compatibility
+@farm_management_bp.route('/farms/<farm_code>/toggle', methods=['POST'])
 @jwt_required()
 def toggle_farm(farm_code):
     """启用/停用风电场"""
@@ -166,7 +171,8 @@ def toggle_farm(farm_code):
         logger.error(f"切换风电场状态失败: {e}")
         return jsonify({'message': '切换风电场状态失败'}), 500
 
-@farm_management_bp.route('/api/farms/<farm_code>/stats', methods=['GET'])
+@farm_management_bp.route('/api/farms/<farm_code>/stats', methods=['GET'])  # legacy path compatibility
+@farm_management_bp.route('/farms/<farm_code>/stats', methods=['GET'])
 @jwt_required()
 def get_farm_stats(farm_code):
     """获取风电场统计信息"""
