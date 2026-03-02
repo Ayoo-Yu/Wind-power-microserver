@@ -516,6 +516,7 @@ print(f"[{datetime.datetime.now()}] PM2状态监控后台任务已启动")
 
 # 获取预测任务状态，同时更新全局字典 prediction_status
 @autopredict_bp.route('/status', methods=['GET'])
+@autopredict_bp.route('/v1/autopredict/status', methods=['GET'])
 def get_status():
     try:
         # 查询指定场站的状态
@@ -550,6 +551,7 @@ def get_status():
 
 # 启动指定预测任务
 @autopredict_bp.route('/start', methods=['POST'])
+@autopredict_bp.route('/v1/autopredict/start', methods=['POST'])
 def start_prediction():
     data = request.get_json() or {}
     prediction_type = data.get('type')
@@ -670,6 +672,7 @@ def start_prediction():
 
 # 停止预测任务
 @autopredict_bp.route('/stop', methods=['POST'])
+@autopredict_bp.route('/v1/autopredict/stop', methods=['POST'])
 def stop_prediction():
     data = request.json or {}
     prediction_type = data.get('type')
@@ -904,6 +907,7 @@ def get_script_info():
 
 # 获取指定脚本的近期日志信息
 @autopredict_bp.route('/logs', methods=['GET'])
+@autopredict_bp.route('/v1/autopredict/logs', methods=['GET'])
 def get_logs():
     prediction_type = request.args.get('type')
     log_type = request.args.get('logType', 'train') # train, main, predict, param
@@ -1097,6 +1101,7 @@ def get_logs():
 
 # 加载已保存的 PM2 配置（基于 pm2 resurrect）
 @autopredict_bp.route('/resurrect', methods=['POST'])
+@autopredict_bp.route('/v1/autopredict/resurrect', methods=['POST'])
 def resurrect():
     success, result = safe_pm2_command(['resurrect'])
     
@@ -1177,6 +1182,7 @@ def _update_prediction_status():
 
 # 获取任务历史记录
 @autopredict_bp.route('/history', methods=['GET'])
+@autopredict_bp.route('/v1/autopredict/history', methods=['GET'])
 def get_task_history():
     task_type = request.args.get('type')    # 可选，筛选特定类型
     action = request.args.get('action')   # 可选，筛选特定操作
@@ -1235,6 +1241,7 @@ def get_task_history():
 
 # 查询任务状态（训练、预测、参数优化）
 @autopredict_bp.route('/task_status', methods=['GET'])
+@autopredict_bp.route('/v1/autopredict/task_status', methods=['GET'])
 def get_task_status():
     prediction_type = request.args.get('type')
     date_str = request.args.get('date', datetime.datetime.now().strftime('%Y%m%d'))

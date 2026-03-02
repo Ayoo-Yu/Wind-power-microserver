@@ -120,15 +120,33 @@ Assert-Envelope -Name "Auto /api/status" -Resp $autoStatus
 $hasLegacyFarm = $autoStatus.Json -and ($autoStatus.Json.PSObject.Properties.Name -contains "farm_code")
 Assert-True -Name "Auto /api/status legacy farm_code" -Condition $hasLegacyFarm -FailMessage "body=$($autoStatus.Raw)"
 
-# 4) Auto history envelope
+# 4) Auto v1 status + compatibility with legacy
+$autoStatusV1 = Invoke-Json -Method "GET" -Url "$AutoBaseUrl/api/v1/autopredict/status?farm_code=$farmCode"
+Assert-True -Name "Auto /api/v1/autopredict/status status" -Condition ($autoStatusV1.StatusCode -eq 200) -FailMessage "HTTP $($autoStatusV1.StatusCode) body=$($autoStatusV1.Raw)"
+Assert-Envelope -Name "Auto /api/v1/autopredict/status" -Resp $autoStatusV1
+if ($autoStatus.Json -and $autoStatusV1.Json) {
+    Assert-True -Name "Auto status legacy=v1 code" -Condition ($autoStatus.Json.code -eq $autoStatusV1.Json.code) -FailMessage "legacy=$($autoStatus.Json.code) v1=$($autoStatusV1.Json.code)"
+}
+
+# 5) Auto history envelope
 $autoHistory = Invoke-Json -Method "GET" -Url "$AutoBaseUrl/api/history?limit=1"
 Assert-True -Name "Auto /api/history status" -Condition ($autoHistory.StatusCode -eq 200) -FailMessage "HTTP $($autoHistory.StatusCode) body=$($autoHistory.Raw)"
 Assert-Envelope -Name "Auto /api/history" -Resp $autoHistory
 
-# 5) Auto task_status envelope (valid and invalid)
+# 6) Auto v1 history envelope
+$autoHistoryV1 = Invoke-Json -Method "GET" -Url "$AutoBaseUrl/api/v1/autopredict/history?limit=1"
+Assert-True -Name "Auto /api/v1/autopredict/history status" -Condition ($autoHistoryV1.StatusCode -eq 200) -FailMessage "HTTP $($autoHistoryV1.StatusCode) body=$($autoHistoryV1.Raw)"
+Assert-Envelope -Name "Auto /api/v1/autopredict/history" -Resp $autoHistoryV1
+
+# 7) Auto task_status envelope (valid and invalid)
 $taskStatus = Invoke-Json -Method "GET" -Url "$AutoBaseUrl/api/task_status?type=short"
 Assert-True -Name "Auto /api/task_status(short) http" -Condition ($taskStatus.StatusCode -eq 200 -or $taskStatus.StatusCode -eq 500) -FailMessage "HTTP $($taskStatus.StatusCode) body=$($taskStatus.Raw)"
 Assert-Envelope -Name "Auto /api/task_status(short)" -Resp $taskStatus
+
+# 8) Auto v1 task_status envelope (valid and invalid)
+$taskStatusV1 = Invoke-Json -Method "GET" -Url "$AutoBaseUrl/api/v1/autopredict/task_status?type=short"
+Assert-True -Name "Auto /api/v1/autopredict/task_status(short) http" -Condition ($taskStatusV1.StatusCode -eq 200 -or $taskStatusV1.StatusCode -eq 500) -FailMessage "HTTP $($taskStatusV1.StatusCode) body=$($taskStatusV1.Raw)"
+Assert-Envelope -Name "Auto /api/v1/autopredict/task_status(short)" -Resp $taskStatusV1
 
 $taskInvalid = Invoke-Json -Method "GET" -Url "$AutoBaseUrl/api/task_status?type=invalid_type"
 Assert-True -Name "Auto /api/task_status(invalid) status expected" -Condition (($taskInvalid.StatusCode -eq 400) -or ($taskInvalid.StatusCode -eq 401)) -FailMessage "HTTP $($taskInvalid.StatusCode) body=$($taskInvalid.Raw)"
@@ -139,6 +157,17 @@ if ($taskInvalid.StatusCode -eq 400) {
     }
 } else {
     Write-Host "[INFO] Auto /api/task_status(invalid) is auth-protected in current environment (401)."
+}
+
+$taskInvalidV1 = Invoke-Json -Method "GET" -Url "$AutoBaseUrl/api/v1/autopredict/task_status?type=invalid_type"
+Assert-True -Name "Auto /api/v1/autopredict/task_status(invalid) status expected" -Condition (($taskInvalidV1.StatusCode -eq 400) -or ($taskInvalidV1.StatusCode -eq 401)) -FailMessage "HTTP $($taskInvalidV1.StatusCode) body=$($taskInvalidV1.Raw)"
+if ($taskInvalidV1.StatusCode -eq 400) {
+    Assert-Envelope -Name "Auto /api/v1/autopredict/task_status(invalid)" -Resp $taskInvalidV1
+    if ($taskInvalidV1.Json) {
+        Assert-True -Name "Auto /api/v1/autopredict/task_status(invalid) code=1001" -Condition ($taskInvalidV1.Json.code -eq 1001) -FailMessage "body=$($taskInvalidV1.Raw)"
+    }
+} else {
+    Write-Host "[INFO] Auto /api/v1/autopredict/task_status(invalid) is auth-protected in current environment (401)."
 }
 
 Write-Host ""

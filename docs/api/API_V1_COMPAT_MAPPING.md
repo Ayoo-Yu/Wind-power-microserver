@@ -14,10 +14,15 @@ This document defines the M1 compatibility mapping from legacy endpoints to `/ap
 
 | Capability | Legacy Path | v1 Path | M1 Status | Notes |
 |---|---|---|---|---|
-| Health | `/health` | `/api/v1/health` | Pending | Legacy health remains; v1 endpoint not added in M1. |
+| Health | `/health` | `/api/v1/health` | Implemented | v1 returns unified envelope format. |
 | Auth | `/api/auth/*` | `/api/v1/auth/*` | Pending | Keep legacy path; migrate in later milestone. |
-| Task status | `/api/task_status` | `/api/v1/autopredict/task_status` | Pending | M1 focuses on response envelope compatibility first. |
-| Runtime status | `/api/status` | `/api/v1/autopredict/status` | Pending | Keep legacy contract stable during migration window. |
+| Runtime status | `/api/status` | `/api/v1/autopredict/status` | Implemented | v1 and legacy share same handler logic. |
+| Start task | `/api/start` | `/api/v1/autopredict/start` | Implemented | v1 and legacy share same handler logic. |
+| Stop task | `/api/stop` | `/api/v1/autopredict/stop` | Implemented | v1 and legacy share same handler logic. |
+| Logs | `/api/logs` | `/api/v1/autopredict/logs` | Implemented | v1 and legacy share same handler logic. |
+| Resurrect PM2 | `/api/resurrect` | `/api/v1/autopredict/resurrect` | Implemented | v1 and legacy share same handler logic. |
+| Task history | `/api/history` | `/api/v1/autopredict/history` | Implemented | v1 and legacy share same handler logic. |
+| Task status | `/api/task_status` | `/api/v1/autopredict/task_status` | Implemented | Handles missing `param` dir for short/medium safely. |
 
 ## Contract Notes
 

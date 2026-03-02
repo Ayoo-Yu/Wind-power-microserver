@@ -100,6 +100,11 @@ def health_check():
     """Docker容器健康检查接口"""
     return jsonify({"status": "ok", "service": "backend-autopredict"}), 200
 
+
+@app.route('/api/v1/health', methods=['GET'])
+def health_check_v1():
+    return jsonify({"code": 0, "message": "ok", "data": {"status": "ok", "service": "backend-autopredict"}}), 200
+
 # 添加全局 OPTIONS 请求处理器
 @app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
 @app.route('/<path:path>', methods=['OPTIONS'])
