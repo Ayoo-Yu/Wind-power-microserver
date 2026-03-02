@@ -15,6 +15,7 @@ It applies to the autopredict backend endpoints proxied from frontend `/api/*` r
 
 | Endpoint | Method | Farm Scope | Notes |
 |---|---|---|---|
+| `/api/farms` | `GET` | N/A | Returns active farms from `wind_farms` as selector source-of-truth. |
 | `/api/status` | `GET` | Query by `farm_code` | Returns current task statuses and `farm_code`. |
 | `/api/start` | `POST` | Body `farm_code` | Starts task process as `<farm_code>_<script_name>`. |
 | `/api/stop` | `POST` | Body `farm_code` | Stops only the scoped process. |

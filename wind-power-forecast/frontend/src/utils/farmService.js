@@ -72,20 +72,30 @@ class FarmService {
     }
 
     try {
-      const response = await fetch('/api/report/farms', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
+      const fetchFarms = async (url) => {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        })
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`)
         }
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
+        const payload = await response.json()
+        const farms = Array.isArray(payload) ? payload : payload?.data
+        if (!Array.isArray(farms)) {
+          throw new Error('场站列表返回格式错误')
+        }
+        return farms
       }
 
-      const farms = await response.json()
-      if (!Array.isArray(farms)) {
-        throw new Error('场站列表返回格式错误')
+      let farms = []
+      try {
+        farms = await fetchFarms('/api/report/farms')
+      } catch (mainBackendError) {
+        console.warn('主后端场站接口不可用，尝试自动预测后端接口', mainBackendError)
+        farms = await fetchFarms('/api/v1/autopredict/farms')
       }
 
       const mappedFarms = farms

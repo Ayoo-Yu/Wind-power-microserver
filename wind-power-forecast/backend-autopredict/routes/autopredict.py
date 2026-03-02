@@ -372,6 +372,60 @@ def get_active_farm_codes():
         return [DEFAULT_FARM_CODE]
 
 
+def get_active_farms():
+    """
+    从 wind_farms 表读取有效场站（编码+名称）。
+    回退策略：
+    1) 查询失败时返回 DEFAULT_FARM
+    2) 查询为空时返回 DEFAULT_FARM
+    """
+    try:
+        with db_session() as db:
+            has_deleted_at = db.execute(
+                text(
+                    """
+                    SELECT COUNT(1)
+                    FROM information_schema.columns
+                    WHERE table_name = 'wind_farms'
+                      AND column_name = 'deleted_at'
+                    """
+                )
+            ).scalar()
+
+            if has_deleted_at:
+                query_sql = """
+                    SELECT farm_code, farm_name
+                    FROM wind_farms
+                    WHERE COALESCE(is_active, TRUE) = TRUE
+                      AND deleted_at IS NULL
+                    ORDER BY farm_code
+                """
+            else:
+                query_sql = """
+                    SELECT farm_code, farm_name
+                    FROM wind_farms
+                    WHERE COALESCE(is_active, TRUE) = TRUE
+                    ORDER BY farm_code
+                """
+
+            rows = db.execute(text(query_sql)).fetchall()
+
+        farms = [
+            {
+                'farm_code': row[0],
+                'farm_name': row[1] if row[1] else row[0]
+            }
+            for row in rows
+            if row and row[0]
+        ]
+        if not farms:
+            return [{'farm_code': DEFAULT_FARM_CODE, 'farm_name': DEFAULT_FARM_CODE}]
+        return farms
+    except Exception as e:
+        print(f"警告: 读取场站详情失败，使用默认场站: {e}")
+        return [{'farm_code': DEFAULT_FARM_CODE, 'farm_name': DEFAULT_FARM_CODE}]
+
+
 def is_valid_farm_code(farm_code):
     if not farm_code:
         return False
@@ -537,6 +591,13 @@ update_pm2_status_periodically()
 # 启动调度器
 scheduler.start()
 print(f"[{datetime.datetime.now()}] PM2状态监控后台任务已启动")
+
+
+@autopredict_bp.route('/farms', methods=['GET'])
+@autopredict_bp.route('/v1/autopredict/farms', methods=['GET'])
+def get_autopredict_farms():
+    farms = get_active_farms()
+    return api_success(data=farms, message='获取场站列表成功', legacy=farms)
 
 # 获取预测任务状态，同时更新全局字典 prediction_status
 @autopredict_bp.route('/status', methods=['GET'])

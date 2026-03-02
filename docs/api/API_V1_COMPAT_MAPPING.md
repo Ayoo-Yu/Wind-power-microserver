@@ -16,6 +16,7 @@ This document defines the M1 compatibility mapping from legacy endpoints to `/ap
 |---|---|---|---|---|
 | Health | `/health` | `/api/v1/health` | Implemented | v1 returns unified envelope format. |
 | Auth | `/api/auth/*` | `/api/v1/auth/*` | Implemented | v1 and legacy share the same auth handlers via blueprint alias. |
+| Farms | `/api/farms` | `/api/v1/autopredict/farms` | Implemented | Returns active farms from `wind_farms`, aligned with farm-code validation. |
 | Runtime status | `/api/status` | `/api/v1/autopredict/status` | Implemented | v1 and legacy share same handler logic. |
 | Start task | `/api/start` | `/api/v1/autopredict/start` | Implemented | v1 and legacy share same handler logic. |
 | Stop task | `/api/stop` | `/api/v1/autopredict/stop` | Implemented | v1 and legacy share same handler logic. |
