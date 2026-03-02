@@ -121,6 +121,10 @@ export function getAutoPredictHistory(params = {}) {
   return autopredictGet('history', 'history', params)
 }
 
+export function getAutoPredictStatusAll() {
+  return autopredictGet('status_all', 'status_all', {})
+}
+
 export function getAutoPredictTaskStatus(predictionType, date, farmCode, extraParams = {}) {
   const params = {
     type: predictionType,

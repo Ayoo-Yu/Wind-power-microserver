@@ -7,6 +7,19 @@
     :class="{'animated-background': isAnimatedBackground.value, 'static-background': !isAnimatedBackground.value}"
   >
     <h1 class="page-title">自动化预测功能管理</h1>
+    <div class="fleet-overview" v-loading="fleetLoading">
+      <div class="fleet-title">多场站运行总览</div>
+      <div class="fleet-list">
+        <div class="fleet-item" v-for="farm in fleetStatus" :key="farm.farm_code">
+          <div class="fleet-name">{{ farm.farm_name }} ({{ farm.farm_code }})</div>
+          <div class="fleet-tags">
+            <el-tag size="small" :type="farm.status?.supershort ? 'success' : 'info'">超短期</el-tag>
+            <el-tag size="small" :type="farm.status?.short ? 'success' : 'info'">短期</el-tag>
+            <el-tag size="small" :type="farm.status?.medium ? 'success' : 'info'">中期</el-tag>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="hero-section">
       <!-- Global buttons removed -->
       <el-row :gutter="24">
@@ -123,7 +136,7 @@
 import { ref, reactive, inject, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import farmService from '../utils/farmService'
-import { getAutoPredictStatus, controlAutoPredict, getAutoPredictLogs } from '../api/autopredictApi'
+import { getAutoPredictStatus, getAutoPredictStatusAll, controlAutoPredict, getAutoPredictLogs } from '../api/autopredictApi'
 
 const isAnimatedBackground = inject('isAnimatedBackground');
 
@@ -166,6 +179,8 @@ const logsFilters = reactive({
   logType: '',
   date: ''
 })
+const fleetStatus = ref([])
+const fleetLoading = ref(false)
 
 const errorDialogVisible = ref(false)
 const errorDetails = ref('')
@@ -225,13 +240,18 @@ const handleFarmChanged = (farmCode) => {
   }
   farmChangeTimerId = setTimeout(() => {
     fetchStatus()
+    fetchFleetStatus()
   }, FARM_CHANGE_DEBOUNCE_MS)
 }
 
 onMounted(() => {
   farmService.addListener(handleFarmChanged)
   fetchStatus()
-  intervalId = setInterval(fetchStatus, POLLING_INTERVAL)
+  fetchFleetStatus()
+  intervalId = setInterval(() => {
+    fetchStatus()
+    fetchFleetStatus()
+  }, POLLING_INTERVAL)
 })
 
 onUnmounted(() => {
@@ -278,6 +298,19 @@ const fetchStatus = async () => {
     if (requestId === statusRequestSeq) {
       loading.value = false
     }
+  }
+}
+
+const fetchFleetStatus = async () => {
+  fleetLoading.value = true
+  try {
+    const res = await getAutoPredictStatusAll()
+    const payload = res.data?.data || res.data || {}
+    fleetStatus.value = Array.isArray(payload.items) ? payload.items : []
+  } catch (error) {
+    console.error('获取多场站状态失败:', error)
+  } finally {
+    fleetLoading.value = false
   }
 }
 
@@ -328,6 +361,10 @@ const handleControl = async (name, action) => {
       await fetchStatus()
     }, 1000)
   } catch (error) {
+    if (error?.response?.status === 409) {
+      ElMessage.warning(error?.response?.data?.message || '任务操作冲突，请稍后再试')
+      return
+    }
     if (error.response && error.response.data) {
       const errorData = error.response.data
       showErrorDialog(
@@ -450,6 +487,44 @@ const handleLogTypeChange = () => {
 .page-title {
   color: white;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.fleet-overview {
+  margin: 12px 0 20px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 12px;
+}
+
+.fleet-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: #111827;
+}
+
+.fleet-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 8px;
+}
+
+.fleet-item {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #ffffff;
+}
+
+.fleet-name {
+  font-size: 13px;
+  color: #111827;
+  margin-bottom: 6px;
+}
+
+.fleet-tags {
+  display: flex;
+  gap: 6px;
 }
 
 .hero-section {

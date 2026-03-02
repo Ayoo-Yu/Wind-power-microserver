@@ -653,6 +653,41 @@ def get_status():
         print(error_msg)
         return api_error('获取状态时出错', code=1500, status_code=500, details=error_msg)
 
+
+@autopredict_bp.route('/status_all', methods=['GET'])
+@autopredict_bp.route('/v1/autopredict/status_all', methods=['GET'])
+def get_status_all():
+    """
+    获取所有有效场站的预测任务状态总览。
+    """
+    try:
+        farms = get_active_farms()
+        processes = get_pm2_processes()
+
+        items = []
+        for farm in farms:
+            farm_code = farm.get('farm_code')
+            farm_name = farm.get('farm_name') or farm_code
+            if not farm_code:
+                continue
+
+            status = get_farm_prediction_status(farm_code, processes)
+            items.append({
+                'farm_code': farm_code,
+                'farm_name': farm_name,
+                'status': status
+            })
+
+        payload = {
+            'items': items,
+            'count': len(items)
+        }
+        return api_success(data=payload, message='获取多场站状态成功', legacy=payload)
+    except Exception as e:
+        error_msg = f"获取多场站状态失败: {str(e)}\n{traceback.format_exc()}"
+        print(error_msg)
+        return api_error('获取多场站状态失败', code=1500, status_code=500, details=error_msg)
+
 # 启动指定预测任务
 @autopredict_bp.route('/start', methods=['POST'])
 @autopredict_bp.route('/v1/autopredict/start', methods=['POST'])
