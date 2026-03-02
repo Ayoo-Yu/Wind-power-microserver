@@ -1,4 +1,4 @@
-// src/utils/farmService.js
+﻿// src/utils/farmService.js
 
 /**
  * 场站管理服务
@@ -9,9 +9,7 @@ class FarmService {
   constructor() {
     this.currentFarm = localStorage.getItem('selectedFarm') || 'DEFAULT_FARM'
     this.availableFarms = [
-      { code: 'DEFAULT_FARM', name: '默认风场' },
-      { code: 'zyx01', name: '中扬新1号风场' },
-      { code: 'zyx02', name: '中扬新2号风场' }
+      { code: 'DEFAULT_FARM', name: '默认风场' }
     ]
     this.farmsLoaded = false
     this.listeners = []
@@ -28,6 +26,10 @@ class FarmService {
    * 设置当前场站
    */
   setCurrentFarm(farmCode) {
+    if (!farmCode || typeof farmCode !== 'string') {
+      return
+    }
+
     if (this.currentFarm !== farmCode) {
       this.currentFarm = farmCode
       localStorage.setItem('selectedFarm', farmCode)
@@ -42,6 +44,23 @@ class FarmService {
    */
   getAvailableFarms() {
     return this.availableFarms
+  }
+
+  /**
+   * 使用新列表覆盖当前场站列表，并校验当前场站是否有效
+   */
+  setAvailableFarms(farms) {
+    if (!Array.isArray(farms) || farms.length === 0) {
+      this.availableFarms = [{ code: 'DEFAULT_FARM', name: '默认风场' }]
+      this.farmsLoaded = false
+    } else {
+      this.availableFarms = farms
+    }
+
+    const exists = this.availableFarms.some(f => f.code === this.currentFarm)
+    if (!exists) {
+      this.setCurrentFarm(this.availableFarms[0].code)
+    }
   }
 
   /**
@@ -77,17 +96,15 @@ class FarmService {
         }))
 
       if (mappedFarms.length > 0) {
-        this.availableFarms = mappedFarms
+        this.setAvailableFarms(mappedFarms)
         this.farmsLoaded = true
-
-        // 如果当前场站已失效，自动切换为首个可用场站
-        const exists = this.availableFarms.some(f => f.code === this.currentFarm)
-        if (!exists) {
-          this.setCurrentFarm(this.availableFarms[0].code)
-        }
+      } else {
+        this.setAvailableFarms([{ code: 'DEFAULT_FARM', name: '默认风场' }])
+        this.farmsLoaded = false
       }
     } catch (error) {
-      console.error('加载场站列表失败，使用本地默认列表:', error)
+      console.error('加载场站列表失败，使用本地默认列表', error)
+      this.setAvailableFarms([{ code: 'DEFAULT_FARM', name: '默认风场' }])
       this.farmsLoaded = false
     }
 
@@ -127,13 +144,13 @@ class FarmService {
       try {
         callback(farmCode)
       } catch (error) {
-        console.error('场站监听器执行失败:', error)
+        console.error('场站监听器执行失败', error)
       }
     })
   }
 
   /**
-   * 为API请求添加场站参数
+   * 为 API 请求添加场站参数
    */
   addFarmParams(params = {}) {
     return {

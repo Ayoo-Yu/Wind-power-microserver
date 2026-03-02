@@ -1,7 +1,26 @@
-import axiosInstance from './axios'
+﻿import axiosInstance from './axios'
+import farmService from '../utils/farmService'
 
 function resolveFarmCode(farmCode) {
   return farmCode || 'DEFAULT_FARM'
+}
+
+function isInvalidFarmError(error) {
+  const status = error?.response?.status
+  const message = String(error?.response?.data?.message || error?.response?.data?.error || '')
+  return status === 400 && message.includes('无效的场站代码')
+}
+
+function getFallbackFarmCode() {
+  const farms = farmService.getAvailableFarms()
+  if (Array.isArray(farms) && farms.length > 0) {
+    const hasDefault = farms.some(f => f.code === 'DEFAULT_FARM')
+    if (hasDefault) {
+      return 'DEFAULT_FARM'
+    }
+    return farms[0].code
+  }
+  return 'DEFAULT_FARM'
 }
 
 function shouldFallbackToLegacy(error) {
@@ -20,18 +39,58 @@ async function withLegacyFallback(v1Call, legacyCall) {
   }
 }
 
-function autopredictGet(path, legacyPath, params) {
-  return withLegacyFallback(
-    () => axiosInstance.get(`/api/v1/autopredict/${path}`, { params }),
-    () => axiosInstance.get(`/api/${legacyPath || path}`, { params })
-  )
+async function autopredictGet(path, legacyPath, params) {
+  try {
+    return await withLegacyFallback(
+      () => axiosInstance.get(`/api/v1/autopredict/${path}`, { params }),
+      () => axiosInstance.get(`/api/${legacyPath || path}`, { params })
+    )
+  } catch (error) {
+    if (!isInvalidFarmError(error)) {
+      throw error
+    }
+
+    const fallbackFarmCode = getFallbackFarmCode()
+    const requestedFarmCode = params?.farm_code
+    if (fallbackFarmCode === requestedFarmCode) {
+      throw error
+    }
+
+    farmService.setCurrentFarm(fallbackFarmCode)
+    const fallbackParams = { ...params, farm_code: fallbackFarmCode }
+
+    return withLegacyFallback(
+      () => axiosInstance.get(`/api/v1/autopredict/${path}`, { params: fallbackParams }),
+      () => axiosInstance.get(`/api/${legacyPath || path}`, { params: fallbackParams })
+    )
+  }
 }
 
-function autopredictPost(path, payload = {}, legacyPath) {
-  return withLegacyFallback(
-    () => axiosInstance.post(`/api/v1/autopredict/${path}`, payload),
-    () => axiosInstance.post(`/api/${legacyPath || path}`, payload)
-  )
+async function autopredictPost(path, payload = {}, legacyPath) {
+  try {
+    return await withLegacyFallback(
+      () => axiosInstance.post(`/api/v1/autopredict/${path}`, payload),
+      () => axiosInstance.post(`/api/${legacyPath || path}`, payload)
+    )
+  } catch (error) {
+    if (!isInvalidFarmError(error)) {
+      throw error
+    }
+
+    const fallbackFarmCode = getFallbackFarmCode()
+    const requestedFarmCode = payload?.farm_code
+    if (fallbackFarmCode === requestedFarmCode) {
+      throw error
+    }
+
+    farmService.setCurrentFarm(fallbackFarmCode)
+    const fallbackPayload = { ...payload, farm_code: fallbackFarmCode }
+
+    return withLegacyFallback(
+      () => axiosInstance.post(`/api/v1/autopredict/${path}`, fallbackPayload),
+      () => axiosInstance.post(`/api/${legacyPath || path}`, fallbackPayload)
+    )
+  }
 }
 
 export function getAutoPredictStatus(farmCode) {
@@ -80,18 +139,26 @@ export function getAutoPredictScriptInfo(predictionType, farmCode) {
 }
 
 export function setAutoPredictSchedule(predictionType, time, farmCode) {
-  return autopredictPost('schedule', {
-    type: predictionType,
-    time,
-    farm_code: resolveFarmCode(farmCode)
-  }, 'schedule')
+  return autopredictPost(
+    'schedule',
+    {
+      type: predictionType,
+      time,
+      farm_code: resolveFarmCode(farmCode)
+    },
+    'schedule'
+  )
 }
 
 export function deleteAutoPredictTask(predictionType, farmCode) {
-  return autopredictPost('delete', {
-    type: predictionType,
-    farm_code: resolveFarmCode(farmCode)
-  }, 'delete')
+  return autopredictPost(
+    'delete',
+    {
+      type: predictionType,
+      farm_code: resolveFarmCode(farmCode)
+    },
+    'delete'
+  )
 }
 
 export function saveAutoPredictPm2Config() {
