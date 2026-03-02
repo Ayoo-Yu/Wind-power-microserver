@@ -106,6 +106,15 @@ export function controlAutoPredict(action, predictionType, farmCode) {
   return autopredictPost(action, payload, action)
 }
 
+export function controlAutoPredictAll(action, predictionType, farmCodes = []) {
+  const payload = {
+    action,
+    type: predictionType,
+    farm_codes: Array.isArray(farmCodes) ? farmCodes : []
+  }
+  return autopredictPost('control_all', payload, 'control_all')
+}
+
 export function getAutoPredictLogs(predictionType, farmCode, options = {}) {
   const params = {
     type: predictionType,

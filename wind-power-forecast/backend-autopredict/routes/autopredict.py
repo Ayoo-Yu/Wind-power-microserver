@@ -688,6 +688,98 @@ def get_status_all():
         print(error_msg)
         return api_error('获取多场站状态失败', code=1500, status_code=500, details=error_msg)
 
+
+@autopredict_bp.route('/control_all', methods=['POST'])
+@autopredict_bp.route('/v1/autopredict/control_all', methods=['POST'])
+def control_all_prediction():
+    """
+    批量控制多场站同一预测类型任务。
+    请求体:
+      {
+        "action": "start|stop|delete",
+        "type": "supershort|short|medium",
+        "farm_codes": ["farm_a", "farm_b"]  # 可选，缺省则对全部有效场站执行
+      }
+    """
+    data = request.get_json(silent=True) or {}
+    action = data.get('action')
+    prediction_type = data.get('type')
+    raw_farm_codes = data.get('farm_codes')
+
+    if action not in ('start', 'stop', 'delete'):
+        return api_error('无效的批量操作类型', code=1001, status_code=400)
+    if prediction_type not in prediction_status:
+        return api_error('无效的预测类型', code=1001, status_code=400)
+
+    active_farm_codes = get_active_farm_codes()
+    if not active_farm_codes:
+        return api_error('未找到有效场站，无法执行批量操作', code=1004, status_code=400)
+
+    if raw_farm_codes is None:
+        target_farm_codes = active_farm_codes
+    elif not isinstance(raw_farm_codes, list):
+        return api_error('farm_codes 必须是数组', code=1001, status_code=400)
+    else:
+        normalized_codes = []
+        for code in raw_farm_codes:
+            if isinstance(code, str):
+                cleaned = code.strip()
+                if cleaned and cleaned not in normalized_codes:
+                    normalized_codes.append(cleaned)
+        target_farm_codes = normalized_codes
+
+    if not target_farm_codes:
+        return api_error('缺少可执行的场站列表', code=1001, status_code=400)
+
+    invalid_codes = [code for code in target_farm_codes if code not in active_farm_codes]
+    if invalid_codes:
+        return api_error(
+            f"无效的场站代码: {', '.join(invalid_codes)}",
+            code=1001,
+            status_code=400
+        )
+
+    results = []
+    success_count = 0
+    failed_count = 0
+    endpoint = f'/api/{action}'
+
+    with current_app.test_client() as client:
+        for farm_code in target_farm_codes:
+            resp = client.post(endpoint, json={'type': prediction_type, 'farm_code': farm_code})
+            body = resp.get_json(silent=True) or {}
+            item_success = 200 <= resp.status_code < 300
+            if item_success:
+                success_count += 1
+            else:
+                failed_count += 1
+            results.append({
+                'farm_code': farm_code,
+                'status_code': resp.status_code,
+                'success': item_success,
+                'code': body.get('code'),
+                'message': body.get('message') or body.get('error') or ''
+            })
+
+    summary = {
+        'total': len(target_farm_codes),
+        'success': success_count,
+        'failed': failed_count
+    }
+    payload = {
+        'action': action,
+        'type': prediction_type,
+        'summary': summary,
+        'items': results
+    }
+    http_status = 200 if failed_count == 0 else 207
+    return api_success(
+        data=payload,
+        message=f"批量{action}完成: 成功 {success_count}/{len(target_farm_codes)}",
+        status_code=http_status,
+        legacy=payload
+    )
+
 # 启动指定预测任务
 @autopredict_bp.route('/start', methods=['POST'])
 @autopredict_bp.route('/v1/autopredict/start', methods=['POST'])

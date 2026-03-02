@@ -52,6 +52,11 @@
               <!-- 璇︽儏鎸夐挳宸茬Щ闄?-->
               <el-button type="primary" @click="fetchLogs(item.name)">日志</el-button>
             </div>
+            <div class="button-group batch-actions">
+              <el-button type="primary" :disabled="isFleetControlBusy(item.name)" @click="handleControlAll(item.name, 'start')">全部场站启用</el-button>
+              <el-button type="warning" :disabled="isFleetControlBusy(item.name)" @click="handleControlAll(item.name, 'stop')">全部场站停止</el-button>
+              <el-button type="danger" :disabled="isFleetControlBusy(item.name)" @click="handleControlAll(item.name, 'delete')">全部场站删除</el-button>
+            </div>
           </el-card>
         </el-col>
       </el-row>
@@ -136,7 +141,7 @@
 import { ref, reactive, inject, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import farmService from '../utils/farmService'
-import { getAutoPredictStatus, getAutoPredictStatusAll, controlAutoPredict, getAutoPredictLogs } from '../api/autopredictApi'
+import { getAutoPredictStatus, getAutoPredictStatusAll, controlAutoPredict, controlAutoPredictAll, getAutoPredictLogs } from '../api/autopredictApi'
 
 const isAnimatedBackground = inject('isAnimatedBackground');
 
@@ -160,6 +165,11 @@ const predictions = reactive([
 
 const loading = ref(true)
 const controlBusyMap = reactive({
+  supershort: false,
+  short: false,
+  medium: false
+})
+const fleetControlBusyMap = reactive({
   supershort: false,
   short: false,
   medium: false
@@ -276,6 +286,10 @@ const isControlBusy = (predictionName) => {
   return !!controlBusyMap[predictionName]
 }
 
+const isFleetControlBusy = (predictionName) => {
+  return !!fleetControlBusyMap[predictionName]
+}
+
 
 const fetchStatus = async () => {
   const requestId = ++statusRequestSeq
@@ -374,6 +388,53 @@ const handleControl = async (name, action) => {
     }
   } finally {
     controlBusyMap[name] = false
+    loading.value = false
+  }
+}
+
+const handleControlAll = async (name, action) => {
+  if (isFleetControlBusy(name)) {
+    ElMessage.warning('批量操作正在处理中，请稍候')
+    return
+  }
+
+  fleetControlBusyMap[name] = true
+  loading.value = true
+  try {
+    const codesFromPanel = Array.isArray(fleetStatus.value)
+      ? fleetStatus.value.map(item => item.farm_code).filter(Boolean)
+      : []
+    const fallbackCodes = farmService.getAvailableFarms().map(f => f.code).filter(Boolean)
+    const targetFarmCodes = codesFromPanel.length > 0 ? codesFromPanel : fallbackCodes
+
+    const res = await controlAutoPredictAll(action, name, targetFarmCodes)
+    const payload = res.data?.data || res.data || {}
+    const summary = payload.summary || {}
+    const success = Number(summary.success || 0)
+    const total = Number(summary.total || targetFarmCodes.length || 0)
+    const failed = Number(summary.failed || 0)
+
+    if (failed > 0) {
+      ElMessage.warning(`批量${action}完成：成功 ${success}/${total}，失败 ${failed}`)
+    } else {
+      ElMessage.success(`批量${action}完成：成功 ${success}/${total}`)
+    }
+    await fetchStatus()
+    await fetchFleetStatus()
+  } catch (error) {
+    if (error?.response?.status === 409) {
+      ElMessage.warning(error?.response?.data?.message || '批量任务操作冲突，请稍后再试')
+      return
+    }
+    if (error.response && error.response.data) {
+      const errorData = error.response.data
+      showErrorDialog(
+        `批量${action} ${name} 失败`,
+        errorData.details || errorData.error || error.message
+      )
+    }
+  } finally {
+    fleetControlBusyMap[name] = false
     loading.value = false
   }
 }
@@ -658,6 +719,11 @@ const handleLogTypeChange = () => {
   width: 100%;
   justify-content: center;
   min-width: 80px;
+}
+
+.batch-actions {
+  grid-template-columns: repeat(3, 1fr);
+  padding-top: 8px;
 }
 
 .el-row {
