@@ -227,3 +227,7 @@ docker-compose up -d
 - [ ] 鏁版嵁搴撳垵濮嬪寲鎴愬姛
 - [ ] API鏈嶅姟鍝嶅簲姝ｅ父
 - [ ] 鍓嶇椤甸潰鍔犺浇姝ｅ父
+
+> Deprecation Notice (M1): Manual model training and manual predict endpoints are decommissioned from active product flow.
+> Prefer /api/v1/autopredict/* and farm-scoped data APIs.
+

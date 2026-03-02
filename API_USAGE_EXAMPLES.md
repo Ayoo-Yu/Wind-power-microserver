@@ -1,8 +1,8 @@
-# API接口使用示例
+﻿# API鎺ュ彛浣跨敤绀轰緥
 
-## 认证相关API
+## 璁よ瘉鐩稿叧API
 
-### 用户登录
+### 鐢ㄦ埛鐧诲綍
 ```bash
 # Request
 curl -X POST http://localhost:5000/auth/login \
@@ -25,7 +25,7 @@ curl -X POST http://localhost:5000/auth/login \
 }
 ```
 
-### 刷新Token
+### 鍒锋柊Token
 ```bash
 # Request
 curl -X POST http://localhost:5000/auth/refresh \
@@ -38,14 +38,14 @@ curl -X POST http://localhost:5000/auth/refresh \
 }
 ```
 
-## 数据管理API
+## 鏁版嵁绠＄悊API
 
-### 上传训练数据
+### 涓婁紶璁粌鏁版嵁
 ```python
 import requests
 import json
 
-# Python示例
+# Python绀轰緥
 url = "http://localhost:5000/upload_train_csv"
 headers = {
     "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
@@ -56,7 +56,7 @@ files = {
 }
 
 data = {
-    'description': '2024年训练数据',
+    'description': '2024骞磋缁冩暟鎹?,
     'tags': 'winter,complete'
 }
 
@@ -64,15 +64,15 @@ response = requests.post(url, headers=headers, files=files, data=data)
 result = response.json()
 
 if result['success']:
-    print(f"文件上传成功: {result['data']['filename']}")
-    print(f"文件ID: {result['data']['file_id']}")
+    print(f"鏂囦欢涓婁紶鎴愬姛: {result['data']['filename']}")
+    print(f"鏂囦欢ID: {result['data']['file_id']}")
 else:
-    print(f"上传失败: {result['error']}")
+    print(f"涓婁紶澶辫触: {result['error']}")
 ```
 
-### 批量上传多个文件
+### 鎵归噺涓婁紶澶氫釜鏂囦欢
 ```javascript
-// JavaScript/Node.js示例
+// JavaScript/Node.js绀轰緥
 const FormData = require('form-data');
 const fs = require('fs');
 const axios = require('axios');
@@ -80,14 +80,14 @@ const axios = require('axios');
 async function uploadFiles() {
     const form = new FormData();
 
-    // 添加多个文件
+    // 娣诲姞澶氫釜鏂囦欢
     form.append('files', fs.createReadStream('weather_data.csv'));
     form.append('files', fs.createReadStream('power_data.csv'));
     form.append('files', fs.createReadStream('turbine_data.csv'));
 
-    // 添加其他参数
+    // 娣诲姞鍏朵粬鍙傛暟
     form.append('data_type', 'training');
-    form.append('description', '批量训练数据');
+    form.append('description', '鎵归噺璁粌鏁版嵁');
 
     try {
         const response = await axios.post('http://localhost:5000/upload_batch', form, {
@@ -97,33 +97,33 @@ async function uploadFiles() {
             }
         });
 
-        console.log('批量上传成功:', response.data);
+        console.log('鎵归噺涓婁紶鎴愬姛:', response.data);
     } catch (error) {
-        console.error('上传失败:', error.response.data);
+        console.error('涓婁紶澶辫触:', error.response.data);
     }
 }
 ```
 
-### 获取数据列表
+### 鑾峰彇鏁版嵁鍒楄〃
 ```bash
-# 获取所有训练数据
+# 鑾峰彇鎵€鏈夎缁冩暟鎹?
 curl -X GET "http://localhost:5000/api/data/list?type=train&page=1&limit=10" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 
-# 带过滤条件
+# 甯﹁繃婊ゆ潯浠?
 curl -X GET "http://localhost:5000/api/data/list?type=predict&status=completed&start_date=2024-01-01&end_date=2024-01-31" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
-## 模型训练API
+## 妯″瀷璁粌API
 
-### 创建训练任务
+### 鍒涘缓璁粌浠诲姟
 ```python
 import requests
 import time
 
 def train_model():
-    # 1. 创建训练任务
+    # 1. 鍒涘缓璁粌浠诲姟
     url = "http://localhost:5000/modeltrain"
     headers = {
         "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -131,7 +131,7 @@ def train_model():
     }
 
     training_config = {
-        "name": "XGBoost模型_2024年1月",
+        "name": "XGBoost妯″瀷_2024骞?鏈?,
         "data_id": "12345",
         "model_type": "xgboost",
         "features": ["wind_speed", "wind_direction", "temperature", "pressure"],
@@ -152,15 +152,15 @@ def train_model():
 
     if result['success']:
         task_id = result['data']['task_id']
-        print(f"训练任务已创建: {task_id}")
+        print(f"璁粌浠诲姟宸插垱寤? {task_id}")
 
-        # 2. 监控训练进度
+        # 2. 鐩戞帶璁粌杩涘害
         monitor_training(task_id)
     else:
-        print(f"任务创建失败: {result['error']}")
+        print(f"浠诲姟鍒涘缓澶辫触: {result['error']}")
 
 def monitor_training(task_id):
-    """监控训练进度"""
+    """鐩戞帶璁粌杩涘害"""
     status_url = f"http://localhost:5000/modeltrain/status/{task_id}"
     headers = {"Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
 
@@ -168,45 +168,45 @@ def monitor_training(task_id):
         response = requests.get(status_url, headers=headers)
         status = response.json()['data']
 
-        print(f"训练进度: {status['progress']}% - {status['status']}")
+        print(f"璁粌杩涘害: {status['progress']}% - {status['status']}")
 
         if status['status'] == 'completed':
-            print("训练完成!")
-            print(f"模型ID: {status['model_id']}")
-            print(f"训练精度: {status['metrics']}")
+            print("璁粌瀹屾垚!")
+            print(f"妯″瀷ID: {status['model_id']}")
+            print(f"璁粌绮惧害: {status['metrics']}")
             break
         elif status['status'] == 'failed':
-            print(f"训练失败: {status.get('error', '未知错误')}")
+            print(f"璁粌澶辫触: {status.get('error', '鏈煡閿欒')}")
             break
 
-        time.sleep(30)  # 每30秒检查一次
+        time.sleep(30)  # 姣?0绉掓鏌ヤ竴娆?
 
-# 执行训练
+# 鎵ц璁粌
 train_model()
 ```
 
-### 获取训练结果和模型
+### 鑾峰彇璁粌缁撴灉鍜屾ā鍨?
 ```bash
-# 下载训练好的模型
+# 涓嬭浇璁粌濂界殑妯″瀷
 curl -X GET "http://localhost:5000/modeltrain/download-model?model_id=1" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -o model.pkl
 
-# 下载标准化器
+# 涓嬭浇鏍囧噯鍖栧櫒
 curl -X GET "http://localhost:5000/modeltrain/download-scaler?model_id=1" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -o scaler.pkl
 ```
 
-## 功率预测API
+## 鍔熺巼棰勬祴API
 
-### 创建预测任务
+### 鍒涘缓棰勬祴浠诲姟
 ```javascript
-// JavaScript示例 - 创建预测任务
+// JavaScript绀轰緥 - 鍒涘缓棰勬祴浠诲姟
 async function createPrediction() {
     const predictionData = {
         model_id: 1,
-        name: "2024年1月16日功率预测",
+        name: "2024骞?鏈?6鏃ュ姛鐜囬娴?,
         start_time: "2024-01-16T00:00:00Z",
         end_time: "2024-01-17T00:00:00Z",
         data_source: "weather_forecast",
@@ -230,25 +230,25 @@ async function createPrediction() {
         const result = await response.json();
 
         if (result.success) {
-            console.log('预测任务创建成功:', result.data);
+            console.log('棰勬祴浠诲姟鍒涘缓鎴愬姛:', result.data);
             return result.data.prediction_id;
         } else {
             throw new Error(result.error);
         }
     } catch (error) {
-        console.error('预测任务创建失败:', error);
+        console.error('棰勬祴浠诲姟鍒涘缓澶辫触:', error);
     }
 }
 ```
 
-### 批量预测
+### 鎵归噺棰勬祴
 ```python
 import asyncio
 import aiohttp
 import pandas as pd
 
 async def batch_predict(models, time_ranges):
-    """批量创建预测任务"""
+    """鎵归噺鍒涘缓棰勬祴浠诲姟"""
     tasks = []
 
     async with aiohttp.ClientSession() as session:
@@ -256,12 +256,12 @@ async def batch_predict(models, time_ranges):
             task = create_single_prediction(session, model_id, time_range)
             tasks.append(task)
 
-        # 并发执行所有预测任务
+        # 骞跺彂鎵ц鎵€鏈夐娴嬩换鍔?
         results = await asyncio.gather(*tasks)
         return results
 
 async def create_single_prediction(session, model_id, time_range):
-    """创建单个预测任务"""
+    """鍒涘缓鍗曚釜棰勬祴浠诲姟"""
     url = "http://localhost:5000/predict"
     headers = {
         "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -270,7 +270,7 @@ async def create_single_prediction(session, model_id, time_range):
 
     prediction_data = {
         "model_id": model_id,
-        "name": f"批量预测_{model_id}_{time_range['start']}",
+        "name": f"鎵归噺棰勬祴_{model_id}_{time_range['start']}",
         "start_time": time_range['start'],
         "end_time": time_range['end'],
         "data_source": "weather_forecast"
@@ -280,27 +280,27 @@ async def create_single_prediction(session, model_id, time_range):
         result = await response.json()
         return result
 
-# 使用示例
-models = [1, 2, 3]  # 多个模型ID
+# 浣跨敤绀轰緥
+models = [1, 2, 3]  # 澶氫釜妯″瀷ID
 time_ranges = [
     {"start": "2024-01-16T00:00:00Z", "end": "2024-01-16T12:00:00Z"},
     {"start": "2024-01-16T12:00:00Z", "end": "2024-01-17T00:00:00Z"},
     {"start": "2024-01-17T00:00:00Z", "end": "2024-01-17T12:00:00Z"}
 ]
 
-# 运行批量预测
+# 杩愯鎵归噺棰勬祴
 results = asyncio.run(batch_predict(models, time_ranges))
-print(f"批量预测完成，共创建 {len(results)} 个预测任务")
+print(f"鎵归噺棰勬祴瀹屾垚锛屽叡鍒涘缓 {len(results)} 涓娴嬩换鍔?)
 ```
 
-### 获取预测结果
+### 鑾峰彇棰勬祴缁撴灉
 ```python
 import requests
 import pandas as pd
 import matplotlib.pyplot as plt
 
 def get_prediction_results(prediction_id):
-    """获取预测结果并可视化"""
+    """鑾峰彇棰勬祴缁撴灉骞跺彲瑙嗗寲"""
     url = f"http://localhost:5000/predict/result/{prediction_id}"
     headers = {"Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
 
@@ -310,37 +310,37 @@ def get_prediction_results(prediction_id):
     if result['success']:
         data = result['data']
 
-        # 转换为DataFrame
+        # 杞崲涓篋ataFrame
         df = pd.DataFrame(data['results'])
         df['timestamp'] = pd.to_datetime(df['timestamp'])
 
-        # 显示统计信息
-        print("预测统计信息:")
+        # 鏄剧ず缁熻淇℃伅
+        print("棰勬祴缁熻淇℃伅:")
         print(f"MAE: {data['statistics']['mae']:.2f} kW")
         print(f"RMSE: {data['statistics']['rmse']:.2f} kW")
         print(f"MAPE: {data['statistics']['mape']:.2f}%")
-        print(f"R²: {data['statistics']['r2']:.3f}")
+        print(f"R虏: {data['statistics']['r2']:.3f}")
 
-        # 可视化
+        # 鍙鍖?
         plt.figure(figsize=(12, 6))
         plt.plot(df['timestamp'], df['predicted_power'],
-                label='预测功率', color='blue', linewidth=2)
+                label='棰勬祴鍔熺巼', color='blue', linewidth=2)
 
-        # 如果有实际值，也绘制出来
+        # 濡傛灉鏈夊疄闄呭€硷紝涔熺粯鍒跺嚭鏉?
         if 'actual_power' in df.columns:
             plt.plot(df['timestamp'], df['actual_power'],
-                    label='实际功率', color='red', linewidth=2, alpha=0.7)
+                    label='瀹為檯鍔熺巼', color='red', linewidth=2, alpha=0.7)
 
-        # 绘制置信区间
+        # 缁樺埗缃俊鍖洪棿
         if 'confidence_lower' in df.columns:
             plt.fill_between(df['timestamp'],
                            df['confidence_lower'],
                            df['confidence_upper'],
-                           alpha=0.3, color='blue', label='置信区间')
+                           alpha=0.3, color='blue', label='缃俊鍖洪棿')
 
-        plt.xlabel('时间')
-        plt.ylabel('功率 (kW)')
-        plt.title('风功率预测结果')
+        plt.xlabel('鏃堕棿')
+        plt.ylabel('鍔熺巼 (kW)')
+        plt.title('椋庡姛鐜囬娴嬬粨鏋?)
         plt.legend()
         plt.grid(True, alpha=0.3)
         plt.xticks(rotation=45)
@@ -349,39 +349,39 @@ def get_prediction_results(prediction_id):
 
         return df
     else:
-        print(f"获取预测结果失败: {result['error']}")
+        print(f"鑾峰彇棰勬祴缁撴灉澶辫触: {result['error']}")
         return None
 
-# 使用示例
+# 浣跨敤绀轰緥
 df_predictions = get_prediction_results("pred_12345")
 ```
 
-## 运营数据API
+## 杩愯惀鏁版嵁API
 
-### 上传运营数据
+### 涓婁紶杩愯惀鏁版嵁
 ```python
 import requests
 import pandas as pd
 from datetime import datetime
 
 def upload_operational_data(file_path, table_name):
-    """上传运营数据"""
+    """涓婁紶杩愯惀鏁版嵁"""
     url = "http://localhost:5000/operational/upload"
     headers = {"Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
 
-    # 支持的运营数据表
+    # 鏀寔鐨勮繍钀ユ暟鎹〃
     supported_tables = [
-        'wind_speed_data',           # 单机风速数据
-        'turbine_power_data',        # 单机功率数据
-        'weather_data',              # 气象信息数据
-        'installed_capacity_data',   # 装机容量数据
-        'available_capacity_data',   # 可用容量数据
-        'theoretical_power_data',    # 理论功率数据
-        'available_power_data'       # 可用功率数据
+        'wind_speed_data',           # 鍗曟満椋庨€熸暟鎹?
+        'turbine_power_data',        # 鍗曟満鍔熺巼鏁版嵁
+        'weather_data',              # 姘旇薄淇℃伅鏁版嵁
+        'installed_capacity_data',   # 瑁呮満瀹归噺鏁版嵁
+        'available_capacity_data',   # 鍙敤瀹归噺鏁版嵁
+        'theoretical_power_data',    # 鐞嗚鍔熺巼鏁版嵁
+        'available_power_data'       # 鍙敤鍔熺巼鏁版嵁
     ]
 
     if table_name not in supported_tables:
-        print(f"不支持的表名: {table_name}")
+        print(f"涓嶆敮鎸佺殑琛ㄥ悕: {table_name}")
         return
 
     files = {'file': open(file_path, 'rb')}
@@ -394,11 +394,11 @@ def upload_operational_data(file_path, table_name):
     result = response.json()
 
     if result['success']:
-        print(f"运营数据上传成功: {result['data']['records_uploaded']} 条记录")
+        print(f"杩愯惀鏁版嵁涓婁紶鎴愬姛: {result['data']['records_uploaded']} 鏉¤褰?)
     else:
-        print(f"上传失败: {result['error']}")
+        print(f"涓婁紶澶辫触: {result['error']}")
 
-# 批量上传不同类型的运营数据
+# 鎵归噺涓婁紶涓嶅悓绫诲瀷鐨勮繍钀ユ暟鎹?
 operational_files = {
     'wind_speed_data': 'wind_speed_2024.csv',
     'turbine_power_data': 'turbine_power_2024.csv',
@@ -409,27 +409,27 @@ for table_name, file_path in operational_files.items():
     upload_operational_data(file_path, table_name)
 ```
 
-### 查询运营数据
+### 鏌ヨ杩愯惀鏁版嵁
 ```bash
-# 获取风速数据
+# 鑾峰彇椋庨€熸暟鎹?
 curl -X GET "http://localhost:5000/operational/data/wind_speed_data?start_date=2024-01-01&end_date=2024-01-31&limit=100" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 
-# 获取特定风机的功率数据
+# 鑾峰彇鐗瑰畾椋庢満鐨勫姛鐜囨暟鎹?
 curl -X GET "http://localhost:5000/operational/data/turbine_power_data?turbine_id=T001&date=2024-01-15" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
-## 系统管理API
+## 绯荤粺绠＄悊API
 
-### 获取系统状态
+### 鑾峰彇绯荤粺鐘舵€?
 ```python
 import requests
 import json
 from datetime import datetime
 
 def check_system_health():
-    """检查系统健康状态"""
+    """妫€鏌ョ郴缁熷仴搴风姸鎬?""
     url = "http://localhost:5000/system/status"
     headers = {"Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
 
@@ -439,102 +439,102 @@ def check_system_health():
     if result['success']:
         status = result['data']
 
-        print("=== 系统健康状态 ===")
-        print(f"整体状态: {status['status']}")
-        print(f"运行时间: {status['system_info']['uptime']}")
+        print("=== 绯荤粺鍋ュ悍鐘舵€?===")
+        print(f"鏁翠綋鐘舵€? {status['status']}")
+        print(f"杩愯鏃堕棿: {status['system_info']['uptime']}")
         print()
 
-        print("=== 服务状态 ===")
+        print("=== 鏈嶅姟鐘舵€?===")
         for service, state in status['services'].items():
-            status_icon = "✅" if state == "connected" else "❌"
+            status_icon = "鉁? if state == "connected" else "鉂?
             print(f"{status_icon} {service}: {state}")
         print()
 
-        print("=== 系统资源 ===")
+        print("=== 绯荤粺璧勬簮 ===")
         sys_info = status['system_info']
-        print(f"CPU使用率: {sys_info['cpu_usage']}%")
-        print(f"内存使用率: {sys_info['memory_usage']}%")
-        print(f"磁盘使用率: {sys_info['disk_usage']}%")
+        print(f"CPU浣跨敤鐜? {sys_info['cpu_usage']}%")
+        print(f"鍐呭瓨浣跨敤鐜? {sys_info['memory_usage']}%")
+        print(f"纾佺洏浣跨敤鐜? {sys_info['disk_usage']}%")
 
-        # 资源告警
+        # 璧勬簮鍛婅
         if sys_info['cpu_usage'] > 80:
-            print("⚠️ 警告: CPU使用率过高")
+            print("鈿狅笍 璀﹀憡: CPU浣跨敤鐜囪繃楂?)
         if sys_info['memory_usage'] > 85:
-            print("⚠️ 警告: 内存使用率过高")
+            print("鈿狅笍 璀﹀憡: 鍐呭瓨浣跨敤鐜囪繃楂?)
         if sys_info['disk_usage'] > 90:
-            print("⚠️ 警告: 磁盘使用率过高")
+            print("鈿狅笍 璀﹀憡: 纾佺洏浣跨敤鐜囪繃楂?)
 
     else:
-        print(f"系统状态检查失败: {result['error']}")
+        print(f"绯荤粺鐘舵€佹鏌ュけ璐? {result['error']}")
 
-# 定时检查系统状态
+# 瀹氭椂妫€鏌ョ郴缁熺姸鎬?
 def monitor_system(interval=300):
-    """定期监控系统状态"""
+    """瀹氭湡鐩戞帶绯荤粺鐘舵€?""
     while True:
-        print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 系统检查")
+        print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 绯荤粺妫€鏌?)
         check_system_health()
         time.sleep(interval)
 
-# 运行监控
+# 杩愯鐩戞帶
 check_system_health()
 ```
 
-### 获取系统统计信息
+### 鑾峰彇绯荤粺缁熻淇℃伅
 ```bash
-# 获取今日预测统计
+# 鑾峰彇浠婃棩棰勬祴缁熻
 curl -X GET "http://localhost:5000/system/stats?type=predictions&date=$(date +%Y-%m-%d)" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 
-# 获取本月模型训练统计
+# 鑾峰彇鏈湀妯″瀷璁粌缁熻
 curl -X GET "http://localhost:5000/system/stats?type=training&month=$(date +%Y-%m)" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
-## 高级功能示例
+## 楂樼骇鍔熻兘绀轰緥
 
-### WebSocket实时数据
+### WebSocket瀹炴椂鏁版嵁
 ```javascript
-// JavaScript WebSocket客户端
+// JavaScript WebSocket瀹㈡埛绔?
 const socket = io('http://localhost:5000', {
     auth: {
         token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
     }
 });
 
-// 监听训练进度
+// 鐩戝惉璁粌杩涘害
 socket.on('training_progress', (data) => {
-    console.log('训练进度:', data.progress + '%');
-    console.log('状态:', data.status);
+    console.log('璁粌杩涘害:', data.progress + '%');
+    console.log('鐘舵€?', data.status);
 
     if (data.status === 'completed') {
-        console.log('训练完成！模型ID:', data.model_id);
+        console.log('璁粌瀹屾垚锛佹ā鍨婭D:', data.model_id);
     }
 });
 
-// 监听预测结果
+// 鐩戝惉棰勬祴缁撴灉
 socket.on('prediction_result', (data) => {
-    console.log('新的预测结果:', data);
+    console.log('鏂扮殑棰勬祴缁撴灉:', data);
 
-    // 更新实时图表
+    // 鏇存柊瀹炴椂鍥捐〃
     updateRealtimeChart(data);
 });
 
-// 监听系统告警
+// 鐩戝惉绯荤粺鍛婅
 socket.on('system_alert', (alert) => {
-    console.log('系统告警:', alert.message);
+    console.log('绯荤粺鍛婅:', alert.message);
 
     if (alert.severity === 'critical') {
-        // 显示紧急告警通知
+        // 鏄剧ず绱ф€ュ憡璀﹂€氱煡
         showCriticalAlert(alert);
     }
 });
 
-// 加入房间（按任务ID）
+// 鍔犲叆鎴块棿锛堟寜浠诲姟ID锛?
 socket.emit('join_room', 'task_12345');
 socket.emit('join_room', 'pred_67890');
 ```
 
-### 批量数据处理
+### 鎵归噺鏁版嵁澶勭悊
 ```python
 import pandas as pd
 import numpy as np
@@ -542,38 +542,38 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 
 def process_large_dataset(file_path, chunk_size=1000):
-    """分块处理大型数据集"""
+    """鍒嗗潡澶勭悊澶у瀷鏁版嵁闆?""
 
-    # 读取CSV文件
+    # 璇诲彇CSV鏂囦欢
     chunks = pd.read_csv(file_path, chunksize=chunk_size)
 
-    # 并行处理每个数据块
+    # 骞惰澶勭悊姣忎釜鏁版嵁鍧?
     with ThreadPoolExecutor(max_workers=4) as executor:
         futures = []
 
         for chunk_id, chunk in enumerate(chunks):
-            # 数据预处理
+            # 鏁版嵁棰勫鐞?
             processed_chunk = preprocess_data(chunk)
 
-            # 提交处理任务
+            # 鎻愪氦澶勭悊浠诲姟
             future = executor.submit(upload_chunk, processed_chunk, chunk_id)
             futures.append(future)
 
-        # 等待所有任务完成
+        # 绛夊緟鎵€鏈変换鍔″畬鎴?
         results = [future.result() for future in futures]
 
     return results
 
 def preprocess_data(df):
-    """数据预处理"""
-    # 处理缺失值
+    """鏁版嵁棰勫鐞?""
+    # 澶勭悊缂哄け鍊?
     df = df.fillna(method='forward')
 
-    # 数据验证
+    # 鏁版嵁楠岃瘉
     df = df[(df['wind_speed'] >= 0) & (df['wind_speed'] <= 50)]
     df = df[(df['power_output'] >= 0) & (df['power_output'] <= 5000)]
 
-    # 添加派生特征
+    # 娣诲姞娲剧敓鐗瑰緛
     df['wind_speed_squared'] = df['wind_speed'] ** 2
     df['wind_direction_sin'] = np.sin(np.radians(df['wind_direction']))
     df['wind_direction_cos'] = np.cos(np.radians(df['wind_direction']))
@@ -581,8 +581,8 @@ def preprocess_data(df):
     return df
 
 def upload_chunk(chunk, chunk_id):
-    """上传数据块"""
-    # 将DataFrame转换为CSV
+    """涓婁紶鏁版嵁鍧?""
+    # 灏咲ataFrame杞崲涓篊SV
     csv_data = chunk.to_csv(index=False)
 
     files = {
@@ -591,8 +591,8 @@ def upload_chunk(chunk, chunk_id):
 
     data = {
         'chunk_id': chunk_id,
-        'total_chunks': 'unknown',  # 将在最后更新
-        'description': f'数据块_{chunk_id}'
+        'total_chunks': 'unknown',  # 灏嗗湪鏈€鍚庢洿鏂?
+        'description': f'鏁版嵁鍧梍{chunk_id}'
     }
 
     headers = {"Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
@@ -607,7 +607,7 @@ def upload_chunk(chunk, chunk_id):
     return response.json()
 ```
 
-### 自动化预测流程
+### 鑷姩鍖栭娴嬫祦绋?
 ```python
 import schedule
 import time
@@ -615,34 +615,34 @@ from datetime import datetime, timedelta
 import requests
 
 def automated_prediction():
-    """自动化预测任务"""
+    """鑷姩鍖栭娴嬩换鍔?""
 
-    # 1. 获取最新气象数据
+    # 1. 鑾峰彇鏈€鏂版皵璞℃暟鎹?
     weather_data = fetch_latest_weather_data()
 
-    # 2. 数据预处理
+    # 2. 鏁版嵁棰勫鐞?
     processed_data = preprocess_weather_data(weather_data)
 
-    # 3. 选择最优模型
+    # 3. 閫夋嫨鏈€浼樻ā鍨?
     best_model = select_best_model()
 
-    # 4. 创建预测任务
+    # 4. 鍒涘缓棰勬祴浠诲姟
     prediction_id = create_prediction_task(best_model, processed_data)
 
-    # 5. 等待预测完成
+    # 5. 绛夊緟棰勬祴瀹屾垚
     results = wait_for_prediction_completion(prediction_id)
 
-    # 6. 生成报告
+    # 6. 鐢熸垚鎶ュ憡
     report_id = generate_automated_report(results)
 
-    # 7. 发送通知
+    # 7. 鍙戦€侀€氱煡
     send_prediction_notification(results, report_id)
 
-    print(f"[{datetime.now()}] 自动化预测完成: {prediction_id}")
+    print(f"[{datetime.now()}] 鑷姩鍖栭娴嬪畬鎴? {prediction_id}")
 
 def fetch_latest_weather_data():
-    """获取最新气象数据"""
-    # 从气象服务API获取数据
+    """鑾峰彇鏈€鏂版皵璞℃暟鎹?""
+    # 浠庢皵璞℃湇鍔PI鑾峰彇鏁版嵁
     response = requests.get('http://api.weather.com/forecast', params={
         'location': 'wind_farm_001',
         'hours': 72
@@ -650,8 +650,8 @@ def fetch_latest_weather_data():
     return response.json()
 
 def select_best_model():
-    """选择最优模型"""
-    # 获取所有可用模型
+    """閫夋嫨鏈€浼樻ā鍨?""
+    # 鑾峰彇鎵€鏈夊彲鐢ㄦā鍨?
     response = requests.get(
         'http://localhost:5000/model/list?status=completed',
         headers={"Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
@@ -659,15 +659,15 @@ def select_best_model():
 
     models = response.json()['data']['items']
 
-    # 选择精度最高的模型
+    # 閫夋嫨绮惧害鏈€楂樼殑妯″瀷
     best_model = max(models, key=lambda x: x['accuracy'])
     return best_model['id']
 
 def create_prediction_task(model_id, weather_data):
-    """创建预测任务"""
+    """鍒涘缓棰勬祴浠诲姟"""
     prediction_config = {
         "model_id": model_id,
-        "name": f"自动预测_{datetime.now().strftime('%Y%m%d_%H%M')}",
+        "name": f"鑷姩棰勬祴_{datetime.now().strftime('%Y%m%d_%H%M')}",
         "start_time": datetime.utcnow().isoformat(),
         "end_time": (datetime.utcnow() + timedelta(hours=72)).isoformat(),
         "data_source": "weather_forecast",
@@ -682,11 +682,11 @@ def create_prediction_task(model_id, weather_data):
 
     return response.json()['data']['prediction_id']
 
-# 设置定时任务
-schedule.every().day.at("06:00").do(automated_prediction)  # 每天早上6点
-schedule.every().day.at("18:00").do(automated_prediction)  # 每天晚上6点
+# 璁剧疆瀹氭椂浠诲姟
+schedule.every().day.at("06:00").do(automated_prediction)  # 姣忓ぉ鏃╀笂6鐐?
+schedule.every().day.at("18:00").do(automated_prediction)  # 姣忓ぉ鏅氫笂6鐐?
 
-# 运行调度器
+# 杩愯璋冨害鍣?
 while True:
     schedule.run_pending()
     time.sleep(60)
@@ -694,16 +694,16 @@ while True:
 
 ---
 
-## 错误处理示例
+## 閿欒澶勭悊绀轰緥
 
-### API错误处理
+### API閿欒澶勭悊
 ```python
 import requests
 from requests.exceptions import RequestException
 import time
 
 def safe_api_call(method, url, **kwargs):
-    """安全的API调用，包含重试机制"""
+    """瀹夊叏鐨凙PI璋冪敤锛屽寘鍚噸璇曟満鍒?""
 
     max_retries = 3
     retry_delay = 1
@@ -712,41 +712,41 @@ def safe_api_call(method, url, **kwargs):
         try:
             response = requests.request(method, url, **kwargs)
 
-            # 处理HTTP错误
+            # 澶勭悊HTTP閿欒
             if response.status_code >= 400:
                 error_data = response.json()
 
                 if response.status_code == 401:
-                    print("认证失败，需要重新登录")
-                    # 重新获取token
+                    print("璁よ瘉澶辫触锛岄渶瑕侀噸鏂扮櫥褰?)
+                    # 閲嶆柊鑾峰彇token
                     new_token = refresh_token()
                     kwargs['headers']['Authorization'] = f'Bearer {new_token}'
                     continue
 
                 elif response.status_code == 429:
-                    print("请求过于频繁，等待重试")
+                    print("璇锋眰杩囦簬棰戠箒锛岀瓑寰呴噸璇?)
                     time.sleep(retry_delay * (attempt + 1))
                     continue
 
                 else:
-                    print(f"API错误 ({response.status_code}): {error_data.get('error', '未知错误')}")
+                    print(f"API閿欒 ({response.status_code}): {error_data.get('error', '鏈煡閿欒')}")
                     return None
 
             return response.json()
 
         except RequestException as e:
-            print(f"网络请求失败 (尝试 {attempt + 1}/{max_retries}): {e}")
+            print(f"缃戠粶璇锋眰澶辫触 (灏濊瘯 {attempt + 1}/{max_retries}): {e}")
 
             if attempt < max_retries - 1:
                 time.sleep(retry_delay * (attempt + 1))
             else:
-                print("所有重试尝试都失败了")
+                print("鎵€鏈夐噸璇曞皾璇曢兘澶辫触浜?)
                 return None
 
     return None
 
 def refresh_token():
-    """刷新访问令牌"""
+    """鍒锋柊璁块棶浠ょ墝"""
     login_data = {
         "username": "admin",
         "password": "admin123"
@@ -760,39 +760,39 @@ def refresh_token():
     if response.status_code == 200:
         return response.json()['token']
     else:
-        raise Exception("无法刷新token")
+        raise Exception("鏃犳硶鍒锋柊token")
 ```
 
-### 数据验证示例
+### 鏁版嵁楠岃瘉绀轰緥
 ```python
 def validate_prediction_data(data):
-    """验证预测输入数据"""
+    """楠岃瘉棰勬祴杈撳叆鏁版嵁"""
 
     required_fields = ['wind_speed', 'wind_direction', 'temperature']
 
-    # 检查必需字段
+    # 妫€鏌ュ繀闇€瀛楁
     for field in required_fields:
         if field not in data:
-            raise ValueError(f"缺少必需字段: {field}")
+            raise ValueError(f"缂哄皯蹇呴渶瀛楁: {field}")
 
-    # 验证数据范围
+    # 楠岃瘉鏁版嵁鑼冨洿
     if not (0 <= data['wind_speed'] <= 50):
-        raise ValueError("风速必须在0-50 m/s之间")
+        raise ValueError("椋庨€熷繀椤诲湪0-50 m/s涔嬮棿")
 
     if not (0 <= data['wind_direction'] <= 360):
-        raise ValueError("风向必须在0-360度之间")
+        raise ValueError("椋庡悜蹇呴』鍦?-360搴︿箣闂?)
 
     if not (-40 <= data['temperature'] <= 60):
-        raise ValueError("温度必须在-40到60摄氏度之间")
+        raise ValueError("娓╁害蹇呴』鍦?40鍒?0鎽勬皬搴︿箣闂?)
 
-    # 检查数据类型
+    # 妫€鏌ユ暟鎹被鍨?
     for field in required_fields:
         if not isinstance(data[field], (int, float)):
-            raise ValueError(f"字段 {field} 必须是数值类型")
+            raise ValueError(f"瀛楁 {field} 蹇呴』鏄暟鍊肩被鍨?)
 
     return True
 
-# 使用示例
+# 浣跨敤绀轰緥
 try:
     prediction_data = {
         "wind_speed": 15.5,
@@ -801,17 +801,17 @@ try:
     }
 
     validate_prediction_data(prediction_data)
-    print("数据验证通过")
+    print("鏁版嵁楠岃瘉閫氳繃")
 
 except ValueError as e:
-    print(f"数据验证失败: {e}")
+    print(f"鏁版嵁楠岃瘉澶辫触: {e}")
 ```
 
 ---
 
-## 性能优化示例
+## 鎬ц兘浼樺寲绀轰緥
 
-### 并发请求处理
+### 骞跺彂璇锋眰澶勭悊
 ```python
 import asyncio
 import aiohttp
@@ -819,7 +819,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 async def concurrent_predictions(session, prediction_requests):
-    """并发处理多个预测请求"""
+    """骞跺彂澶勭悊澶氫釜棰勬祴璇锋眰"""
 
     async def single_prediction(request_data):
         url = "http://localhost:5000/predict"
@@ -831,40 +831,40 @@ async def concurrent_predictions(session, prediction_requests):
         async with session.post(url, headers=headers, json=request_data) as response:
             return await response.json()
 
-    # 创建并发任务
+    # 鍒涘缓骞跺彂浠诲姟
     tasks = [single_prediction(req) for req in prediction_requests]
 
-    # 并发执行
+    # 骞跺彂鎵ц
     results = await asyncio.gather(*tasks)
     return results
 
 async def optimized_batch_processing():
-    """优化的批量处理"""
+    """浼樺寲鐨勬壒閲忓鐞?""
 
-    # 预测请求列表
+    # 棰勬祴璇锋眰鍒楄〃
     prediction_requests = [
         {
             "model_id": 1,
-            "name": f"预测任务_{i}",
+            "name": f"棰勬祴浠诲姟_{i}",
             "start_time": f"2024-01-16T{i:02d}:00:00Z",
             "end_time": f"2024-01-16T{i+1:02d}:00:00Z",
             "data_source": "weather_forecast"
         }
-        for i in range(24)  # 24小时的预测
+        for i in range(24)  # 24灏忔椂鐨勯娴?
     ]
 
-    # 使用连接池
+    # 浣跨敤杩炴帴姹?
     connector = aiohttp.TCPConnector(
-        limit=100,  # 总连接数限制
-        limit_per_host=30,  # 每个主机的连接数限制
-        ttl_dns_cache=300,  # DNS缓存时间
+        limit=100,  # 鎬昏繛鎺ユ暟闄愬埗
+        limit_per_host=30,  # 姣忎釜涓绘満鐨勮繛鎺ユ暟闄愬埗
+        ttl_dns_cache=300,  # DNS缂撳瓨鏃堕棿
         use_dns_cache=True,
     )
 
     timeout = aiohttp.ClientTimeout(
-        total=30,  # 总超时时间
-        connect=10,  # 连接超时时间
-        sock_read=10  # 读取超时时间
+        total=30,  # 鎬昏秴鏃舵椂闂?
+        connect=10,  # 杩炴帴瓒呮椂鏃堕棿
+        sock_read=10  # 璇诲彇瓒呮椂鏃堕棿
     )
 
     async with aiohttp.ClientSession(
@@ -873,7 +873,7 @@ async def optimized_batch_processing():
     ) as session:
         start_time = time.time()
 
-        # 分批处理，避免一次性请求过多
+        # 鍒嗘壒澶勭悊锛岄伩鍏嶄竴娆℃€ц姹傝繃澶?
         batch_size = 5
         all_results = []
 
@@ -882,24 +882,24 @@ async def optimized_batch_processing():
             batch_results = await concurrent_predictions(session, batch)
             all_results.extend(batch_results)
 
-            # 批次间稍作等待，避免系统过载
+            # 鎵规闂寸◢浣滅瓑寰咃紝閬垮厤绯荤粺杩囪浇
             if i + batch_size < len(prediction_requests):
                 await asyncio.sleep(0.5)
 
         end_time = time.time()
 
-        print(f"处理完成: {len(all_results)} 个预测请求")
-        print(f"总耗时: {end_time - start_time:.2f} 秒")
-        print(f"平均响应时间: {(end_time - start_time) / len(all_results):.2f} 秒/请求")
+        print(f"澶勭悊瀹屾垚: {len(all_results)} 涓娴嬭姹?)
+        print(f"鎬昏€楁椂: {end_time - start_time:.2f} 绉?)
+        print(f"骞冲潎鍝嶅簲鏃堕棿: {(end_time - start_time) / len(all_results):.2f} 绉?璇锋眰")
 
         return all_results
 
-# 运行优化后的批量处理
+# 杩愯浼樺寲鍚庣殑鎵归噺澶勭悊
 if __name__ == "__main__":
     results = asyncio.run(optimized_batch_processing())
 ```
 
-### 缓存策略实现
+### 缂撳瓨绛栫暐瀹炵幇
 ```python
 import redis
 import json
@@ -917,7 +917,7 @@ class APICache:
         self.default_ttl = default_ttl
 
     def generate_cache_key(self, func_name, *args, **kwargs):
-        """生成缓存键"""
+        """鐢熸垚缂撳瓨閿?""
         key_data = {
             'function': func_name,
             'args': args,
@@ -927,7 +927,7 @@ class APICache:
         return f"api_cache:{hashlib.md5(key_string.encode()).hexdigest()}"
 
     def cache_result(self, ttl=None):
-        """缓存装饰器"""
+        """缂撳瓨瑁呴グ鍣?""
         if ttl is None:
             ttl = self.default_ttl
 
@@ -936,13 +936,13 @@ class APICache:
             def wrapper(*args, **kwargs):
                 cache_key = self.generate_cache_key(func.__name__, *args, **kwargs)
 
-                # 尝试从缓存获取
+                # 灏濊瘯浠庣紦瀛樿幏鍙?
                 cached_result = self.redis_client.get(cache_key)
                 if cached_result:
-                    print(f"从缓存获取结果: {func.__name__}")
+                    print(f"浠庣紦瀛樿幏鍙栫粨鏋? {func.__name__}")
                     return json.loads(cached_result)
 
-                # 执行函数并缓存结果
+                # 鎵ц鍑芥暟骞剁紦瀛樼粨鏋?
                 result = func(*args, **kwargs)
                 if result:
                     self.redis_client.setex(
@@ -950,19 +950,19 @@ class APICache:
                         ttl,
                         json.dumps(result)
                     )
-                    print(f"缓存结果: {func.__name__}")
+                    print(f"缂撳瓨缁撴灉: {func.__name__}")
 
                 return result
 
             return wrapper
         return decorator
 
-# 使用缓存装饰器
+# 浣跨敤缂撳瓨瑁呴グ鍣?
 api_cache = APICache()
 
-@api_cache.cache_result(ttl=600)  # 缓存10分钟
+@api_cache.cache_result(ttl=600)  # 缂撳瓨10鍒嗛挓
 def get_weather_forecast(station_id, start_date, end_date):
-    """获取天气预报数据（带缓存）"""
+    """鑾峰彇澶╂皵棰勬姤鏁版嵁锛堝甫缂撳瓨锛?""
     url = f"http://localhost:5000/weather/forecast"
     headers = {"Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
     params = {
@@ -974,9 +974,9 @@ def get_weather_forecast(station_id, start_date, end_date):
     response = requests.get(url, headers=headers, params=params)
     return response.json()
 
-@api_cache.cache_result(ttl=1800)  # 缓存30分钟
+@api_cache.cache_result(ttl=1800)  # 缂撳瓨30鍒嗛挓
 def get_model_list(status="completed"):
-    """获取模型列表（带缓存）"""
+    """鑾峰彇妯″瀷鍒楄〃锛堝甫缂撳瓨锛?""
     url = f"http://localhost:5000/model/list"
     headers = {"Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
     params = {"status": status}
@@ -985,7 +985,7 @@ def get_model_list(status="completed"):
     return response.json()
 ```
 
-### 数据库查询优化
+### 鏁版嵁搴撴煡璇紭鍖?
 ```python
 import pandas as pd
 from sqlalchemy import create_engine, text
@@ -1002,9 +1002,9 @@ class OptimizedDataQueries:
         )
 
     def get_weather_data_optimized(self, station_ids, start_date, end_date):
-        """优化的天气数据查询"""
+        """浼樺寲鐨勫ぉ姘旀暟鎹煡璇?""
 
-        # 使用参数化查询防止SQL注入
+        # 浣跨敤鍙傛暟鍖栨煡璇㈤槻姝QL娉ㄥ叆
         query = text("""
             SELECT
                 station_id,
@@ -1023,7 +1023,7 @@ class OptimizedDataQueries:
             ORDER BY station_id, measurement_time
         """)
 
-        # 使用pandas直接读取数据
+        # 浣跨敤pandas鐩存帴璇诲彇鏁版嵁
         df = pd.read_sql_query(
             query,
             self.engine,
@@ -1034,14 +1034,14 @@ class OptimizedDataQueries:
             }
         )
 
-        # 设置索引优化后续处理
+        # 璁剧疆绱㈠紩浼樺寲鍚庣画澶勭悊
         df['measurement_time'] = pd.to_datetime(df['measurement_time'])
         df.set_index('measurement_time', inplace=True)
 
         return df
 
     def get_aggregated_data(self, station_id, date, aggregation_level='hour'):
-        """获取聚合数据"""
+        """鑾峰彇鑱氬悎鏁版嵁"""
 
         aggregation_map = {
             'hour': 'DATE_TRUNC(\'hour\', measurement_time)',
@@ -1078,7 +1078,7 @@ class OptimizedDataQueries:
         return df
 
     def get_data_with_pagination(self, table, start_id=0, batch_size=1000):
-        """分页获取大数据集"""
+        """鍒嗛〉鑾峰彇澶ф暟鎹泦"""
 
         query = text(f"""
             SELECT *
@@ -1091,7 +1091,7 @@ class OptimizedDataQueries:
         offset = start_id
 
         while True:
-            # 获取一批数据
+            # 鑾峰彇涓€鎵规暟鎹?
             batch_df = pd.read_sql_query(
                 query,
                 self.engine,
@@ -1103,41 +1103,41 @@ class OptimizedDataQueries:
 
             yield batch_df
 
-            # 更新偏移量
+            # 鏇存柊鍋忕Щ閲?
             offset = batch_df['id'].max()
 
-            # 可选：添加延迟避免数据库过载
+            # 鍙€夛細娣诲姞寤惰繜閬垮厤鏁版嵁搴撹繃杞?
             # time.sleep(0.1)
 
-# 使用示例
+# 浣跨敤绀轰緥
 query_engine = OptimizedDataQueries("postgresql://user:password@localhost:5432/wind_power")
 
-# 优化的天气数据查询
+# 浼樺寲鐨勫ぉ姘旀暟鎹煡璇?
 weather_data = query_engine.get_weather_data_optimized(
     station_ids=['ST001', 'ST002', 'ST003'],
     start_date='2024-01-01',
     end_date='2024-01-31'
 )
 
-# 聚合数据查询
+# 鑱氬悎鏁版嵁鏌ヨ
 hourly_data = query_engine.get_aggregated_data(
     station_id='ST001',
     date='2024-01-15',
     aggregation_level='hour'
 )
 
-# 分页处理大数据集
+# 鍒嗛〉澶勭悊澶ф暟鎹泦
 for batch_df in query_engine.get_data_with_pagination('weather_data', batch_size=5000):
-    # 处理每个批次的数据
+    # 澶勭悊姣忎釜鎵规鐨勬暟鎹?
     process_batch(batch_df)
-    print(f"处理了 {len(batch_df)} 条记录")
+    print(f"澶勭悊浜?{len(batch_df)} 鏉¤褰?)
 ```
 
 ---
 
-## 多语言示例
+## 澶氳瑷€绀轰緥
 
-### Java示例
+### Java绀轰緥
 ```java
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -1193,7 +1193,7 @@ public class WindPowerAPI {
         }
     }
 
-    // 数据模型类
+    // 鏁版嵁妯″瀷绫?
     public static class PredictionRequest {
         public int modelId;
         public String name;
@@ -1202,7 +1202,7 @@ public class WindPowerAPI {
         public String dataSource;
         public Map<String, Object> parameters;
 
-        // 构造函数和getter/setter省略
+        // 鏋勯€犲嚱鏁板拰getter/setter鐪佺暐
     }
 
     public static class PredictionResult {
@@ -1218,7 +1218,7 @@ public class WindPowerAPI {
 }
 ```
 
-### Go示例
+### Go绀轰緥
 ```go
 package main
 
@@ -1306,7 +1306,7 @@ func main() {
 
     request := PredictionRequest{
         ModelID:    1,
-        Name:       "Go客户端预测任务",
+        Name:       "Go瀹㈡埛绔娴嬩换鍔?,
         StartTime:  "2024-01-16T00:00:00Z",
         EndTime:    "2024-01-17T00:00:00Z",
         DataSource: "weather_forecast",
@@ -1326,7 +1326,7 @@ func main() {
 }
 ```
 
-### C#示例
+### C#绀轰緥
 ```csharp
 using System;
 using System.Net.Http;
@@ -1437,7 +1437,7 @@ class Program
             "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
         );
 
-        // 测试连接
+        // 娴嬭瘯杩炴帴
         var isConnected = await client.TestConnectionAsync();
         Console.WriteLine($"Connection test: {(isConnected ? "Success" : "Failed")}");
 
@@ -1446,7 +1446,7 @@ class Program
             var request = new PredictionRequest
             {
                 ModelId = 1,
-                Name = "C#客户端预测任务",
+                Name = "C#瀹㈡埛绔娴嬩换鍔?,
                 StartTime = "2024-01-16T00:00:00Z",
                 EndTime = "2024-01-17T00:00:00Z",
                 DataSource = "weather_forecast",
@@ -1481,9 +1481,9 @@ class Program
 
 ---
 
-## 调试和监控示例
+## 璋冭瘯鍜岀洃鎺хず渚?
 
-### 请求日志记录
+### 璇锋眰鏃ュ織璁板綍
 ```python
 import logging
 import time
@@ -1495,15 +1495,15 @@ class APIRequestLogger:
         self.logger = logging.getLogger('api_requests')
         self.logger.setLevel(logging.INFO)
 
-        # 文件处理器
+        # 鏂囦欢澶勭悊鍣?
         file_handler = logging.FileHandler(log_file)
         file_handler.setLevel(logging.INFO)
 
-        # 控制台处理器
+        # 鎺у埗鍙板鐞嗗櫒
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.DEBUG)
 
-        # 格式化器
+        # 鏍煎紡鍖栧櫒
         formatter = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
@@ -1514,7 +1514,7 @@ class APIRequestLogger:
         self.logger.addHandler(console_handler)
 
     def log_request(self, method, url, headers=None, data=None, response=None, duration=None):
-        """记录API请求和响应"""
+        """璁板綍API璇锋眰鍜屽搷搴?""
 
         log_entry = {
             'timestamp': datetime.now().isoformat(),
@@ -1535,7 +1535,7 @@ class APIRequestLogger:
         self.logger.info(json.dumps(log_entry, indent=2))
 
     def _sanitize_headers(self, headers):
-        """清理敏感信息"""
+        """娓呯悊鏁忔劅淇℃伅"""
         sanitized = headers.copy()
         sensitive_keys = ['authorization', 'x-api-key', 'cookie']
 
@@ -1546,7 +1546,7 @@ class APIRequestLogger:
         return sanitized
 
     def _truncate_response(self, response, max_length=1000):
-        """截断响应数据"""
+        """鎴柇鍝嶅簲鏁版嵁"""
         try:
             content = response.text
             if len(content) > max_length:
@@ -1555,16 +1555,16 @@ class APIRequestLogger:
         except:
             return '[Unable to read response content]'
 
-# 使用示例
+# 浣跨敤绀轰緥
 request_logger = APIRequestLogger()
 
 def logged_api_request(method, url, **kwargs):
-    """带日志记录的API请求"""
+    """甯︽棩蹇楄褰曠殑API璇锋眰"""
     start_time = time.time()
 
     try:
         response = requests.request(method, url, **kwargs)
-        duration = (time.time() - start_time) * 1000  # 转换为毫秒
+        duration = (time.time() - start_time) * 1000  # 杞崲涓烘绉?
 
         request_logger.log_request(
             method=method,
@@ -1583,7 +1583,7 @@ def logged_api_request(method, url, **kwargs):
         raise
 ```
 
-### 性能监控
+### 鎬ц兘鐩戞帶
 ```python
 import psutil
 import threading
@@ -1600,32 +1600,32 @@ class PerformanceMonitor:
         self.monitor_thread = None
 
     def start_monitoring(self, interval=1):
-        """开始性能监控"""
+        """寮€濮嬫€ц兘鐩戞帶"""
         self.monitoring = True
         self.monitor_thread = threading.Thread(target=self._monitor_loop, args=(interval,))
         self.monitor_thread.daemon = True
         self.monitor_thread.start()
-        print("性能监控已启动")
+        print("鎬ц兘鐩戞帶宸插惎鍔?)
 
     def stop_monitoring(self):
-        """停止性能监控"""
+        """鍋滄鎬ц兘鐩戞帶"""
         self.monitoring = False
         if self.monitor_thread:
             self.monitor_thread.join()
-        print("性能监控已停止")
+        print("鎬ц兘鐩戞帶宸插仠姝?)
 
     def _monitor_loop(self, interval):
-        """监控循环"""
+        """鐩戞帶寰幆"""
         while self.monitoring:
-            # CPU使用率
+            # CPU浣跨敤鐜?
             cpu_percent = psutil.cpu_percent(interval=None)
             self.cpu_history.append(cpu_percent)
 
-            # 内存使用率
+            # 鍐呭瓨浣跨敤鐜?
             memory = psutil.virtual_memory()
             self.memory_history.append(memory.percent)
 
-            # 网络IO
+            # 缃戠粶IO
             network = psutil.net_io_counters()
             self.network_history.append({
                 'bytes_sent': network.bytes_sent,
@@ -1636,7 +1636,7 @@ class PerformanceMonitor:
             time.sleep(interval)
 
     def get_stats(self):
-        """获取性能统计"""
+        """鑾峰彇鎬ц兘缁熻"""
         if not self.cpu_history:
             return None
 
@@ -1657,26 +1657,26 @@ class PerformanceMonitor:
         }
 
     def check_resource_usage(self, cpu_threshold=80, memory_threshold=85):
-        """检查资源使用情况"""
+        """妫€鏌ヨ祫婧愪娇鐢ㄦ儏鍐?""
         stats = self.get_stats()
         if not stats:
             return {'alerts': [], 'status': 'unknown'}
 
         alerts = []
 
-        # CPU告警
+        # CPU鍛婅
         if stats['cpu']['current'] > cpu_threshold:
             alerts.append({
                 'type': 'cpu_high',
-                'message': f"CPU使用率过高: {stats['cpu']['current']:.1f}%",
+                'message': f"CPU浣跨敤鐜囪繃楂? {stats['cpu']['current']:.1f}%",
                 'severity': 'warning' if stats['cpu']['current'] < 90 else 'critical'
             })
 
-        # 内存告警
+        # 鍐呭瓨鍛婅
         if stats['memory']['current'] > memory_threshold:
             alerts.append({
                 'type': 'memory_high',
-                'message': f"内存使用率过高: {stats['memory']['current']:.1f}%",
+                'message': f"鍐呭瓨浣跨敤鐜囪繃楂? {stats['memory']['current']:.1f}%",
                 'severity': 'warning' if stats['memory']['current'] < 95 else 'critical'
             })
 
@@ -1690,31 +1690,34 @@ class PerformanceMonitor:
             'stats': stats
         }
 
-# 使用示例
+# 浣跨敤绀轰緥
 perf_monitor = PerformanceMonitor()
 
-# 开始监控
+# 寮€濮嬬洃鎺?
 perf_monitor.start_monitoring(interval=2)
 
-# 模拟一些工作
+# 妯℃嫙涓€浜涘伐浣?
 time.sleep(10)
 
-# 检查资源使用情况
+# 妫€鏌ヨ祫婧愪娇鐢ㄦ儏鍐?
 resource_check = perf_monitor.check_resource_usage()
-print(f"资源状态: {resource_check['status']}")
+print(f"璧勬簮鐘舵€? {resource_check['status']}")
 for alert in resource_check['alerts']:
-    print(f"告警: {alert['message']}")
+    print(f"鍛婅: {alert['message']}")
 
-# 获取详细统计信息
+# 鑾峰彇璇︾粏缁熻淇℃伅
 stats = perf_monitor.get_stats()
 if stats:
-    print(f"CPU平均使用率: {stats['cpu']['average']:.1f}%")
-    print(f"内存平均使用率: {stats['memory']['average']:.1f}%")
+    print(f"CPU骞冲潎浣跨敤鐜? {stats['cpu']['average']:.1f}%")
+    print(f"鍐呭瓨骞冲潎浣跨敤鐜? {stats['memory']['average']:.1f}%")
 
-# 停止监控
+# 鍋滄鐩戞帶
 perf_monitor.stop_monitoring()
 ```
 
 ---
 
-这些API使用示例涵盖了风功率预测系统的主要功能，包括认证、数据管理、模型训练、功率预测、运营数据管理和系统管理等各个方面。同时还提供了性能优化、错误处理、多语言支持和调试监控的高级示例。您可以根据实际需求选择合适的示例进行修改和使用。记得替换示例中的token和URL为您的实际值。如果您需要更多特定功能的示例，请随时询问。"}
+杩欎簺API浣跨敤绀轰緥娑电洊浜嗛鍔熺巼棰勬祴绯荤粺鐨勪富瑕佸姛鑳斤紝鍖呮嫭璁よ瘉銆佹暟鎹鐞嗐€佹ā鍨嬭缁冦€佸姛鐜囬娴嬨€佽繍钀ユ暟鎹鐞嗗拰绯荤粺绠＄悊绛夊悇涓柟闈€傚悓鏃惰繕鎻愪緵浜嗘€ц兘浼樺寲銆侀敊璇鐞嗐€佸璇█鏀寔鍜岃皟璇曠洃鎺х殑楂樼骇绀轰緥銆傛偍鍙互鏍规嵁瀹為檯闇€姹傞€夋嫨鍚堥€傜殑绀轰緥杩涜淇敼鍜屼娇鐢ㄣ€傝寰楁浛鎹㈢ず渚嬩腑鐨則oken鍜孶RL涓烘偍鐨勫疄闄呭€笺€傚鏋滄偍闇€瑕佹洿澶氱壒瀹氬姛鑳界殑绀轰緥锛岃闅忔椂璇㈤棶銆?}
+> Deprecation Notice (M1): Manual model training and manual predict endpoints are decommissioned from active product flow.
+> Prefer /api/v1/autopredict/* and farm-scoped data APIs.
+
