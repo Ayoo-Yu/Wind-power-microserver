@@ -29,13 +29,17 @@ class FarmService {
     if (!farmCode || typeof farmCode !== 'string') {
       return
     }
+    const normalizedCode = farmCode.trim()
+    if (!normalizedCode) {
+      return
+    }
 
-    if (this.currentFarm !== farmCode) {
-      this.currentFarm = farmCode
-      localStorage.setItem('selectedFarm', farmCode)
+    if (this.currentFarm !== normalizedCode) {
+      this.currentFarm = normalizedCode
+      localStorage.setItem('selectedFarm', normalizedCode)
 
       // 通知所有监听器
-      this.notifyListeners(farmCode)
+      this.notifyListeners(normalizedCode)
     }
   }
 
@@ -90,20 +94,75 @@ class FarmService {
         return farms
       }
 
-      let farms = []
-      try {
-        farms = await fetchFarms('/api/report/farms')
-      } catch (mainBackendError) {
-        console.warn('主后端场站接口不可用，尝试自动预测后端接口', mainBackendError)
-        farms = await fetchFarms('/api/v1/autopredict/farms')
+      const normalizeFarmCode = (value) => {
+        if (value === undefined || value === null) {
+          return null
+        }
+        const code = String(value).trim()
+        return code || null
       }
 
-      const mappedFarms = farms
+      const mapFarms = (farms = []) => farms
         .filter(farm => farm && farm.farm_code)
-        .map(farm => ({
-          code: farm.farm_code,
-          name: farm.farm_name || farm.farm_code
+        .map(farm => {
+          const code = normalizeFarmCode(farm.farm_code)
+          if (!code) {
+            return null
+          }
+          const farmName = typeof farm.farm_name === 'string' ? farm.farm_name.trim() : ''
+          return {
+            code,
+            name: farmName || code
+          }
+        })
+        .filter(Boolean)
+
+      const dedupeByCode = (farms = []) => {
+        const seen = new Set()
+        const result = []
+        farms.forEach((farm) => {
+          const key = farm.code.toLowerCase()
+          if (seen.has(key)) {
+            return
+          }
+          seen.add(key)
+          result.push(farm)
+        })
+        return result
+      }
+
+      let autopredictFarms = []
+      let reportFarms = []
+
+      try {
+        autopredictFarms = await fetchFarms('/api/v1/autopredict/farms')
+      } catch (autopredictError) {
+        console.warn('自动预测后端场站接口不可用', autopredictError)
+      }
+
+      try {
+        reportFarms = await fetchFarms('/api/report/farms')
+      } catch (reportError) {
+        console.warn('主后端场站接口不可用', reportError)
+      }
+
+      const mappedAutopredictFarms = mapFarms(autopredictFarms)
+      const mappedReportFarms = mapFarms(reportFarms)
+
+      let mappedFarms = []
+      if (mappedAutopredictFarms.length > 0) {
+        const reportNameByCode = new Map(
+          mappedReportFarms.map(farm => [farm.code.toLowerCase(), farm.name])
+        )
+        mappedFarms = mappedAutopredictFarms.map((farm) => ({
+          code: farm.code,
+          name: reportNameByCode.get(farm.code.toLowerCase()) || farm.name
         }))
+      } else if (mappedReportFarms.length > 0) {
+        mappedFarms = mappedReportFarms
+      }
+
+      mappedFarms = dedupeByCode(mappedFarms)
 
       if (mappedFarms.length > 0) {
         this.setAvailableFarms(mappedFarms)
