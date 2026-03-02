@@ -1,4 +1,4 @@
-<!-- src/components/FarmSelector.vue -->
+﻿<!-- src/components/FarmSelector.vue -->
 <template>
   <div class="farm-selector">
     <el-dropdown @command="handleFarmChange" trigger="click">
@@ -46,63 +46,59 @@ export default {
   },
   emits: ['farm-changed'],
   setup(props, { emit }) {
-    // 当前选中的风场
+    // 褰撳墠閫変腑鐨勯鍦?
     const currentFarm = ref(farmService.getCurrentFarm())
 
-    // 可用的风场列表
+    // 鍙敤鐨勯鍦哄垪琛?
     const availableFarms = ref(farmService.getAvailableFarms())
 
-    // 计算当前风场名称
+    // 璁＄畻褰撳墠椋庡満鍚嶇О
     const currentFarmName = computed(() => {
       const farm = availableFarms.value.find(f => f.code === currentFarm.value)
-      return farm ? farm.name : '未知风场'
+      return farm ? farm.name : '鏈煡椋庡満'
     })
 
-    // 处理风场切换
+    // 澶勭悊椋庡満鍒囨崲
     const handleFarmChange = (farmCode) => {
       if (farmCode !== currentFarm.value) {
-        // 使用farmService设置当前场站
+        // 浣跨敤farmService璁剧疆褰撳墠鍦虹珯
         farmService.setCurrentFarm(farmCode)
         currentFarm.value = farmCode
 
-        // 发送事件通知父组件
+        // 鍙戦€佷簨浠堕€氱煡鐖剁粍浠?
         emit('farm-changed', farmCode)
 
-        ElMessage.success(`已切换到 ${currentFarmName.value}`)
+        ElMessage.success(`宸插垏鎹㈠埌 ${currentFarmName.value}`)
       }
     }
 
-    // 监听farmService中的风场变化
+    // 鐩戝惉farmService涓殑椋庡満鍙樺寲
     const handleFarmServiceChange = (farmCode) => {
       currentFarm.value = farmCode
       emit('farm-changed', farmCode)
     }
 
-    // 监听风场变化，可以在这里添加额外的逻辑
+    // 鐩戝惉椋庡満鍙樺寲锛屽彲浠ュ湪杩欓噷娣诲姞棰濆鐨勯€昏緫
     watch(currentFarm, (newFarm, oldFarm) => {
-      console.log(`风场已从 ${oldFarm} 切换到 ${newFarm}`)
+      console.log(`椋庡満宸蹭粠 ${oldFarm} 鍒囨崲鍒?${newFarm}`)
     })
 
-    // 组件挂载时，添加监听器
+    // 组件挂载时，初始化场站列表并同步当前选择
     onMounted(async () => {
-      // 拉取最新场站列表（失败时farmService内部自动回退）
       await farmService.loadAvailableFarms()
       availableFarms.value = farmService.getAvailableFarms()
 
-      // 确保localStorage中有值
       if (!localStorage.getItem('selectedFarm')) {
         farmService.resetToDefault()
         currentFarm.value = farmService.getCurrentFarm()
       }
 
-      // 当前场站如果已不在列表中，切到默认/首个可用场站
       const exists = availableFarms.value.some(f => f.code === currentFarm.value)
       if (!exists && availableFarms.value.length > 0) {
         farmService.setCurrentFarm(availableFarms.value[0].code)
         currentFarm.value = farmService.getCurrentFarm()
       }
 
-      // 监听farmService的变化
       farmService.addListener(handleFarmServiceChange)
     })
 
@@ -131,7 +127,7 @@ export default {
   border-radius: 20px;
   cursor: pointer;
   transition: all 0.3s ease;
-  color: var(--text-primary);
+  color: #111827;
   min-width: 140px;
   justify-content: space-between;
 }
@@ -170,12 +166,12 @@ export default {
 .farm-name {
   font-size: 14px;
   font-weight: 500;
-  color: var(--text-primary);
+  color: #111827;
 }
 
 .farm-code {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: #6b7280;
 }
 
 .check-icon {
@@ -183,21 +179,32 @@ export default {
   font-size: 16px;
 }
 
-/* 激活状态的下拉项 */
-.el-dropdown-item.is-active {
-  background: linear-gradient(90deg, rgba(52, 199, 89, 0.1), transparent);
-  color: #34C759;
+/* 下拉项样式（Element Plus 实际类名为 el-dropdown-menu__item） */
+:deep(.el-dropdown-menu__item) {
+  color: #111827 !important;
+  padding: 8px 16px !important;
+  background: #ffffff !important;
 }
 
-.el-dropdown-item {
-  padding: 8px 16px;
+:deep(.el-dropdown-menu__item:hover) {
+  background: #f3f4f6 !important;
+  color: #111827 !important;
 }
 
-.el-dropdown-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+:deep(.el-dropdown-menu__item.is-active) {
+  background: #ecfdf3 !important;
+  color: #047857 !important;
 }
 
-/* 响应式设计 */
+:deep(.el-dropdown-menu__item.is-active .farm-name) {
+  color: #047857 !important;
+}
+
+:deep(.el-dropdown-menu__item.is-active .farm-code) {
+  color: #065f46 !important;
+}
+
+/* 鍝嶅簲寮忚璁?*/
 @media (max-width: 768px) {
   .farm-selector-trigger {
     padding: 6px 12px;
@@ -213,3 +220,4 @@ export default {
   }
 }
 </style>
+
