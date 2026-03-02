@@ -30,6 +30,10 @@ SET AUTO_PY=D:\my-vue-project\wind-power-forecast\backend-autopredict\wind-power
 
 d:
 
+REM Release local backend ports if occupied by stale processes
+CALL :free_port %MAIN_APP_PORT% MainBackend
+CALL :free_port %AUTO_APP_PORT% AutoPredictBackend
+
 REM Wait for infra dependencies to be ready before starting backends
 CALL :wait_tcp %DB_HOST% %DB_PORT% Kingbase
 IF ERRORLEVEL 1 (
@@ -98,3 +102,14 @@ if %_elapsed% GEQ %_max_wait% (
 timeout /t 2 > nul
 set /a "_elapsed+=2"
 goto :wait_tcp_loop
+
+:free_port
+set "_target_port=%~1"
+set "_target_name=%~2"
+
+echo [INFO] Checking %_target_name% port (%_target_port%)...
+for /f %%p in ('powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort %_target_port% -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique"') do (
+  echo [WARN] Port %_target_port% is occupied by PID %%p, terminating...
+  taskkill /PID %%p /F > nul 2>&1
+)
+exit /b 0
