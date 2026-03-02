@@ -79,7 +79,10 @@ from routes.auth import auth_bp  # 保留认证蓝图
 
 app.register_blueprint(autopredict_bp, url_prefix='/api')
 app.register_blueprint(autotask_bp, url_prefix='/')
+# Legacy auth namespace (kept for compatibility)
 app.register_blueprint(auth_bp, url_prefix='/api/auth')  # 认证是必要的
+# v1 auth namespace (compat bridge to same handlers)
+app.register_blueprint(auth_bp, url_prefix='/api/v1/auth', name='auth_v1')
 
 # 添加JWT错误处理
 @jwt.expired_token_loader

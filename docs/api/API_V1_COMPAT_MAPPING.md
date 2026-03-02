@@ -15,7 +15,7 @@ This document defines the M1 compatibility mapping from legacy endpoints to `/ap
 | Capability | Legacy Path | v1 Path | M1 Status | Notes |
 |---|---|---|---|---|
 | Health | `/health` | `/api/v1/health` | Implemented | v1 returns unified envelope format. |
-| Auth | `/api/auth/*` | `/api/v1/auth/*` | Pending | Keep legacy path; migrate in later milestone. |
+| Auth | `/api/auth/*` | `/api/v1/auth/*` | Implemented | v1 and legacy share the same auth handlers via blueprint alias. |
 | Runtime status | `/api/status` | `/api/v1/autopredict/status` | Implemented | v1 and legacy share same handler logic. |
 | Start task | `/api/start` | `/api/v1/autopredict/start` | Implemented | v1 and legacy share same handler logic. |
 | Stop task | `/api/stop` | `/api/v1/autopredict/stop` | Implemented | v1 and legacy share same handler logic. |
