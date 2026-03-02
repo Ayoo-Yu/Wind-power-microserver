@@ -257,9 +257,8 @@
 <script>
 import { Chart, CategoryScale, LinearScale, LineElement, PointElement, Title, Tooltip, Legend, LineController } from 'chart.js'
 import zoomPlugin from 'chartjs-plugin-zoom';
-import axios from 'axios'
 import farmService from '../utils/farmService'
-import { getFleetMetrics, getFleetSeries } from '../api/powerCompareApi'
+import { getFleetMetrics, getFleetSeries, getPowerCompareData } from '../api/powerCompareApi'
 
 Chart.register(
   CategoryScale,
@@ -600,7 +599,7 @@ export default {
           ...(this.selectedTypes.includes('超短期预测') && { supershort_horizon: 'average' })
         };
 
-        const response = await axios.post(`${this.backendBaseUrl}/power-compare/data`, payload);
+        const response = await getPowerCompareData(payload);
         await this.processChartData(response.data); 
       } catch (error) {
         this.$message.error('数据获取失败');

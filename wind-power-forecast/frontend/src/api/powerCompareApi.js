@@ -30,3 +30,9 @@ export function getFleetSeries(payload) {
   )
 }
 
+export function getPowerCompareData(payload) {
+  return withLegacyFallback(
+    () => axiosInstance.post('/api/v1/power-compare/data', payload),
+    () => axiosInstance.post('/power-compare/data', payload)
+  )
+}

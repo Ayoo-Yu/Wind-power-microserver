@@ -11,6 +11,7 @@ This document defines the M1 compatibility mapping from legacy endpoints to `/ap
 | Auth | `/auth/*` | `/api/v1/auth/*` | Implemented | v1 and legacy share the same auth handlers via blueprint alias. |
 | Fleet compare metrics | `/power-compare/fleet_metrics` | `/api/v1/power-compare/fleet_metrics` | Implemented | Multi-station MAE/RMSE/MSE aggregation by prediction type. |
 | Fleet compare series | `/power-compare/fleet_series` | `/api/v1/power-compare/fleet_series` | Implemented | Multi-station overlay series for predicted/actual curves by prediction type. |
+| Power compare main data | `/power-compare/data` | `/api/v1/power-compare/data` | Implemented | Main comparison timeseries endpoint now available in v1 compat bridge. |
 
 ## AutoPredict Backend (Port 5001 / local 18081)
 
