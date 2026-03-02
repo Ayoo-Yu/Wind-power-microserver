@@ -9,6 +9,7 @@ This document defines the M1 compatibility mapping from legacy endpoints to `/ap
 | Health | `/health` | `/api/v1/health` | Implemented | v1 returns unified envelope; legacy remains available. |
 | Farms (list) | `/api/farms` | `/api/v1/farms` | Implemented | v1 currently bridges to existing farms handler. |
 | Auth | `/auth/*` | `/api/v1/auth/*` | Implemented | v1 and legacy share the same auth handlers via blueprint alias. |
+| Fleet compare metrics | `/power-compare/fleet_metrics` | `/api/v1/power-compare/fleet_metrics` | Implemented | Multi-station MAE/RMSE/MSE aggregation by prediction type. |
 
 ## AutoPredict Backend (Port 5001 / local 18081)
 
@@ -43,3 +44,5 @@ This document defines the M1 compatibility mapping from legacy endpoints to `/ap
 - Duplicate concurrent control requests on same farm/task/action may return `409` (conflict guard).
 - AutoPredict multi-station request and response contract is documented in:
   `docs/api/AUTOPREDICT_MULTI_STATION_CONTRACT.md`.
+- Power compare multi-station contract is documented in:
+  `docs/api/POWER_COMPARE_MULTI_STATION_CONTRACT.md`.

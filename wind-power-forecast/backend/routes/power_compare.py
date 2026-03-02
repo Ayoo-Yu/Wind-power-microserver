@@ -5,8 +5,39 @@ from sqlalchemy import func
 from database_config import get_db
 from sqlalchemy.orm import Session
 from db_session import db_session
+from db_models.report_config import WindFarm
 
 bp = Blueprint('power_compare', __name__, url_prefix='/power-compare')
+
+
+def _calc_basic_metrics(actual_values, predicted_values):
+    valid_pairs = []
+    for actual, predicted in zip(actual_values, predicted_values):
+        if actual is None or predicted is None:
+            continue
+        valid_pairs.append((float(actual), float(predicted)))
+
+    if not valid_pairs:
+        return {
+            'points': 0,
+            'mae': None,
+            'rmse': None,
+            'mse': None
+        }
+
+    errors = [pred - actual for actual, pred in valid_pairs]
+    abs_errors = [abs(err) for err in errors]
+    sq_errors = [err * err for err in errors]
+    count = len(valid_pairs)
+    mse = sum(sq_errors) / count
+    rmse = mse ** 0.5
+    mae = sum(abs_errors) / count
+    return {
+        'points': count,
+        'mae': mae,
+        'rmse': rmse,
+        'mse': mse
+    }
 
 @bp.route('/data', methods=['POST'])
 def get_power_data():
@@ -190,3 +221,123 @@ def get_power_data():
         import traceback
         traceback.print_exc()
         return jsonify({"error": f"服务器错误: {str(e)}"}), 500
+
+@bp.route('/fleet_metrics', methods=['POST'])
+def get_fleet_metrics():
+    """
+    Multi-station comparison metrics aggregation.
+    request:
+      {
+        "start": "2026-03-01 00:00:00",
+        "end": "2026-03-01 23:59:59",
+        "farm_codes": ["farm_a", "farm_b"],
+        "prediction_type": "short|mid|supershort"
+      }
+    """
+    payload = request.get_json(silent=True) or {}
+    start = payload.get('start')
+    end = payload.get('end')
+    farm_codes = payload.get('farm_codes') or []
+    prediction_type = str(payload.get('prediction_type') or 'short').strip().lower()
+
+    if not start or not end:
+        return jsonify({"code": 1001, "message": "missing start/end"}), 400
+    if prediction_type not in ('short', 'mid', 'supershort'):
+        return jsonify({"code": 1001, "message": "invalid prediction_type"}), 400
+
+    try:
+        start_dt = datetime.fromisoformat(start)
+        end_dt = datetime.fromisoformat(end)
+    except ValueError:
+        return jsonify({"code": 1001, "message": "invalid datetime format"}), 400
+
+    with db_session() as db:
+        active_farms = db.query(WindFarm).filter(
+            WindFarm.deleted_at == None,
+            WindFarm.is_active == True
+        ).all()
+        active_map = {farm.farm_code: farm for farm in active_farms}
+
+        if isinstance(farm_codes, list) and len(farm_codes) > 0:
+            selected_codes = []
+            for code in farm_codes:
+                if isinstance(code, str):
+                    cleaned = code.strip()
+                    if cleaned and cleaned not in selected_codes:
+                        selected_codes.append(cleaned)
+            invalid_codes = [code for code in selected_codes if code not in active_map]
+            if invalid_codes:
+                return jsonify({
+                    "code": 1001,
+                    "message": f"invalid farm_codes: {', '.join(invalid_codes)}"
+                }), 400
+            target_codes = selected_codes
+        else:
+            target_codes = list(active_map.keys())
+
+        if not target_codes:
+            return jsonify({
+                "code": 0,
+                "message": "ok",
+                "data": {
+                    "items": [],
+                    "count": 0,
+                    "prediction_type": prediction_type
+                }
+            }), 200
+
+        result_items = []
+        for farm_code in target_codes:
+            farm = active_map.get(farm_code)
+            actual_rows = db.query(ActualPower.timestamp, ActualPower.wp_true).filter(
+                ActualPower.farm_code == farm_code,
+                ActualPower.timestamp.between(start_dt, end_dt)
+            ).order_by(ActualPower.timestamp).all()
+            actual_map = {
+                row.timestamp: row.wp_true
+                for row in actual_rows
+                if row.wp_true is not None
+            }
+
+            if prediction_type == 'short':
+                pred_rows = db.query(ShortlPower.timestamp, ShortlPower.wp_pred).filter(
+                    ShortlPower.farm_code == farm_code,
+                    ShortlPower.timestamp.between(start_dt, end_dt)
+                ).order_by(ShortlPower.timestamp).all()
+                pred_map = {row.timestamp: row.wp_pred for row in pred_rows if row.wp_pred is not None}
+            elif prediction_type == 'mid':
+                pred_rows = db.query(MidPower.timestamp, MidPower.wp_pred).filter(
+                    MidPower.farm_code == farm_code,
+                    MidPower.timestamp.between(start_dt, end_dt)
+                ).order_by(MidPower.timestamp).all()
+                pred_map = {row.timestamp: row.wp_pred for row in pred_rows if row.wp_pred is not None}
+            else:
+                pred_rows = db.query(SupershortlPower.timestamp, SupershortlPower.wp_pred2).filter(
+                    SupershortlPower.farm_code == farm_code,
+                    SupershortlPower.timestamp.between(start_dt, end_dt)
+                ).order_by(SupershortlPower.timestamp).all()
+                pred_map = {row.timestamp: row.wp_pred2 for row in pred_rows if row.wp_pred2 is not None}
+
+            aligned_timestamps = sorted(set(actual_map.keys()) & set(pred_map.keys()))
+            actual_values = [actual_map[ts] for ts in aligned_timestamps]
+            predicted_values = [pred_map[ts] for ts in aligned_timestamps]
+            metrics = _calc_basic_metrics(actual_values, predicted_values)
+
+            result_items.append({
+                "farm_code": farm_code,
+                "farm_name": farm.farm_name if farm else farm_code,
+                "actual_points": len(actual_map),
+                "predicted_points": len(pred_map),
+                **metrics
+            })
+
+        result_items.sort(key=lambda x: (x['rmse'] is None, x['rmse'] if x['rmse'] is not None else float('inf')))
+        return jsonify({
+            "code": 0,
+            "message": "ok",
+            "data": {
+                "items": result_items,
+                "count": len(result_items),
+                "prediction_type": prediction_type
+            }
+        }), 200

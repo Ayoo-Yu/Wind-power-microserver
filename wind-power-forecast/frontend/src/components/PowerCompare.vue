@@ -93,6 +93,34 @@
         </div>
 
         <!-- Row 2: Type Select -->
+        <div class="config-row config-row-3">
+          <div class="fleet-compare-config">
+            <span class="label">多场站指标对比：</span>
+            <el-select
+              v-model="fleetCompareFarmCodes"
+              multiple
+              collapse-tags
+              collapse-tags-tooltip
+              placeholder="选择场站"
+              class="fleet-farm-select"
+            >
+              <el-option
+                v-for="farm in fleetCompareFarms"
+                :key="farm.code"
+                :label="`${farm.name} (${farm.code})`"
+                :value="farm.code"
+              />
+            </el-select>
+            <el-select v-model="fleetComparePredictionType" class="fleet-type-select">
+              <el-option label="短期预测" value="short" />
+              <el-option label="中期预测" value="mid" />
+              <el-option label="超短期预测(P2)" value="supershort" />
+            </el-select>
+            <el-button type="primary" :loading="fleetCompareLoading" @click="fetchFleetMetricsCompare">
+              场站指标对比
+            </el-button>
+          </div>
+        </div>
         <div class="config-row config-row-2">
           <div class="type-checkbox-group type-checkbox-group-row2">
             <span class="label">选择展示类型：</span>
@@ -110,6 +138,28 @@
     </div>
 
     <!-- 图表展示区域 -->
+    <div class="fleet-metrics-container" v-if="fleetCompareRows.length > 0">
+      <el-card class="fleet-metrics-card">
+        <template #header>
+          <div class="fleet-metrics-header">多场站指标对比结果（{{ fleetComparePredictionType }}）</div>
+        </template>
+        <el-table :data="fleetCompareRows" border size="small" style="width: 100%">
+          <el-table-column prop="farm_code" label="场站编码" min-width="140" />
+          <el-table-column prop="farm_name" label="场站名称" min-width="160" />
+          <el-table-column prop="points" label="对齐点数" width="100" />
+          <el-table-column label="MAE" width="110">
+            <template #default="scope">{{ formatMetricNumber(scope.row.mae) }}</template>
+          </el-table-column>
+          <el-table-column label="RMSE" width="110">
+            <template #default="scope">{{ formatMetricNumber(scope.row.rmse) }}</template>
+          </el-table-column>
+          <el-table-column label="MSE" width="110">
+            <template #default="scope">{{ formatMetricNumber(scope.row.mse) }}</template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+    </div>
+
     <div class="chart-container" v-if="chartData">
       <div class="chart-wrapper" :key="chartKey">
         <canvas ref="chartCanvas" style="height: 70vh !important;"></canvas>
@@ -190,6 +240,7 @@
 import { Chart, CategoryScale, LinearScale, LineElement, PointElement, Title, Tooltip, Legend, LineController } from 'chart.js'
 import zoomPlugin from 'chartjs-plugin-zoom';
 import axios from 'axios'
+import farmService from '../utils/farmService'
 
 Chart.register(
   CategoryScale,
@@ -259,6 +310,11 @@ export default {
       isQuickTimeSwitching: false, // Flag for quick time range button cooldown
       isUpdatingMetricChart: false, // Added for updateMetricChart lock
       isMetricButtonCooling: false, // 指标按钮的冷却状态标志
+      fleetCompareFarms: [],
+      fleetCompareFarmCodes: [],
+      fleetComparePredictionType: 'short',
+      fleetCompareLoading: false,
+      fleetCompareRows: []
     }
   },
   mounted() {
@@ -271,11 +327,78 @@ export default {
       `${year}-${month}-${day} 00:00:00`,
       `${year}-${month}-${day} 23:59:59`,
     ];
+    this.loadFleetCompareFarms();
     this.fetchComparisonData();
   },
   methods: {
     refreshPage() {
       window.location.reload();
+    },
+
+    async loadFleetCompareFarms() {
+      try {
+        const farms = await farmService.loadAvailableFarms(true);
+        const normalized = Array.isArray(farms) ? farms : [];
+        this.fleetCompareFarms = normalized.map(item => ({
+          code: item.code,
+          name: item.name || item.code
+        }));
+        this.fleetCompareFarmCodes = this.fleetCompareFarms.map(item => item.code);
+      } catch (error) {
+        console.error('loadFleetCompareFarms failed:', error);
+        this.fleetCompareFarms = [];
+        this.fleetCompareFarmCodes = [];
+      }
+    },
+
+    formatMetricNumber(value) {
+      if (value === null || value === undefined || Number.isNaN(Number(value))) {
+        return '-';
+      }
+      return Number(value).toFixed(3);
+    },
+
+    async fetchFleetMetricsCompare() {
+      if (!this.timeRange || this.timeRange.length !== 2) {
+        this.$message.error('请先选择完整时间范围');
+        return;
+      }
+      if (!Array.isArray(this.fleetCompareFarmCodes) || this.fleetCompareFarmCodes.length === 0) {
+        this.$message.warning('请至少选择一个场站');
+        return;
+      }
+
+      this.fleetCompareLoading = true;
+      try {
+        const payload = {
+          start: this.timeRange[0],
+          end: this.timeRange[1],
+          farm_codes: this.fleetCompareFarmCodes,
+          prediction_type: this.fleetComparePredictionType
+        };
+
+        let response;
+        try {
+          response = await axios.post(`${this.backendBaseUrl}/api/v1/power-compare/fleet_metrics`, payload);
+        } catch (v1Error) {
+          response = await axios.post(`${this.backendBaseUrl}/power-compare/fleet_metrics`, payload);
+        }
+
+        const data = response?.data?.data || {};
+        const rows = Array.isArray(data.items) ? data.items : [];
+        this.fleetCompareRows = rows.map(item => ({
+          ...item,
+          points: item.points || 0
+        }));
+        if (this.fleetCompareRows.length === 0) {
+          this.$message.info('当前条件下没有可对比的数据');
+        }
+      } catch (error) {
+        console.error('fetchFleetMetricsCompare failed:', error);
+        this.$message.error('多场站指标对比失败');
+      } finally {
+        this.fleetCompareLoading = false;
+      }
     },
     
     // 格式化K值为三位有效数字
@@ -1628,12 +1751,21 @@ export default {
   width: 100%; /* Allow it to take full width for its checkboxes */
 }
 
-/* Row 3: Horizon Select */
-.config-row-3 .horizon-select-wrapper {
+/* Row 3: Fleet compare */
+.config-row-3 .fleet-compare-config {
   display: flex;
   align-items: center;
   gap: 10px;
-  width: 100%; /* Allow it to take full width for its checkboxes */
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.fleet-farm-select {
+  min-width: 320px;
+}
+
+.fleet-type-select {
+  min-width: 180px;
 }
 
 /* General styling for checkbox groups within rows */
@@ -1667,6 +1799,22 @@ export default {
   padding: 24px;
   height: 75vh;
   margin-top: 20px;
+}
+
+.fleet-metrics-container {
+  margin-top: 16px;
+}
+
+.fleet-metrics-card {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+}
+
+.fleet-metrics-header {
+  font-weight: 600;
+  color: #1f2937;
 }
 
 .chart-wrapper {
