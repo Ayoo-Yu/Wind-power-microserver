@@ -120,4 +120,7 @@ def handle_disconnect():
     app.logger.info("与服务器断开连接！")
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5001, debug=True)
+    app_host = os.environ.get('APP_HOST', '0.0.0.0')
+    app_port = int(os.environ.get('APP_PORT', '5001'))
+    app_debug = os.environ.get('APP_DEBUG', 'true').lower() in ('1', 'true', 'yes', 'on')
+    socketio.run(app, host=app_host, port=app_port, debug=app_debug)
