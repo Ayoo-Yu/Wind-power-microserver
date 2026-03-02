@@ -8,6 +8,12 @@
 class FarmService {
   constructor() {
     this.currentFarm = localStorage.getItem('selectedFarm') || 'DEFAULT_FARM'
+    this.availableFarms = [
+      { code: 'DEFAULT_FARM', name: '默认风场' },
+      { code: 'zyx01', name: '中扬新1号风场' },
+      { code: 'zyx02', name: '中扬新2号风场' }
+    ]
+    this.farmsLoaded = false
     this.listeners = []
   }
 
@@ -35,11 +41,57 @@ class FarmService {
    * 获取所有可用场站
    */
   getAvailableFarms() {
-    return [
-      { code: 'DEFAULT_FARM', name: '默认风场' },
-      { code: 'zyx01', name: '中扬新1号风场' },
-      { code: 'zyx02', name: '中扬新2号风场' }
-    ]
+    return this.availableFarms
+  }
+
+  /**
+   * 从后端加载可用场站列表
+   */
+  async loadAvailableFarms(forceReload = false) {
+    if (this.farmsLoaded && !forceReload) {
+      return this.availableFarms
+    }
+
+    try {
+      const response = await fetch('/api/report/farms', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      const farms = await response.json()
+      if (!Array.isArray(farms)) {
+        throw new Error('场站列表返回格式错误')
+      }
+
+      const mappedFarms = farms
+        .filter(farm => farm && farm.farm_code)
+        .map(farm => ({
+          code: farm.farm_code,
+          name: farm.farm_name || farm.farm_code
+        }))
+
+      if (mappedFarms.length > 0) {
+        this.availableFarms = mappedFarms
+        this.farmsLoaded = true
+
+        // 如果当前场站已失效，自动切换为首个可用场站
+        const exists = this.availableFarms.some(f => f.code === this.currentFarm)
+        if (!exists) {
+          this.setCurrentFarm(this.availableFarms[0].code)
+        }
+      }
+    } catch (error) {
+      console.error('加载场站列表失败，使用本地默认列表:', error)
+      this.farmsLoaded = false
+    }
+
+    return this.availableFarms
   }
 
   /**
@@ -114,7 +166,8 @@ class FarmService {
    * 重置到默认场站
    */
   resetToDefault() {
-    this.setCurrentFarm('DEFAULT_FARM')
+    const defaultFarm = this.availableFarms.find(f => f.code === 'DEFAULT_FARM')
+    this.setCurrentFarm(defaultFarm ? 'DEFAULT_FARM' : this.availableFarms[0].code)
   }
 }
 

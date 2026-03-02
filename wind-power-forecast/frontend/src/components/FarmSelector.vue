@@ -84,10 +84,21 @@ export default {
     })
 
     // 组件挂载时，添加监听器
-    onMounted(() => {
+    onMounted(async () => {
+      // 拉取最新场站列表（失败时farmService内部自动回退）
+      await farmService.loadAvailableFarms()
+      availableFarms.value = farmService.getAvailableFarms()
+
       // 确保localStorage中有值
       if (!localStorage.getItem('selectedFarm')) {
         farmService.resetToDefault()
+        currentFarm.value = farmService.getCurrentFarm()
+      }
+
+      // 当前场站如果已不在列表中，切到默认/首个可用场站
+      const exists = availableFarms.value.some(f => f.code === currentFarm.value)
+      if (!exists && availableFarms.value.length > 0) {
+        farmService.setCurrentFarm(availableFarms.value[0].code)
         currentFarm.value = farmService.getCurrentFarm()
       }
 
