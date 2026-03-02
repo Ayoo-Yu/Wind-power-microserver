@@ -1,5 +1,5 @@
 ﻿// src/utils/farmService.js
-
+import axiosInstance from '../api/axios'
 /**
  * 场站管理服务
  * 提供场站选择、状态管理和数据隔离功能
@@ -77,16 +77,8 @@ class FarmService {
 
     try {
       const fetchFarms = async (url) => {
-        const response = await fetch(url, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        })
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`)
-        }
-        const payload = await response.json()
+        const response = await axiosInstance.get(url)
+        const payload = response?.data
         const farms = Array.isArray(payload) ? payload : payload?.data
         if (!Array.isArray(farms)) {
           throw new Error('场站列表返回格式错误')
@@ -270,3 +262,4 @@ export class FarmInfo {
     this.name = name
   }
 }
+
