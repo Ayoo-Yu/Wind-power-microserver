@@ -33,6 +33,7 @@ d:
 REM Release local backend ports if occupied by stale processes
 CALL :free_port %MAIN_APP_PORT% MainBackend
 CALL :free_port %AUTO_APP_PORT% AutoPredictBackend
+CALL :free_port 8080 Frontend
 
 REM Wait for infra dependencies to be ready before starting backends
 CALL :wait_tcp %DB_HOST% %DB_PORT% Kingbase
@@ -78,8 +79,7 @@ echo Main backend:  http://%MAIN_APP_HOST%:%MAIN_APP_PORT%
 echo Auto backend:  http://%AUTO_APP_HOST%:%AUTO_APP_PORT%
 echo Frontend:      http://localhost:8080
 echo.
-pause > nul
-exit
+exit /b 0
 
 :wait_tcp
 set "_host=%~1"
