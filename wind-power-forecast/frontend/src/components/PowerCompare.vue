@@ -336,10 +336,11 @@ export default {
       fleetSeriesLoading: false,
       fleetSeriesIncludeActual: true,
       fleetSeriesData: [],
-      fleetSeriesChart: null
+      fleetSeriesChart: null,
+      farmChangeTimer: null
     }
   },
-  mounted() {
+  async mounted() {
     const today = new Date();
     const year = today.getFullYear();
     const month = (today.getMonth() + 1).toString().padStart(2, '0');
@@ -349,12 +350,22 @@ export default {
       `${year}-${month}-${day} 00:00:00`,
       `${year}-${month}-${day} 23:59:59`,
     ];
-    this.loadFleetCompareFarms();
+    await this.loadFleetCompareFarms();
+    farmService.addListener(this.handleFarmServiceChanged);
     this.fetchComparisonData();
   },
   methods: {
     refreshPage() {
       window.location.reload();
+    },
+
+    handleFarmServiceChanged() {
+      if (this.farmChangeTimer) {
+        clearTimeout(this.farmChangeTimer);
+      }
+      this.farmChangeTimer = setTimeout(() => {
+        this.fetchComparisonData();
+      }, 300);
     },
 
     async loadFleetCompareFarms() {
@@ -1768,6 +1779,11 @@ export default {
   },
 
   beforeUnmount() {
+    farmService.removeListener(this.handleFarmServiceChanged);
+    if (this.farmChangeTimer) {
+      clearTimeout(this.farmChangeTimer);
+      this.farmChangeTimer = null;
+    }
     if (this.chartInstance) {
       this.chartInstance.destroy();
       this.chartInstance = null;
