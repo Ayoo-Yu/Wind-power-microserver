@@ -10,7 +10,7 @@ import traceback
 import uuid
 import threading
 from apscheduler.schedulers.background import BackgroundScheduler
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, create_engine
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from database_config import Base, get_db
@@ -26,6 +26,8 @@ prediction_status = {
 }
 # 添加线程锁以确保线程安全
 status_lock = threading.Lock()
+
+DEFAULT_FARM_CODE = "DEFAULT_FARM"
 
 # 获取当前文件所在目录
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -332,12 +334,80 @@ def _get_running_farm_code(prediction_type):
                 # 进程名称格式: farm_type_scriptname
                 if '_' in proc_name:
                     farm_code = proc_name.split('_')[0]
-                    if farm_code in ['DEFAULT_FARM', 'zyx01', 'zyx02']:
+                    if is_valid_farm_code(farm_code):
                         return farm_code
     except:
         pass
 
     return None
+
+
+def get_active_farm_codes():
+    """
+    从 wind_farms 表读取有效场站编码。
+    回退策略：
+    1) 查询失败时返回 DEFAULT_FARM_CODE
+    2) 查询为空时返回 DEFAULT_FARM_CODE
+    """
+    try:
+        with db_session() as db:
+            has_deleted_at = db.execute(
+                text(
+                    """
+                    SELECT COUNT(1)
+                    FROM information_schema.columns
+                    WHERE table_name = 'wind_farms'
+                      AND column_name = 'deleted_at'
+                    """
+                )
+            ).scalar()
+
+            if has_deleted_at:
+                query_sql = """
+                    SELECT farm_code
+                    FROM wind_farms
+                    WHERE COALESCE(is_active, TRUE) = TRUE
+                      AND deleted_at IS NULL
+                    ORDER BY farm_code
+                """
+            else:
+                query_sql = """
+                    SELECT farm_code
+                    FROM wind_farms
+                    WHERE COALESCE(is_active, TRUE) = TRUE
+                    ORDER BY farm_code
+                """
+
+            rows = db.execute(text(query_sql)).fetchall()
+
+        farm_codes = [row[0] for row in rows if row and row[0]]
+        if not farm_codes:
+            return [DEFAULT_FARM_CODE]
+        return farm_codes
+    except Exception as e:
+        print(f"警告: 读取场站列表失败，使用默认场站: {e}")
+        return [DEFAULT_FARM_CODE]
+
+
+def is_valid_farm_code(farm_code):
+    if not farm_code:
+        return False
+    return farm_code in set(get_active_farm_codes())
+
+
+def resolve_farm_code(raw_farm_code):
+    """
+    解析请求中的 farm_code：
+    - 为空时使用 DEFAULT_FARM_CODE（若存在），否则使用首个有效场站
+    - 非空时原样返回
+    """
+    if raw_farm_code:
+        return raw_farm_code
+
+    active_farms = get_active_farm_codes()
+    if DEFAULT_FARM_CODE in active_farms:
+        return DEFAULT_FARM_CODE
+    return active_farms[0]
 
 def query_pm2_state(script_path):
     """
@@ -424,7 +494,7 @@ print(f"[{datetime.datetime.now()}] PM2状态监控后台任务已启动")
 def get_status():
     try:
         # 查询指定场站的状态
-        farm_code = request.args.get('farm_code', 'DEFAULT_FARM')
+        farm_code = resolve_farm_code(request.args.get('farm_code'))
         prediction_type = request.args.get('type')
 
         # 更新全局状态
@@ -457,14 +527,13 @@ def get_status():
 def start_prediction():
     data = request.get_json() or {}
     prediction_type = data.get('type')
-    farm_code = data.get('farm_code', 'DEFAULT_FARM')  # 新增场站参数
+    farm_code = resolve_farm_code(data.get('farm_code'))
 
     if prediction_type not in prediction_status:
         return jsonify({'error': '无效的预测类型'}), 400
 
     # 验证场站代码
-    valid_farm_codes = ['DEFAULT_FARM', 'zyx01', 'zyx02']  # 可从配置获取
-    if farm_code not in valid_farm_codes:
+    if not is_valid_farm_code(farm_code):
         return jsonify({'error': f'无效的场站代码: {farm_code}'}), 400
 
     script_path = scripts[prediction_type]
