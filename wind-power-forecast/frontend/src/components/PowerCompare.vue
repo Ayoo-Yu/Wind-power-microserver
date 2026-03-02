@@ -259,6 +259,7 @@ import { Chart, CategoryScale, LinearScale, LineElement, PointElement, Title, To
 import zoomPlugin from 'chartjs-plugin-zoom';
 import axios from 'axios'
 import farmService from '../utils/farmService'
+import { getFleetMetrics, getFleetSeries } from '../api/powerCompareApi'
 
 Chart.register(
   CategoryScale,
@@ -399,12 +400,7 @@ export default {
           prediction_type: this.fleetComparePredictionType
         };
 
-        let response;
-        try {
-          response = await axios.post(`${this.backendBaseUrl}/api/v1/power-compare/fleet_metrics`, payload);
-        } catch (v1Error) {
-          response = await axios.post(`${this.backendBaseUrl}/power-compare/fleet_metrics`, payload);
-        }
+        const response = await getFleetMetrics(payload);
 
         const data = response?.data?.data || {};
         const rows = Array.isArray(data.items) ? data.items : [];
@@ -444,12 +440,7 @@ export default {
           include_actual: this.fleetSeriesIncludeActual
         };
 
-        let response;
-        try {
-          response = await axios.post(`${this.backendBaseUrl}/api/v1/power-compare/fleet_series`, payload);
-        } catch (v1Error) {
-          response = await axios.post(`${this.backendBaseUrl}/power-compare/fleet_series`, payload);
-        }
+        const response = await getFleetSeries(payload);
 
         const data = response?.data?.data || {};
         this.fleetSeriesData = Array.isArray(data.items) ? data.items : [];
