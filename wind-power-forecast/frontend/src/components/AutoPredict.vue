@@ -1,4 +1,4 @@
-<!-- src/components/AutoPredict.vue -->
+﻿<!-- src/components/AutoPredict.vue -->
 <template>
   <div 
     class="autopredict-container power-predict-container" 
@@ -32,11 +32,11 @@
                 停止
               </el-button>
               
-              <!-- 定时重启按钮已移除 -->
+              <!-- 瀹氭椂閲嶅惎鎸夐挳宸茬Щ闄?-->
             </div>
             <div class="button-group extra">
               <el-button type="danger" @click="showConfirmDialog('deleteTask', '删除预测任务', `确定要从PM2中删除${item.title}吗？此操作不会删除脚本文件，但会移除任务记录。`, item.name)">删除</el-button>
-              <!-- 详情按钮已移除 -->
+              <!-- 璇︽儏鎸夐挳宸茬Щ闄?-->
               <el-button type="primary" @click="fetchLogs(item.name)">日志</el-button>
             </div>
           </el-card>
@@ -44,7 +44,7 @@
       </el-row>
     </div>
 
-    <!-- 操作确认对话框 -->
+    <!-- 鎿嶄綔纭瀵硅瘽妗?-->
     <el-dialog 
       :title="confirmDialog.title" 
       v-model="confirmDialog.visible" 
@@ -53,54 +53,54 @@
       <p>{{ confirmDialog.message }}</p>
       <template #footer>
         <div class="dialog-footer-buttons">
-          <el-button type="primary" @click="executeConfirmedAction">确定</el-button>
-          <el-button @click="confirmDialog.visible = false">取消</el-button>
+          <el-button type="primary" @click="executeConfirmedAction">纭畾</el-button>
+          <el-button @click="confirmDialog.visible = false">鍙栨秷</el-button>
         </div>
       </template>
     </el-dialog>
 
-    <!-- 定时重启设置对话框已移除 -->
-    <!-- 脚本详情对话框已移除 -->
+    <!-- 瀹氭椂閲嶅惎璁剧疆瀵硅瘽妗嗗凡绉婚櫎 -->
+    <!-- 鑴氭湰璇︽儏瀵硅瘽妗嗗凡绉婚櫎 -->
 
-    <!-- 脚本日志对话框 -->
+    <!-- 鑴氭湰鏃ュ織瀵硅瘽妗?-->
     <el-dialog 
-      title="脚本日志" 
+      title="鑴氭湰鏃ュ織" 
       v-model="logsDialogVisible" 
       width="80%"
     >
       <div class="logs-filters">
         <el-form :inline="true">
-          <el-form-item label="日志类型">
-            <el-select v-model="logsFilters.logType" placeholder="选择日志类型" @change="handleLogTypeChange" style="min-width: 180px;">
+          <el-form-item label="鏃ュ織绫诲瀷">
+            <el-select v-model="logsFilters.logType" placeholder="閫夋嫨鏃ュ織绫诲瀷" @change="handleLogTypeChange" style="min-width: 180px;">
               <el-option v-for="option in getLogTypeOptions()" :key="option.value" :label="option.label" :value="option.value"></el-option>
             </el-select>
           </el-form-item>
-          <el-form-item label="日期">
+          <el-form-item label="鏃ユ湡">
             <el-date-picker
               v-model="logsFilters.date"
               type="date"
-              placeholder="选择日期"
+              placeholder="閫夋嫨鏃ユ湡"
               format="YYYY-MM-DD"
               value-format="YYYYMMDD"
               style="min-width: 180px;"
             ></el-date-picker>
           </el-form-item>
           <el-form-item>
-            <el-button type="primary" @click="fetchLogsByFilter">查询</el-button>
-            <el-button @click="resetLogsFilters">重置</el-button>
+            <el-button type="primary" @click="fetchLogsByFilter">鏌ヨ</el-button>
+            <el-button @click="resetLogsFilters">閲嶇疆</el-button>
           </el-form-item>
         </el-form>
       </div>
       <pre class="logs-content">{{ logsContent }}</pre>
       <template #footer>
         <div class="dialog-footer-buttons">
-          <el-button type="primary" @click="fetchLogsByFilter">刷新</el-button>
-          <el-button @click="logsDialogVisible = false">关闭</el-button>
+          <el-button type="primary" @click="fetchLogsByFilter">鍒锋柊</el-button>
+          <el-button @click="logsDialogVisible = false">鍏抽棴</el-button>
         </div>
       </template>
     </el-dialog>
 
-    <!-- 错误详情对话框 -->
+    <!-- 閿欒璇︽儏瀵硅瘽妗?-->
     <el-dialog 
       :title="errorTitle"
       v-model="errorDialogVisible" 
@@ -109,20 +109,19 @@
       <pre class="error-content">{{ errorDetails }}</pre>
       <template #footer>
         <div class="dialog-footer-buttons">
-          <el-button @click="errorDialogVisible = false">关闭</el-button>
+          <el-button @click="errorDialogVisible = false">鍏抽棴</el-button>
         </div>
       </template>
     </el-dialog>
 
-    <!-- 任务历史记录对话框已移除 -->
-    <!-- 历史记录详情对话框已移除 -->
+    <!-- 浠诲姟鍘嗗彶璁板綍瀵硅瘽妗嗗凡绉婚櫎 -->
+    <!-- 鍘嗗彶璁板綍璇︽儏瀵硅瘽妗嗗凡绉婚櫎 -->
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, inject, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import axiosInstance from '../api/axios'
 import farmService from '../utils/farmService'
 import { getAutoPredictStatus, controlAutoPredict, getAutoPredictLogs } from '../api/autopredictApi'
 
@@ -148,12 +147,12 @@ const predictions = reactive([
 
 const loading = ref(true)
 
-// 定时重启相关变量 - 已移除
+// 瀹氭椂閲嶅惎鐩稿叧鍙橀噺 - 宸茬Щ闄?
 // const scheduleDialogVisible = ref(false)
 // const scheduleTime = ref('')
 let currentPrediction = '' // Still needed for logs and other actions
 
-// 脚本详情与日志相关变量
+// 鑴氭湰璇︽儏涓庢棩蹇楃浉鍏冲彉閲?
 // const scriptInfoDialogVisible = ref(false) // Removed
 // const scriptInfo = ref('') // Removed
 const logsDialogVisible = ref(false)
@@ -165,7 +164,7 @@ const logsFilters = reactive({
 
 const errorDialogVisible = ref(false)
 const errorDetails = ref('')
-const errorTitle = ref('操作失败')
+const errorTitle = ref('鎿嶄綔澶辫触')
 
 const confirmDialog = reactive({
   visible: false,
@@ -175,7 +174,7 @@ const confirmDialog = reactive({
   params: null
 })
 
-// 任务历史记录相关变量 - 已移除
+// 浠诲姟鍘嗗彶璁板綍鐩稿叧鍙橀噺 - 宸茬Щ闄?
 // const historyDialogVisible = ref(false)
 // const historyRecords = ref([])
 // const historyFilters = reactive({
@@ -190,7 +189,7 @@ const confirmDialog = reactive({
 // const historyDetailDialogVisible = ref(false)
 // const historyDetailContent = ref('')
 
-// 详情相关变量 - 移除与详情弹窗相关的部分
+// 璇︽儏鐩稿叧鍙橀噺 - 绉婚櫎涓庤鎯呭脊绐楃浉鍏崇殑閮ㄥ垎
 // const taskStatus = reactive({
 //   training: false,
 //   prediction: false,
@@ -204,7 +203,7 @@ const confirmDialog = reactive({
 
 // const taskDateInfo = reactive({
 //   selectedDate: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-//   displayDate: '今天'
+//   displayDate: '浠婂ぉ'
 // })
 
 const POLLING_INTERVAL = 60000
@@ -231,51 +230,11 @@ onUnmounted(() => {
 })
 
 const showErrorDialog = (title, details) => {
-  errorTitle.value = title || '操作失败'
+  errorTitle.value = title || '鎿嶄綔澶辫触'
   errorDetails.value = typeof details === 'object' ? JSON.stringify(details, null, 2) : String(details)
   errorDialogVisible.value = true
 }
 
-const apiClient = axiosInstance;
-
-apiClient.interceptors.response.use(
-  response => {
-    if (response.data && response.data.warning) {
-      ElMessage.warning(response.data.warning)
-    }
-    return response
-  },
-  error => {
-    console.error('API请求出错:', error)
-    let errorMessage = '请求失败'
-    let errorDetails = {}
-    if (error.response) {
-      errorMessage = `服务器返回错误 (${error.response.status})`
-      errorDetails = {
-        status: error.response.status,
-        statusText: error.response.statusText,
-        data: error.response.data
-      }
-    } else if (error.request) {
-      errorMessage = '服务器无响应'
-      errorDetails = {
-        message: '请求已发送，但未收到服务器响应',
-        request: error.request
-      }
-    } else {
-      errorMessage = '请求配置错误'
-      errorDetails = {
-        message: error.message
-      }
-    }
-    if (errorDetails.data && errorDetails.data.error && errorDetails.data.error.includes('PM2')) {
-      errorMessage = 'PM2服务错误'
-    }
-    ElMessage.error(errorMessage)
-    console.error('详细错误:', errorDetails)
-    return Promise.reject(error)
-  }
-)
 
 const fetchStatus = async () => {
   loading.value = true
@@ -286,7 +245,7 @@ const fetchStatus = async () => {
       p.status = payload[p.name] || false
     })
   } catch (error) {
-    console.error('获取状态失败:', error)
+    console.error('鑾峰彇鐘舵€佸け璐?', error)
   } finally {
     loading.value = false
   }
@@ -314,7 +273,7 @@ const executeConfirmedAction = () => {
       break
     // Removed cases for saveSettings, resurrectConfig, clearSavedConfig
     default:
-      console.warn('未知操作:', confirmDialog.action)
+      console.warn('鏈煡鎿嶄綔:', confirmDialog.action)
   }
 }
 
@@ -327,7 +286,7 @@ const handleControl = async (name, action) => {
     if (payload.warning || res.data?.warning) {
       ElMessage.warning(payload.warning || res.data.warning)
     } else {
-      ElMessage.success(res.data.message || '操作成功')
+      ElMessage.success(res.data.message || '鎿嶄綔鎴愬姛')
     }
     setTimeout(async () => {
       await fetchStatus()
@@ -336,7 +295,7 @@ const handleControl = async (name, action) => {
     if (error.response && error.response.data) {
       const errorData = error.response.data
       showErrorDialog(
-        `${action} ${name} 失败`, 
+        `${action} ${name} 澶辫触`, 
         errorData.details || errorData.error || error.message
       )
     }
@@ -345,13 +304,13 @@ const handleControl = async (name, action) => {
   }
 }
 
-// 定时重启方法 (showScheduleDialog, setSchedule) 已移除
-// 保存/加载/删除 PM2 配置方法 (saveSettings, resurrectConfig, clearSavedConfig) 已移除
-// 查询脚本详情方法 (fetchScriptInfo) 已移除
-// 获取任务状态方法 (fetchTaskStatus, refreshTaskStatus, fetchTaskStatusByDate, resetTaskDateInfo) 已移除
-// 获取任务标题方法 (getTaskTitle) 已移除 (如果日志部分不需要可以彻底删除)
+// 瀹氭椂閲嶅惎鏂规硶 (showScheduleDialog, setSchedule) 宸茬Щ闄?
+// 淇濆瓨/鍔犺浇/鍒犻櫎 PM2 閰嶇疆鏂规硶 (saveSettings, resurrectConfig, clearSavedConfig) 宸茬Щ闄?
+// 鏌ヨ鑴氭湰璇︽儏鏂规硶 (fetchScriptInfo) 宸茬Щ闄?
+// 鑾峰彇浠诲姟鐘舵€佹柟娉?(fetchTaskStatus, refreshTaskStatus, fetchTaskStatusByDate, resetTaskDateInfo) 宸茬Щ闄?
+// 鑾峰彇浠诲姟鏍囬鏂规硶 (getTaskTitle) 宸茬Щ闄?(濡傛灉鏃ュ織閮ㄥ垎涓嶉渶瑕佸彲浠ュ交搴曞垹闄?
 
-// 获取脚本日志
+// 鑾峰彇鑴氭湰鏃ュ織
 const fetchLogs = async (name) => {
   currentPrediction = name // Set currentPrediction for logs
   logsDialogVisible.value = true
@@ -375,12 +334,12 @@ const fetchLogsByFilter = async () => {
       lines: 500
     })
     const payload = res.data?.data || res.data || {}
-    logsContent.value = payload.logs || res.data.logs || '暂无日志信息'
+    logsContent.value = payload.logs || res.data.logs || '鏆傛棤鏃ュ織淇℃伅'
   } catch (error) {
-    console.error('获取日志失败:', error)
+    console.error('鑾峰彇鏃ュ織澶辫触:', error)
     if (error.response && error.response.data) {
       showErrorDialog(
-        '获取日志失败', 
+        '鑾峰彇鏃ュ織澶辫触', 
         error.response.data.details || error.response.data.error || error.message
       )
     }
@@ -398,14 +357,14 @@ const resetLogsFilters = () => {
 const getLogTypeOptions = () => {
   if (currentPrediction === 'supershort') {
     return [
-      // { label: '主调度日志', value: 'main' },
-      { label: '每日训练日志', value: 'train' },
-      { label: '实时预测日志', value: 'predict' }
+      // { label: '涓昏皟搴︽棩蹇?, value: 'main' },
+      { label: '姣忔棩璁粌鏃ュ織', value: 'train' },
+      { label: '瀹炴椂棰勬祴鏃ュ織', value: 'predict' }
     ]
   } 
   return [
-    { label: '训练日志', value: 'train' },
-    // { label: '参数优化日志', value: 'param' } // Consider if 'param' logs still relevant/obtainable without 'details'
+    { label: '璁粌鏃ュ織', value: 'train' },
+    // { label: '鍙傛暟浼樺寲鏃ュ織', value: 'param' } // Consider if 'param' logs still relevant/obtainable without 'details'
   ]
 }
 
@@ -413,10 +372,10 @@ const handleLogTypeChange = () => {
   fetchLogsByFilter()
 }
 
-// 任务历史记录相关方法 (openHistoryDialog, fetchTaskHistory, resetHistoryFilters, handleSizeChange, handleCurrentChange, showHistoryDetail) 已移除
-// 历史记录辅助方法 (getTaskTypeTagType, getTaskTypeLabel, getActionTagType, getActionLabel, getStatusTagType, getStatusLabel) 已移除
-// 参数优化星期相关方法 (getParamOptWeekday, getParamOptDay) 已移除
-// 预测任务状态文本/类型方法 (getTaskPredictionType, getTaskPredictionStatus) 已移除
+// 浠诲姟鍘嗗彶璁板綍鐩稿叧鏂规硶 (openHistoryDialog, fetchTaskHistory, resetHistoryFilters, handleSizeChange, handleCurrentChange, showHistoryDetail) 宸茬Щ闄?
+// 鍘嗗彶璁板綍杈呭姪鏂规硶 (getTaskTypeTagType, getTaskTypeLabel, getActionTagType, getActionLabel, getStatusTagType, getStatusLabel) 宸茬Щ闄?
+// 鍙傛暟浼樺寲鏄熸湡鐩稿叧鏂规硶 (getParamOptWeekday, getParamOptDay) 宸茬Щ闄?
+// 棰勬祴浠诲姟鐘舵€佹枃鏈?绫诲瀷鏂规硶 (getTaskPredictionType, getTaskPredictionStatus) 宸茬Щ闄?
 
 // getTaskTitle might still be used by logs, so keeping it conditionally or removing if not used.
 
@@ -463,7 +422,7 @@ const handleLogTypeChange = () => {
 }
 
 .hero-section::before {
-  content: "✨";
+  content: "鉁?;
   position: absolute;
   top: 0;
   left: 0;
@@ -472,7 +431,7 @@ const handleLogTypeChange = () => {
 }
 
 .hero-section::after {
-  content: "✨";
+  content: "鉁?;
   position: absolute;
   bottom: 0;
   right: 0;
