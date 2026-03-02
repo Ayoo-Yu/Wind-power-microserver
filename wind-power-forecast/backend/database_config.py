@@ -127,7 +127,7 @@ def cleanup_idle_connections(engine, idle_timeout=120):
                 print("检测到过多空闲连接，进行部分清理...")
                 # 重新创建连接池来清理空闲连接
                 pool.dispose()
-                print("✅ 已清理空闲连接")
+                print("[OK] 已清理空闲连接")
         
     except Exception as e:
         print(f"清理空闲连接时发生错误: {e}")
@@ -146,7 +146,7 @@ def check_migrations():
         
         if not inspector.has_table("models"):
             Base.metadata.create_all(engine)
-            print("✅ 已自动创建缺失的数据库表")
+            print("[OK] 已自动创建缺失的数据库表")
     except Exception as e:
         print(f"警告: 迁移检查失败: {e}")
 
@@ -157,8 +157,8 @@ except Exception as e:
 
 # 初始化MinIO客户端（使用config中的配置），添加重试机制
 def init_minio_client():
-    max_retries = 5
-    retry_delay = 5  # 秒
+    max_retries = int(str(os.environ.get('MINIO_CONNECT_RETRIES', '5')).strip() or '5')
+    retry_delay = int(str(os.environ.get('MINIO_CONNECT_RETRY_DELAY', '5')).strip() or '5')
     
     for attempt in range(max_retries):
         try:
@@ -195,9 +195,9 @@ try:
     for bucket in required_buckets:
         if bucket not in existing_buckets:
             minio_client.make_bucket(bucket)
-            print(f"✅ 成功创建存储桶: {bucket}")
+            print(f"[OK] 成功创建存储桶: {bucket}")
         else:
-            print(f"✅ 存储桶已存在: {bucket}")
+            print(f"[OK] 存储桶已存在: {bucket}")
             
     # 导入策略设置函数
     from config import set_bucket_policy
@@ -208,7 +208,7 @@ try:
         if bucket_value:
             try:
                 set_bucket_policy(minio_client, bucket_value, policy)
-                print(f"✅ 成功设置存储桶策略: {bucket_value} -> {policy}")
+                print(f"[OK] 成功设置存储桶策略: {bucket_value} -> {policy}")
             except Exception as e:
                 print(f"警告: 设置存储桶策略失败 ({bucket_value}): {e}")
                 
@@ -259,7 +259,7 @@ def cleanup_old_models(db: Session, keep_last=5):
                         bucket_name = MINIO_CONFIG["buckets"]["models"]
                         object_name = model.model_path.split("/")[-1]
                         minio_client.remove_object(bucket_name, object_name)
-                        print(f"✅ 已从S3删除模型文件: {object_name}")
+                        print(f"[OK] 已从S3删除模型文件: {object_name}")
                     except Exception as e:
                         print(f"警告: 从S3删除模型文件失败: {e}")
                 
@@ -269,7 +269,7 @@ def cleanup_old_models(db: Session, keep_last=5):
                         bucket_name = MINIO_CONFIG["buckets"]["scalers"]
                         object_name = model.scaler_path.split("/")[-1]
                         minio_client.remove_object(bucket_name, object_name)
-                        print(f"✅ 已从S3删除缩放器文件: {object_name}")
+                        print(f"[OK] 已从S3删除缩放器文件: {object_name}")
                     except Exception as e:
                         print(f"警告: 从S3删除缩放器文件失败: {e}")
                 
@@ -279,7 +279,7 @@ def cleanup_old_models(db: Session, keep_last=5):
                         bucket_name = MINIO_CONFIG["buckets"]["metrics"]
                         object_name = model.metrics_path.split("/")[-1]
                         minio_client.remove_object(bucket_name, object_name)
-                        print(f"✅ 已从S3删除指标文件: {object_name}")
+                        print(f"[OK] 已从S3删除指标文件: {object_name}")
                     except Exception as e:
                         print(f"警告: 从S3删除指标文件失败: {e}")
                 
@@ -287,7 +287,7 @@ def cleanup_old_models(db: Session, keep_last=5):
                 db.delete(model)
             
             db.commit()
-            print(f"✅ 成功清理旧模型，保留最新的{keep_last}个")
+            print(f"[OK] 成功清理旧模型，保留最新的{keep_last}个")
     except Exception as e:
         print(f"警告: 清理旧模型失败: {e}")
         db.rollback()

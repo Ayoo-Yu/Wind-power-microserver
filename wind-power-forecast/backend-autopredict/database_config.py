@@ -129,7 +129,7 @@ def check_migrations():
         
         if not inspector.has_table("models"):
             Base.metadata.create_all(engine)
-            print("✅ 已自动创建缺失的数据库表")
+            print("[OK] 已自动创建缺失的数据库表")
     except Exception as e:
         print(f"警告: 迁移检查失败: {e}")
 
@@ -140,8 +140,8 @@ except Exception as e:
 
 # 初始化MinIO客户端（使用config中的配置），添加重试机制
 def init_minio_client():
-    max_retries = 5
-    retry_delay = 5  # 秒
+    max_retries = int(str(os.environ.get('MINIO_CONNECT_RETRIES', '5')).strip() or '5')
+    retry_delay = int(str(os.environ.get('MINIO_CONNECT_RETRY_DELAY', '5')).strip() or '5')
     
     for attempt in range(max_retries):
         try:
@@ -179,9 +179,9 @@ try:
     for bucket in required_buckets:
         if bucket not in existing_buckets:
             minio_client.make_bucket(bucket)
-            print(f"✅ 成功创建存储桶: {bucket}")
+            print(f"[OK] 成功创建存储桶: {bucket}")
         else:
-            print(f"✅ 存储桶已存在: {bucket}")
+            print(f"[OK] 存储桶已存在: {bucket}")
             
     # 导入策略设置函数
     from config import set_bucket_policy
@@ -192,7 +192,7 @@ try:
         if bucket_value:
             try:
                 set_bucket_policy(minio_client, bucket_value, policy)
-                print(f"✅ 成功设置存储桶策略: {bucket_value} -> {policy}")
+                print(f"[OK] 成功设置存储桶策略: {bucket_value} -> {policy}")
             except Exception as e:
                 print(f"警告: 设置存储桶策略失败 ({bucket_value}): {e}")
                 
