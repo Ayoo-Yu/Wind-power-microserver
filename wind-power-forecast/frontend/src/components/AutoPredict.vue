@@ -207,12 +207,20 @@ const confirmDialog = reactive({
 // })
 
 const POLLING_INTERVAL = 60000
+const FARM_CHANGE_DEBOUNCE_MS = 300
 let intervalId = null
+let farmChangeTimerId = null
+let statusRequestSeq = 0
 const currentFarm = ref(farmService.getCurrentFarm())
 
 const handleFarmChanged = (farmCode) => {
   currentFarm.value = farmCode
-  fetchStatus()
+  if (farmChangeTimerId) {
+    clearTimeout(farmChangeTimerId)
+  }
+  farmChangeTimerId = setTimeout(() => {
+    fetchStatus()
+  }, FARM_CHANGE_DEBOUNCE_MS)
 }
 
 onMounted(() => {
@@ -227,6 +235,10 @@ onUnmounted(() => {
     clearInterval(intervalId)
     intervalId = null
   }
+  if (farmChangeTimerId) {
+    clearTimeout(farmChangeTimerId)
+    farmChangeTimerId = null
+  }
 })
 
 const showErrorDialog = (title, details) => {
@@ -237,17 +249,26 @@ const showErrorDialog = (title, details) => {
 
 
 const fetchStatus = async () => {
+  const requestId = ++statusRequestSeq
   loading.value = true
   try {
     const res = await getAutoPredictStatus(currentFarm.value)
+    if (requestId !== statusRequestSeq) {
+      return
+    }
     const payload = res.data?.data || res.data || {}
     predictions.forEach(p => {
       p.status = payload[p.name] || false
     })
   } catch (error) {
+    if (requestId !== statusRequestSeq) {
+      return
+    }
     console.error('鑾峰彇鐘舵€佸け璐?', error)
   } finally {
-    loading.value = false
+    if (requestId === statusRequestSeq) {
+      loading.value = false
+    }
   }
 }
 
