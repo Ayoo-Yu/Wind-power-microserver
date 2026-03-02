@@ -19,7 +19,7 @@
               <el-button 
                 :type="item.status ? 'success' : 'primary'" 
                 @click="showConfirmDialog('startTask', '启用预测任务', `确定要启用${item.title}吗？`, item.name)"
-                :disabled="item.status"
+                :disabled="item.status || isControlBusy(item.name)"
               >
                 {{ item.status ? '运行中' : '启用' }}
               </el-button>
@@ -27,7 +27,7 @@
               <el-button 
                 type="danger" 
                 @click="showConfirmDialog('stopTask', '停止预测任务', `确定要停止${item.title}吗？此操作会中断当前预测。`, item.name)"
-                :disabled="!item.status"
+                :disabled="!item.status || isControlBusy(item.name)"
               >
                 停止
               </el-button>
@@ -35,7 +35,7 @@
               <!-- 瀹氭椂閲嶅惎鎸夐挳宸茬Щ闄?-->
             </div>
             <div class="button-group extra">
-              <el-button type="danger" @click="showConfirmDialog('deleteTask', '删除预测任务', `确定要从PM2中删除${item.title}吗？此操作不会删除脚本文件，但会移除任务记录。`, item.name)">删除</el-button>
+              <el-button type="danger" :disabled="isControlBusy(item.name)" @click="showConfirmDialog('deleteTask', '删除预测任务', `确定要从PM2中删除${item.title}吗？此操作不会删除脚本文件，但会移除任务记录。`, item.name)">删除</el-button>
               <!-- 璇︽儏鎸夐挳宸茬Щ闄?-->
               <el-button type="primary" @click="fetchLogs(item.name)">日志</el-button>
             </div>
@@ -146,6 +146,11 @@ const predictions = reactive([
 ])
 
 const loading = ref(true)
+const controlBusyMap = reactive({
+  supershort: false,
+  short: false,
+  medium: false
+})
 
 // 瀹氭椂閲嶅惎鐩稿叧鍙橀噺 - 宸茬Щ闄?
 // const scheduleDialogVisible = ref(false)
@@ -247,6 +252,10 @@ const showErrorDialog = (title, details) => {
   errorDialogVisible.value = true
 }
 
+const isControlBusy = (predictionName) => {
+  return !!controlBusyMap[predictionName]
+}
+
 
 const fetchStatus = async () => {
   const requestId = ++statusRequestSeq
@@ -299,6 +308,12 @@ const executeConfirmedAction = () => {
 }
 
 const handleControl = async (name, action) => {
+  if (isControlBusy(name)) {
+    ElMessage.warning('操作正在处理中，请稍候')
+    return
+  }
+
+  controlBusyMap[name] = true
   console.log('handleControl invoked', name, action)
   loading.value = true
   try {
@@ -321,6 +336,7 @@ const handleControl = async (name, action) => {
       )
     }
   } finally {
+    controlBusyMap[name] = false
     loading.value = false
   }
 }
