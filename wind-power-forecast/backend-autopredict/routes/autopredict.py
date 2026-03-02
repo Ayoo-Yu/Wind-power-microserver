@@ -1,4 +1,4 @@
-import json
+﻿import json
 import subprocess
 import datetime
 import glob
@@ -409,6 +409,31 @@ def resolve_farm_code(raw_farm_code):
         return DEFAULT_FARM_CODE
     return active_farms[0]
 
+
+def api_success(data=None, message="ok", status_code=200, legacy=None):
+    payload = {
+        "code": 0,
+        "message": message,
+        "data": data
+    }
+    if isinstance(legacy, dict):
+        payload.update(legacy)
+    return jsonify(payload), status_code
+
+
+def api_error(message, code=1500, status_code=400, details=None, legacy=None):
+    payload = {
+        "code": code,
+        "message": message,
+        "data": None,
+        "error": message
+    }
+    if details is not None:
+        payload["details"] = details
+    if isinstance(legacy, dict):
+        payload.update(legacy)
+    return jsonify(payload), status_code
+
 def query_pm2_state(script_path):
     """
     查询 pm2 中指定脚本的运行状态，
@@ -507,20 +532,21 @@ def get_status():
         # 如果指定了预测类型，只返回该类型的状态
         if prediction_type:
             if prediction_type in current_status:
-                return jsonify({
+                legacy_data = {
                     prediction_type: current_status[prediction_type],
                     'farm_code': farm_code
-                })
+                }
+                return api_success(data=legacy_data, message="ok", legacy=legacy_data)
             else:
-                return jsonify({'error': '无效的预测类型'}), 400
+                return api_error('无效的预测类型', code=1001, status_code=400)
 
         # 添加场站信息到返回结果
         current_status['farm_code'] = farm_code
-        return jsonify(current_status)
+        return api_success(data=current_status, message="ok", legacy=current_status)
     except Exception as e:
         error_msg = f"获取状态时出错: {str(e)}\n{traceback.format_exc()}"
         print(error_msg)
-        return jsonify({'error': error_msg}), 500
+        return api_error('获取状态时出错', code=1500, status_code=500, details=error_msg)
 
 # 启动指定预测任务
 @autopredict_bp.route('/start', methods=['POST'])
@@ -530,11 +556,11 @@ def start_prediction():
     farm_code = resolve_farm_code(data.get('farm_code'))
 
     if prediction_type not in prediction_status:
-        return jsonify({'error': '无效的预测类型'}), 400
+        return api_error('无效的预测类型', code=1001, status_code=400)
 
     # 验证场站代码
     if not is_valid_farm_code(farm_code):
-        return jsonify({'error': f'无效的场站代码: {farm_code}'}), 400
+        return api_error(f'无效的场站代码: {farm_code}', code=1001, status_code=400)
 
     script_path = scripts[prediction_type]
 
@@ -542,7 +568,7 @@ def start_prediction():
     if not os.path.exists(script_path):
         error_msg = f'脚本文件不存在: {script_path}'
         record_task_history(prediction_type, 'start', 'failed', error_msg)
-        return jsonify({'error': error_msg}), 400
+        return api_error(error_msg, code=1004, status_code=400)
 
     # 使用场站信息作为进程名称的一部分
     process_name = f"{farm_code}_{os.path.splitext(os.path.basename(script_path))[0]}"
@@ -555,11 +581,18 @@ def start_prediction():
             with status_lock:  # 获取锁
                 prediction_status[prediction_type] = True
             record_task_history(prediction_type, 'start', 'success', f'场站 {farm_code} 进程已在运行中: {process_name}')
-            return jsonify({'message': f'{prediction_type} 预测任务已经在运行 (场站: {farm_code})', 'status': True})
+            legacy_data = {'status': True, 'farm_code': farm_code}
+            return api_success(
+                data=legacy_data,
+                message=f'{prediction_type} 预测任务已经在运行 (场站: {farm_code})',
+                legacy={'status': True, 'farm_code': farm_code}
+            )
         else:
-            return jsonify({
-                'error': f'{prediction_type} 预测任务正在为场站 {existing_farm_status} 运行，请先停止再启动新场站'
-            }), 400
+            return api_error(
+                f'{prediction_type} 预测任务正在为场站 {existing_farm_status} 运行，请先停止再启动新场站',
+                code=1005,
+                status_code=400
+            )
 
     # 为脚本传递场站参数
     env_vars = {
@@ -584,32 +617,56 @@ def start_prediction():
                 with status_lock:  # 获取锁
                     prediction_status[prediction_type] = True
                 record_task_history(prediction_type, 'start', 'success', f'场站 {farm_code} 进程启动成功: {process_name}')
-                return jsonify({
+                legacy_data = {
                     'message': f'{prediction_type} 预测任务已启动 (场站: {farm_code})',
                     'output': result.stdout if hasattr(result, 'stdout') else '',
                     'farm_code': farm_code  # 返回场站信息
-                })
+                }
+                return api_success(
+                    data={
+                        'output': result.stdout if hasattr(result, 'stdout') else '',
+                        'farm_code': farm_code
+                    },
+                    message=f'{prediction_type} 预测任务已启动 (场站: {farm_code})',
+                    legacy=legacy_data
+                )
             else:
                 # 命令成功但进程可能没有正常启动
                 warning_msg = f'{prediction_type} 启动命令成功，但进程可能未正常运行 (场站: {farm_code})'
                 record_task_history(prediction_type, 'start', 'warning', warning_msg)
-                return jsonify({
+                legacy_data = {
                     'warning': warning_msg,
                     'output': result.stdout if hasattr(result, 'stdout') else '',
                     'farm_code': farm_code
-                }), 202
+                }
+                return api_success(
+                    data={
+                        'warning': warning_msg,
+                        'output': result.stdout if hasattr(result, 'stdout') else '',
+                        'farm_code': farm_code
+                    },
+                    message=warning_msg,
+                    status_code=202,
+                    legacy=legacy_data
+                )
         else:
             warning_msg = f'{prediction_type} 启动命令成功，但无法验证进程状态'
             record_task_history(prediction_type, 'start', 'warning', warning_msg)
-            return jsonify({
+            legacy_data = {
                 'warning': warning_msg,
                 'output': result.stdout if hasattr(result, 'stdout') else ''
-            }), 202
+            }
+            return api_success(
+                data=legacy_data,
+                message=warning_msg,
+                status_code=202,
+                legacy=legacy_data
+            )
     else:
         # 启动命令执行失败
         error_msg = f'启动任务失败: {result}'
         record_task_history(prediction_type, 'start', 'failed', error_msg)
-        return jsonify({'error': error_msg}), 500
+        return api_error('启动任务失败', code=1500, status_code=500, details=str(result))
 
 # 停止预测任务
 @autopredict_bp.route('/stop', methods=['POST'])
@@ -619,7 +676,7 @@ def stop_prediction():
     farm_code = resolve_farm_code(data.get('farm_code'))
     
     if not prediction_type or prediction_type not in prediction_status:
-        return jsonify({'error': '无效的预测类型'}), 400
+        return api_error('无效的预测类型', code=1001, status_code=400)
     
     try:
         # 正常停止单个脚本
@@ -638,27 +695,20 @@ def stop_prediction():
             message = f'{process_name} 已停止'
             record_task_history(prediction_type, 'stop', 'success', message)
             
-            return jsonify({
-                'message': f'{prediction_type}预测任务已停止 (场站: {farm_code})',
-                'farm_code': farm_code
-            })
+            legacy_data = {'farm_code': farm_code}
+            return api_success(
+                data=legacy_data,
+                message=f'{prediction_type}预测任务已停止 (场站: {farm_code})',
+                legacy=legacy_data
+            )
         else:
             error_msg = f'停止任务失败: {result}'
             record_task_history(prediction_type, 'stop', 'failed', error_msg)
-            
-            return jsonify({
-                'error': '停止预测任务失败',
-                'details': str(result)
-            }), 500
+            return api_error('停止预测任务失败', code=1500, status_code=500, details=str(result))
     except Exception as e:
         error_msg = f'停止预测任务异常: {str(e)}'
         record_task_history(prediction_type, 'stop', 'failed', error_msg)
-        
-        return jsonify({
-            'error': '停止预测任务失败',
-            'details': str(e)
-        }), 500
-
+        return api_error('停止预测任务失败', code=1500, status_code=500, details=str(e))
 # 设置定时重启任务
 @autopredict_bp.route('/schedule', methods=['POST'])
 def schedule_restart():
@@ -668,50 +718,46 @@ def schedule_restart():
     schedule_time = data.get('time')  # 格式应为 HH:mm
 
     if prediction_type not in prediction_status:
-        return jsonify({'error': '无效的预测类型'}), 400
+        return api_error('无效的预测类型', code=1001, status_code=400)
     if not schedule_time:
-        return jsonify({'error': '缺少重启时间参数'}), 400
+        return api_error('缺少重启时间参数', code=1001, status_code=400)
 
     try:
         time_obj = datetime.datetime.strptime(schedule_time, '%H:%M')
     except ValueError:
         error_msg = '时间格式错误，要求 HH:mm'
         record_task_history(prediction_type, 'schedule', 'failed', error_msg)
-        return jsonify({'error': error_msg}), 400
+        return api_error(error_msg, code=1001, status_code=400)
 
     script_path = scripts[prediction_type]
-    # 使用 os.path.splitext 获取脚本文件名，去掉.py后缀作为进程名称
     process_name = f"{farm_code}_{os.path.splitext(os.path.basename(script_path))[0]}"
-    
-    # 先停止现有进程
+
     stop_success, _ = safe_pm2_command(['stop', process_name])
     if not stop_success:
         print(f"警告: 无法停止现有进程 {process_name}, 将尝试继续设置定时任务")
-    
-    # 使用动态确定的Python解释器路径
-    
-    # 启动带定时重启的任务
+
     cron_expression = f'0 {time_obj.minute} {time_obj.hour} * * *'
     success, result = safe_pm2_command(['start', script_path, '--name', process_name, '--cron', cron_expression, '--interpreter', python_interpreter])
-    
+
     if success:
-        with status_lock:  # 获取锁
+        with status_lock:
             prediction_status[prediction_type] = True
         record_task_history(
-            prediction_type, 
-            'schedule', 
-            'success', 
+            prediction_type,
+            'schedule',
+            'success',
             f'设置定时重启: {schedule_time}'
         )
-        return jsonify({
-            'message': f'为 {prediction_type} 设置了每日 {schedule_time} 的定时重启 (场站: {farm_code})',
-            'farm_code': farm_code
-        })
+        legacy_data = {'farm_code': farm_code}
+        return api_success(
+            data=legacy_data,
+            message=f'为 {prediction_type} 设置了每日 {schedule_time} 的定时重启 (场站: {farm_code})',
+            legacy=legacy_data
+        )
     else:
         error_msg = f'设置定时重启失败: {result}'
         record_task_history(prediction_type, 'schedule', 'failed', error_msg)
-        return jsonify({'error': error_msg}), 500
-
+        return api_error('设置定时重启失败', code=1500, status_code=500, details=str(result))
 # 从 PM2 中删除任务
 @autopredict_bp.route('/delete', methods=['POST'])
 def delete_prediction():
@@ -719,45 +765,37 @@ def delete_prediction():
     prediction_type = data.get('type')
     farm_code = resolve_farm_code(data.get('farm_code'))
     if not prediction_type or prediction_type not in prediction_status:
-        return jsonify({'error': '无效的预测类型'}), 400
-    
+        return api_error('无效的预测类型', code=1001, status_code=400)
+
     try:
         script_path = scripts[prediction_type]
-        script_name = os.path.splitext(os.path.basename(script_path))[0]  # 去掉.py后缀
+        script_name = os.path.splitext(os.path.basename(script_path))[0]
         process_name = f"{farm_code}_{script_name}"
-        
+
         success, result = safe_pm2_command(['delete', process_name])
-        
+
         if success:
-            with status_lock:  # 获取锁
+            with status_lock:
                 prediction_status[prediction_type] = False
-            # 更新全局状态
             _update_prediction_status()
-            
+
             message = f'{process_name} 已从PM2删除'
             record_task_history(prediction_type, 'delete', 'success', message)
-            
-            return jsonify({
-                'message': f'{prediction_type}预测任务已从PM2删除 (场站: {farm_code})',
-                'farm_code': farm_code
-            })
+
+            legacy_data = {'farm_code': farm_code}
+            return api_success(
+                data=legacy_data,
+                message=f'{prediction_type}预测任务已从PM2删除 (场站: {farm_code})',
+                legacy=legacy_data
+            )
         else:
             error_msg = f'删除任务失败: {result}'
             record_task_history(prediction_type, 'delete', 'failed', error_msg)
-            
-            return jsonify({
-                'error': '从PM2删除预测任务失败',
-                'details': str(result)
-            }), 500
+            return api_error('从PM2删除预测任务失败', code=1500, status_code=500, details=str(result))
     except Exception as e:
         error_msg = f'删除预测任务异常: {str(e)}'
         record_task_history(prediction_type, 'delete', 'failed', error_msg)
-        
-        return jsonify({
-            'error': '从PM2删除预测任务失败',
-            'details': str(e)
-        }), 500
-
+        return api_error('从PM2删除预测任务失败', code=1500, status_code=500, details=str(e))
 # 保存当前 PM2 任务配置
 @autopredict_bp.route('/save', methods=['POST'])
 def save_pm2_config():
@@ -765,11 +803,11 @@ def save_pm2_config():
     
     if success:
         record_task_history('all', 'save', 'success', '保存PM2配置')
-        return jsonify({'message': 'PM2 任务配置已保存'})
+        return api_success(data={}, message='PM2 任务配置已保存')
     else:
         error_msg = f'保存配置失败: {result}'
         record_task_history('all', 'save', 'failed', error_msg)
-        return jsonify({'error': error_msg}), 500
+        return api_error('保存配置失败', code=1500, status_code=500, details=str(result))
 
 # 删除PM2保存的配置文件（新增）
 @autopredict_bp.route('/clearsave', methods=['POST'])
@@ -778,11 +816,11 @@ def clear_pm2_save():
     
     if success:
         record_task_history('all', 'clearsave', 'success', '删除PM2保存的配置')
-        return jsonify({'message': 'PM2 保存的配置已删除'})
+        return api_success(data={}, message='PM2 保存的配置已删除')
     else:
         error_msg = f'删除保存配置失败: {result}'
         record_task_history('all', 'clearsave', 'failed', error_msg)
-        return jsonify({'error': error_msg}), 500
+        return api_error('删除保存配置失败', code=1500, status_code=500, details=str(result))
 
 # 查询指定脚本的详细 PM2 信息
 @autopredict_bp.route('/script_info', methods=['GET'])
@@ -790,7 +828,7 @@ def get_script_info():
     prediction_type = request.args.get('type')
     farm_code = resolve_farm_code(request.args.get('farm_code'))
     if not prediction_type or prediction_type not in prediction_status:
-        return jsonify({'error': '无效的预测类型'}), 400
+        return api_error('无效的预测类型', code=1001, status_code=400)
 
     try:
         # 获取进程名称（去掉.py后缀）
@@ -803,10 +841,7 @@ def get_script_info():
         if not list_success:
             error_msg = '无法获取PM2进程列表'
             record_task_history(prediction_type, 'script_info', 'failed', error_msg)
-            return jsonify({
-                'error': error_msg,
-                'details': str(list_result)
-            }), 500
+            return api_error(error_msg, code=1500, status_code=500, details=str(list_result))
             
         list_output = list_result.stdout if hasattr(list_result, 'stdout') else ''
         print(f"PM2 进程列表: {list_output}")  # 输出所有进程列表
@@ -819,19 +854,25 @@ def get_script_info():
             if describe_success:
                 # 即使进程名不在列表中，describe命令可能仍然返回信息
                 record_task_history(prediction_type, 'script_info', 'warning', '进程未在PM2列表中找到，但describe命令返回了信息')
-                return jsonify({
+                legacy_data = {
                     'info': describe_result.stdout,
                     'process_name': process_name,
                     'warning': '进程未在PM2列表中找到，但describe命令返回了信息'
-                })
+                }
+                return api_success(
+                    data=legacy_data,
+                    message='进程未在PM2列表中找到，但describe命令返回了信息',
+                    legacy=legacy_data
+                )
             else:
                 error_msg = f'进程 {process_name} 未运行'
                 record_task_history(prediction_type, 'script_info', 'failed', error_msg)
-                return jsonify({
-                    'error': error_msg,
-                    'pm2_list': list_output,
-                    'describe_error': str(describe_result)
-                }), 404
+                return api_error(
+                    error_msg,
+                    code=1004,
+                    status_code=404,
+                    details={'pm2_list': list_output, 'describe_error': str(describe_result)}
+                )
             
         # 使用进程名称查询详情
         describe_success, describe_result = safe_pm2_command(['describe', process_name])
@@ -839,35 +880,27 @@ def get_script_info():
         if not describe_success:
             error_msg = '查询进程详情失败'
             record_task_history(prediction_type, 'script_info', 'failed', error_msg)
-            return jsonify({
-                'error': error_msg,
-                'details': str(describe_result)
-            }), 500
+            return api_error(error_msg, code=1500, status_code=500, details=str(describe_result))
             
         describe_output = describe_result.stdout if hasattr(describe_result, 'stdout') else ''
         
         if not describe_output.strip():
             error_msg = '进程信息为空'
             record_task_history(prediction_type, 'script_info', 'failed', error_msg)
-            return jsonify({
-                'error': error_msg,
-                'process_name': process_name
-            }), 404
+            return api_error(error_msg, code=1004, status_code=404, details={'process_name': process_name})
             
         record_task_history(prediction_type, 'script_info', 'success', '查询进程详情成功')
-        return jsonify({
+        legacy_data = {
             'info': describe_output,
             'process_name': process_name
-        })
+        }
+        return api_success(data=legacy_data, message='查询进程详情成功', legacy=legacy_data)
         
     except Exception as e:
         error_msg = f"获取脚本详情出错: {str(e)}\n{traceback.format_exc()}"
         print(error_msg)
         record_task_history(prediction_type, 'script_info', 'failed', error_msg)
-        return jsonify({
-            'error': '查询脚本详情失败',
-            'details': error_msg
-        }), 500
+        return api_error('查询脚本详情失败', code=1500, status_code=500, details=error_msg)
 
 # 获取指定脚本的近期日志信息
 @autopredict_bp.route('/logs', methods=['GET'])
@@ -878,7 +911,7 @@ def get_logs():
     lines = request.args.get('lines', 500, type=int)
     
     if not prediction_type or prediction_type not in prediction_status:
-        return jsonify({'error': '无效的预测类型'}), 400
+        return api_error('无效的预测类型', code=1001, status_code=400)
     
     try:
         # 如果是通过PM2查询主日志
@@ -890,16 +923,21 @@ def get_logs():
             
             if success:
                 record_task_history(prediction_type, 'logs', 'success', f'获取主日志 ({lines} 行)')
-                return jsonify({'logs': result.stdout if hasattr(result, 'stdout') else '没有日志输出'})
+                log_text = result.stdout if hasattr(result, 'stdout') else '没有日志输出'
+                return api_success(data={'logs': log_text}, message='获取日志成功', legacy={'logs': log_text})
             else:
                 # 尝试只获取错误日志
                 error_success, error_result = safe_pm2_command(['logs', '--nostream', '--err', '--lines', str(lines), process_name])
                 if error_success:
                     warning_msg = '无法获取完整日志，仅显示错误日志'
                     record_task_history(prediction_type, 'logs', 'warning', warning_msg)
-                    return jsonify({
-                        'logs': f"警告: {warning_msg}:\n{error_result.stdout if hasattr(error_result, 'stdout') else '没有错误日志'}"
-                    })
+                    log_text = f"警告: {warning_msg}:\n{error_result.stdout if hasattr(error_result, 'stdout') else '没有错误日志'}"
+                    return api_success(
+                        data={'logs': log_text, 'warning': warning_msg},
+                        message=warning_msg,
+                        status_code=202,
+                        legacy={'logs': log_text, 'warning': warning_msg}
+                    )
                 else:
                     error_msg = '获取日志失败'
                     details = {
@@ -907,16 +945,20 @@ def get_logs():
                         'error_log_details': str(error_result) if 'error_result' in locals() else '未尝试获取错误日志'
                     }
                     record_task_history(prediction_type, 'logs', 'failed', json.dumps(details))
-                    return jsonify({
-                        'error': error_msg, 
-                        'details': str(result),
-                        'error_log_details': str(error_result) if 'error_result' in locals() else '未尝试获取错误日志'
-                    }), 500
+                    return api_error(
+                        error_msg,
+                        code=1500,
+                        status_code=500,
+                        details={
+                            'details': str(result),
+                            'error_log_details': str(error_result) if 'error_result' in locals() else '未尝试获取错误日志'
+                        }
+                    )
         else:
             # 从对应的日志目录读取文件
             log_dir = log_dirs[prediction_type].get(log_type)
             if not log_dir:
-                return jsonify({'error': f'无效的日志类型: {log_type}'}), 400
+                return api_error(f'无效的日志类型: {log_type}', code=1001, status_code=400)
             
             # 查找日志文件
             log_files = []
@@ -1023,7 +1065,12 @@ def get_logs():
             
             if not log_files:
                 record_task_history(prediction_type, 'logs', 'failed', f'未找到{date_str}的{log_type}类型日志文件')
-                return jsonify({'logs': f'未找到{date_str}的{log_type}日志文件'})
+                log_text = f'未找到{date_str}的{log_type}日志文件'
+                return api_success(
+                    data={'logs': log_text},
+                    message='日志文件不存在',
+                    legacy={'logs': log_text}
+                )
             
             # 读取最新的日志文件
             latest_log = max(log_files, key=os.path.getmtime)
@@ -1038,15 +1085,15 @@ def get_logs():
                 log_content = file_info + log_content
                 
                 record_task_history(prediction_type, 'logs', 'success', f'获取{log_type}日志 ({lines} 行)')
-                return jsonify({'logs': log_content})
+                return api_success(data={'logs': log_content}, message='获取日志成功', legacy={'logs': log_content})
             except Exception as e:
                 error_msg = f'读取日志文件失败: {str(e)}'
                 record_task_history(prediction_type, 'logs', 'failed', error_msg)
-                return jsonify({'error': error_msg}), 500
+                return api_error('读取日志文件失败', code=1500, status_code=500, details=error_msg)
     except Exception as e:
         error_msg = f'获取日志失败: {str(e)}'
         record_task_history(prediction_type, 'logs', 'failed', error_msg)
-        return jsonify({'error': error_msg}), 500
+        return api_error('获取日志失败', code=1500, status_code=500, details=error_msg)
 
 # 加载已保存的 PM2 配置（基于 pm2 resurrect）
 @autopredict_bp.route('/resurrect', methods=['POST'])
@@ -1353,4 +1400,7 @@ def get_task_status():
     except Exception as e:
         print(f"获取任务状态失败: {str(e)}")
         return jsonify({'error': '获取任务状态失败', 'details': str(e)}), 500
+
+
+
 

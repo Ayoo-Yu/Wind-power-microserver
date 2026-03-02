@@ -87,6 +87,7 @@ Write-Host "Using farm_code for checks: $farmCode"
 $statusResp = Invoke-JsonGet -Url "$AutoBaseUrl/api/status?farm_code=$farmCode"
 $hasFarmCode = $statusResp.Json.PSObject.Properties.Name -contains "farm_code"
 Assert-True -Name "Auto /api/status status" -Condition ($statusResp.StatusCode -eq 200) -FailMessage "HTTP $($statusResp.StatusCode)"
+Assert-True -Name "Auto /api/status envelope code" -Condition ($statusResp.Json.code -eq 0) -FailMessage "Payload: $($statusResp.Raw)"
 Assert-True -Name "Auto /api/status contains farm_code" -Condition $hasFarmCode -FailMessage "Payload: $($statusResp.Raw)"
 
 # 5) Invalid farm should be rejected

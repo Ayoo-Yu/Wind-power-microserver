@@ -281,8 +281,9 @@ const fetchStatus = async () => {
   loading.value = true
   try {
     const res = await getAutoPredictStatus(currentFarm.value)
+    const payload = res.data?.data || res.data || {}
     predictions.forEach(p => {
-      p.status = res.data[p.name] || false
+      p.status = payload[p.name] || false
     })
   } catch (error) {
     console.error('获取状态失败:', error)
@@ -322,8 +323,9 @@ const handleControl = async (name, action) => {
   loading.value = true
   try {
     const res = await controlAutoPredict(action, name, currentFarm.value)
-    if (res.data.warning) {
-      ElMessage.warning(res.data.warning)
+    const payload = res.data?.data || res.data || {}
+    if (payload.warning || res.data?.warning) {
+      ElMessage.warning(payload.warning || res.data.warning)
     } else {
       ElMessage.success(res.data.message || '操作成功')
     }
@@ -372,7 +374,8 @@ const fetchLogsByFilter = async () => {
       date: queryDate,
       lines: 500
     })
-    logsContent.value = res.data.logs || '暂无日志信息'
+    const payload = res.data?.data || res.data || {}
+    logsContent.value = payload.logs || res.data.logs || '暂无日志信息'
   } catch (error) {
     console.error('获取日志失败:', error)
     if (error.response && error.response.data) {

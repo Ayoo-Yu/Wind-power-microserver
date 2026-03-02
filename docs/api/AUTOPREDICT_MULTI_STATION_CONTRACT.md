@@ -23,6 +23,13 @@ It applies to the autopredict backend endpoints proxied from frontend `/api/*` r
 | `/api/script_info` | `GET` | Query `farm_code` | Reads info from scoped process name. |
 | `/api/logs` | `GET` | Query `farm_code` | Filters logs by farm context where supported. |
 
+## Response Envelope
+- Current standard envelope:
+`{ "code": <int>, "message": <string>, "data": <object|null> }`
+- During compatibility window, several endpoints still expose legacy top-level fields
+  (for example `farm_code`, `short`, `logs`).
+- New clients should read `data` first, then fallback to legacy fields only if needed.
+
 ## Validation Rule
 - Backend validates `farm_code` against active farm list from database (`wind_farms`).
 - Invalid `farm_code` must return `400`.
