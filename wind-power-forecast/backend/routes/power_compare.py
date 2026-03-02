@@ -39,6 +39,26 @@ def _calc_basic_metrics(actual_values, predicted_values):
         'mse': mse
     }
 
+
+def _query_prediction_series(db, farm_code, prediction_type, start_dt, end_dt):
+    if prediction_type == 'short':
+        pred_rows = db.query(ShortlPower.timestamp, ShortlPower.wp_pred).filter(
+            ShortlPower.farm_code == farm_code,
+            ShortlPower.timestamp.between(start_dt, end_dt)
+        ).order_by(ShortlPower.timestamp).all()
+        return [{"timestamp": row.timestamp.isoformat(), "power": row.wp_pred} for row in pred_rows if row.wp_pred is not None]
+    if prediction_type == 'mid':
+        pred_rows = db.query(MidPower.timestamp, MidPower.wp_pred).filter(
+            MidPower.farm_code == farm_code,
+            MidPower.timestamp.between(start_dt, end_dt)
+        ).order_by(MidPower.timestamp).all()
+        return [{"timestamp": row.timestamp.isoformat(), "power": row.wp_pred} for row in pred_rows if row.wp_pred is not None]
+    pred_rows = db.query(SupershortlPower.timestamp, SupershortlPower.wp_pred2).filter(
+        SupershortlPower.farm_code == farm_code,
+        SupershortlPower.timestamp.between(start_dt, end_dt)
+    ).order_by(SupershortlPower.timestamp).all()
+    return [{"timestamp": row.timestamp.isoformat(), "power": row.wp_pred2} for row in pred_rows if row.wp_pred2 is not None]
+
 @bp.route('/data', methods=['POST'])
 def get_power_data():
     data = request.get_json()
@@ -299,24 +319,8 @@ def get_fleet_metrics():
                 if row.wp_true is not None
             }
 
-            if prediction_type == 'short':
-                pred_rows = db.query(ShortlPower.timestamp, ShortlPower.wp_pred).filter(
-                    ShortlPower.farm_code == farm_code,
-                    ShortlPower.timestamp.between(start_dt, end_dt)
-                ).order_by(ShortlPower.timestamp).all()
-                pred_map = {row.timestamp: row.wp_pred for row in pred_rows if row.wp_pred is not None}
-            elif prediction_type == 'mid':
-                pred_rows = db.query(MidPower.timestamp, MidPower.wp_pred).filter(
-                    MidPower.farm_code == farm_code,
-                    MidPower.timestamp.between(start_dt, end_dt)
-                ).order_by(MidPower.timestamp).all()
-                pred_map = {row.timestamp: row.wp_pred for row in pred_rows if row.wp_pred is not None}
-            else:
-                pred_rows = db.query(SupershortlPower.timestamp, SupershortlPower.wp_pred2).filter(
-                    SupershortlPower.farm_code == farm_code,
-                    SupershortlPower.timestamp.between(start_dt, end_dt)
-                ).order_by(SupershortlPower.timestamp).all()
-                pred_map = {row.timestamp: row.wp_pred2 for row in pred_rows if row.wp_pred2 is not None}
+            pred_series = _query_prediction_series(db, farm_code, prediction_type, start_dt, end_dt)
+            pred_map = {datetime.fromisoformat(item['timestamp']): item['power'] for item in pred_series}
 
             aligned_timestamps = sorted(set(actual_map.keys()) & set(pred_map.keys()))
             actual_values = [actual_map[ts] for ts in aligned_timestamps]
@@ -339,5 +343,93 @@ def get_fleet_metrics():
                 "items": result_items,
                 "count": len(result_items),
                 "prediction_type": prediction_type
+            }
+        }), 200
+
+
+@bp.route('/fleet_series', methods=['POST'])
+def get_fleet_series():
+    """
+    Multi-station curve overlay data.
+    request:
+      {
+        "start": "2026-03-01 00:00:00",
+        "end": "2026-03-01 23:59:59",
+        "farm_codes": ["farm_a", "farm_b"],
+        "prediction_type": "short|mid|supershort",
+        "include_actual": true
+      }
+    """
+    payload = request.get_json(silent=True) or {}
+    start = payload.get('start')
+    end = payload.get('end')
+    farm_codes = payload.get('farm_codes') or []
+    prediction_type = str(payload.get('prediction_type') or 'short').strip().lower()
+    include_actual = payload.get('include_actual', True)
+
+    if not start or not end:
+        return jsonify({"code": 1001, "message": "missing start/end"}), 400
+    if prediction_type not in ('short', 'mid', 'supershort'):
+        return jsonify({"code": 1001, "message": "invalid prediction_type"}), 400
+
+    try:
+        start_dt = datetime.fromisoformat(start)
+        end_dt = datetime.fromisoformat(end)
+    except ValueError:
+        return jsonify({"code": 1001, "message": "invalid datetime format"}), 400
+
+    with db_session() as db:
+        active_farms = db.query(WindFarm).filter(
+            WindFarm.deleted_at == None,
+            WindFarm.is_active == True
+        ).all()
+        active_map = {farm.farm_code: farm for farm in active_farms}
+
+        if isinstance(farm_codes, list) and len(farm_codes) > 0:
+            selected_codes = []
+            for code in farm_codes:
+                if isinstance(code, str):
+                    cleaned = code.strip()
+                    if cleaned and cleaned not in selected_codes:
+                        selected_codes.append(cleaned)
+            invalid_codes = [code for code in selected_codes if code not in active_map]
+            if invalid_codes:
+                return jsonify({
+                    "code": 1001,
+                    "message": f"invalid farm_codes: {', '.join(invalid_codes)}"
+                }), 400
+            target_codes = selected_codes
+        else:
+            target_codes = list(active_map.keys())
+
+        items = []
+        for farm_code in target_codes:
+            farm = active_map.get(farm_code)
+            predicted = _query_prediction_series(db, farm_code, prediction_type, start_dt, end_dt)
+            actual = []
+            if include_actual:
+                actual_rows = db.query(ActualPower.timestamp, ActualPower.wp_true).filter(
+                    ActualPower.farm_code == farm_code,
+                    ActualPower.timestamp.between(start_dt, end_dt)
+                ).order_by(ActualPower.timestamp).all()
+                actual = [
+                    {"timestamp": row.timestamp.isoformat(), "power": row.wp_true}
+                    for row in actual_rows if row.wp_true is not None
+                ]
+            items.append({
+                "farm_code": farm_code,
+                "farm_name": farm.farm_name if farm else farm_code,
+                "predicted": predicted,
+                "actual": actual
+            })
+
+        return jsonify({
+            "code": 0,
+            "message": "ok",
+            "data": {
+                "items": items,
+                "count": len(items),
+                "prediction_type": prediction_type,
+                "include_actual": bool(include_actual)
             }
         }), 200

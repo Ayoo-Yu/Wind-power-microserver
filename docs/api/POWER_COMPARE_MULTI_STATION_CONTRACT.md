@@ -6,6 +6,8 @@ This contract defines multi-station comparison behavior for data visualization.
 ## Endpoint
 - Legacy: `POST /power-compare/fleet_metrics`
 - v1 bridge: `POST /api/v1/power-compare/fleet_metrics`
+- Legacy: `POST /power-compare/fleet_series`
+- v1 bridge: `POST /api/v1/power-compare/fleet_series`
 
 ## Request
 ```json
@@ -50,3 +52,35 @@ Rules:
 Notes:
 - `items` are sorted by ascending `rmse` (best first).
 - `points` is aligned timestamp count between actual and prediction series.
+
+## Fleet Series Request
+```json
+{
+  "start": "2026-03-01 00:00:00",
+  "end": "2026-03-01 23:59:59",
+  "farm_codes": ["farm_a", "farm_b"],
+  "prediction_type": "short",
+  "include_actual": true
+}
+```
+
+## Fleet Series Response
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "items": [
+      {
+        "farm_code": "farm_a",
+        "farm_name": "Farm A",
+        "predicted": [{"timestamp": "2026-03-01T00:00:00", "power": 120.5}],
+        "actual": [{"timestamp": "2026-03-01T00:00:00", "power": 118.2}]
+      }
+    ],
+    "count": 1,
+    "prediction_type": "short",
+    "include_actual": true
+  }
+}
+```
