@@ -93,11 +93,7 @@ except Exception as e:
 
 # 注册蓝图
 from routes.upload import upload_bp
-from routes.modeltrain import modeltrain_bp
 from routes.download import download_bp
-from routes.predict import predict_bp
-from routes.training import training_bp
-from routes.predict import predict_bp
 from routes.autotask import autotask_bp
 from routes.actual_power_router import actual_power_bp
 from routes.prediction2database import prediction2database_bp
@@ -122,10 +118,7 @@ from routes.farm_management import farm_management_bp
 from routes.v1_compat import v1_compat_bp
 
 # app.register_blueprint(upload_bp, url_prefix='/')
-app.register_blueprint(modeltrain_bp, url_prefix='/')
 app.register_blueprint(download_bp, url_prefix='/')
-app.register_blueprint(predict_bp, url_prefix='/')
-app.register_blueprint(training_bp, url_prefix='/')
 app.register_blueprint(autotask_bp, url_prefix='/')
 app.register_blueprint(actual_power_bp)
 app.register_blueprint(prediction2database_bp)

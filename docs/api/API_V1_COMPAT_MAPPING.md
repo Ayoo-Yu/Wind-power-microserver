@@ -34,5 +34,6 @@ This document defines the M1 compatibility mapping from legacy endpoints to `/ap
 - Legacy endpoints remain valid during compatibility window (2 release cycles).
 - `/api/v1/*` is the target namespace for incremental migration.
 - Any added mapping must update this table in the same change set.
+- Manual training/predict UI chain has been decommissioned in frontend and is intentionally not mapped into `/api/v1`.
 - AutoPredict multi-station request and response contract is documented in:
   `docs/api/AUTOPREDICT_MULTI_STATION_CONTRACT.md`.
