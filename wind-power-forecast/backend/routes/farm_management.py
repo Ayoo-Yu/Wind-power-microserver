@@ -11,6 +11,17 @@ logger = logging.getLogger(__name__)
 # 创建场站管理蓝图
 farm_management_bp = Blueprint('farm_management', __name__)
 
+
+def _apply_not_deleted_filter(query):
+    """
+    兼容不同库结构：
+    - 新库可能有 deleted_at（软删除）
+    - 旧库没有 deleted_at
+    """
+    if hasattr(WindFarm, 'deleted_at'):
+        return query.filter(WindFarm.deleted_at == None)
+    return query
+
 @farm_management_bp.route('/api/farms', methods=['GET'])  # legacy path compatibility
 @farm_management_bp.route('/farms', methods=['GET'])
 @jwt_required()
@@ -18,7 +29,7 @@ def get_farms():
     """获取所有风电场列表"""
     try:
         with db_session() as session:
-            farms = session.query(WindFarm).filter(WindFarm.deleted_at == None).all()
+            farms = _apply_not_deleted_filter(session.query(WindFarm)).all()
 
             return jsonify([{
                 'farm_code': farm.farm_code,
@@ -45,10 +56,10 @@ def get_farm_by_code(farm_code):
             return jsonify({'message': '缺少场站编码'}), 400
 
         with db_session() as session:
-            farm = session.query(WindFarm).filter(
-                WindFarm.farm_code == normalized_code,
-                WindFarm.deleted_at == None
-            ).first()
+            farm_query = _apply_not_deleted_filter(
+                session.query(WindFarm).filter(WindFarm.farm_code == normalized_code)
+            )
+            farm = farm_query.first()
 
             if not farm:
                 return jsonify({'message': '风电场不存在'}), 404
@@ -83,10 +94,10 @@ def create_farm():
 
         with db_session() as session:
             # 检查场站代码是否已存在
-            existing = session.query(WindFarm).filter(
-                WindFarm.farm_code == data['farm_code'],
-                WindFarm.deleted_at == None
-            ).first()
+            existing_query = _apply_not_deleted_filter(
+                session.query(WindFarm).filter(WindFarm.farm_code == data['farm_code'])
+            )
+            existing = existing_query.first()
 
             if existing:
                 return jsonify({'message': '场站代码已存在'}), 400
@@ -123,10 +134,10 @@ def update_farm(farm_code):
         data = request.get_json()
 
         with db_session() as session:
-            farm = session.query(WindFarm).filter(
-                WindFarm.farm_code == farm_code,
-                WindFarm.deleted_at == None
-            ).first()
+            farm_query = _apply_not_deleted_filter(
+                session.query(WindFarm).filter(WindFarm.farm_code == farm_code)
+            )
+            farm = farm_query.first()
 
             if not farm:
                 return jsonify({'message': '风电场不存在'}), 404
@@ -156,16 +167,19 @@ def delete_farm(farm_code):
     """删除风电场（软删除）"""
     try:
         with db_session() as session:
-            farm = session.query(WindFarm).filter(
-                WindFarm.farm_code == farm_code,
-                WindFarm.deleted_at == None
-            ).first()
+            farm_query = _apply_not_deleted_filter(
+                session.query(WindFarm).filter(WindFarm.farm_code == farm_code)
+            )
+            farm = farm_query.first()
 
             if not farm:
                 return jsonify({'message': '风电场不存在'}), 404
 
-            # 软删除
-            farm.deleted_at = datetime.utcnow()
+            # 兼容旧库：无 deleted_at 时改为停用
+            if hasattr(farm, 'deleted_at'):
+                farm.deleted_at = datetime.utcnow()
+            else:
+                farm.is_active = False
             session.commit()
 
             return jsonify({'message': '风电场删除成功'})
@@ -181,10 +195,10 @@ def toggle_farm(farm_code):
     """启用/停用风电场"""
     try:
         with db_session() as session:
-            farm = session.query(WindFarm).filter(
-                WindFarm.farm_code == farm_code,
-                WindFarm.deleted_at == None
-            ).first()
+            farm_query = _apply_not_deleted_filter(
+                session.query(WindFarm).filter(WindFarm.farm_code == farm_code)
+            )
+            farm = farm_query.first()
 
             if not farm:
                 return jsonify({'message': '风电场不存在'}), 404
@@ -213,10 +227,10 @@ def get_farm_stats(farm_code):
     try:
         with db_session() as session:
             # 验证场站存在
-            farm = session.query(WindFarm).filter(
-                WindFarm.farm_code == farm_code,
-                WindFarm.deleted_at == None
-            ).first()
+            farm_query = _apply_not_deleted_filter(
+                session.query(WindFarm).filter(WindFarm.farm_code == farm_code)
+            )
+            farm = farm_query.first()
 
             if not farm:
                 return jsonify({'message': '风电场不存在'}), 404
