@@ -596,6 +596,7 @@ export default {
           start: this.timeRange[0],
           end: this.timeRange[1],
           types: this.selectedTypes,
+          farm_code: farmService.getCurrentFarm(),
           ...(this.selectedTypes.includes('超短期预测') && { supershort_horizon: 'average' })
         };
 

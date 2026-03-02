@@ -4,6 +4,8 @@
 This contract defines multi-station comparison behavior for data visualization.
 
 ## Endpoint
+- Legacy: `POST /power-compare/data`
+- v1 bridge: `POST /api/v1/power-compare/data`
 - Legacy: `POST /power-compare/fleet_metrics`
 - v1 bridge: `POST /api/v1/power-compare/fleet_metrics`
 - Legacy: `POST /power-compare/fleet_series`
@@ -24,6 +26,22 @@ Rules:
 - `farm_codes` is optional.
 - If `farm_codes` is omitted or empty, backend uses all active farms.
 - `prediction_type` supports `short`, `mid`, `supershort`.
+
+## Main Compare Data Request (single farm scoped)
+```json
+{
+  "start": "2026-03-01 00:00:00",
+  "end": "2026-03-01 23:59:59",
+  "types": ["实测值", "短期预测", "中期预测"],
+  "farm_code": "farm_a",
+  "supershort_horizon": "average"
+}
+```
+
+Rules:
+- `farm_code` is optional.
+- If `farm_code` is provided, backend filters all selected series by that farm.
+- If omitted, backend behavior remains compatible with existing legacy flow.
 
 ## Response
 ```json

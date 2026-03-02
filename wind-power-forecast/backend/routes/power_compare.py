@@ -69,6 +69,11 @@ def get_power_data():
         start = data.get('start')
         end = data.get('end')
         types = data.get('types', [])
+        farm_code = data.get('farm_code')
+        if isinstance(farm_code, str):
+            farm_code = farm_code.strip() or None
+        elif farm_code is not None:
+            farm_code = str(farm_code).strip() or None
         # New parameter for ultra-short-term horizon selection
         supershort_horizon_requested = data.get('supershort_horizon', 'average')
         # 新增参数：最小预测值数量要求
@@ -85,8 +90,14 @@ def get_power_data():
         with db_session() as db:
             result = {}
 
+            def apply_farm_filter(query, model):
+                if farm_code and hasattr(model, 'farm_code'):
+                    return query.filter(model.farm_code == farm_code)
+                return query
+
             if '实测值' in types:
-                actual = db.query(ActualPower).filter(
+                actual_query = apply_farm_filter(db.query(ActualPower), ActualPower)
+                actual = actual_query.filter(
                     ActualPower.timestamp.between(start_dt, end_dt)
                 ).order_by(ActualPower.timestamp).all()
                 result['实测值'] = [
@@ -104,7 +115,8 @@ def get_power_data():
                     earliest_needed_dt = start_dt - timedelta(minutes=max_offset_minutes)
 
                     # 获取所有可能需要的SupershortlPower记录
-                    potential_records = db.query(SupershortlPower).filter(
+                    potential_query = apply_farm_filter(db.query(SupershortlPower), SupershortlPower)
+                    potential_records = potential_query.filter(
                         SupershortlPower.timestamp.between(earliest_needed_dt, end_dt)
                     ).order_by(SupershortlPower.timestamp).all()
 
@@ -170,8 +182,13 @@ def get_power_data():
 
                 elif supershort_horizon_requested in valid_horizons:
                     # 查询特定的预测列
-                    query = db.query(SupershortlPower.timestamp,
-                                   getattr(SupershortlPower, supershort_horizon_requested).label("power"))
+                    query = apply_farm_filter(
+                        db.query(
+                            SupershortlPower.timestamp,
+                            getattr(SupershortlPower, supershort_horizon_requested).label("power")
+                        ),
+                        SupershortlPower
+                    )
                     
                     supershort_data = query.filter(
                         SupershortlPower.timestamp.between(start_dt, end_dt)
@@ -186,7 +203,8 @@ def get_power_data():
                     result['超短期预测'] = []
 
             if '短期预测' in types:
-                short = db.query(ShortlPower).filter(
+                short_query = apply_farm_filter(db.query(ShortlPower), ShortlPower)
+                short = short_query.filter(
                     ShortlPower.timestamp.between(start_dt, end_dt)
                 ).order_by(ShortlPower.timestamp).all()
                 result['短期预测'] = [
@@ -195,7 +213,8 @@ def get_power_data():
                 ]
 
             if '中期预测' in types:
-                mid = db.query(MidPower).filter(
+                mid_query = apply_farm_filter(db.query(MidPower), MidPower)
+                mid = mid_query.filter(
                     MidPower.timestamp.between(start_dt, end_dt)
                 ).order_by(MidPower.timestamp).all()
                 result['中期预测'] = [
@@ -207,10 +226,14 @@ def get_power_data():
                 avg_ws_expr = (
                     (func.coalesce(TrainPreShort.col_ws200_8, 0)) 
                 )
-                short_ws = db.query(
-                    TrainPreShort.Timestamp,
-                    avg_ws_expr.label("avg_wind_speed")
-                ).filter(
+                short_ws_query = apply_farm_filter(
+                    db.query(
+                        TrainPreShort.Timestamp,
+                        avg_ws_expr.label("avg_wind_speed")
+                    ),
+                    TrainPreShort
+                )
+                short_ws = short_ws_query.filter(
                     TrainPreShort.Timestamp.between(start_dt, end_dt)
                 ).order_by(TrainPreShort.Timestamp).all()
                 result['短期风速'] = [
@@ -222,10 +245,14 @@ def get_power_data():
                 avg_ws_expr = (
                     (func.coalesce(TrainPreMiddle.col_ws200_8, 0)) 
                 )
-                mid_ws = db.query(
-                    TrainPreMiddle.Timestamp,
-                    avg_ws_expr.label("avg_wind_speed")
-                ).filter(
+                mid_ws_query = apply_farm_filter(
+                    db.query(
+                        TrainPreMiddle.Timestamp,
+                        avg_ws_expr.label("avg_wind_speed")
+                    ),
+                    TrainPreMiddle
+                )
+                mid_ws = mid_ws_query.filter(
                     TrainPreMiddle.Timestamp.between(start_dt, end_dt)
                 ).order_by(TrainPreMiddle.Timestamp).all()
                 result['中期风速'] = [
