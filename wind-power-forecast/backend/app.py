@@ -1,4 +1,4 @@
-# 确保在第一时间进行gevent monkey patch
+# 纭繚鍦ㄧ涓€鏃堕棿杩涜gevent monkey patch
 import gevent.monkey
 gevent.monkey.patch_all()
 
@@ -16,13 +16,14 @@ import os
 from db_session import db_session
 from connection_middleware import register_middleware
 from sqlalchemy import text
-# 导入JWT扩展
+# 瀵煎叆JWT鎵╁睍
 from flask_jwt_extended import JWTManager
+from common.api_response import success
 
-# 加载环境变量
+# 鍔犺浇鐜鍙橀噺
 load_dotenv()
 
-# 检查是否在Docker环境中运行
+# 妫€鏌ユ槸鍚﹀湪Docker鐜涓繍琛?
 def is_running_in_docker():
     try:
         with open('/proc/1/cgroup', 'r') as f:
@@ -30,11 +31,11 @@ def is_running_in_docker():
     except:
         return False
 
-# 如果在本地环境运行且未设置数据库连接信息，则设置为本地Docker连接
+# 濡傛灉鍦ㄦ湰鍦扮幆澧冭繍琛屼笖鏈缃暟鎹簱杩炴帴淇℃伅锛屽垯璁剧疆涓烘湰鍦癉ocker杩炴帴
 if not is_running_in_docker():
-    # 仅在未设置环境变量时设置默认值
+    # 浠呭湪鏈缃幆澧冨彉閲忔椂璁剧疆榛樿鍊?
     if not os.environ.get('DB_HOST'):
-        os.environ['DB_HOST'] = 'localhost'  # 或Docker容器的IP
+        os.environ['DB_HOST'] = 'localhost'  # 鎴朌ocker瀹瑰櫒鐨処P
     if not os.environ.get('DB_PORT'):
         os.environ['DB_PORT'] = '54321'
     if not os.environ.get('DB_USER'):
@@ -49,48 +50,48 @@ if not is_running_in_docker():
         os.environ['MINIO_PORT'] = '9900'
 
 from logging_config import configure_logging
-# 导入会话管理模块和连接中间件
+# 瀵煎叆浼氳瘽绠＄悊妯″潡鍜岃繛鎺ヤ腑闂翠欢
 from db_session import get_db, db_session
 from connection_middleware import register_middleware
 
 app = Flask(__name__, static_folder='./static')
 app.config.from_object(Config)
 
-# --- JWT配置 ---
-# 设置JWT密钥，优先从环境变量获取
+# --- JWT閰嶇疆 ---
+# 璁剧疆JWT瀵嗛挜锛屼紭鍏堜粠鐜鍙橀噺鑾峰彇
 app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY", "wind-power-forecast-secret-key")
-# 设置令牌过期时间（12小时）
+# 璁剧疆浠ょ墝杩囨湡鏃堕棿锛?2灏忔椂锛?
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=12)
-# 初始化JWTManager
+# 鍒濆鍖朖WTManager
 jwt = JWTManager(app)
-# --- JWT配置结束 ---
+# --- JWT閰嶇疆缁撴潫 ---
 
-# 配置 CORS，允许所有跨域请求
+# 閰嶇疆 CORS锛屽厑璁告墍鏈夎法鍩熻姹?
 CORS(app, resources={r"/*": {
-    "origins": "*",  # 允许所有来源
+    "origins": "*",  # 鍏佽鎵€鏈夋潵婧?
     "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
     "expose_headers": ["Content-Type", "Content-Length", "Authorization", "Accept", "X-Requested-With", "Origin"],
-    "supports_credentials": False,  # 改为False，因为我们不使用凭证
-    "max_age": 86400  # 预检请求结果缓存24小时
+    "supports_credentials": False,  # 鏀逛负False锛屽洜涓烘垜浠笉浣跨敤鍑瘉
+    "max_age": 86400  # 棰勬璇锋眰缁撴灉缂撳瓨24灏忔椂
 }})
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 
-# 配置日志
+# 閰嶇疆鏃ュ織
 configure_logging(app, socketio)
 
-# 注册数据库连接中间件
+# 娉ㄥ唽鏁版嵁搴撹繛鎺ヤ腑闂翠欢
 register_middleware(app)
 
-# 初始化指标收集器
+# 鍒濆鍖栨寚鏍囨敹闆嗗櫒
 try:
     from utils.metrics import init_metrics
     init_metrics()
-    app.logger.info("指标收集器初始化成功")
+    app.logger.info("鎸囨爣鏀堕泦鍣ㄥ垵濮嬪寲鎴愬姛")
 except Exception as e:
-    app.logger.error(f"指标收集器初始化失败: {str(e)}")
+    app.logger.error(f"鎸囨爣鏀堕泦鍣ㄥ垵濮嬪寲澶辫触: {str(e)}")
 
-# 注册蓝图
+# 娉ㄥ唽钃濆浘
 from routes.upload import upload_bp
 from routes.modeltrain import modeltrain_bp
 from routes.download import download_bp
@@ -101,23 +102,24 @@ from routes.autotask import autotask_bp
 from routes.actual_power_router import actual_power_bp
 from routes.prediction2database import prediction2database_bp
 from routes.power_compare import bp as power_compare_bp
-from routes.auth import auth_bp  # 导入认证蓝图
-from routes.user import user_bp  # 导入用户路由蓝图
-from routes.example_route import example_bp  # 导入示例路由
-# 新增：导入特征上传蓝图
+from routes.auth import auth_bp  # 瀵煎叆璁よ瘉钃濆浘
+from routes.user import user_bp  # 瀵煎叆鐢ㄦ埛璺敱钃濆浘
+from routes.example_route import example_bp  # 瀵煎叆绀轰緥璺敱
+# 鏂板锛氬鍏ョ壒寰佷笂浼犺摑鍥?
 from routes.feature_upload import feature_upload_bp
-# 新增：导入物理仿真路由
+# 鏂板锛氬鍏ョ墿鐞嗕豢鐪熻矾鐢?
 from routes.physical_simulation_router import physical_simulation_bp
-# 新增：导入系统信息路由
+# 鏂板锛氬鍏ョ郴缁熶俊鎭矾鐢?
 from routes.system_info_router import system_info_bp
-# 新增：导入上报管理路由
+# 鏂板锛氬鍏ヤ笂鎶ョ鐞嗚矾鐢?
 from routes.report_management_router import report_management_bp
-# 新增：导入气象数据拉取路由
+# 鏂板锛氬鍏ユ皵璞℃暟鎹媺鍙栬矾鐢?
 from routes.weather_fetch_router import weather_fetch_bp
-# 新增：导入运营数据上传路由
+# 鏂板锛氬鍏ヨ繍钀ユ暟鎹笂浼犺矾鐢?
 from routes.operational_data_upload import operational_data_upload_bp
-# 新增：导入场站管理路由
+# 鏂板锛氬鍏ュ満绔欑鐞嗚矾鐢?
 from routes.farm_management import farm_management_bp
+from routes.v1_compat import v1_compat_bp
 
 # app.register_blueprint(upload_bp, url_prefix='/')
 app.register_blueprint(modeltrain_bp, url_prefix='/')
@@ -129,28 +131,29 @@ app.register_blueprint(actual_power_bp)
 app.register_blueprint(prediction2database_bp)
 app.register_blueprint(power_compare_bp)
 app.register_blueprint(auth_bp, url_prefix='/auth')
-app.register_blueprint(user_bp, url_prefix='/api/user')  # 注册用户路由蓝图，使用 /api/user 前缀
-app.register_blueprint(example_bp, url_prefix='/api/example')  # 注册示例路由
-# 新增：注册特征上传蓝图
+app.register_blueprint(user_bp, url_prefix='/api/user')  # 娉ㄥ唽鐢ㄦ埛璺敱钃濆浘锛屼娇鐢?/api/user 鍓嶇紑
+app.register_blueprint(example_bp, url_prefix='/api/example')  # 娉ㄥ唽绀轰緥璺敱
+# 鏂板锛氭敞鍐岀壒寰佷笂浼犺摑鍥?
 app.register_blueprint(feature_upload_bp)
-# 新增：注册物理仿真路由
+# 鏂板锛氭敞鍐岀墿鐞嗕豢鐪熻矾鐢?
 app.register_blueprint(physical_simulation_bp)
-# 新增：注册系统信息路由
+# 鏂板锛氭敞鍐岀郴缁熶俊鎭矾鐢?
 app.register_blueprint(system_info_bp, url_prefix='/system')
-# 新增：注册上报管理路由
+# 鏂板锛氭敞鍐屼笂鎶ョ鐞嗚矾鐢?
 app.register_blueprint(report_management_bp, url_prefix='/report')
-# 新增：注册气象数据拉取路由
+# 鏂板锛氭敞鍐屾皵璞℃暟鎹媺鍙栬矾鐢?
 app.register_blueprint(weather_fetch_bp, url_prefix='/weather-fetch')
-# 新增：注册运营数据上传路由
+# 鏂板锛氭敞鍐岃繍钀ユ暟鎹笂浼犺矾鐢?
 app.register_blueprint(operational_data_upload_bp, url_prefix='/operational')
-# 新增：注册场站管理路由
+# 鏂板锛氭敞鍐屽満绔欑鐞嗚矾鐢?
 app.register_blueprint(farm_management_bp, url_prefix='/api')
+app.register_blueprint(v1_compat_bp)  # compat bridge
 
-# 新增：初始化气象数据拉取调度器
+# 鏂板锛氬垵濮嬪寲姘旇薄鏁版嵁鎷夊彇璋冨害鍣?
 try:
     from services.scheduler_service import init_scheduler
     import os
-    # 获取数据库URL
+    # 鑾峰彇鏁版嵁搴揢RL
     db_host = os.environ.get('DB_HOST', 'localhost')
     db_port = os.environ.get('DB_PORT', '54321')
     db_user = os.environ.get('DB_USER', 'system')
@@ -159,33 +162,32 @@ try:
     database_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
     
     init_scheduler(database_url)
-    print("✅ 气象数据拉取调度器初始化成功")
+    print("鉁?姘旇薄鏁版嵁鎷夊彇璋冨害鍣ㄥ垵濮嬪寲鎴愬姛")
 except Exception as e:
-    print(f"警告: 气象数据拉取调度器初始化失败: {e}")
+    print(f"璀﹀憡: 姘旇薄鏁版嵁鎷夊彇璋冨害鍣ㄥ垵濮嬪寲澶辫触: {e}")
 
-# 添加JWT错误处理
+# 娣诲姞JWT閿欒澶勭悊
 @jwt.expired_token_loader
 def expired_token_callback(jwt_header, jwt_payload):
-    return jsonify({"message": "令牌已过期，请重新登录"}), 401
+    return jsonify({"message": "浠ょ墝宸茶繃鏈燂紝璇烽噸鏂扮櫥褰?}), 401
 
 @jwt.invalid_token_loader
 def invalid_token_callback(error):
-    return jsonify({"message": "无效的令牌"}), 401
+    return jsonify({"message": "鏃犳晥鐨勪护鐗?}), 401
 
 @jwt.unauthorized_loader
 def missing_token_callback(error):
-    return jsonify({"message": "缺少认证令牌"}), 401
+    return jsonify({"message": "缂哄皯璁よ瘉浠ょ墝"}), 401
 
-# 添加健康检查端点
-@app.route('/health', methods=['GET'])
-def health_check():
+# 娣诲姞鍋ュ悍妫€鏌ョ鐐?
+def _build_health_status():
     health_status = {
         "status": "ok",
         "database": "unknown",
         "minio": "unknown"
     }
     
-    # 检查数据库连接
+    # 妫€鏌ユ暟鎹簱杩炴帴
     try:
         with db_session() as db:
             db.execute(text("SELECT 1"))
@@ -193,65 +195,84 @@ def health_check():
     except Exception as e:
         health_status["database"] = f"error: {str(e)}"
     
-    # 检查MinIO连接
+    # 妫€鏌inIO杩炴帴
     try:
         if minio_client is not None:
-            # 尝试列出存储桶
+            # 灏濊瘯鍒楀嚭瀛樺偍妗?
             minio_client.list_buckets()
             health_status["minio"] = "ok"
         else:
             health_status["minio"] = "unavailable"
     except Exception as e:
         health_status["minio"] = f"error: {str(e)}"
-    
-    # 如果任何服务不可用，返回503状态码
+
+    return health_status
+
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    health_status = _build_health_status()
+
     if "error" in health_status["database"] or "error" in health_status["minio"] or \
        health_status["database"] == "unavailable" or health_status["minio"] == "unavailable":
         return jsonify(health_status), 503
-    
+
     return jsonify(health_status)
 
-# 添加Prometheus指标接口
+
+@app.route('/api/v1/health', methods=['GET'])
+def health_check_v1():
+    health_status = _build_health_status()
+    is_healthy = not (
+        "error" in health_status["database"]
+        or "error" in health_status["minio"]
+        or health_status["database"] == "unavailable"
+        or health_status["minio"] == "unavailable"
+    )
+    status_code = 200 if is_healthy else 503
+    payload = success(data=health_status, message="ok" if is_healthy else "degraded")
+    return jsonify(payload), status_code
+
 @app.route('/metrics', methods=['GET'])
 def metrics():
-    """Prometheus指标接口"""
+    """Prometheus鎸囨爣鎺ュ彛"""
     try:
         from utils.metrics import get_metrics
         metrics_data = get_metrics()
         return metrics_data, 200, {'Content-Type': 'text/plain; version=0.0.4'}
     except Exception as e:
-        current_app.logger.error(f"获取指标数据失败: {str(e)}")
-        return jsonify({"error": "获取指标数据失败"}), 500
+        current_app.logger.error(f"鑾峰彇鎸囨爣鏁版嵁澶辫触: {str(e)}")
+        return jsonify({"error": "鑾峰彇鎸囨爣鏁版嵁澶辫触"}), 500
 
-# 添加全局 OPTIONS 请求处理器
+# 娣诲姞鍏ㄥ眬 OPTIONS 璇锋眰澶勭悊鍣?
 @app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
 @app.route('/<path:path>', methods=['OPTIONS'])
 def handle_options(path):
     return '', 200
 
-# 初始化数据库和存储桶
+# 鍒濆鍖栨暟鎹簱鍜屽瓨鍌ㄦ《
 def initialize():
     with app.app_context():
-        # 创建数据库表
+        # 鍒涘缓鏁版嵁搴撹〃
         if engine is not None:
             try:
                 Base.metadata.create_all(bind=engine)
-                print("✅ 数据库表创建完成")
+                print("鉁?鏁版嵁搴撹〃鍒涘缓瀹屾垚")
                 
-                # 初始化用户和角色
+                # 鍒濆鍖栫敤鎴峰拰瑙掕壊
                 try:
                     from init_users import init_users_and_roles
                     init_users_and_roles()
-                    print("✅ 初始用户和角色创建完成")
+                    print("鉁?鍒濆鐢ㄦ埛鍜岃鑹插垱寤哄畬鎴?)
                 except Exception as e:
-                    print(f"警告: 初始用户创建失败: {e}")
+                    print(f"璀﹀憡: 鍒濆鐢ㄦ埛鍒涘缓澶辫触: {e}")
                     
             except Exception as e:
-                print(f"警告: 数据库表创建失败: {e}")
+                print(f"璀﹀憡: 鏁版嵁搴撹〃鍒涘缓澶辫触: {e}")
         else:
-            print("警告: 数据库引擎不可用，跳过表创建")
+            print("璀﹀憡: 鏁版嵁搴撳紩鎿庝笉鍙敤锛岃烦杩囪〃鍒涘缓")
         
-        # 初始化MinIO存储桶（更新为新的配置结构）
+        # 鍒濆鍖朚inIO瀛樺偍妗讹紙鏇存柊涓烘柊鐨勯厤缃粨鏋勶級
         if minio_client is not None:
             try:
                 required_buckets = list(MINIO_CONFIG["buckets"].values())
@@ -260,15 +281,15 @@ def initialize():
                 for bucket in required_buckets:
                     if bucket not in existing_buckets:
                         minio_client.make_bucket(bucket)
-                        print(f"✅ 成功创建存储桶: {bucket}")
+                        print(f"鉁?鎴愬姛鍒涘缓瀛樺偍妗? {bucket}")
                     else:
-                        print(f"✅ 存储桶已存在: {bucket}")
+                        print(f"鉁?瀛樺偍妗跺凡瀛樺湪: {bucket}")
             except Exception as e:
-                print(f"警告: MinIO存储桶初始化失败: {e}")
+                print(f"璀﹀憡: MinIO瀛樺偍妗跺垵濮嬪寲澶辫触: {e}")
         else:
-            print("警告: MinIO客户端不可用，跳过存储桶创建")
+            print("璀﹀憡: MinIO瀹㈡埛绔笉鍙敤锛岃烦杩囧瓨鍌ㄦ《鍒涘缓")
 
-# 执行初始化
+# 鎵ц鍒濆鍖?
 initialize()
 
 @app.route('/upload_train_csv', methods=['POST'])
@@ -280,42 +301,42 @@ def upload_train_csv():
     if file.filename == '':
         return jsonify({"error": "No selected file"}), 400
 
-    # 新增文件类型校验（来自代码1）
+    # 鏂板鏂囦欢绫诲瀷鏍￠獙锛堟潵鑷唬鐮?锛?
     if not allowed_file(file.filename, current_app.config['ALLOWED_EXTENSIONS']):
         return jsonify({"error": "Invalid file type"}), 400
 
-    # 生成唯一文件ID（来自代码1）
+    # 鐢熸垚鍞竴鏂囦欢ID锛堟潵鑷唬鐮?锛?
     file_id = datetime.now().strftime('%Y%m%d%H%M%S%f')
     
     try:
-        # 新增本地保存逻辑（来自代码1）
+        # 鏂板鏈湴淇濆瓨閫昏緫锛堟潵鑷唬鐮?锛?
         save_uploaded_file(file, file_id, current_app.config['UPLOAD_FOLDER'])
         
-        # 重置文件指针以便后续上传
+        # 閲嶇疆鏂囦欢鎸囬拡浠ヤ究鍚庣画涓婁紶
         file.stream.seek(0)
 
-        # 根据数据类型选择存储路径
+        # 鏍规嵁鏁版嵁绫诲瀷閫夋嫨瀛樺偍璺緞
         data_type = request.form.get('data_type', 'traincsv')
         file_path = f"datasets/{data_type}/{datetime.now().strftime('%Y%m%d')}/{file.filename}"
         
         minio_client.put_object(
-            MINIO_CONFIG["buckets"]["datasets"],  # 更新后的存储桶引用
+            MINIO_CONFIG["buckets"]["datasets"],  # 鏇存柊鍚庣殑瀛樺偍妗跺紩鐢?
             file_path,
             file.stream,
             length=-1,
             part_size=10*1024*1024
         )
 
-        # 验证MinIO上传
+        # 楠岃瘉MinIO涓婁紶
         obj_info = minio_client.stat_object(
-            MINIO_CONFIG["buckets"]["datasets"],  # 更新后的存储桶引用
+            MINIO_CONFIG["buckets"]["datasets"],  # 鏇存柊鍚庣殑瀛樺偍妗跺紩鐢?
             file_path
         )
-        print(f"✅ MinIO验证 - 文件大小：{obj_info.size}")
+        print(f"鉁?MinIO楠岃瘉 - 鏂囦欢澶у皬锛歿obj_info.size}")
 
-        # 数据库操作
+        # 鏁版嵁搴撴搷浣?
         with db_session() as db:
-            # 生成本地路径（组合代码1和代码2的参数）
+            # 鐢熸垚鏈湴璺緞锛堢粍鍚堜唬鐮?鍜屼唬鐮?鐨勫弬鏁帮級
             ext = os.path.splitext(file.filename)[1]
             local_path = os.path.join(
                 current_app.config['UPLOAD_FOLDER'], 
@@ -340,11 +361,11 @@ def upload_train_csv():
             return jsonify({
                 "message": "File uploaded successfully",
                 "dataset_id": db_dataset.id,
-                "file_id": file_id  # 返回本地保存的ID
+                "file_id": file_id  # 杩斿洖鏈湴淇濆瓨鐨処D
             })
             
     except Exception as e:
-        print(f"全局异常：{str(e)}")
+        print(f"鍏ㄥ眬寮傚父锛歿str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/upload_predict_csv', methods=['POST'])
@@ -356,42 +377,42 @@ def upload_predict_csv():
     if file.filename == '':
         return jsonify({"error": "No selected file"}), 400
 
-    # 新增文件类型校验（来自代码1）
+    # 鏂板鏂囦欢绫诲瀷鏍￠獙锛堟潵鑷唬鐮?锛?
     if not allowed_file(file.filename, current_app.config['ALLOWED_EXTENSIONS']):
         return jsonify({"error": "Invalid file type"}), 400
 
-    # 生成唯一文件ID（来自代码1）
+    # 鐢熸垚鍞竴鏂囦欢ID锛堟潵鑷唬鐮?锛?
     file_id = datetime.now().strftime('%Y%m%d%H%M%S%f')
     
     try:
-        # 新增本地保存逻辑（来自代码1）
+        # 鏂板鏈湴淇濆瓨閫昏緫锛堟潵鑷唬鐮?锛?
         save_uploaded_file(file, file_id, current_app.config['UPLOAD_FOLDER'])
         
-        # 重置文件指针以便后续上传
+        # 閲嶇疆鏂囦欢鎸囬拡浠ヤ究鍚庣画涓婁紶
         file.stream.seek(0)
 
-        # 根据数据类型选择存储路径
+        # 鏍规嵁鏁版嵁绫诲瀷閫夋嫨瀛樺偍璺緞
         data_type = request.form.get('data_type', 'predictcsv')
         file_path = f"datasets/{data_type}/{datetime.now().strftime('%Y%m%d')}/{file.filename}"
         
         minio_client.put_object(
-            MINIO_CONFIG["buckets"]["datasets"],  # 更新后的存储桶引用
+            MINIO_CONFIG["buckets"]["datasets"],  # 鏇存柊鍚庣殑瀛樺偍妗跺紩鐢?
             file_path,
             file.stream,
             length=-1,
             part_size=10*1024*1024
         )
 
-        # 验证MinIO上传
+        # 楠岃瘉MinIO涓婁紶
         obj_info = minio_client.stat_object(
-            MINIO_CONFIG["buckets"]["datasets"],  # 更新后的存储桶引用
+            MINIO_CONFIG["buckets"]["datasets"],  # 鏇存柊鍚庣殑瀛樺偍妗跺紩鐢?
             file_path
         )
-        print(f"✅ MinIO验证 - 文件大小：{obj_info.size}")
+        print(f"鉁?MinIO楠岃瘉 - 鏂囦欢澶у皬锛歿obj_info.size}")
 
-        # 数据库操作
+        # 鏁版嵁搴撴搷浣?
         with db_session() as db:
-            # 生成本地路径（组合代码1和代码2的参数）
+            # 鐢熸垚鏈湴璺緞锛堢粍鍚堜唬鐮?鍜屼唬鐮?鐨勫弬鏁帮級
             ext = os.path.splitext(file.filename)[1]
             local_path = os.path.join(
                 current_app.config['UPLOAD_FOLDER'], 
@@ -416,11 +437,11 @@ def upload_predict_csv():
             return jsonify({
                 "message": "File uploaded successfully",
                 "dataset_id": db_dataset.id,
-                "file_id": file_id  # 返回本地保存的ID
+                "file_id": file_id  # 杩斿洖鏈湴淇濆瓨鐨処D
             })
             
     except Exception as e:
-        print(f"全局异常：{str(e)}")
+        print(f"鍏ㄥ眬寮傚父锛歿str(e)}")
         return jsonify({"error": str(e)}), 500
     
 @app.route('/upload_model', methods=['POST'])
@@ -432,42 +453,42 @@ def upload_model():
     if file.filename == '':
         return jsonify({"error": "No selected file"}), 400
 
-    # 新增文件类型校验（来自代码1）
+    # 鏂板鏂囦欢绫诲瀷鏍￠獙锛堟潵鑷唬鐮?锛?
     if not allowed_file(file.filename, current_app.config['ALLOWED_EXTENSIONS']):
         return jsonify({"error": "Invalid file type"}), 400
 
-    # 生成唯一文件ID（来自代码1）
+    # 鐢熸垚鍞竴鏂囦欢ID锛堟潵鑷唬鐮?锛?
     file_id = datetime.now().strftime('%Y%m%d%H%M%S%f')
     
     try:
-        # 新增本地保存逻辑（来自代码1）
+        # 鏂板鏈湴淇濆瓨閫昏緫锛堟潵鑷唬鐮?锛?
         save_uploaded_file(file, file_id, current_app.config['UPLOAD_FOLDER'])
         
-        # 重置文件指针以便后续上传
+        # 閲嶇疆鏂囦欢鎸囬拡浠ヤ究鍚庣画涓婁紶
         file.stream.seek(0)
 
-        # 根据数据类型选择存储路径
+        # 鏍规嵁鏁版嵁绫诲瀷閫夋嫨瀛樺偍璺緞
         data_type = request.form.get('data_type', 'model')
         file_path = f"datasets/{data_type}/{datetime.now().strftime('%Y%m%d')}/{file.filename}"
         
         minio_client.put_object(
-            MINIO_CONFIG["buckets"]["datasets"],  # 更新后的存储桶引用
+            MINIO_CONFIG["buckets"]["datasets"],  # 鏇存柊鍚庣殑瀛樺偍妗跺紩鐢?
             file_path,
             file.stream,
             length=-1,
             part_size=10*1024*1024
         )
 
-        # 验证MinIO上传
+        # 楠岃瘉MinIO涓婁紶
         obj_info = minio_client.stat_object(
-            MINIO_CONFIG["buckets"]["datasets"],  # 更新后的存储桶引用
+            MINIO_CONFIG["buckets"]["datasets"],  # 鏇存柊鍚庣殑瀛樺偍妗跺紩鐢?
             file_path
         )
-        print(f"✅ MinIO验证 - 文件大小：{obj_info.size}")
+        print(f"鉁?MinIO楠岃瘉 - 鏂囦欢澶у皬锛歿obj_info.size}")
 
-        # 数据库操作
+        # 鏁版嵁搴撴搷浣?
         with db_session() as db:
-            # 生成本地路径（组合代码1和代码2的参数）
+            # 鐢熸垚鏈湴璺緞锛堢粍鍚堜唬鐮?鍜屼唬鐮?鐨勫弬鏁帮級
             ext = os.path.splitext(file.filename)[1]
             local_path = os.path.join(
                 current_app.config['UPLOAD_FOLDER'], 
@@ -492,11 +513,11 @@ def upload_model():
             return jsonify({
                 "message": "File uploaded successfully",
                 "dataset_id": db_dataset.id,
-                "file_id": file_id  # 返回本地保存的ID
+                "file_id": file_id  # 杩斿洖鏈湴淇濆瓨鐨処D
             })
             
     except Exception as e:
-        print(f"全局异常：{str(e)}")
+        print(f"鍏ㄥ眬寮傚父锛歿str(e)}")
         return jsonify({"error": str(e)}), 500
     
 @app.route('/upload_scaler', methods=['POST'])
@@ -508,42 +529,42 @@ def upload_scaler():
     if file.filename == '':
         return jsonify({"error": "No selected file"}), 400
 
-    # 新增文件类型校验（来自代码1）
+    # 鏂板鏂囦欢绫诲瀷鏍￠獙锛堟潵鑷唬鐮?锛?
     if not allowed_file(file.filename, current_app.config['ALLOWED_EXTENSIONS']):
         return jsonify({"error": "Invalid file type"}), 400
 
-    # 生成唯一文件ID（来自代码1）
+    # 鐢熸垚鍞竴鏂囦欢ID锛堟潵鑷唬鐮?锛?
     file_id = datetime.now().strftime('%Y%m%d%H%M%S%f')
     
     try:
-        # 新增本地保存逻辑（来自代码1）
+        # 鏂板鏈湴淇濆瓨閫昏緫锛堟潵鑷唬鐮?锛?
         save_uploaded_file(file, file_id, current_app.config['UPLOAD_FOLDER'])
         
-        # 重置文件指针以便后续上传
+        # 閲嶇疆鏂囦欢鎸囬拡浠ヤ究鍚庣画涓婁紶
         file.stream.seek(0)
 
-        # 根据数据类型选择存储路径
+        # 鏍规嵁鏁版嵁绫诲瀷閫夋嫨瀛樺偍璺緞
         data_type = request.form.get('data_type', 'scaler')
         file_path = f"datasets/{data_type}/{datetime.now().strftime('%Y%m%d')}/{file.filename}"
         
         minio_client.put_object(
-            MINIO_CONFIG["buckets"]["datasets"],  # 更新后的存储桶引用
+            MINIO_CONFIG["buckets"]["datasets"],  # 鏇存柊鍚庣殑瀛樺偍妗跺紩鐢?
             file_path,
             file.stream,
             length=-1,
             part_size=10*1024*1024
         )
 
-        # 验证MinIO上传
+        # 楠岃瘉MinIO涓婁紶
         obj_info = minio_client.stat_object(
-            MINIO_CONFIG["buckets"]["datasets"],  # 更新后的存储桶引用
+            MINIO_CONFIG["buckets"]["datasets"],  # 鏇存柊鍚庣殑瀛樺偍妗跺紩鐢?
             file_path
         )
-        print(f"✅ MinIO验证 - 文件大小：{obj_info.size}")
+        print(f"鉁?MinIO楠岃瘉 - 鏂囦欢澶у皬锛歿obj_info.size}")
 
-        # 数据库操作
+        # 鏁版嵁搴撴搷浣?
         with db_session() as db:
-            # 生成本地路径（组合代码1和代码2的参数）
+            # 鐢熸垚鏈湴璺緞锛堢粍鍚堜唬鐮?鍜屼唬鐮?鐨勫弬鏁帮級
             ext = os.path.splitext(file.filename)[1]
             local_path = os.path.join(
                 current_app.config['UPLOAD_FOLDER'], 
@@ -568,11 +589,11 @@ def upload_scaler():
             return jsonify({
                 "message": "File uploaded successfully",
                 "dataset_id": db_dataset.id,
-                "file_id": file_id  # 返回本地保存的ID
+                "file_id": file_id  # 杩斿洖鏈湴淇濆瓨鐨処D
             })
             
     except Exception as e:
-        print(f"全局异常：{str(e)}")
+        print(f"鍏ㄥ眬寮傚父锛歿str(e)}")
         return jsonify({"error": str(e)}), 500
     
 @app.errorhandler(413)
@@ -581,12 +602,12 @@ def request_entity_too_large(error):
 
 @socketio.on('connect')
 def handle_connect():
-    app.logger.info("成功连接服务器！")
-    socketio.emit('response', {'message': '连接成功！'})
+    app.logger.info("鎴愬姛杩炴帴鏈嶅姟鍣紒")
+    socketio.emit('response', {'message': '杩炴帴鎴愬姛锛?})
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    app.logger.info("与服务器断开连接！")
+    app.logger.info("涓庢湇鍔″櫒鏂紑杩炴帴锛?)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
