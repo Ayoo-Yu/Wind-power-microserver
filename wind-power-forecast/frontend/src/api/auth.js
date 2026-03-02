@@ -1,61 +1,88 @@
-import axios from './axios';
+﻿import axios from './axios'
 
-// 登录API
+const shouldFallbackToLegacy = (error) => {
+  const status = error?.response?.status
+  return !error?.response || status === 404 || status === 405
+}
+
+const withLegacyFallback = async (v1Call, legacyCall) => {
+  try {
+    return await v1Call()
+  } catch (error) {
+    if (shouldFallbackToLegacy(error)) {
+      return legacyCall()
+    }
+    throw error
+  }
+}
+
+const authGet = (path) => withLegacyFallback(
+  () => axios.get(`/api/v1/auth/${path}`),
+  () => axios.get(`/api/auth/${path}`)
+)
+
+const authPost = (path, payload) => withLegacyFallback(
+  () => axios.post(`/api/v1/auth/${path}`, payload),
+  () => axios.post(`/api/auth/${path}`, payload)
+)
+
+const authPut = (path, payload) => withLegacyFallback(
+  () => axios.put(`/api/v1/auth/${path}`, payload),
+  () => axios.put(`/api/auth/${path}`, payload)
+)
+
+const authDelete = (path) => withLegacyFallback(
+  () => axios.delete(`/api/v1/auth/${path}`),
+  () => axios.delete(`/api/auth/${path}`)
+)
+
 export const login = async (username, password) => {
-  const response = await axios.post('/api/auth/login', { username, password });
-  return response.data;
-};
+  const response = await authPost('login', { username, password })
+  return response.data
+}
 
-// 获取当前用户信息
 export const getCurrentUser = async () => {
-  const response = await axios.get('/api/auth/me');
-  return response.data;
-};
+  const response = await authGet('me')
+  return response.data
+}
 
-// 修改密码
 export const changePassword = async (username, currentPassword, newPassword) => {
-  const response = await axios.post('/api/auth/change-password', {
+  const response = await authPost('change-password', {
     username,
     current_password: currentPassword,
     new_password: newPassword
-  });
-  return response.data;
-};
+  })
+  return response.data
+}
 
-// 获取用户列表
 export const getUsers = async () => {
-  const response = await axios.get('/api/auth/users');
-  return response.data;
-};
+  const response = await authGet('users')
+  return response.data
+}
 
-// 创建用户
 export const createUser = async (userData) => {
-  const response = await axios.post('/api/auth/users', userData);
-  return response.data;
-};
+  const response = await authPost('users', userData)
+  return response.data
+}
 
-// 更新用户
 export const updateUser = async (userId, userData) => {
-  const response = await axios.put(`/api/auth/users/${userId}`, userData);
-  return response.data;
-};
+  const response = await authPut(`users/${userId}`, userData)
+  return response.data
+}
 
-// 删除用户
 export const deleteUser = async (userId) => {
-  const response = await axios.delete(`/api/auth/users/${userId}`);
-  return response.data;
-};
+  const response = await authDelete(`users/${userId}`)
+  return response.data
+}
 
-// 重置用户密码
 export const resetUserPassword = async (userId, newPassword) => {
-  const response = await axios.post(`/api/auth/users/${userId}/reset-password`, {
+  const response = await authPost(`users/${userId}/reset-password`, {
     new_password: newPassword
-  });
-  return response.data;
-};
+  })
+  return response.data
+}
 
-// 获取角色列表
 export const getRoles = async () => {
-  const response = await axios.get('/api/auth/roles');
-  return response.data;
-}; 
+  const response = await authGet('roles')
+  return response.data
+}
