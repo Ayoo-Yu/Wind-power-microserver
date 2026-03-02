@@ -119,6 +119,13 @@
             <el-button type="primary" :loading="fleetCompareLoading" @click="fetchFleetMetricsCompare">
               场站指标对比
             </el-button>
+            <el-checkbox v-model="fleetSeriesIncludeActual">Include Actual</el-checkbox>
+            <el-button type="primary" :loading="fleetSeriesLoading" @click="fetchFleetSeriesCompare">
+              Compare Curves
+            </el-button>
+            <el-button type="success" :disabled="fleetSeriesData.length === 0" @click="downloadFleetSeriesCSV">
+              Export Curve CSV
+            </el-button>
           </div>
         </div>
         <div class="config-row config-row-2">
@@ -157,6 +164,17 @@
             <template #default="scope">{{ formatMetricNumber(scope.row.mse) }}</template>
           </el-table-column>
         </el-table>
+      </el-card>
+    </div>
+
+    <div class="fleet-series-container" v-if="fleetSeriesData.length > 0">
+      <el-card class="fleet-series-card">
+        <template #header>
+          <div class="fleet-metrics-header">Fleet Curve Overlay ({{ fleetComparePredictionType }})</div>
+        </template>
+        <div class="chart-wrapper fleet-series-wrapper">
+          <canvas ref="fleetSeriesCanvas" style="height: 56vh !important;"></canvas>
+        </div>
       </el-card>
     </div>
 
@@ -314,7 +332,11 @@ export default {
       fleetCompareFarmCodes: [],
       fleetComparePredictionType: 'short',
       fleetCompareLoading: false,
-      fleetCompareRows: []
+      fleetCompareRows: [],
+      fleetSeriesLoading: false,
+      fleetSeriesIncludeActual: true,
+      fleetSeriesData: [],
+      fleetSeriesChart: null
     }
   },
   mounted() {
@@ -402,6 +424,151 @@ export default {
     },
     
     // 格式化K值为三位有效数字
+    async fetchFleetSeriesCompare() {
+      if (!this.timeRange || this.timeRange.length !== 2) {
+        this.$message.error('Please choose a complete time range');
+        return;
+      }
+      if (!Array.isArray(this.fleetCompareFarmCodes) || this.fleetCompareFarmCodes.length === 0) {
+        this.$message.warning('Please select at least one farm');
+        return;
+      }
+
+      this.fleetSeriesLoading = true;
+      try {
+        const payload = {
+          start: this.timeRange[0],
+          end: this.timeRange[1],
+          farm_codes: this.fleetCompareFarmCodes,
+          prediction_type: this.fleetComparePredictionType,
+          include_actual: this.fleetSeriesIncludeActual
+        };
+
+        let response;
+        try {
+          response = await axios.post(`${this.backendBaseUrl}/api/v1/power-compare/fleet_series`, payload);
+        } catch (v1Error) {
+          response = await axios.post(`${this.backendBaseUrl}/power-compare/fleet_series`, payload);
+        }
+
+        const data = response?.data?.data || {};
+        this.fleetSeriesData = Array.isArray(data.items) ? data.items : [];
+        if (this.fleetSeriesData.length === 0) {
+          this.$message.info('No curve data under current conditions');
+          return;
+        }
+        this.$nextTick(() => this.renderFleetSeriesChart());
+      } catch (error) {
+        console.error('fetchFleetSeriesCompare failed:', error);
+        this.$message.error('Fleet curve compare failed');
+      } finally {
+        this.fleetSeriesLoading = false;
+      }
+    },
+
+    renderFleetSeriesChart() {
+      const canvas = this.$refs.fleetSeriesCanvas;
+      if (!canvas || !this.fleetSeriesData || this.fleetSeriesData.length === 0) {
+        return;
+      }
+      const allTimestampSet = new Set();
+      this.fleetSeriesData.forEach(item => {
+        (item.predicted || []).forEach(point => allTimestampSet.add(point.timestamp));
+        if (this.fleetSeriesIncludeActual) {
+          (item.actual || []).forEach(point => allTimestampSet.add(point.timestamp));
+        }
+      });
+      const sortedTimestamps = Array.from(allTimestampSet)
+        .map(ts => new Date(ts).getTime())
+        .sort((a, b) => a - b)
+        .map(ts => new Date(ts).toISOString());
+
+      const labels = sortedTimestamps.map(ts => {
+        const date = new Date(ts);
+        return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+      });
+
+      const palette = ['#2563eb', '#dc2626', '#059669', '#7c3aed', '#ea580c', '#0ea5e9', '#4f46e5', '#16a34a', '#be123c', '#475569'];
+      const datasets = [];
+      this.fleetSeriesData.forEach((farm, idx) => {
+        const color = palette[idx % palette.length];
+        const predMap = new Map((farm.predicted || []).map(p => [new Date(p.timestamp).toISOString(), p.power]));
+        datasets.push({
+          label: `${farm.farm_name || farm.farm_code} Pred`,
+          data: sortedTimestamps.map(ts => predMap.has(ts) ? predMap.get(ts) : null),
+          borderColor: color,
+          backgroundColor: `${color}33`,
+          pointRadius: 1,
+          borderWidth: 2,
+          tension: 0.2,
+          spanGaps: true
+        });
+        if (this.fleetSeriesIncludeActual) {
+          const actualMap = new Map((farm.actual || []).map(p => [new Date(p.timestamp).toISOString(), p.power]));
+          datasets.push({
+            label: `${farm.farm_name || farm.farm_code} Actual`,
+            data: sortedTimestamps.map(ts => actualMap.has(ts) ? actualMap.get(ts) : null),
+            borderColor: color,
+            backgroundColor: `${color}22`,
+            pointRadius: 0,
+            borderWidth: 1,
+            borderDash: [4, 4],
+            tension: 0.2,
+            spanGaps: true
+          });
+        }
+      });
+
+      if (this.fleetSeriesChart) {
+        this.fleetSeriesChart.destroy();
+        this.fleetSeriesChart = null;
+      }
+
+      this.fleetSeriesChart = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { position: 'top' }
+          }
+        }
+      });
+    },
+
+    downloadFleetSeriesCSV() {
+      if (!Array.isArray(this.fleetSeriesData) || this.fleetSeriesData.length === 0) {
+        this.$message.warning('No curve data to export');
+        return;
+      }
+      const rows = ['farm_code,farm_name,series_type,timestamp,power'];
+      this.fleetSeriesData.forEach(item => {
+        const farmCode = item.farm_code || '';
+        const farmName = (item.farm_name || '').replace(/"/g, '""');
+        (item.predicted || []).forEach(point => {
+          rows.push(`${farmCode},"${farmName}",predicted,${point.timestamp},${point.power ?? ''}`);
+        });
+        if (this.fleetSeriesIncludeActual) {
+          (item.actual || []).forEach(point => {
+            rows.push(`${farmCode},"${farmName}",actual,${point.timestamp},${point.power ?? ''}`);
+          });
+        }
+      });
+
+      const blob = new Blob([`\uFEFF${rows.join('\n')}`], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `fleet_series_${this.fleetComparePredictionType}_${Date.now()}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      this.$message.success('Curve CSV exported');
+    },
+
     formatKValue(kValue) {
       if (kValue === null || kValue === undefined || isNaN(kValue)) {
         return '0.000';
@@ -1618,6 +1785,10 @@ export default {
       this.metricChart.destroy();
       this.metricChart = null;
     }
+    if (this.fleetSeriesChart) {
+      this.fleetSeriesChart.destroy();
+      this.fleetSeriesChart = null;
+    }
   }
 }
 </script>
@@ -1815,6 +1986,21 @@ export default {
 .fleet-metrics-header {
   font-weight: 600;
   color: #1f2937;
+}
+
+.fleet-series-container {
+  margin-top: 16px;
+}
+
+.fleet-series-card {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+}
+
+.fleet-series-wrapper {
+  height: 56vh;
 }
 
 .chart-wrapper {
