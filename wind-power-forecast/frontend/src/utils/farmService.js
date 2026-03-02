@@ -1,5 +1,5 @@
 ﻿// src/utils/farmService.js
-import axiosInstance from '../api/axios'
+import { getAutoPredictFarms, getReportFarms, getFarms } from '../api/farmApi'
 /**
  * 场站管理服务
  * 提供场站选择、状态管理和数据隔离功能
@@ -76,16 +76,6 @@ class FarmService {
     }
 
     try {
-      const fetchFarms = async (url) => {
-        const response = await axiosInstance.get(url)
-        const payload = response?.data
-        const farms = Array.isArray(payload) ? payload : payload?.data
-        if (!Array.isArray(farms)) {
-          throw new Error('场站列表返回格式错误')
-        }
-        return farms
-      }
-
       const normalizeFarmCode = (value) => {
         if (value === undefined || value === null) {
           return null
@@ -125,33 +115,43 @@ class FarmService {
 
       let autopredictFarms = []
       let reportFarms = []
+      let generalFarms = []
 
       try {
-        autopredictFarms = await fetchFarms('/api/v1/autopredict/farms')
+        autopredictFarms = await getAutoPredictFarms()
       } catch (autopredictError) {
         console.warn('自动预测后端场站接口不可用', autopredictError)
       }
 
       try {
-        reportFarms = await fetchFarms('/api/report/farms')
+        reportFarms = await getReportFarms()
       } catch (reportError) {
         console.warn('主后端场站接口不可用', reportError)
       }
 
+      try {
+        generalFarms = await getFarms()
+      } catch (generalError) {
+        console.warn('通用场站接口不可用', generalError)
+      }
+
       const mappedAutopredictFarms = mapFarms(autopredictFarms)
       const mappedReportFarms = mapFarms(reportFarms)
+      const mappedGeneralFarms = mapFarms(generalFarms)
 
       let mappedFarms = []
       if (mappedAutopredictFarms.length > 0) {
-        const reportNameByCode = new Map(
-          mappedReportFarms.map(farm => [farm.code.toLowerCase(), farm.name])
-        )
+        const reportNameByCode = new Map()
+        mappedGeneralFarms.forEach((farm) => reportNameByCode.set(farm.code.toLowerCase(), farm.name))
+        mappedReportFarms.forEach((farm) => reportNameByCode.set(farm.code.toLowerCase(), farm.name))
         mappedFarms = mappedAutopredictFarms.map((farm) => ({
           code: farm.code,
           name: reportNameByCode.get(farm.code.toLowerCase()) || farm.name
         }))
       } else if (mappedReportFarms.length > 0) {
         mappedFarms = mappedReportFarms
+      } else if (mappedGeneralFarms.length > 0) {
+        mappedFarms = mappedGeneralFarms
       }
 
       mappedFarms = dedupeByCode(mappedFarms)
