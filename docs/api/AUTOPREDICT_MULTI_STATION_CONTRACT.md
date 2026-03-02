@@ -38,6 +38,7 @@ It applies to the autopredict backend endpoints proxied from frontend `/api/*` r
 - PM2 process names use pattern:
 `<farm_code>_<script_name>`
 - This prevents cross-farm task collisions and allows independent control.
+- Same prediction type can run concurrently for different farms, because process scope is farm-specific.
 
 ## Frontend Requirement
 - Frontend should always include `farm_code` from selected farm state.

@@ -267,31 +267,14 @@ def update_pm2_status_periodically():
     """周期性查询PM2并更新全局状态字典"""
     print(f"[{datetime.datetime.now()}] 后台任务：正在更新PM2状态...")
     local_status = {}  # 先操作局部变量
-    
-    success, result = safe_pm2_command(['jlist'])  # 调用一次jlist
-    processes = []
-    if success:
-        output = result.stdout.strip() if result.stdout else ''
-        if output:
-            try:
-                processes = json.loads(output)
-                if not isinstance(processes, list):
-                    print(f"警告: PM2 jlist 输出不是预期的列表格式")
-                    processes = []
-            except json.JSONDecodeError as e:
-                print(f"警告: 解析PM2 jlist输出失败: {e}")
-                processes = []
-    else:
-        print(f"后台任务：执行pm2 jlist失败: {result}")
-        # 如果命令失败，保留原状态
-        return
+
+    processes = get_pm2_processes()
     
     # 根据找到的进程计算状态
-    for key, script_path in scripts.items():
-        script_basename = os.path.basename(script_path)
+    for key in scripts.keys():
+        script_name = get_script_name(key)
         is_online = any(
-            (script_path in proc.get('pm2_env', {}).get('pm_exec_path', '') or 
-             script_basename == proc.get('pm2_env', {}).get('name', ''))
+            proc.get('pm2_env', {}).get('name', '').endswith(f"_{script_name}")
             and proc.get('pm2_env', {}).get('status', '') == "online"
             for proc in processes
         )
@@ -410,6 +393,47 @@ def resolve_farm_code(raw_farm_code):
     return active_farms[0]
 
 
+def get_script_name(prediction_type):
+    script_path = scripts[prediction_type]
+    return os.path.splitext(os.path.basename(script_path))[0]
+
+
+def build_process_name(farm_code, prediction_type):
+    return f"{farm_code}_{get_script_name(prediction_type)}"
+
+
+def get_pm2_processes():
+    success, result = safe_pm2_command(['jlist'])
+    if not success:
+        return []
+    try:
+        output = result.stdout.strip() if hasattr(result, 'stdout') and result.stdout else ''
+        if not output:
+            return []
+        processes = json.loads(output)
+        return processes if isinstance(processes, list) else []
+    except Exception:
+        return []
+
+
+def is_process_online(process_name, processes=None):
+    proc_list = processes if processes is not None else get_pm2_processes()
+    for proc in proc_list:
+        pm2_env = proc.get('pm2_env', {})
+        if pm2_env.get('name', '') == process_name and pm2_env.get('status', '') == 'online':
+            return True
+    return False
+
+
+def get_farm_prediction_status(farm_code, processes=None):
+    proc_list = processes if processes is not None else get_pm2_processes()
+    status = {}
+    for prediction_type in prediction_status.keys():
+        process_name = build_process_name(farm_code, prediction_type)
+        status[prediction_type] = is_process_online(process_name, proc_list)
+    return status
+
+
 def api_success(data=None, message="ok", status_code=200, legacy=None):
     payload = {
         "code": 0,
@@ -519,16 +543,15 @@ print(f"[{datetime.datetime.now()}] PM2状态监控后台任务已启动")
 @autopredict_bp.route('/v1/autopredict/status', methods=['GET'])
 def get_status():
     try:
+        raw_farm_code = request.args.get('farm_code')
+        if raw_farm_code and not is_valid_farm_code(raw_farm_code):
+            return api_error(f'无效的场站代码: {raw_farm_code}', code=1001, status_code=400)
+
         # 查询指定场站的状态
-        farm_code = resolve_farm_code(request.args.get('farm_code'))
+        farm_code = resolve_farm_code(raw_farm_code)
         prediction_type = request.args.get('type')
-
-        # 更新全局状态
-        _update_prediction_status()
-
-        # 使用线程锁安全地获取当前状态的副本
-        with status_lock:
-            current_status = prediction_status.copy()
+        processes = get_pm2_processes()
+        current_status = get_farm_prediction_status(farm_code, processes)
 
         # 如果指定了预测类型，只返回该类型的状态
         if prediction_type:
@@ -572,35 +595,19 @@ def start_prediction():
         record_task_history(prediction_type, 'start', 'failed', error_msg)
         return api_error(error_msg, code=1004, status_code=400)
 
-    # 使用场站信息作为进程名称的一部分
-    process_name = f"{farm_code}_{os.path.splitext(os.path.basename(script_path))[0]}"
+    process_name = build_process_name(farm_code, prediction_type)
 
-    # 先检查进程是否已经运行（包括相同场站和类型）
-    if query_pm2_state(script_path):
-        # 检查是否为相同场站的进程
-        existing_farm_status = _get_running_farm_code(prediction_type)
-        if existing_farm_status == farm_code:
-            with status_lock:  # 获取锁
-                prediction_status[prediction_type] = True
-            record_task_history(prediction_type, 'start', 'success', f'场站 {farm_code} 进程已在运行中: {process_name}')
-            legacy_data = {'status': True, 'farm_code': farm_code}
-            return api_success(
-                data=legacy_data,
-                message=f'{prediction_type} 预测任务已经在运行 (场站: {farm_code})',
-                legacy={'status': True, 'farm_code': farm_code}
-            )
-        else:
-            return api_error(
-                f'{prediction_type} 预测任务正在为场站 {existing_farm_status} 运行，请先停止再启动新场站',
-                code=1005,
-                status_code=400
-            )
-
-    # 为脚本传递场站参数
-    env_vars = {
-        'FARM_CODE': farm_code,
-        'PYTHONPATH': base_dir  # 确保模块路径正确
-    }
+    # 检查同场站同类型任务是否已运行（允许不同场站并行）
+    if is_process_online(process_name):
+        with status_lock:  # 获取锁
+            prediction_status[prediction_type] = True
+        record_task_history(prediction_type, 'start', 'success', f'场站 {farm_code} 进程已在运行中: {process_name}')
+        legacy_data = {'status': True, 'farm_code': farm_code}
+        return api_success(
+            data=legacy_data,
+            message=f'{prediction_type} 预测任务已经在运行 (场站: {farm_code})',
+            legacy=legacy_data
+        )
 
     # 使用动态确定的Python解释器路径，并传递环境变量
     success, result = safe_pm2_command([
@@ -614,8 +621,8 @@ def start_prediction():
         # 启动命令执行成功，但需要验证进程是否真的启动
         verify_success, _ = safe_pm2_command(['list'])
         if verify_success:
-            # 再次检查进程状态
-            if query_pm2_state(script_path):
+            # 再次检查当前场站进程状态
+            if is_process_online(process_name):
                 with status_lock:  # 获取锁
                     prediction_status[prediction_type] = True
                 record_task_history(prediction_type, 'start', 'success', f'场站 {farm_code} 进程启动成功: {process_name}')
@@ -676,16 +683,17 @@ def start_prediction():
 def stop_prediction():
     data = request.get_json(silent=True) or {}
     prediction_type = data.get('type')
-    farm_code = resolve_farm_code(data.get('farm_code'))
+    raw_farm_code = data.get('farm_code')
+    if raw_farm_code and not is_valid_farm_code(raw_farm_code):
+        return api_error(f'无效的场站代码: {raw_farm_code}', code=1001, status_code=400)
+    farm_code = resolve_farm_code(raw_farm_code)
     
     if not prediction_type or prediction_type not in prediction_status:
         return api_error('无效的预测类型', code=1001, status_code=400)
     
     try:
         # 正常停止单个脚本
-        script_path = scripts[prediction_type]
-        script_name = os.path.splitext(os.path.basename(script_path))[0]  # 去掉.py后缀
-        process_name = f"{farm_code}_{script_name}"
+        process_name = build_process_name(farm_code, prediction_type)
         
         success, result = safe_pm2_command(['stop', process_name])
             
@@ -718,7 +726,10 @@ def stop_prediction():
 def schedule_restart():
     data = request.get_json(silent=True) or {}
     prediction_type = data.get('type')
-    farm_code = resolve_farm_code(data.get('farm_code'))
+    raw_farm_code = data.get('farm_code')
+    if raw_farm_code and not is_valid_farm_code(raw_farm_code):
+        return api_error(f'无效的场站代码: {raw_farm_code}', code=1001, status_code=400)
+    farm_code = resolve_farm_code(raw_farm_code)
     schedule_time = data.get('time')  # 格式应为 HH:mm
 
     if prediction_type not in prediction_status:
@@ -734,7 +745,7 @@ def schedule_restart():
         return api_error(error_msg, code=1001, status_code=400)
 
     script_path = scripts[prediction_type]
-    process_name = f"{farm_code}_{os.path.splitext(os.path.basename(script_path))[0]}"
+    process_name = build_process_name(farm_code, prediction_type)
 
     stop_success, _ = safe_pm2_command(['stop', process_name])
     if not stop_success:
@@ -768,14 +779,15 @@ def schedule_restart():
 def delete_prediction():
     data = request.get_json(silent=True) or {}
     prediction_type = data.get('type')
-    farm_code = resolve_farm_code(data.get('farm_code'))
+    raw_farm_code = data.get('farm_code')
+    if raw_farm_code and not is_valid_farm_code(raw_farm_code):
+        return api_error(f'无效的场站代码: {raw_farm_code}', code=1001, status_code=400)
+    farm_code = resolve_farm_code(raw_farm_code)
     if not prediction_type or prediction_type not in prediction_status:
         return api_error('无效的预测类型', code=1001, status_code=400)
 
     try:
-        script_path = scripts[prediction_type]
-        script_name = os.path.splitext(os.path.basename(script_path))[0]
-        process_name = f"{farm_code}_{script_name}"
+        process_name = build_process_name(farm_code, prediction_type)
 
         success, result = safe_pm2_command(['delete', process_name])
 
@@ -834,13 +846,16 @@ def clear_pm2_save():
 @autopredict_bp.route('/v1/autopredict/script_info', methods=['GET'])
 def get_script_info():
     prediction_type = request.args.get('type')
-    farm_code = resolve_farm_code(request.args.get('farm_code'))
+    raw_farm_code = request.args.get('farm_code')
+    if raw_farm_code and not is_valid_farm_code(raw_farm_code):
+        return api_error(f'无效的场站代码: {raw_farm_code}', code=1001, status_code=400)
+    farm_code = resolve_farm_code(raw_farm_code)
     if not prediction_type or prediction_type not in prediction_status:
         return api_error('无效的预测类型', code=1001, status_code=400)
 
     try:
         # 获取进程名称（去掉.py后缀）
-        process_name = f"{farm_code}_{os.path.splitext(os.path.basename(scripts[prediction_type]))[0]}"
+        process_name = build_process_name(farm_code, prediction_type)
         print(f"正在查询进程: {process_name}")  # 调试日志
         
         # 先检查进程是否存在
@@ -1150,25 +1165,14 @@ def resurrect():
 def _update_prediction_status():
     """更新全局prediction_status字典，但不返回响应"""
     try:
-        success, result = safe_pm2_command(['jlist'])
-        if not success:
-            print(f"更新状态失败: {result}")
-            return False
-            
-        output = result.stdout
-        if not output or output.strip() == '[]':
-            # PM2可能没有运行任何进程，但不一定是错误
-            processes = []
-        else:
-            processes = json.loads(output)
-            
+        processes = get_pm2_processes()
+             
         # 更新每个预测任务的状态
         local_status = {}
-        for key, script_path in scripts.items():
-            script_basename = os.path.basename(script_path)
+        for key in scripts.keys():
+            script_name = get_script_name(key)
             is_online = any(
-                (script_path in proc.get('pm2_env', {}).get('pm_exec_path', '') or 
-                 script_basename == proc.get('pm2_env', {}).get('name', ''))
+                proc.get('pm2_env', {}).get('name', '').endswith(f"_{script_name}")
                 and proc.get('pm2_env', {}).get('status', '') == "online"
                 for proc in processes
             )

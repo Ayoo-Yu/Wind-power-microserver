@@ -148,6 +148,12 @@ Assert-Envelope -Name "Auto /api/v1/autopredict/status" -Resp $autoStatusV1
 if ($autoStatus.Json -and $autoStatusV1.Json) {
     Assert-True -Name "Auto status legacy=v1 code" -Condition ($autoStatus.Json.code -eq $autoStatusV1.Json.code) -FailMessage "legacy=$($autoStatus.Json.code) v1=$($autoStatusV1.Json.code)"
 }
+$autoStatusInvalidFarmV1 = Invoke-Json -Method "GET" -Url "$AutoBaseUrl/api/v1/autopredict/status?farm_code=INVALID_FARM_123"
+Assert-True -Name "Auto /api/v1/autopredict/status(invalid farm) status 400" -Condition ($autoStatusInvalidFarmV1.StatusCode -eq 400) -FailMessage "HTTP $($autoStatusInvalidFarmV1.StatusCode) body=$($autoStatusInvalidFarmV1.Raw)"
+Assert-Envelope -Name "Auto /api/v1/autopredict/status(invalid farm)" -Resp $autoStatusInvalidFarmV1
+if ($autoStatusInvalidFarmV1.Json) {
+    Assert-True -Name "Auto /api/v1/autopredict/status(invalid farm) code=1001" -Condition ($autoStatusInvalidFarmV1.Json.code -eq 1001) -FailMessage "body=$($autoStatusInvalidFarmV1.Raw)"
+}
 
 # 5) Auto history envelope
 $autoHistory = Invoke-Json -Method "GET" -Url "$AutoBaseUrl/api/history?limit=1"
