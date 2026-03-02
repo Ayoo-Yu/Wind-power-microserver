@@ -1,6 +1,6 @@
 // frontend/vue.config.js
-const MAIN_BACKEND_PORT = process.env.MAIN_BACKEND_PORT || '5000'
-const AUTO_BACKEND_PORT = process.env.AUTO_BACKEND_PORT || '5001'
+const MAIN_BACKEND_PORT = process.env.MAIN_BACKEND_PORT || process.env.VUE_APP_MAIN_BACKEND_PORT || '18080'
+const AUTO_BACKEND_PORT = process.env.AUTO_BACKEND_PORT || process.env.VUE_APP_AUTO_BACKEND_PORT || '18081'
 
 module.exports = {
   devServer: {
