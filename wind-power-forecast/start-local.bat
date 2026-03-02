@@ -35,7 +35,7 @@ IF ERRORLEVEL 1 (
   exit /b 1
 )
 
-CALL :wait_http http://%MINIO_ENDPOINT%:%MINIO_PORT% MinIO
+CALL :wait_tcp %MINIO_ENDPOINT% %MINIO_PORT% MinIO
 IF ERRORLEVEL 1 (
   echo [ERROR] MinIO is not ready. Abort startup.
   pause
@@ -80,24 +80,3 @@ if %_elapsed% GEQ %_max_wait% (
 timeout /t 2 > nul
 set /a "_elapsed+=2"
 goto :wait_tcp_loop
-
-:wait_http
-set "_url=%~1"
-set "_name=%~2"
-set /a "_elapsed=0"
-set /a "_max_wait=90"
-
-echo [INFO] Waiting for %_name% (%_url%)...
-:wait_http_loop
-powershell -NoProfile -Command "$ok=$false; try { $r=Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 '%_url%'; $code=[int]$r.StatusCode; if(@(200,400,403) -contains $code){$ok=$true} } catch { if($_.Exception.Response){ $code=[int]$_.Exception.Response.StatusCode.value__; if(@(200,400,403) -contains $code){$ok=$true} } }; if($ok){exit 0}else{exit 1}"
-if %ERRORLEVEL% EQU 0 (
-  echo [OK] %_name% is ready.
-  exit /b 0
-)
-if %_elapsed% GEQ %_max_wait% (
-  echo [ERROR] Timeout waiting for %_name%.
-  exit /b 1
-)
-timeout /t 2 > nul
-set /a "_elapsed+=2"
-goto :wait_http_loop
