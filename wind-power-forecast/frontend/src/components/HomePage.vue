@@ -22,7 +22,7 @@
               v-if="hasPermission('auto_predictions')"
               type="primary" 
               class="learn-more-btn"
-              @click="urljump('http://localhost:8080/autopredict')"
+              @click="goTo('/autopredict')"
             >
               了解更多
               <el-icon class="arrow-icon"><ArrowRight /></el-icon>
@@ -42,7 +42,7 @@
               v-if="hasPermission('view_all_data')"
               type="primary" 
               class="learn-more-btn"
-              @click="urljump('http://localhost:8080/powercompare')"
+              @click="goTo('/powercompare')"
             >
               了解更多
               <el-icon class="arrow-icon"><ArrowRight /></el-icon>
@@ -72,6 +72,7 @@
 
 <script>
 import { onMounted, ref, computed, inject } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 // import Chart from 'chart.js/auto'
 // Import BarChart if it's a specific component and not globally registered
@@ -79,15 +80,14 @@ import { ElMessage } from 'element-plus'
 
 export default {
   name: 'HomePage',
-  methods: {
-    urljump(url) {
-      window.location.href = url;
-    },
-  },
-
   setup() {
     const activeMenu = ref('1')
     const hasPermission = inject('hasPermission')
+    const router = useRouter()
+
+    const goTo = (path) => {
+      router.push(path)
+    }
 
     const viewDetails = () => {
       ElMessage.info('更多详情即将推出！')
@@ -156,6 +156,7 @@ export default {
       viewDetails,
       backgroundStyle,
       hasPermission,
+      goTo,
     }
   }
 }
