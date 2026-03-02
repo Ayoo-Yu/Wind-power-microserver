@@ -9,6 +9,25 @@
     <h1 class="page-title">自动化预测功能管理</h1>
     <div class="fleet-overview" v-loading="fleetLoading">
       <div class="fleet-title">多场站运行总览</div>
+      <div class="fleet-filter-row">
+        <el-select
+          v-model="selectedFleetFarmCodes"
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
+          placeholder="选择批量操作场站（默认全部）"
+          class="fleet-farm-select"
+        >
+          <el-option
+            v-for="farm in fleetStatus"
+            :key="farm.farm_code"
+            :label="`${farm.farm_name} (${farm.farm_code})`"
+            :value="farm.farm_code"
+          />
+        </el-select>
+        <el-button size="small" @click="selectAllFleetFarms">全选</el-button>
+        <el-button size="small" @click="clearFleetFarmSelection">清空</el-button>
+      </div>
       <div class="fleet-list">
         <div class="fleet-item" v-for="farm in fleetStatus" :key="farm.farm_code">
           <div class="fleet-name">{{ farm.farm_name }} ({{ farm.farm_code }})</div>
@@ -221,6 +240,7 @@ const logsFilters = reactive({
 })
 const fleetStatus = ref([])
 const fleetLoading = ref(false)
+const selectedFleetFarmCodes = ref([])
 
 const errorDialogVisible = ref(false)
 const errorDetails = ref('')
@@ -357,12 +377,30 @@ const fetchFleetStatus = async () => {
   try {
     const res = await getAutoPredictStatusAll()
     const payload = res.data?.data || res.data || {}
-    fleetStatus.value = Array.isArray(payload.items) ? payload.items : []
+    const items = Array.isArray(payload.items) ? payload.items : []
+    fleetStatus.value = items
+
+    const availableCodes = items.map(item => item.farm_code).filter(Boolean)
+    if (selectedFleetFarmCodes.value.length === 0 && availableCodes.length > 0) {
+      selectedFleetFarmCodes.value = [...availableCodes]
+    } else {
+      selectedFleetFarmCodes.value = selectedFleetFarmCodes.value.filter(code => availableCodes.includes(code))
+    }
   } catch (error) {
     console.error('获取多场站状态失败:', error)
   } finally {
     fleetLoading.value = false
   }
+}
+
+const selectAllFleetFarms = () => {
+  selectedFleetFarmCodes.value = fleetStatus.value
+    .map(item => item.farm_code)
+    .filter(Boolean)
+}
+
+const clearFleetFarmSelection = () => {
+  selectedFleetFarmCodes.value = []
 }
 
 const showConfirmDialog = (action, title, message, params = null) => {
@@ -438,11 +476,17 @@ const handleControlAll = async (name, action) => {
   fleetControlBusyMap[name] = true
   loading.value = true
   try {
-    const codesFromPanel = Array.isArray(fleetStatus.value)
-      ? fleetStatus.value.map(item => item.farm_code).filter(Boolean)
+    const selectedCodes = Array.isArray(selectedFleetFarmCodes.value)
+      ? selectedFleetFarmCodes.value.filter(Boolean)
       : []
-    const fallbackCodes = farmService.getAvailableFarms().map(f => f.code).filter(Boolean)
-    const targetFarmCodes = codesFromPanel.length > 0 ? codesFromPanel : fallbackCodes
+    const targetFarmCodes = selectedCodes.length > 0
+      ? selectedCodes
+      : (Array.isArray(fleetStatus.value) ? fleetStatus.value.map(item => item.farm_code).filter(Boolean) : [])
+
+    if (targetFarmCodes.length === 0) {
+      ElMessage.warning('未选择可执行的场站，请先在总览区域选择场站')
+      return
+    }
 
     const res = await controlAutoPredictAll(action, name, targetFarmCodes)
     const payload = res.data?.data || res.data || {}
@@ -609,6 +653,18 @@ const handleLogTypeChange = () => {
   font-weight: 600;
   margin-bottom: 10px;
   color: #111827;
+}
+
+.fleet-filter-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.fleet-farm-select {
+  min-width: 360px;
+  max-width: 680px;
 }
 
 .fleet-list {
@@ -931,6 +987,16 @@ const handleLogTypeChange = () => {
     flex-direction: column;
     align-items: center;
     gap: 8px;
+  }
+
+  .fleet-filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .fleet-farm-select {
+    min-width: 100%;
+    max-width: 100%;
   }
 }
 
