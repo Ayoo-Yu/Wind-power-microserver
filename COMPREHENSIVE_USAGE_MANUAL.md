@@ -1,230 +1,229 @@
-# 风功率预测系统 - 完整使用手册
+﻿# 椋庡姛鐜囬娴嬬郴缁?- 瀹屾暣浣跨敤鎵嬪唽
 
-## 📋 目录
+## 馃搵 鐩綍
 
-1. [系统概述](#系统概述)
-2. [快速开始](#快速开始)
-3. [不同用户角色指南](#不同用户角色指南)
-4. [核心功能使用](#核心功能使用)
-5. [API接口使用](#api接口使用)
-6. [配置和部署](#配置和部署)
-7. [监控和维护](#监控和维护)
-8. [故障排除](#故障排除)
-9. [最佳实践](#最佳实践)
-10. [常见问题](#常见问题)
+1. [绯荤粺姒傝堪](#绯荤粺姒傝堪)
+2. [蹇€熷紑濮媇(#蹇€熷紑濮?
+3. [涓嶅悓鐢ㄦ埛瑙掕壊鎸囧崡](#涓嶅悓鐢ㄦ埛瑙掕壊鎸囧崡)
+4. [鏍稿績鍔熻兘浣跨敤](#鏍稿績鍔熻兘浣跨敤)
+5. [API鎺ュ彛浣跨敤](#api鎺ュ彛浣跨敤)
+6. [閰嶇疆鍜岄儴缃瞉(#閰嶇疆鍜岄儴缃?
+7. [鐩戞帶鍜岀淮鎶(#鐩戞帶鍜岀淮鎶?
+8. [鏁呴殰鎺掗櫎](#鏁呴殰鎺掗櫎)
+9. [鏈€浣冲疄璺礭(#鏈€浣冲疄璺?
+10. [甯歌闂](#甯歌闂)
 
-## 系统概述
+## 绯荤粺姒傝堪
 
-### 🏗️ 系统架构
+### 馃彈锔?绯荤粺鏋舵瀯
 
-风功率预测系统提供两种部署模式：
+椋庡姛鐜囬娴嬬郴缁熸彁渚涗袱绉嶉儴缃叉ā寮忥細
 
-#### 模式1：单体架构（适合中小规模）
-- **前端**: Vue.js 3 + Element Plus
-- **后端**: Python Flask + scikit-learn
-- **数据库**: KingBase金仓数据库
-- **文件存储**: MinIO对象存储
+#### 妯″紡1锛氬崟浣撴灦鏋勶紙閫傚悎涓皬瑙勬ā锛?
+- **鍓嶇**: Vue.js 3 + Element Plus
+- **鍚庣**: Python Flask + scikit-learn
+- **鏁版嵁搴?*: KingBase閲戜粨鏁版嵁搴?
+- **鏂囦欢瀛樺偍**: MinIO瀵硅薄瀛樺偍
 
-#### 模式2：微服务架构（适合大规模）
-- **API网关**: Kong Gateway
-- **6个微服务**: 气象、SCADA、功率预测、报告、风场、租户
-- **消息队列**: Kafka + Zookeeper
-- **数据库**: PostgreSQL + Redis + InfluxDB
-- **机器学习**: MLflow模型管理
+#### 妯″紡2锛氬井鏈嶅姟鏋舵瀯锛堥€傚悎澶ц妯★級
+- **API缃戝叧**: Kong Gateway
+- **6涓井鏈嶅姟**: 姘旇薄銆丼CADA銆佸姛鐜囬娴嬨€佹姤鍛娿€侀鍦恒€佺鎴?
+- **娑堟伅闃熷垪**: Kafka + Zookeeper
+- **鏁版嵁搴?*: PostgreSQL + Redis + InfluxDB
+- **鏈哄櫒瀛︿範**: MLflow妯″瀷绠＄悊
 
-### 🎯 核心功能
+### 馃幆 鏍稿績鍔熻兘
 
-1. **多时间尺度功率预测**（1小时-72小时）
-2. **多种机器学习模型**（LSTM、XGBoost、随机森林）
-3. **自动化报告生成**（PDF、HTML、Excel）
-4. **实时监控告警**（Prometheus + Grafana）
-5. **多租户支持**（企业级权限管理）
-6. **数据质量管理**（完整性检查、异常检测）
+1. **澶氭椂闂村昂搴﹀姛鐜囬娴?*锛?灏忔椂-72灏忔椂锛?
+2. **澶氱鏈哄櫒瀛︿範妯″瀷**锛圠STM銆乆GBoost銆侀殢鏈烘．鏋楋級
+3. **鑷姩鍖栨姤鍛婄敓鎴?*锛圥DF銆丠TML銆丒xcel锛?
+4. **瀹炴椂鐩戞帶鍛婅**锛圥rometheus + Grafana锛?
+5. **澶氱鎴锋敮鎸?*锛堜紒涓氱骇鏉冮檺绠＄悊锛?
+6. **鏁版嵁璐ㄩ噺绠＄悊**锛堝畬鏁存€ф鏌ャ€佸紓甯告娴嬶級
 
-## 快速开始
+## 蹇€熷紑濮?
 
-### 🚀 一键启动
+### 馃殌 涓€閿惎鍔?
 
-#### Windows用户
+#### Windows鐢ㄦ埛
 ```bash
-# 双击运行或命令行执行
+# 鍙屽嚮杩愯鎴栧懡浠よ鎵ц
 quick-start.bat
 ```
 
-#### Linux/Mac用户
+#### Linux/Mac鐢ㄦ埛
 ```bash
-# 添加执行权限并运行
+# 娣诲姞鎵ц鏉冮檺骞惰繍琛?
 chmod +x quick-start.sh
 ./quick-start.sh
 ```
 
-启动工具提供以下选项：
-- **1️⃣ 开发环境** - 快速体验所有功能
-- **2️⃣ 微服务架构** - 企业级完整部署
-- **3️⃣ 仅基础设施** - 数据库和中间件
-- **4️⃣ 系统状态检查** - 健康状态检查
-- **5️⃣ 停止所有服务** - 优雅关闭系统
-- **6️⃣ 查看日志** - 故障排查工具
+鍚姩宸ュ叿鎻愪緵浠ヤ笅閫夐」锛?
+- **1锔忊儯 寮€鍙戠幆澧?* - 蹇€熶綋楠屾墍鏈夊姛鑳?
+- **2锔忊儯 寰湇鍔℃灦鏋?* - 浼佷笟绾у畬鏁撮儴缃?
+- **3锔忊儯 浠呭熀纭€璁炬柦** - 鏁版嵁搴撳拰涓棿浠?
+- **4锔忊儯 绯荤粺鐘舵€佹鏌?* - 鍋ュ悍鐘舵€佹鏌?
+- **5锔忊儯 鍋滄鎵€鏈夋湇鍔?* - 浼橀泤鍏抽棴绯荤粺
+- **6锔忊儯 鏌ョ湅鏃ュ織** - 鏁呴殰鎺掓煡宸ュ叿
 
-### 📦 手动启动步骤
+### 馃摝 鎵嬪姩鍚姩姝ラ
 
-#### 开发环境启动
+#### 寮€鍙戠幆澧冨惎鍔?
 ```bash
-# 1. 启动基础设施
+# 1. 鍚姩鍩虹璁炬柦
 cd wind-power-forecast
 docker-compose -f database/docker-compose.yaml up -d
 
-# 2. 启动后端服务
+# 2. 鍚姩鍚庣鏈嶅姟
 cd backend
 pip install -r requirements.txt
 python app.py
 
-# 3. 启动前端服务（新终端）
+# 3. 鍚姩鍓嶇鏈嶅姟锛堟柊缁堢锛?
 cd frontend
 npm install
 npm run dev
 ```
 
-#### 微服务架构启动
+#### 寰湇鍔℃灦鏋勫惎鍔?
 ```bash
-# 启动所有微服务
-cd wind-power-microservices
+# 鍚姩鎵€鏈夊井鏈嶅姟
 docker-compose up -d
 
-# 等待1-2分钟服务启动完成
+# 绛夊緟1-2鍒嗛挓鏈嶅姟鍚姩瀹屾垚
 ```
 
-### 🔍 访问系统
+### 馃攳 璁块棶绯荤粺
 
-系统启动后，可通过以下地址访问：
+绯荤粺鍚姩鍚庯紝鍙€氳繃浠ヤ笅鍦板潃璁块棶锛?
 
-| 服务 | URL | 用户名/密码 |
+| 鏈嶅姟 | URL | 鐢ㄦ埛鍚?瀵嗙爜 |
 |------|-----|-------------|
-| 前端应用 | http://localhost:8080 | - |
-| 后端API | http://localhost:5000 | - |
-| API网关 | http://localhost:8000 | - |
-| Grafana监控 | http://localhost:3000 | admin/password |
+| 鍓嶇搴旂敤 | http://localhost:8080 | - |
+| 鍚庣API | http://localhost:5000 | - |
+| API缃戝叧 | http://localhost:8000 | - |
+| Grafana鐩戞帶 | http://localhost:3000 | admin/password |
 | Kafka UI | http://localhost:8090 | - |
-| MinIO控制台 | http://localhost:9001 | minioadmin/minioadmin |
+| MinIO鎺у埗鍙?| http://localhost:9001 | minioadmin/minioadmin |
 | PgAdmin | http://localhost:5050 | admin@admin.com/admin |
 
-## 不同用户角色指南
+## 涓嶅悓鐢ㄦ埛瑙掕壊鎸囧崡
 
-### 👨‍💻 开发者使用指南
+### 馃懆鈥嶐煉?寮€鍙戣€呬娇鐢ㄦ寚鍗?
 
-#### 环境要求
-- **Node.js**: 18+ (前端开发)
-- **Python**: 3.9+ (后端开发)
-- **Docker**: 20.10+ (容器化)
-- **Git**: 版本控制
+#### 鐜瑕佹眰
+- **Node.js**: 18+ (鍓嶇寮€鍙?
+- **Python**: 3.9+ (鍚庣寮€鍙?
+- **Docker**: 20.10+ (瀹瑰櫒鍖?
+- **Git**: 鐗堟湰鎺у埗
 
-#### 开发环境搭建
+#### 寮€鍙戠幆澧冩惌寤?
 ```bash
-# 1. 克隆项目
+# 1. 鍏嬮殕椤圭洰
 git clone https://github.com/your-org/wind-power-forecasting.git
 
-# 2. 启动基础设施
+# 2. 鍚姩鍩虹璁炬柦
 cd wind-power-forecast
 docker-compose -f database/docker-compose.yaml up -d
 
-# 3. 后端开发环境
+# 3. 鍚庣寮€鍙戠幆澧?
 cd backend
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 python app.py
 
-# 4. 前端开发环境
+# 4. 鍓嶇寮€鍙戠幆澧?
 cd frontend
 npm install
 npm run dev
 ```
 
-#### 代码调试技巧
+#### 浠ｇ爜璋冭瘯鎶€宸?
 ```bash
-# 后端调试（VS Code）
-# 安装Python扩展，设置断点，按F5调试
+# 鍚庣璋冭瘯锛圴S Code锛?
+# 瀹夎Python鎵╁睍锛岃缃柇鐐癸紝鎸塅5璋冭瘯
 
-# 前端调试（浏览器）
-# Chrome DevTools -> Vue.js devtools 扩展
+# 鍓嶇璋冭瘯锛堟祻瑙堝櫒锛?
+# Chrome DevTools -> Vue.js devtools 鎵╁睍
 
-# API测试（Postman/curl）
+# API娴嬭瘯锛圥ostman/curl锛?
 curl -X GET "http://localhost:5000/api/weather/current"
 
-# 数据库查询
+# 鏁版嵁搴撴煡璇?
 docker exec -it kingbase psql -U system -d wind_power
 ```
 
-#### 开发最佳实践
-1. **代码规范**: 遵循PEP8（Python）和ESLint（JavaScript）
-2. **版本控制**: 使用Git分支管理，定期提交代码
-3. **测试驱动**: 编写单元测试，确保代码质量
-4. **文档更新**: 同步更新相关文档和注释
+#### 寮€鍙戞渶浣冲疄璺?
+1. **浠ｇ爜瑙勮寖**: 閬靛惊PEP8锛圥ython锛夊拰ESLint锛圝avaScript锛?
+2. **鐗堟湰鎺у埗**: 浣跨敤Git鍒嗘敮绠＄悊锛屽畾鏈熸彁浜や唬鐮?
+3. **娴嬭瘯椹卞姩**: 缂栧啓鍗曞厓娴嬭瘯锛岀‘淇濅唬鐮佽川閲?
+4. **鏂囨。鏇存柊**: 鍚屾鏇存柊鐩稿叧鏂囨。鍜屾敞閲?
 
-### 🔧 运维人员使用指南
+### 馃敡 杩愮淮浜哄憳浣跨敤鎸囧崡
 
-#### 日常巡检清单
+#### 鏃ュ父宸℃娓呭崟
 ```bash
-# 1. 系统健康检查
+# 1. 绯荤粺鍋ュ悍妫€鏌?
 ./scripts/health-check.sh
 
-# 2. 服务状态检查
+# 2. 鏈嶅姟鐘舵€佹鏌?
 docker ps
 docker-compose ps
 
-# 3. 资源使用监控
+# 3. 璧勬簮浣跨敤鐩戞帶
 docker stats
-kubectl top nodes  # Kubernetes环境
+kubectl top nodes  # Kubernetes鐜
 
-# 4. 日志检查
+# 4. 鏃ュ織妫€鏌?
 docker logs --tail 100 service-name
 ```
 
-#### 监控面板使用
-1. **Grafana监控** (http://localhost:3000)
-   - 查看系统性能指标
-   - 监控预测精度趋势
-   - 设置自定义告警规则
+#### 鐩戞帶闈㈡澘浣跨敤
+1. **Grafana鐩戞帶** (http://localhost:3000)
+   - 鏌ョ湅绯荤粺鎬ц兘鎸囨爣
+   - 鐩戞帶棰勬祴绮惧害瓒嬪娍
+   - 璁剧疆鑷畾涔夊憡璀﹁鍒?
 
-2. **Kibana日志** (http://localhost:5601)
-   - 搜索和分析系统日志
-   - 创建日志可视化图表
-   - 设置日志告警
+2. **Kibana鏃ュ織** (http://localhost:5601)
+   - 鎼滅储鍜屽垎鏋愮郴缁熸棩蹇?
+   - 鍒涘缓鏃ュ織鍙鍖栧浘琛?
+   - 璁剧疆鏃ュ織鍛婅
 
-#### 备份和恢复
+#### 澶囦唤鍜屾仮澶?
 ```bash
-# 数据库备份
+# 鏁版嵁搴撳浠?
 ./scripts/backup-database.sh
 
-# 配置文件备份
+# 閰嶇疆鏂囦欢澶囦唤
 ./scripts/backup-configs.sh
 
-# 系统恢复
+# 绯荤粺鎭㈠
 ./scripts/restore-system.sh backup-2024-01-15
 ```
 
-### 👨‍💼 最终用户使用指南
+### 馃懆鈥嶐煉?鏈€缁堢敤鎴蜂娇鐢ㄦ寚鍗?
 
-#### 首次使用步骤
-1. **访问系统**: 打开浏览器访问 http://localhost:8080
-2. **上传数据**: 点击"数据管理"上传气象和运营数据
-3. **选择模型**: 在"模型训练"页面选择合适的算法
-4. **开始预测**: 设置参数后开始功率预测
-5. **查看报告**: 在"报告中心"查看生成的分析报告
+#### 棣栨浣跨敤姝ラ
+1. **璁块棶绯荤粺**: 鎵撳紑娴忚鍣ㄨ闂?http://localhost:8080
+2. **涓婁紶鏁版嵁**: 鐐瑰嚮"鏁版嵁绠＄悊"涓婁紶姘旇薄鍜岃繍钀ユ暟鎹?
+3. **閫夋嫨妯″瀷**: 鍦?妯″瀷璁粌"椤甸潰閫夋嫨鍚堥€傜殑绠楁硶
+4. **寮€濮嬮娴?*: 璁剧疆鍙傛暟鍚庡紑濮嬪姛鐜囬娴?
+5. **鏌ョ湅鎶ュ憡**: 鍦?鎶ュ憡涓績"鏌ョ湅鐢熸垚鐨勫垎鏋愭姤鍛?
 
-#### 常用操作
-- **数据上传**: 支持CSV、Excel、JSON格式
-- **模型选择**: LSTM适合长期预测，XGBoost适合短期预测
-- **参数调整**: 根据实际数据特点调整模型参数
-- **结果导出**: 预测结果可导出为PDF、Excel等格式
+#### 甯哥敤鎿嶄綔
+- **鏁版嵁涓婁紶**: 鏀寔CSV銆丒xcel銆丣SON鏍煎紡
+- **妯″瀷閫夋嫨**: LSTM閫傚悎闀挎湡棰勬祴锛孹GBoost閫傚悎鐭湡棰勬祴
+- **鍙傛暟璋冩暣**: 鏍规嵁瀹為檯鏁版嵁鐗圭偣璋冩暣妯″瀷鍙傛暟
+- **缁撴灉瀵煎嚭**: 棰勬祴缁撴灉鍙鍑轰负PDF銆丒xcel绛夋牸寮?
 
-## 核心功能使用
+## 鏍稿績鍔熻兘浣跨敤
 
-### 📊 功率预测功能
+### 馃搳 鍔熺巼棰勬祴鍔熻兘
 
-#### 实时预测
+#### 瀹炴椂棰勬祴
 ```bash
-# API方式调用
+# API鏂瑰紡璋冪敤
 curl -X POST "http://localhost:5000/api/predictions/realtime" \
   -H "Content-Type: application/json" \
   -d '{
@@ -239,9 +238,9 @@ curl -X POST "http://localhost:5000/api/predictions/realtime" \
   }'
 ```
 
-#### 批量预测
+#### 鎵归噺棰勬祴
 ```python
-# Python示例
+# Python绀轰緥
 import requests
 
 url = "http://localhost:5000/api/predictions/batch"
@@ -256,41 +255,41 @@ response = requests.post(url, json=data)
 predictions = response.json()
 ```
 
-#### 预测精度评估
+#### 棰勬祴绮惧害璇勪及
 ```bash
-# 查看预测精度统计
+# 鏌ョ湅棰勬祴绮惧害缁熻
 curl -X GET "http://localhost:5000/api/predictions/accuracy?farm_id=farm_001&days=7"
 ```
 
-### 📈 数据管理功能
+### 馃搱 鏁版嵁绠＄悊鍔熻兘
 
-#### 数据上传（Web界面）
-1. 点击左侧菜单"数据管理"
-2. 选择数据类型（气象数据/运营数据）
-3. 点击"上传文件"按钮
-4. 选择CSV/Excel文件
-5. 预览数据并确认上传
+#### 鏁版嵁涓婁紶锛圵eb鐣岄潰锛?
+1. 鐐瑰嚮宸︿晶鑿滃崟"鏁版嵁绠＄悊"
+2. 閫夋嫨鏁版嵁绫诲瀷锛堟皵璞℃暟鎹?杩愯惀鏁版嵁锛?
+3. 鐐瑰嚮"涓婁紶鏂囦欢"鎸夐挳
+4. 閫夋嫨CSV/Excel鏂囦欢
+5. 棰勮鏁版嵁骞剁‘璁や笂浼?
 
-#### 数据上传（API方式）
+#### 鏁版嵁涓婁紶锛圓PI鏂瑰紡锛?
 ```bash
-# 气象数据上传
+# 姘旇薄鏁版嵁涓婁紶
 curl -X POST "http://localhost:5000/api/data/weather" \
   -H "Content-Type: multipart/form-data" \
   -F "file=@weather_data.csv" \
   -F "station_id=station_001"
 ```
 
-#### 数据质量检查
+#### 鏁版嵁璐ㄩ噺妫€鏌?
 ```bash
-# 检查数据完整性
+# 妫€鏌ユ暟鎹畬鏁存€?
 curl -X GET "http://localhost:5000/api/data/quality?farm_id=farm_001&date=2024-01-15"
 ```
 
-### 📋 报告生成功能
+### 馃搵 鎶ュ憡鐢熸垚鍔熻兘
 
-#### 自动化报告
+#### 鑷姩鍖栨姤鍛?
 ```bash
-# 生成运营报告
+# 鐢熸垚杩愯惀鎶ュ憡
 curl -X POST "http://localhost:5000/api/reports/generate" \
   -H "Content-Type: application/json" \
   -d '{
@@ -302,9 +301,9 @@ curl -X POST "http://localhost:5000/api/reports/generate" \
   }'
 ```
 
-#### 定时报告配置
+#### 瀹氭椂鎶ュ憡閰嶇疆
 ```bash
-# 设置每日自动报告
+# 璁剧疆姣忔棩鑷姩鎶ュ憡
 curl -X POST "http://localhost:5000/api/reports/schedule" \
   -H "Content-Type: application/json" \
   -d '{
@@ -315,20 +314,20 @@ curl -X POST "http://localhost:5000/api/reports/schedule" \
   }'
 ```
 
-### 🔔 监控和告警功能
+### 馃敂 鐩戞帶鍜屽憡璀﹀姛鑳?
 
-#### 查看系统状态
+#### 鏌ョ湅绯荤粺鐘舵€?
 ```bash
-# 系统健康检查
+# 绯荤粺鍋ュ悍妫€鏌?
 curl -X GET "http://localhost:5000/health"
 
-# 详细系统状态
+# 璇︾粏绯荤粺鐘舵€?
 curl -X GET "http://localhost:5000/api/system/status"
 ```
 
-#### 设置告警规则
+#### 璁剧疆鍛婅瑙勫垯
 ```bash
-# 创建告警规则
+# 鍒涘缓鍛婅瑙勫垯
 curl -X POST "http://localhost:5000/api/alerts/rules" \
   -H "Content-Type: application/json" \
   -d '{
@@ -341,15 +340,15 @@ curl -X POST "http://localhost:5000/api/alerts/rules" \
   }'
 ```
 
-## API接口使用
+## API鎺ュ彛浣跨敤
 
-### 🔗 基础信息
+### 馃敆 鍩虹淇℃伅
 
 **Base URL**: `http://localhost:5000/api`
 
-**认证方式**: JWT Token（部分接口需要）
+**璁よ瘉鏂瑰紡**: JWT Token锛堥儴鍒嗘帴鍙ｉ渶瑕侊級
 ```bash
-# 获取Token
+# 鑾峰彇Token
 curl -X POST "http://localhost:5000/api/auth/login" \
   -H "Content-Type: application/json" \
   -d '{
@@ -358,44 +357,44 @@ curl -X POST "http://localhost:5000/api/auth/login" \
   }'
 ```
 
-### 📡 主要API端点
+### 馃摗 涓昏API绔偣
 
-#### 气象数据API
+#### 姘旇薄鏁版嵁API
 ```
-GET /api/weather/current          # 当前气象数据
-GET /api/weather/historical       # 历史气象数据
-POST /api/weather/data            # 上传气象数据
-GET /api/weather/forecast         # 气象预报数据
-```
-
-#### 功率预测API
-```
-POST /api/predictions/realtime    # 实时预测
-POST /api/predictions/batch       # 批量预测
-GET /api/predictions/results      # 预测结果查询
-GET /api/predictions/accuracy     # 预测精度统计
+GET /api/weather/current          # 褰撳墠姘旇薄鏁版嵁
+GET /api/weather/historical       # 鍘嗗彶姘旇薄鏁版嵁
+POST /api/weather/data            # 涓婁紶姘旇薄鏁版嵁
+GET /api/weather/forecast         # 姘旇薄棰勬姤鏁版嵁
 ```
 
-#### 报告API
+#### 鍔熺巼棰勬祴API
 ```
-POST /api/reports/generate        # 生成报告
-GET /api/reports/list             # 报告列表
-GET /api/reports/{id}/download    # 下载报告
-POST /api/reports/schedule        # 定时报告
-```
-
-#### 系统管理API
-```
-GET /api/system/status            # 系统状态
-GET /api/system/metrics           # 系统指标
-GET /api/system/logs              # 系统日志
-GET /health                       # 健康检查
-GET /ready                        # 就绪检查
+POST /api/predictions/realtime    # 瀹炴椂棰勬祴
+POST /api/predictions/batch       # 鎵归噺棰勬祴
+GET /api/predictions/results      # 棰勬祴缁撴灉鏌ヨ
+GET /api/predictions/accuracy     # 棰勬祴绮惧害缁熻
 ```
 
-### 💻 代码示例
+#### 鎶ュ憡API
+```
+POST /api/reports/generate        # 鐢熸垚鎶ュ憡
+GET /api/reports/list             # 鎶ュ憡鍒楄〃
+GET /api/reports/{id}/download    # 涓嬭浇鎶ュ憡
+POST /api/reports/schedule        # 瀹氭椂鎶ュ憡
+```
 
-#### Python示例
+#### 绯荤粺绠＄悊API
+```
+GET /api/system/status            # 绯荤粺鐘舵€?
+GET /api/system/metrics           # 绯荤粺鎸囨爣
+GET /api/system/logs              # 绯荤粺鏃ュ織
+GET /health                       # 鍋ュ悍妫€鏌?
+GET /ready                        # 灏辩华妫€鏌?
+```
+
+### 馃捇 浠ｇ爜绀轰緥
+
+#### Python绀轰緥
 ```python
 import requests
 import json
@@ -436,24 +435,24 @@ class WindPowerAPI:
         )
         return response.json()
 
-# 使用示例
+# 浣跨敤绀轰緥
 api = WindPowerAPI()
 
-# 获取气象数据
+# 鑾峰彇姘旇薄鏁版嵁
 weather_data = api.get_weather_data("station_001", "2024-01-15")
-print(f"气象数据: {weather_data}")
+print(f"姘旇薄鏁版嵁: {weather_data}")
 
-# 创建功率预测
+# 鍒涘缓鍔熺巼棰勬祴
 prediction = api.create_prediction("farm_001", 24, {
     "temperature": 15.2,
     "wind_speed": 8.5,
     "wind_direction": 225,
     "pressure": 1013.2
 })
-print(f"预测结果: {prediction}")
+print(f"棰勬祴缁撴灉: {prediction}")
 ```
 
-#### JavaScript示例
+#### JavaScript绀轰緥
 ```javascript
 class WindPowerAPI {
     constructor(baseUrl = 'http://localhost:5000/api') {
@@ -499,14 +498,14 @@ class WindPowerAPI {
     }
 }
 
-// 使用示例
+// 浣跨敤绀轰緥
 const api = new WindPowerAPI();
 
-// 获取气象数据并创建预测
+// 鑾峰彇姘旇薄鏁版嵁骞跺垱寤洪娴?
 async function runPrediction() {
     try {
         const weatherData = await api.getWeatherData('station_001', '2024-01-15');
-        console.log('气象数据:', weatherData);
+        console.log('姘旇薄鏁版嵁:', weatherData);
 
         const prediction = await api.createPrediction('farm_001', 24, {
             temperature: 15.2,
@@ -514,151 +513,151 @@ async function runPrediction() {
             wind_direction: 225,
             pressure: 1013.2
         });
-        console.log('预测结果:', prediction);
+        console.log('棰勬祴缁撴灉:', prediction);
     } catch (error) {
-        console.error('错误:', error);
+        console.error('閿欒:', error);
     }
 }
 
 runPrediction();
 ```
 
-## 配置和部署
+## 閰嶇疆鍜岄儴缃?
 
-### ⚙️ 环境配置
+### 鈿欙笍 鐜閰嶇疆
 
-#### 环境变量配置
+#### 鐜鍙橀噺閰嶇疆
 ```bash
-# 基础配置
+# 鍩虹閰嶇疆
 export NODE_ENV=development
 export API_BASE_URL=http://localhost:5000
 export JWT_SECRET=your-secret-key
 
-# 数据库配置
+# 鏁版嵁搴撻厤缃?
 export DB_HOST=localhost
 export DB_PORT=54321
 export DB_NAME=wind_power
 export DB_USER=system
 export DB_PASSWORD=yzz0216yh
 
-# Redis配置
+# Redis閰嶇疆
 export REDIS_HOST=localhost
 export REDIS_PORT=6379
 
-# 邮件配置
+# 閭欢閰嶇疆
 export SMTP_HOST=smtp.gmail.com
 export SMTP_PORT=587
 export SMTP_USER=your-email@gmail.com
 export SMTP_PASS=your-password
 ```
 
-#### 配置文件说明
+#### 閰嶇疆鏂囦欢璇存槑
 ```
 wind-power-forecast/
-├── .env                    # 环境变量配置
-├── backend/
-│   ├── config.py          # 后端配置
-│   └── requirements.txt   # Python依赖
-├── frontend/
-│   ├── .env               # 前端环境配置
-│   └── package.json       # Node.js依赖
-└── database/
-    └── docker-compose.yaml # 数据库配置
+鈹溾攢鈹€ .env                    # 鐜鍙橀噺閰嶇疆
+鈹溾攢鈹€ backend/
+鈹?  鈹溾攢鈹€ config.py          # 鍚庣閰嶇疆
+鈹?  鈹斺攢鈹€ requirements.txt   # Python渚濊禆
+鈹溾攢鈹€ frontend/
+鈹?  鈹溾攢鈹€ .env               # 鍓嶇鐜閰嶇疆
+鈹?  鈹斺攢鈹€ package.json       # Node.js渚濊禆
+鈹斺攢鈹€ database/
+    鈹斺攢鈹€ docker-compose.yaml # 鏁版嵁搴撻厤缃?
 ```
 
-### 🐳 Docker部署
+### 馃惓 Docker閮ㄧ讲
 
-#### 开发环境部署
+#### 寮€鍙戠幆澧冮儴缃?
 ```bash
-# 启动基础设施
+# 鍚姩鍩虹璁炬柦
 docker-compose -f database/docker-compose.yaml up -d
 
-# 构建应用镜像
+# 鏋勫缓搴旂敤闀滃儚
 docker build -t wind-power-app ./backend
 docker build -t wind-power-frontend ./frontend
 
-# 启动应用服务
+# 鍚姩搴旂敤鏈嶅姟
 docker run -d -p 5000:5000 --name wind-power-backend wind-power-app
 docker run -d -p 8080:8080 --name wind-power-frontend wind-power-frontend
 ```
 
-#### 生产环境部署
+#### 鐢熶骇鐜閮ㄧ讲
 ```bash
-# 使用生产配置
+# 浣跨敤鐢熶骇閰嶇疆
 docker-compose -f docker-compose.prod.yml up -d
 
-# 或使用Kubernetes
+# 鎴栦娇鐢↘ubernetes
 kubectl apply -f k8s/
 ```
 
-### ☸️ Kubernetes部署
+### 鈽革笍 Kubernetes閮ㄧ讲
 
-#### 基础部署
+#### 鍩虹閮ㄧ讲
 ```bash
-# 创建命名空间
+# 鍒涘缓鍛藉悕绌洪棿
 kubectl create namespace wind-power
 
-# 部署基础设施
+# 閮ㄧ讲鍩虹璁炬柦
 kubectl apply -f k8s/infrastructure/
 
-# 部署微服务
+# 閮ㄧ讲寰湇鍔?
 kubectl apply -f k8s/services/
 
-# 部署监控
+# 閮ㄧ讲鐩戞帶
 kubectl apply -f k8s/monitoring/
 ```
 
-#### Helm部署（推荐）
+#### Helm閮ㄧ讲锛堟帹鑽愶級
 ```bash
-# 添加Helm仓库
+# 娣诲姞Helm浠撳簱
 helm repo add wind-power https://charts.windpower.com
 
-# 安装基础服务
+# 瀹夎鍩虹鏈嶅姟
 helm install wind-power-infrastructure wind-power/infrastructure
 
-# 安装应用服务
+# 瀹夎搴旂敤鏈嶅姟
 helm install wind-power-services wind-power/services
 
-# 安装监控
+# 瀹夎鐩戞帶
 helm install wind-power-monitoring wind-power/monitoring
 ```
 
-## 监控和维护
+## 鐩戞帶鍜岀淮鎶?
 
-### 📊 监控面板使用
+### 馃搳 鐩戞帶闈㈡澘浣跨敤
 
-#### Grafana监控
-1. 访问 http://localhost:3000
-2. 使用 admin/password 登录
-3. 查看预配置的仪表板：
-   - **系统概览**: CPU、内存、磁盘使用率
-   - **应用性能**: 响应时间、错误率、吞吐量
-   - **业务指标**: 预测精度、数据质量、用户活跃度
+#### Grafana鐩戞帶
+1. 璁块棶 http://localhost:3000
+2. 浣跨敤 admin/password 鐧诲綍
+3. 鏌ョ湅棰勯厤缃殑浠〃鏉匡細
+   - **绯荤粺姒傝**: CPU銆佸唴瀛樸€佺鐩樹娇鐢ㄧ巼
+   - **搴旂敤鎬ц兘**: 鍝嶅簲鏃堕棿銆侀敊璇巼銆佸悶鍚愰噺
+   - **涓氬姟鎸囨爣**: 棰勬祴绮惧害銆佹暟鎹川閲忋€佺敤鎴锋椿璺冨害
 
-#### 自定义监控
+#### 鑷畾涔夌洃鎺?
 ```json
-// 创建自定义仪表板
+// 鍒涘缓鑷畾涔変华琛ㄦ澘
 {
   "dashboard": {
-    "title": "风功率预测监控",
+    "title": "椋庡姛鐜囬娴嬬洃鎺?,
     "panels": [
       {
-        "title": "预测精度趋势",
+        "title": "棰勬祴绮惧害瓒嬪娍",
         "type": "graph",
         "targets": [
           {
             "expr": "prediction_accuracy_percentage",
-            "legendFormat": "预测精度"
+            "legendFormat": "棰勬祴绮惧害"
           }
         ]
       },
       {
-        "title": "API响应时间",
+        "title": "API鍝嶅簲鏃堕棿",
         "type": "graph",
         "targets": [
           {
             "expr": "http_request_duration_seconds",
-            "legendFormat": "响应时间"
+            "legendFormat": "鍝嶅簲鏃堕棿"
           }
         ]
       }
@@ -667,11 +666,11 @@ helm install wind-power-monitoring wind-power/monitoring
 }
 ```
 
-### 🚨 告警管理
+### 馃毃 鍛婅绠＄悊
 
-#### 设置告警规则
+#### 璁剧疆鍛婅瑙勫垯
 ```bash
-# CPU使用率告警
+# CPU浣跨敤鐜囧憡璀?
 curl -X POST "http://localhost:9090/api/v1/rules" \
   -H "Content-Type: application/json" \
   -d '{
@@ -682,15 +681,15 @@ curl -X POST "http://localhost:9090/api/v1/rules" \
       "severity": "warning"
     },
     "annotations": {
-      "summary": "CPU使用率过高",
-      "description": "CPU使用率超过85%，持续5分钟"
+      "summary": "CPU浣跨敤鐜囪繃楂?,
+      "description": "CPU浣跨敤鐜囪秴杩?5%锛屾寔缁?鍒嗛挓"
     }
   }'
 ```
 
-#### 告警通知配置
+#### 鍛婅閫氱煡閰嶇疆
 ```bash
-# 邮件通知
+# 閭欢閫氱煡
 curl -X POST "http://localhost:9093/api/v1/alerts" \
   -H "Content-Type: application/json" \
   -d '{
@@ -707,207 +706,207 @@ curl -X POST "http://localhost:9093/api/v1/alerts" \
   }'
 ```
 
-### 🔧 日常维护
+### 馃敡 鏃ュ父缁存姢
 
-#### 自动维护脚本
+#### 鑷姩缁存姢鑴氭湰
 ```bash
 #!/bin/bash
 # daily-maintenance.sh
 
-echo "$(date): 开始日常维护"
+echo "$(date): 寮€濮嬫棩甯哥淮鎶?
 
-# 1. 清理过期日志
-echo "清理过期日志..."
+# 1. 娓呯悊杩囨湡鏃ュ織
+echo "娓呯悊杩囨湡鏃ュ織..."
 find /var/log/wind-power -name "*.log" -mtime +7 -delete
 
-# 2. 数据备份
-echo "执行数据备份..."
+# 2. 鏁版嵁澶囦唤
+echo "鎵ц鏁版嵁澶囦唤..."
 ./scripts/backup-database.sh
 
-# 3. 健康检查
-echo "系统健康检查..."
+# 3. 鍋ュ悍妫€鏌?
+echo "绯荤粺鍋ュ悍妫€鏌?.."
 ./scripts/health-check.sh
 
-# 4. 性能报告
-echo "生成性能报告..."
+# 4. 鎬ц兘鎶ュ憡
+echo "鐢熸垚鎬ц兘鎶ュ憡..."
 ./scripts/generate-performance-report.sh
 
-echo "$(date): 日常维护完成"
+echo "$(date): 鏃ュ父缁存姢瀹屾垚"
 ```
 
-#### 手动维护检查
+#### 鎵嬪姩缁存姢妫€鏌?
 ```bash
-# 数据库维护
+# 鏁版嵁搴撶淮鎶?
 docker exec -it postgres psql -U postgres -d wind_power -c "
-  -- 检查数据库大小
+  -- 妫€鏌ユ暟鎹簱澶у皬
   SELECT pg_size_pretty(pg_database_size('wind_power'));
 
-  -- 检查表统计信息
+  -- 妫€鏌ヨ〃缁熻淇℃伅
   SELECT schemaname, tablename, n_tup_ins, n_tup_upd, n_tup_del
   FROM pg_stat_user_tables
   ORDER BY n_tup_ins DESC;
 
-  -- 更新统计信息
+  -- 鏇存柊缁熻淇℃伅
   ANALYZE;
 "
 
-# Redis维护
+# Redis缁存姢
 docker exec -it redis redis-cli info
 
-# 磁盘空间检查
+# 纾佺洏绌洪棿妫€鏌?
 df -h
 ```
 
-## 故障排除
+## 鏁呴殰鎺掗櫎
 
-### 🔍 常见问题诊断
+### 馃攳 甯歌闂璇婃柇
 
-#### 服务启动失败
+#### 鏈嶅姟鍚姩澶辫触
 ```bash
-# 检查Docker状态
+# 妫€鏌ocker鐘舵€?
 docker system info
 docker ps -a
 
-# 查看容器日志
+# 鏌ョ湅瀹瑰櫒鏃ュ織
 docker logs container-name
 
-# 检查端口冲突
+# 妫€鏌ョ鍙ｅ啿绐?
 netstat -tulpn | grep :8080
 lsof -i :8080
 ```
 
-#### 数据库连接问题
+#### 鏁版嵁搴撹繛鎺ラ棶棰?
 ```bash
-# 测试数据库连接
+# 娴嬭瘯鏁版嵁搴撹繛鎺?
 docker exec -it postgres psql -U postgres -d wind_power -c "SELECT 1;"
 
-# 检查数据库配置
+# 妫€鏌ユ暟鎹簱閰嶇疆
 docker exec -it backend env | grep DB
 
-# 重置数据库
+# 閲嶇疆鏁版嵁搴?
 docker-compose -f database/docker-compose.yaml down
 docker-compose -f database/docker-compose.yaml up -d
 ```
 
-#### 预测精度异常
+#### 棰勬祴绮惧害寮傚父
 ```bash
-# 检查数据质量
+# 妫€鏌ユ暟鎹川閲?
 curl -X GET "http://localhost:5000/api/data/quality"
 
-# 检查模型状态
+# 妫€鏌ユā鍨嬬姸鎬?
 curl -X GET "http://localhost:5000/api/models/status"
 
-# 重新训练模型
+# 閲嶆柊璁粌妯″瀷
 curl -X POST "http://localhost:5000/api/models/retrain"
 ```
 
-### 🚨 紧急故障处理
+### 馃毃 绱ф€ユ晠闅滃鐞?
 
-#### 系统完全不可用
-1. **立即检查基础设施**
+#### 绯荤粺瀹屽叏涓嶅彲鐢?
+1. **绔嬪嵆妫€鏌ュ熀纭€璁炬柦**
    ```bash
    docker-compose ps
    docker system df
    ```
 
-2. **重启核心服务**
+2. **閲嶅惎鏍稿績鏈嶅姟**
    ```bash
    docker-compose restart
    ```
 
-3. **检查资源使用**
+3. **妫€鏌ヨ祫婧愪娇鐢?*
    ```bash
    docker stats
    free -h
    df -h
    ```
 
-4. **查看详细日志**
+4. **鏌ョ湅璇︾粏鏃ュ織**
    ```bash
    docker-compose logs --tail 100
    ```
 
-#### 数据丢失恢复
-1. **检查备份状态**
+#### 鏁版嵁涓㈠け鎭㈠
+1. **妫€鏌ュ浠界姸鎬?*
    ```bash
    ls -la /backups/
    ```
 
-2. **从备份恢复**
+2. **浠庡浠芥仮澶?*
    ```bash
    ./scripts/restore-database.sh backup-latest.sql
    ```
 
-3. **验证数据完整性**
+3. **楠岃瘉鏁版嵁瀹屾暣鎬?*
    ```bash
    ./scripts/verify-data-integrity.sh
    ```
 
-### 📞 技术支持
+### 馃摓 鎶€鏈敮鎸?
 
-#### 获取帮助
-1. **查看日志文件**
-   - 应用日志: `/var/log/wind-power/`
-   - Docker日志: `docker logs service-name`
-   - 系统日志: `journalctl -u docker`
+#### 鑾峰彇甯姪
+1. **鏌ョ湅鏃ュ織鏂囦欢**
+   - 搴旂敤鏃ュ織: `/var/log/wind-power/`
+   - Docker鏃ュ織: `docker logs service-name`
+   - 绯荤粺鏃ュ織: `journalctl -u docker`
 
-2. **在线文档**
-   - 项目文档: `PROJECT_DOCUMENTATION.md`
-   - 运维手册: `OPERATIONS_MANUAL.md`
-   - API文档: `http://localhost:5000/api-docs`
+2. **鍦ㄧ嚎鏂囨。**
+   - 椤圭洰鏂囨。: `PROJECT_DOCUMENTATION.md`
+   - 杩愮淮鎵嬪唽: `OPERATIONS_MANUAL.md`
+   - API鏂囨。: `http://localhost:5000/api-docs`
 
-3. **社区支持**
-   - GitHub Issues: 报告bug和功能请求
-   - 技术支持: support@windpower.com
-   - 紧急联系: +86-xxx-xxxx-xxxx
+3. **绀惧尯鏀寔**
+   - GitHub Issues: 鎶ュ憡bug鍜屽姛鑳借姹?
+   - 鎶€鏈敮鎸? support@windpower.com
+   - 绱ф€ヨ仈绯? +86-xxx-xxxx-xxxx
 
-## 最佳实践
+## 鏈€浣冲疄璺?
 
-### 🏗️ 架构设计最佳实践
+### 馃彈锔?鏋舵瀯璁捐鏈€浣冲疄璺?
 
-#### 微服务划分原则
-1. **单一职责**: 每个服务只负责一个业务领域
-2. **独立部署**: 服务可以独立构建、测试和部署
-3. **数据隔离**: 每个服务拥有自己的数据库
-4. **异步通信**: 使用消息队列进行服务间通信
+#### 寰湇鍔″垝鍒嗗師鍒?
+1. **鍗曚竴鑱岃矗**: 姣忎釜鏈嶅姟鍙礋璐ｄ竴涓笟鍔￠鍩?
+2. **鐙珛閮ㄧ讲**: 鏈嶅姟鍙互鐙珛鏋勫缓銆佹祴璇曞拰閮ㄧ讲
+3. **鏁版嵁闅旂**: 姣忎釜鏈嶅姟鎷ユ湁鑷繁鐨勬暟鎹簱
+4. **寮傛閫氫俊**: 浣跨敤娑堟伅闃熷垪杩涜鏈嶅姟闂撮€氫俊
 
-#### 数据管理策略
-1. **数据分层**
-   - 原始数据层: 保持数据原始状态
-   - 清洗数据层: 经过质量检查的数据
-   - 汇总数据层: 聚合和统计数据
-   - 应用数据层: 业务逻辑处理后的数据
+#### 鏁版嵁绠＄悊绛栫暐
+1. **鏁版嵁鍒嗗眰**
+   - 鍘熷鏁版嵁灞? 淇濇寔鏁版嵁鍘熷鐘舵€?
+   - 娓呮礂鏁版嵁灞? 缁忚繃璐ㄩ噺妫€鏌ョ殑鏁版嵁
+   - 姹囨€绘暟鎹眰: 鑱氬悎鍜岀粺璁℃暟鎹?
+   - 搴旂敤鏁版嵁灞? 涓氬姟閫昏緫澶勭悊鍚庣殑鏁版嵁
 
-2. **数据生命周期管理**
-   - 热数据: 最近7天，快速访问
-   - 温数据: 7天-3个月，标准访问
-   - 冷数据: 3个月以上，归档存储
+2. **鏁版嵁鐢熷懡鍛ㄦ湡绠＄悊**
+   - 鐑暟鎹? 鏈€杩?澶╋紝蹇€熻闂?
+   - 娓╂暟鎹? 7澶?3涓湀锛屾爣鍑嗚闂?
+   - 鍐锋暟鎹? 3涓湀浠ヤ笂锛屽綊妗ｅ瓨鍌?
 
-### 🔧 开发最佳实践
+### 馃敡 寮€鍙戞渶浣冲疄璺?
 
-#### 代码质量
-1. **代码审查**
-   - 强制代码审查流程
-   - 使用Pull Request工作流
-   - 自动化代码质量检查
+#### 浠ｇ爜璐ㄩ噺
+1. **浠ｇ爜瀹℃煡**
+   - 寮哄埗浠ｇ爜瀹℃煡娴佺▼
+   - 浣跨敤Pull Request宸ヤ綔娴?
+   - 鑷姩鍖栦唬鐮佽川閲忔鏌?
 
-2. **测试策略**
-   - 单元测试覆盖率 > 80%
-   - 集成测试覆盖核心功能
-   - 端到端测试覆盖用户场景
+2. **娴嬭瘯绛栫暐**
+   - 鍗曞厓娴嬭瘯瑕嗙洊鐜?> 80%
+   - 闆嗘垚娴嬭瘯瑕嗙洊鏍稿績鍔熻兘
+   - 绔埌绔祴璇曡鐩栫敤鎴峰満鏅?
 
-3. **文档维护**
-   - 代码注释覆盖率 > 30%
-   - API文档自动生成
-   - 架构文档及时更新
+3. **鏂囨。缁存姢**
+   - 浠ｇ爜娉ㄩ噴瑕嗙洊鐜?> 30%
+   - API鏂囨。鑷姩鐢熸垚
+   - 鏋舵瀯鏂囨。鍙婃椂鏇存柊
 
-#### 性能优化
-1. **前端优化**
+#### 鎬ц兘浼樺寲
+1. **鍓嶇浼樺寲**
    ```javascript
-   // 组件懒加载
+   // 缁勪欢鎳掑姞杞?
    const LazyComponent = () => import('./components/HeavyComponent.vue');
 
-   // 数据缓存
+   // 鏁版嵁缂撳瓨
    const cache = new Map();
    const getCachedData = (key, fetchFn) => {
      if (cache.has(key)) return cache.get(key);
@@ -916,13 +915,13 @@ curl -X POST "http://localhost:5000/api/models/retrain"
      return data;
    };
 
-   // 虚拟滚动
+   // 铏氭嫙婊氬姩
    import { VirtualScroller } from 'vue-virtual-scroller';
    ```
 
-2. **后端优化**
+2. **鍚庣浼樺寲**
    ```python
-   # 数据库查询优化
+   # 鏁版嵁搴撴煡璇紭鍖?
    def get_optimized_data():
        return db.session.query(WeatherData)\
            .filter(WeatherData.created_at >= start_date)\
@@ -931,7 +930,7 @@ curl -X POST "http://localhost:5000/api/models/retrain"
            .limit(100)\
            .all()
 
-   # 缓存策略
+   # 缂撳瓨绛栫暐
    from functools import lru_cache
 
    @lru_cache(maxsize=1000)
@@ -939,10 +938,10 @@ curl -X POST "http://localhost:5000/api/models/retrain"
        return load_model(f"models/{model_type}.pkl")
    ```
 
-### 🔒 安全最佳实践
+### 馃敀 瀹夊叏鏈€浣冲疄璺?
 
-#### 应用安全
-1. **输入验证**
+#### 搴旂敤瀹夊叏
+1. **杈撳叆楠岃瘉**
    ```python
    from marshmallow import Schema, fields, validate
 
@@ -952,26 +951,26 @@ curl -X POST "http://localhost:5000/api/models/retrain"
        wind_direction = fields.Integer(required=True, validate=validate.Range(min=0, max=360))
    ```
 
-2. **SQL注入防护**
+2. **SQL娉ㄥ叆闃叉姢**
    ```python
-   # 使用ORM参数化查询
+   # 浣跨敤ORM鍙傛暟鍖栨煡璇?
    result = db.session.query(WeatherData).filter(
        WeatherData.station_id == station_id,
        WeatherData.date >= start_date
    ).all()
 
-   # 避免字符串拼接
-   # ❌ 错误方式
+   # 閬垮厤瀛楃涓叉嫾鎺?
+   # 鉂?閿欒鏂瑰紡
    query = f"SELECT * FROM weather WHERE station_id = '{station_id}'"
 
-   # ✅ 正确方式
+   # 鉁?姝ｇ‘鏂瑰紡
    query = "SELECT * FROM weather WHERE station_id = %s"
    result = db.session.execute(query, (station_id,))
    ```
 
-3. **XSS防护**
+3. **XSS闃叉姢**
    ```javascript
-   // 输入转义
+   // 杈撳叆杞箟
    function escapeHtml(text) {
      const map = {
        '&': '&amp;',
@@ -983,71 +982,71 @@ curl -X POST "http://localhost:5000/api/models/retrain"
      return text.replace(/[&<>"']/g, m => map[m]);
    }
 
-   // Vue.js自动转义
-   {{ userInput }}  <!-- 自动转义 -->
-   <div v-html="userInput"></div>  <!-- 需要手动转义 -->
+   // Vue.js鑷姩杞箟
+   {{ userInput }}  <!-- 鑷姩杞箟 -->
+   <div v-html="userInput"></div>  <!-- 闇€瑕佹墜鍔ㄨ浆涔?-->
    ```
 
-#### 系统安全
-1. **网络安全**
-   - 使用HTTPS加密通信
-   - 配置防火墙规则
-   - 实施网络分段
-   - 定期安全扫描
+#### 绯荤粺瀹夊叏
+1. **缃戠粶瀹夊叏**
+   - 浣跨敤HTTPS鍔犲瘑閫氫俊
+   - 閰嶇疆闃茬伀澧欒鍒?
+   - 瀹炴柦缃戠粶鍒嗘
+   - 瀹氭湡瀹夊叏鎵弿
 
-2. **数据安全**
-   - 敏感数据加密存储
-   - 数据传输加密
-   - 定期备份和测试恢复
-   - 实施数据脱敏
+2. **鏁版嵁瀹夊叏**
+   - 鏁忔劅鏁版嵁鍔犲瘑瀛樺偍
+   - 鏁版嵁浼犺緭鍔犲瘑
+   - 瀹氭湡澶囦唤鍜屾祴璇曟仮澶?
+   - 瀹炴柦鏁版嵁鑴辨晱
 
-3. **访问控制**
-   - 基于角色的权限管理
-   - 最小权限原则
-   - 定期权限审查
-   - 多因素认证
+3. **璁块棶鎺у埗**
+   - 鍩轰簬瑙掕壊鐨勬潈闄愮鐞?
+   - 鏈€灏忔潈闄愬師鍒?
+   - 瀹氭湡鏉冮檺瀹℃煡
+   - 澶氬洜绱犺璇?
 
-### 📊 运维最佳实践
+### 馃搳 杩愮淮鏈€浣冲疄璺?
 
-#### 监控策略
-1. **多层监控**
-   - 基础设施监控（CPU、内存、磁盘、网络）
-   - 应用性能监控（响应时间、错误率、吞吐量）
-   - 业务指标监控（预测精度、数据质量、用户活跃度）
+#### 鐩戞帶绛栫暐
+1. **澶氬眰鐩戞帶**
+   - 鍩虹璁炬柦鐩戞帶锛圕PU銆佸唴瀛樸€佺鐩樸€佺綉缁滐級
+   - 搴旂敤鎬ц兘鐩戞帶锛堝搷搴旀椂闂淬€侀敊璇巼銆佸悶鍚愰噺锛?
+   - 涓氬姟鎸囨爣鐩戞帶锛堥娴嬬簿搴︺€佹暟鎹川閲忋€佺敤鎴锋椿璺冨害锛?
 
-2. **告警优化**
-   - 减少误报和漏报
-   - 设置告警升级机制
-   - 定期审查和调整告警规则
-   - 实施告警静默策略
+2. **鍛婅浼樺寲**
+   - 鍑忓皯璇姤鍜屾紡鎶?
+   - 璁剧疆鍛婅鍗囩骇鏈哄埗
+   - 瀹氭湡瀹℃煡鍜岃皟鏁村憡璀﹁鍒?
+   - 瀹炴柦鍛婅闈欓粯绛栫暐
 
-#### 容量规划
-1. **资源评估**
+#### 瀹归噺瑙勫垝
+1. **璧勬簮璇勪及**
    ```bash
-   # 容量评估脚本
+   # 瀹归噺璇勪及鑴氭湰
    #!/bin/bash
 
-   # 收集当前资源使用情况
+   # 鏀堕泦褰撳墠璧勬簮浣跨敤鎯呭喌
    CPU_USAGE=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | cut -d'%' -f1)
    MEM_USAGE=$(free | grep Mem | awk '{print ($3/$2) * 100.0}')
    DISK_USAGE=$(df -h / | awk 'NR==2 {print $5}' | cut -d'%' -f1)
 
-   # 预测增长趋势
-   GROWTH_RATE=0.15  # 15%月增长率
+   # 棰勬祴澧為暱瓒嬪娍
+   GROWTH_RATE=0.15  # 15%鏈堝闀跨巼
    MONTHS_AHEAD=6
 
    PREDICTED_CPU=$(echo "$CPU_USAGE * (1 + $GROWTH_RATE)^$MONTHS_AHEAD" | bc)
    PREDICTED_MEM=$(echo "$MEM_USAGE * (1 + $GROWTH_RATE)^$MONTHS_AHEAD" | bc)
 
-   echo "当前CPU使用率: ${CPU_USAGE}%"
-   echo "预测6个月后CPU使用率: ${PREDICTED_CPU}%"
-   echo "当前内存使用率: ${MEM_USAGE}%"
-   echo "预测6个月后内存使用率: ${PREDICTED_MEM}%"
+   echo "褰撳墠CPU浣跨敤鐜? ${CPU_USAGE}%"
+   echo "棰勬祴6涓湀鍚嶤PU浣跨敤鐜? ${PREDICTED_CPU}%"
+   echo "褰撳墠鍐呭瓨浣跨敤鐜? ${MEM_USAGE}%"
+   echo "棰勬祴6涓湀鍚庡唴瀛樹娇鐢ㄧ巼: ${PREDICTED_MEM}%"
    ```
 
-2. **弹性伸缩**
+2. **寮规€т几缂?*
    ```yaml
-   # Kubernetes HPA配置
+   # Kubernetes HPA閰嶇疆
    apiVersion: autoscaling/v2
    kind: HorizontalPodAutoscaler
    metadata:
@@ -1074,102 +1073,102 @@ curl -X POST "http://localhost:5000/api/models/retrain"
            averageUtilization: 80
    ```
 
-## 常见问题
+## 甯歌闂
 
-### ❓ 安装和启动问题
+### 鉂?瀹夎鍜屽惎鍔ㄩ棶棰?
 
-#### Q: Docker容器启动失败怎么办？
+#### Q: Docker瀹瑰櫒鍚姩澶辫触鎬庝箞鍔烇紵
 **A**:
-1. 检查Docker服务状态：`docker system info`
-2. 查看容器日志：`docker logs container-name`
-3. 检查端口冲突：`netstat -tulpn | grep port-number`
-4. 重新构建镜像：`docker-compose build --no-cache`
+1. 妫€鏌ocker鏈嶅姟鐘舵€侊細`docker system info`
+2. 鏌ョ湅瀹瑰櫒鏃ュ織锛歚docker logs container-name`
+3. 妫€鏌ョ鍙ｅ啿绐侊細`netstat -tulpn | grep port-number`
+4. 閲嶆柊鏋勫缓闀滃儚锛歚docker-compose build --no-cache`
 
-#### Q: 数据库连接失败怎么办？
+#### Q: 鏁版嵁搴撹繛鎺ュけ璐ユ€庝箞鍔烇紵
 **A**:
-1. 检查数据库容器状态：`docker ps | grep postgres`
-2. 测试连接：`docker exec -it postgres psql -U postgres`
-3. 检查连接字符串配置
-4. 重启数据库服务：`docker-compose restart postgres`
+1. 妫€鏌ユ暟鎹簱瀹瑰櫒鐘舵€侊細`docker ps | grep postgres`
+2. 娴嬭瘯杩炴帴锛歚docker exec -it postgres psql -U postgres`
+3. 妫€鏌ヨ繛鎺ュ瓧绗︿覆閰嶇疆
+4. 閲嶅惎鏁版嵁搴撴湇鍔★細`docker-compose restart postgres`
 
-#### Q: 前端无法访问后端API怎么办？
+#### Q: 鍓嶇鏃犳硶璁块棶鍚庣API鎬庝箞鍔烇紵
 **A**:
-1. 检查后端服务状态：`curl http://localhost:5000/health`
-2. 检查CORS配置
-3. 验证API端点正确性
-4. 查看浏览器控制台错误信息
+1. 妫€鏌ュ悗绔湇鍔＄姸鎬侊細`curl http://localhost:5000/health`
+2. 妫€鏌ORS閰嶇疆
+3. 楠岃瘉API绔偣姝ｇ‘鎬?
+4. 鏌ョ湅娴忚鍣ㄦ帶鍒跺彴閿欒淇℃伅
 
-### ❓ 功能使用问题
+### 鉂?鍔熻兘浣跨敤闂
 
-#### Q: 预测精度不高怎么办？
+#### Q: 棰勬祴绮惧害涓嶉珮鎬庝箞鍔烇紵
 **A**:
-1. 检查输入数据质量
-2. 尝试不同的机器学习模型
-3. 调整模型参数
-4. 增加训练数据量
-5. 检查特征工程是否合理
+1. 妫€鏌ヨ緭鍏ユ暟鎹川閲?
+2. 灏濊瘯涓嶅悓鐨勬満鍣ㄥ涔犳ā鍨?
+3. 璋冩暣妯″瀷鍙傛暟
+4. 澧炲姞璁粌鏁版嵁閲?
+5. 妫€鏌ョ壒寰佸伐绋嬫槸鍚﹀悎鐞?
 
-#### Q: 报告生成失败怎么办？
+#### Q: 鎶ュ憡鐢熸垚澶辫触鎬庝箞鍔烇紵
 **A**:
-1. 检查数据源是否可用
-2. 验证报告模板配置
-3. 查看报告服务日志
-4. 检查磁盘空间是否充足
-5. 验证邮件服务配置
+1. 妫€鏌ユ暟鎹簮鏄惁鍙敤
+2. 楠岃瘉鎶ュ憡妯℃澘閰嶇疆
+3. 鏌ョ湅鎶ュ憡鏈嶅姟鏃ュ織
+4. 妫€鏌ョ鐩樼┖闂存槸鍚﹀厖瓒?
+5. 楠岃瘉閭欢鏈嶅姟閰嶇疆
 
-#### Q: 系统响应缓慢怎么办？
+#### Q: 绯荤粺鍝嶅簲缂撴參鎬庝箞鍔烇紵
 **A**:
-1. 检查系统资源使用情况
-2. 优化数据库查询
-3. 启用缓存机制
-4. 检查网络延迟
-5. 考虑增加服务器资源
+1. 妫€鏌ョ郴缁熻祫婧愪娇鐢ㄦ儏鍐?
+2. 浼樺寲鏁版嵁搴撴煡璇?
+3. 鍚敤缂撳瓨鏈哄埗
+4. 妫€鏌ョ綉缁滃欢杩?
+5. 鑰冭檻澧炲姞鏈嶅姟鍣ㄨ祫婧?
 
-### ❓ 监控和维护问题
+### 鉂?鐩戞帶鍜岀淮鎶ら棶棰?
 
-#### Q: Grafana无法显示数据怎么办？
+#### Q: Grafana鏃犳硶鏄剧ず鏁版嵁鎬庝箞鍔烇紵
 **A**:
-1. 检查数据源配置
-2. 验证Prometheus是否正常运行
-3. 检查指标名称是否正确
-4. 查看Grafana日志
-5. 测试数据源连接
+1. 妫€鏌ユ暟鎹簮閰嶇疆
+2. 楠岃瘉Prometheus鏄惁姝ｅ父杩愯
+3. 妫€鏌ユ寚鏍囧悕绉版槸鍚︽纭?
+4. 鏌ョ湅Grafana鏃ュ織
+5. 娴嬭瘯鏁版嵁婧愯繛鎺?
 
-#### Q: 告警通知无法发送怎么办？
+#### Q: 鍛婅閫氱煡鏃犳硶鍙戦€佹€庝箞鍔烇紵
 **A**:
-1. 检查邮件服务配置
-2. 验证网络连接
-3. 检查告警规则配置
-4. 测试通知渠道
-5. 查看AlertManager日志
+1. 妫€鏌ラ偖浠舵湇鍔￠厤缃?
+2. 楠岃瘉缃戠粶杩炴帴
+3. 妫€鏌ュ憡璀﹁鍒欓厤缃?
+4. 娴嬭瘯閫氱煡娓犻亾
+5. 鏌ョ湅AlertManager鏃ュ織
 
 ---
 
-## 📞 技术支持
+## 馃摓 鎶€鏈敮鎸?
 
-### 获取帮助途径
-1. **文档查询**: 查看相关操作手册和文档
-2. **日志分析**: 检查应用日志和系统日志
-3. **社区支持**: 访问技术社区和论坛
-4. **官方支持**: 联系技术支持团队
+### 鑾峰彇甯姪閫斿緞
+1. **鏂囨。鏌ヨ**: 鏌ョ湅鐩稿叧鎿嶄綔鎵嬪唽鍜屾枃妗?
+2. **鏃ュ織鍒嗘瀽**: 妫€鏌ュ簲鐢ㄦ棩蹇楀拰绯荤粺鏃ュ織
+3. **绀惧尯鏀寔**: 璁块棶鎶€鏈ぞ鍖哄拰璁哄潧
+4. **瀹樻柟鏀寔**: 鑱旂郴鎶€鏈敮鎸佸洟闃?
 
-### 联系信息
-- **技术支持邮箱**: support@windpower.com
-- **紧急联系电话**: +86-xxx-xxxx-xxxx
-- **在线文档**: https://docs.windpower.com
-- **问题反馈**: https://github.com/your-org/wind-power-forecasting/issues
+### 鑱旂郴淇℃伅
+- **鎶€鏈敮鎸侀偖绠?*: support@windpower.com
+- **绱ф€ヨ仈绯荤數璇?*: +86-xxx-xxxx-xxxx
+- **鍦ㄧ嚎鏂囨。**: https://docs.windpower.com
+- **闂鍙嶉**: https://github.com/your-org/wind-power-forecasting/issues
 
-### 反馈建议
-我们持续改进产品，欢迎您提供宝贵的意见和建议：
-- 功能改进建议
-- 使用体验反馈
-- 文档质量评价
-- 新功能需求
+### 鍙嶉寤鸿
+鎴戜滑鎸佺画鏀硅繘浜у搧锛屾杩庢偍鎻愪緵瀹濊吹鐨勬剰瑙佸拰寤鸿锛?
+- 鍔熻兘鏀硅繘寤鸿
+- 浣跨敤浣撻獙鍙嶉
+- 鏂囨。璐ㄩ噺璇勪环
+- 鏂板姛鑳介渶姹?
 
 ---
 
-**文档版本**: 1.0.0
-**更新日期**: 2024年
-**维护团队**: 风功率预测系统开发团队
+**鏂囨。鐗堟湰**: 1.0.0
+**鏇存柊鏃ユ湡**: 2024骞?
+**缁存姢鍥㈤槦**: 椋庡姛鐜囬娴嬬郴缁熷紑鍙戝洟闃?
 
-*本手册会定期更新，请及时关注最新版本。*
+*鏈墜鍐屼細瀹氭湡鏇存柊锛岃鍙婃椂鍏虫敞鏈€鏂扮増鏈€?

@@ -47,7 +47,6 @@ echo.
 :menu
 echo 请选择启动模式：
 echo 1. 开发环境（推荐）- 快速体验所有功能
-echo 2. 微服务架构 - 企业级完整部署
 echo 3. 仅基础设施 - 数据库和中间件
 echo 4. 系统状态检查
 echo 5. 停止所有服务
@@ -58,7 +57,6 @@ echo.
 set /p choice=请输入选项（1-7）：
 
 if "%choice%"=="1" goto dev_env
-if "%choice%"=="2" goto microservices
 if "%choice%"=="3" goto infrastructure
 if "%choice%"=="4" goto status_check
 if "%choice%"=="5" goto stop_all
@@ -128,36 +126,7 @@ echo 按任意键返回主菜单
 pause >nul
 goto menu
 
-:: 微服务架构启动
-:microservices
-echo 正在启动微服务架构...
-
-if not exist "wind-power-microservices" (
-    echo 错误：未找到wind-power-microservices目录
-    pause
-    goto menu
-)
-
-cd wind-power-microservices
-
-echo 启动基础设施...
-start cmd /k "title 基础设施 && docker-compose up"
-timeout /t 60 /nobreak >nul
-
-echo [√] 微服务架构启动完成！
-echo.
-echo 访问地址：
-echo  API网关:   http://localhost:8000
-echo  Grafana:   http://localhost:3000
-echo  Kafka UI:  http://localhost:8090
-echo  Prometheus: http://localhost:9090
-echo.
-echo 服务启动需要1-2分钟
-echo 按任意键返回主菜单
-pause >nul
-goto menu
-
-:: 仅基础设施
+:: 基础设施启动
 :infrastructure
 echo 正在启动基础设施...
 
@@ -196,7 +165,7 @@ docker ps --format "table {{.Names}}	{{.Status}}	{{.Ports}}" 2>nul || echo    �
 :: 检查端口占用
 echo.
 echo 3. 端口占用检查：
-netstat -an | findstr ":8080 :5000 :8000 :3000" >nul 2>&1
+netstat -an | findstr ":8080 :5000" >nul 2>&1
 if %errorLevel% equ 0 (
     echo    [√] 系统端口已监听
 ) else (
@@ -223,11 +192,6 @@ if exist "wind-power-forecast" (
     cd ..
 )
 
-if exist "wind-power-microservices" (
-    cd wind-power-microservices
-    docker-compose down >nul 2>&1
-    cd ..
-)
 
 echo [√] 所有服务已停止
 echo 按任意键返回主菜单

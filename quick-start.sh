@@ -39,7 +39,6 @@ echo
 show_menu() {
     echo -e "${BLUE}请选择启动模式：${NC}"
     echo "1️⃣  开发环境（推荐）- 快速体验所有功能"
-    echo "2️⃣  微服务架构 - 企业级完整部署"
     echo "3️⃣  仅基础设施 - 数据库和中间件"
     echo "4️⃣  系统状态检查"
     echo "5️⃣  停止所有服务"
@@ -100,30 +99,6 @@ dev_env() {
     read -r
 }
 
-# 微服务架构启动
-microservices() {
-    echo -e "${YELLOW}🚀 正在启动微服务架构...${NC}"
-    cd wind-power-microservices || exit
-
-    echo -e "${GREEN}🏗️  启动基础设施...${NC}"
-    docker-compose up -d
-
-    echo -e "${GREEN}⏳ 等待服务启动...${NC}"
-    sleep 60
-
-    echo -e "${GREEN}✅ 微服务架构启动完成！${NC}"
-    echo
-    echo "📋 访问地址："
-    echo "   API网关:   http://localhost:8000"
-    echo "   Grafana:   http://localhost:3000"
-    echo "   Kafka UI:  http://localhost:8090"
-    echo "   Prometheus: http://localhost:9090"
-    echo
-    echo -e "${YELLOW}ℹ️  服务启动需要1-2分钟${NC}"
-    echo -e "${YELLOW}ℹ️  按回车键返回主菜单${NC}"
-    read -r
-}
-
 # 仅基础设施
 infrastructure() {
     echo -e "${YELLOW}🚀 正在启动基础设施...${NC}"
@@ -155,7 +130,7 @@ status_check() {
     # 检查端口占用
     echo
     echo "3️⃣  端口占用检查："
-    if netstat -tuln 2> /dev/null | grep -E ":8080|:5000|:8000|:3000" > /dev/null; then
+    if netstat -tuln 2> /dev/null | grep -E ":8080|:5000" > /dev/null; then
         echo -e "   ${GREEN}✅ 系统端口已监听${NC}"
     else
         echo -e "   ${YELLOW}⚠️  系统端口未监听${NC}"
@@ -176,9 +151,6 @@ stop_all() {
     # 停止Docker容器
     cd wind-power-forecast 2> /dev/null || true
     docker-compose -f database/docker-compose.yaml down 2> /dev/null || true
-
-    cd ../wind-power-microservices 2> /dev/null || true
-    docker-compose down 2> /dev/null || true
 
     echo -e "${GREEN}✅ 所有服务已停止${NC}"
     echo -e "${YELLOW}ℹ️  按回车键返回主菜单${NC}"
@@ -227,7 +199,6 @@ while true; do
 
     case $choice in
         1) dev_env ;;
-        2) microservices ;;
         3) infrastructure ;;
         4) status_check ;;
         5) stop_all ;;

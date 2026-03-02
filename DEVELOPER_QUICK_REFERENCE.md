@@ -1,177 +1,175 @@
-# 开发者快速参考指南
+﻿# 寮€鍙戣€呭揩閫熷弬鑰冩寚鍗?
 
-## 开发环境搭建
+## 寮€鍙戠幆澧冩惌寤?
 
-### 1. 前置要求
+### 1. 鍓嶇疆瑕佹眰
 - Python 3.8+
 - Node.js 14+
 - Docker & Docker Compose
 - Git
 
-### 2. 快速启动命令
+### 2. 蹇€熷惎鍔ㄥ懡浠?
 ```bash
-# 克隆项目
-git clone [项目地址]
+# 鍏嬮殕椤圭洰
+git clone [椤圭洰鍦板潃]
 cd wind-power-forecast
 
-# 启动开发环境
-cd wind-power-microservices
+# 鍚姩寮€鍙戠幆澧?
 docker-compose up -d
 
-# 或者单独启动后端
+# 鎴栬€呭崟鐙惎鍔ㄥ悗绔?
 cd wind-power-forecast/backend
 pip install -r requirements.txt
 python app.py
 
-# 启动前端开发服务器
+# 鍚姩鍓嶇寮€鍙戞湇鍔″櫒
 cd wind-power-forecast/frontend
 npm install
 npm run serve
 ```
 
-### 3. 关键服务端口
-- 前端开发服务器: http://localhost:8080
-- 后端API服务: http://localhost:5000
-- PostgreSQL数据库: localhost:5432
-- Redis缓存: localhost:6379
-- MinIO对象存储: http://localhost:9900
-- Grafana监控: http://localhost:3000
+### 3. 鍏抽敭鏈嶅姟绔彛
+- 鍓嶇寮€鍙戞湇鍔″櫒: http://localhost:8080
+- 鍚庣API鏈嶅姟: http://localhost:5000
+- PostgreSQL鏁版嵁搴? localhost:5432
+- Redis缂撳瓨: localhost:6379
+- MinIO瀵硅薄瀛樺偍: http://localhost:9900
+- Grafana鐩戞帶: http://localhost:3000
 - Prometheus: http://localhost:9090
 
-### 4. 常用开发命令
+### 4. 甯哥敤寮€鍙戝懡浠?
 ```bash
-# 查看服务状态
+# 鏌ョ湅鏈嶅姟鐘舵€?
 docker-compose ps
 
-# 查看日志
+# 鏌ョ湅鏃ュ織
 docker-compose logs -f [service-name]
 
-# 重启服务
+# 閲嶅惎鏈嶅姟
 docker-compose restart [service-name]
 
-# 进入容器调试
+# 杩涘叆瀹瑰櫒璋冭瘯
 docker-compose exec [service-name] bash
 
-# 数据库连接
+# 鏁版嵁搴撹繛鎺?
 docker-compose exec postgres psql -U postgres -d windpower
 
-# 运行测试
+# 杩愯娴嬭瘯
 cd backend && python -m pytest
 cd frontend && npm run test
 ```
 
-### 5. API测试
+### 5. API娴嬭瘯
 ```bash
-# 健康检查
+# 鍋ュ悍妫€鏌?
 curl http://localhost:5000/health
 
-# 用户登录
+# 鐢ㄦ埛鐧诲綍
 curl -X POST http://localhost:5000/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"admin123"}'
 
-# 上传训练数据
+# 涓婁紶璁粌鏁版嵁
 curl -X POST http://localhost:5000/upload_train_csv \
   -H "Authorization: Bearer [token]" \
   -F "file=@train_data.csv"
 
-# 创建预测任务
+# 鍒涘缓棰勬祴浠诲姟
 curl -X POST http://localhost:5000/predict \
   -H "Authorization: Bearer [token]" \
   -H "Content-Type: application/json" \
   -d '{"model_id":1,"start_time":"2024-01-16T00:00:00Z"}'
 ```
 
-### 6. 代码结构
+### 6. 浠ｇ爜缁撴瀯
 ```
 wind-power-forecast/
-├── backend/                    # Python后端
-│   ├── app.py                 # 主应用文件
-│   ├── config.py              # 配置文件
-│   ├── routes/                # API路由
-│   ├── services/              # 业务逻辑
-│   ├── models/                # 数据模型
-│   └── utils/                 # 工具函数
-├── frontend/                   # Vue.js前端
-│   ├── src/
-│   │   ├── components/        # Vue组件
-│   │   ├── views/             # 页面视图
-│   │   ├── services/          # API服务
-│   │   ├── store/             # 状态管理
-│   │   └── utils/             # 工具函数
-│   └── public/                # 静态资源
-├── wind-power-microservices/   # 微服务架构
-│   ├── docker-compose.yml     # 服务编排
-│   ├── services/              # 各个微服务
-│   └── configs/               # 配置文件
-└── monitoring/                 # 监控系统
-    ├── prometheus/            # 指标收集
-    ├── grafana/               # 可视化
-    └── alertmanager/          # 告警管理
+鈹溾攢鈹€ backend/                    # Python鍚庣
+鈹?  鈹溾攢鈹€ app.py                 # 涓诲簲鐢ㄦ枃浠?
+鈹?  鈹溾攢鈹€ config.py              # 閰嶇疆鏂囦欢
+鈹?  鈹溾攢鈹€ routes/                # API璺敱
+鈹?  鈹溾攢鈹€ services/              # 涓氬姟閫昏緫
+鈹?  鈹溾攢鈹€ models/                # 鏁版嵁妯″瀷
+鈹?  鈹斺攢鈹€ utils/                 # 宸ュ叿鍑芥暟
+鈹溾攢鈹€ frontend/                   # Vue.js鍓嶇
+鈹?  鈹溾攢鈹€ src/
+鈹?  鈹?  鈹溾攢鈹€ components/        # Vue缁勪欢
+鈹?  鈹?  鈹溾攢鈹€ views/             # 椤甸潰瑙嗗浘
+鈹?  鈹?  鈹溾攢鈹€ services/          # API鏈嶅姟
+鈹?  鈹?  鈹溾攢鈹€ store/             # 鐘舵€佺鐞?
+鈹?  鈹?  鈹斺攢鈹€ utils/             # 宸ュ叿鍑芥暟
+鈹?  鈹斺攢鈹€ public/                # 闈欐€佽祫婧?
+鈹?  鈹溾攢鈹€ docker-compose.yml     # 鏈嶅姟缂栨帓
+鈹?  鈹溾攢鈹€ services/              # 鍚勪釜寰湇鍔?
+鈹?  鈹斺攢鈹€ configs/               # 閰嶇疆鏂囦欢
+鈹斺攢鈹€ monitoring/                 # 鐩戞帶绯荤粺
+    鈹溾攢鈹€ prometheus/            # 鎸囨爣鏀堕泦
+    鈹溾攢鈹€ grafana/               # 鍙鍖?
+    鈹斺攢鈹€ alertmanager/          # 鍛婅绠＄悊
 ```
 
-### 7. 开发调试技巧
+### 7. 寮€鍙戣皟璇曟妧宸?
 
-#### 后端调试
+#### 鍚庣璋冭瘯
 ```python
-# 使用pdb调试
+# 浣跨敤pdb璋冭瘯
 import pdb; pdb.set_trace()
 
-# 日志调试
+# 鏃ュ織璋冭瘯
 import logging
 logger = logging.getLogger(__name__)
 logger.info(f"Debug info: {variable}")
 
-# 性能分析
+# 鎬ц兘鍒嗘瀽
 import cProfile
 profiler = cProfile.Profile()
 profiler.enable()
-# ... 代码 ...
+# ... 浠ｇ爜 ...
 profiler.disable()
 profiler.print_stats()
 ```
 
-#### 前端调试
+#### 鍓嶇璋冭瘯
 ```javascript
-// Vue组件调试
+// Vue缁勪欢璋冭瘯
 console.log('Component data:', this.data)
 console.table(this.predictions)
 
-// API调用调试
+// API璋冪敤璋冭瘯
 const response = await api.getPredictions()
 console.log('API Response:', response)
-debugger; // 断点调试
+debugger; // 鏂偣璋冭瘯
 
-// 性能监控
+// 鎬ц兘鐩戞帶
 console.time('prediction')
-// ... 代码 ...
+// ... 浠ｇ爜 ...
 console.timeEnd('prediction')
 ```
 
-### 8. 数据库操作
+### 8. 鏁版嵁搴撴搷浣?
 ```sql
--- 常用查询
--- 查看最近的预测结果
+-- 甯哥敤鏌ヨ
+-- 鏌ョ湅鏈€杩戠殑棰勬祴缁撴灉
 SELECT * FROM power_predictions
 ORDER BY prediction_time DESC
 LIMIT 10;
 
--- 统计预测精度
+-- 缁熻棰勬祴绮惧害
 SELECT
     AVG(ABS(predicted_power - actual_power)) as mae,
     SQRT(AVG(POWER(predicted_power - actual_power, 2))) as rmse
 FROM prediction_results
 WHERE DATE(created_at) = CURRENT_DATE;
 
--- 查看训练任务状态
+-- 鏌ョ湅璁粌浠诲姟鐘舵€?
 SELECT * FROM training_tasks
 ORDER BY created_at DESC
 LIMIT 5;
 ```
 
-### 9. 环境配置
+### 9. 鐜閰嶇疆
 ```bash
-# 后端环境变量 (.env)
+# 鍚庣鐜鍙橀噺 (.env)
 FLASK_ENV=development
 FLASK_DEBUG=True
 DB_HOST=localhost
@@ -179,53 +177,53 @@ DB_PORT=5432
 DB_NAME=windpower
 JWT_SECRET_KEY=your-secret-key
 
-# 前端环境变量 (.env.development)
+# 鍓嶇鐜鍙橀噺 (.env.development)
 VUE_APP_API_BASE_URL=http://localhost:5000
 VUE_APP_WS_URL=ws://localhost:5000
-VUE_APP_TITLE=风功率预测系统(开发环境)
+VUE_APP_TITLE=椋庡姛鐜囬娴嬬郴缁?寮€鍙戠幆澧?
 ```
 
-### 10. 常见问题快速解决
+### 10. 甯歌闂蹇€熻В鍐?
 
-#### 端口被占用
+#### 绔彛琚崰鐢?
 ```bash
-# 查找占用进程
+# 鏌ユ壘鍗犵敤杩涚▼
 lsof -i :5000
-# 或
+# 鎴?
 netstat -tlnp | grep 5000
 
-# 终止进程
+# 缁堟杩涚▼
 kill -9 [PID]
 ```
 
-#### 依赖安装失败
+#### 渚濊禆瀹夎澶辫触
 ```bash
-# 清理缓存
+# 娓呯悊缂撳瓨
 pip cache purge
 npm cache clean --force
 
-# 重新安装
+# 閲嶆柊瀹夎
 pip install -r requirements.txt --no-cache-dir
 npm install --registry https://registry.npmmirror.com
 ```
 
-#### 数据库连接失败
+#### 鏁版嵁搴撹繛鎺ュけ璐?
 ```bash
-# 检查PostgreSQL状态
+# 妫€鏌ostgreSQL鐘舵€?
 docker-compose exec postgres pg_isready
 
-# 重置数据库
+# 閲嶇疆鏁版嵁搴?
 docker-compose down
 docker volume rm windpower_postgres_data
 docker-compose up -d
 ```
 
 ---
-**开发环境快速检查清单**:
-- [ ] Docker服务正常运行
-- [ ] 端口未被占用 (5000, 8080, 5432, 6379)
-- [ ] 环境变量配置正确
-- [ ] 依赖包安装完成
-- [ ] 数据库初始化成功
-- [ ] API服务响应正常
-- [ ] 前端页面加载正常
+**寮€鍙戠幆澧冨揩閫熸鏌ユ竻鍗?*:
+- [ ] Docker鏈嶅姟姝ｅ父杩愯
+- [ ] 绔彛鏈鍗犵敤 (5000, 8080, 5432, 6379)
+- [ ] 鐜鍙橀噺閰嶇疆姝ｇ‘
+- [ ] 渚濊禆鍖呭畨瑁呭畬鎴?
+- [ ] 鏁版嵁搴撳垵濮嬪寲鎴愬姛
+- [ ] API鏈嶅姟鍝嶅簲姝ｅ父
+- [ ] 鍓嶇椤甸潰鍔犺浇姝ｅ父
