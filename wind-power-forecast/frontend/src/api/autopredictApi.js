@@ -2,7 +2,20 @@
 import farmService from '../utils/farmService'
 
 function resolveFarmCode(farmCode) {
-  return farmCode || 'DEFAULT_FARM'
+  const directCode = typeof farmCode === 'string' ? farmCode.trim() : ''
+  if (directCode) {
+    return directCode
+  }
+
+  const currentFarm = typeof farmService.getCurrentFarm === 'function'
+    ? String(farmService.getCurrentFarm() || '').trim()
+    : ''
+  if (currentFarm) {
+    return currentFarm
+  }
+
+  const fallbackFarm = getFallbackFarmCode()
+  return fallbackFarm || 'DEFAULT_FARM'
 }
 
 function isInvalidFarmError(error) {
@@ -107,19 +120,42 @@ export function controlAutoPredict(action, predictionType, farmCode) {
 }
 
 export function controlAutoPredictAll(action, predictionType, farmCodes = []) {
+  const normalizedFarmCodes = Array.from(
+    new Set(
+      (Array.isArray(farmCodes) ? farmCodes : [])
+        .map(code => (typeof code === 'string' ? code.trim() : ''))
+        .filter(Boolean)
+    )
+  )
+
   const payload = {
     action,
     type: predictionType,
-    farm_codes: Array.isArray(farmCodes) ? farmCodes : []
+    farm_codes: normalizedFarmCodes
   }
   return autopredictPost('control_all', payload, 'control_all')
 }
 
 export function controlAutoPredictMatrix(action, predictionTypes = [], farmCodes = []) {
+  const normalizedTypes = Array.from(
+    new Set(
+      (Array.isArray(predictionTypes) ? predictionTypes : [])
+        .map(type => (typeof type === 'string' ? type.trim() : ''))
+        .filter(Boolean)
+    )
+  )
+  const normalizedFarmCodes = Array.from(
+    new Set(
+      (Array.isArray(farmCodes) ? farmCodes : [])
+        .map(code => (typeof code === 'string' ? code.trim() : ''))
+        .filter(Boolean)
+    )
+  )
+
   const payload = {
     action,
-    types: Array.isArray(predictionTypes) ? predictionTypes : [],
-    farm_codes: Array.isArray(farmCodes) ? farmCodes : []
+    types: normalizedTypes,
+    farm_codes: normalizedFarmCodes
   }
   return autopredictPost('control_matrix', payload, 'control_matrix')
 }

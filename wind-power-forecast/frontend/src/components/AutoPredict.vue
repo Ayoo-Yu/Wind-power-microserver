@@ -355,8 +355,10 @@ const handleFarmChanged = (farmCode) => {
   }, FARM_CHANGE_DEBOUNCE_MS)
 }
 
-onMounted(() => {
+onMounted(async () => {
   farmService.addListener(handleFarmChanged)
+  await farmService.loadAvailableFarms()
+  currentFarm.value = farmService.getCurrentFarm()
   fetchStatus()
   fetchFleetStatus()
   intervalId = setInterval(() => {
