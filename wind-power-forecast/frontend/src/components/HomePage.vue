@@ -10,46 +10,6 @@
 
       <!-- 功能卡片区域 -->
       <div class="features-section">
-        <!-- 模型训练 -->
-        <div class="feature-card">
-          <div class="card-content">
-            <div class="icon-wrapper">
-              <el-icon><DataAnalysis /></el-icon>
-            </div>
-            <h3>功率预测模型训练</h3>
-            <p>通过先进的算法进行高效的模型训练，提升预测准确度。</p>
-            <el-button 
-              v-if="hasPermission('train_models')"
-              type="primary" 
-              class="learn-more-btn"
-              @click="urljump('http://localhost:8080/modeltrain')"
-            >
-              了解更多
-              <el-icon class="arrow-icon"><ArrowRight /></el-icon>
-            </el-button>
-          </div>
-        </div>
-
-        <!-- 功率预测 -->
-        <div class="feature-card">
-          <div class="card-content">
-            <div class="icon-wrapper">
-              <el-icon><TrendCharts /></el-icon>
-            </div>
-            <h3>风电功率预测</h3>
-            <p>通过精确的算法进行未来功率的预测，助力决策制定。</p>
-            <el-button 
-              v-if="hasPermission('run_predictions')"
-              type="primary" 
-              class="learn-more-btn"
-              @click="urljump('http://localhost:8080/powerpredict')"
-            >
-              了解更多
-              <el-icon class="arrow-icon"><ArrowRight /></el-icon>
-            </el-button>
-          </div>
-        </div>
-
         <!-- 数据可视化 -->
         <div class="feature-card">
           <div class="card-content">
@@ -59,7 +19,7 @@
             <h3>功率自动化预测</h3>
             <p>实现三类风电功率每日预测，包括超短期、短期、中期预测。</p>
             <el-button 
-              v-if="hasPermission('run_predictions')"
+              v-if="hasPermission('auto_predictions')"
               type="primary" 
               class="learn-more-btn"
               @click="urljump('http://localhost:8080/autopredict')"

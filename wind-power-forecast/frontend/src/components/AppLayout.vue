@@ -44,16 +44,6 @@
           <template #title>首页</template>
         </el-menu-item>
 
-        <el-menu-item index="/modeltrain" v-if="hasPermission('train_models')">
-          <el-icon><DataAnalysis /></el-icon>
-          <template #title>模型训练</template>
-        </el-menu-item>
-
-        <el-menu-item index="/powerpredict" v-if="hasPermission('run_predictions')">
-          <el-icon><TrendCharts /></el-icon>
-          <template #title>功率预测</template>
-        </el-menu-item>
-
         <el-menu-item index="/autopredict" v-if="hasPermission('auto_predictions')">
           <el-icon><Timer /></el-icon>
           <template #title>自动预测</template>
@@ -140,10 +130,8 @@ import { isAuthReady, isAuthLoading } from '../store/authReady' // 导入认证�
 // 引入 Element Plus 图标
 import {
   HomeFilled,
-  DataAnalysis,
   Fold,
   Expand,
-  TrendCharts,
   Timer,
   User,
   Loading,
@@ -162,10 +150,8 @@ export default {
   name: 'AppLayout',
   components: {
     HomeFilled,
-    DataAnalysis,
     Fold,
     Expand,
-    TrendCharts,
     Timer,
     User,
     Loading,

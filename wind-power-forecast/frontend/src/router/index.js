@@ -1,9 +1,7 @@
 // src/router/index.js
 import { createRouter, createWebHistory } from 'vue-router'
 import HomePage from '../components/HomePage.vue' // 主页组件
-import ModelTrain from '../components/ModelTrain.vue' // 父组件
 import AppLayout from '../components/AppLayout.vue' // 布局组件
-import PowerPredict from '../components/PowerPredict.vue' // 预测组件
 import AutoPredict  from '../components/AutoPredict.vue'
 import PowerCompare from '../components/PowerCompare.vue'
 import Login from '../components/Login.vue' // 登录组件
@@ -33,14 +31,12 @@ const routes = [
       {
         path: 'modeltrain',
         name: 'ModelTrain',
-        component: ModelTrain,
-        meta: { requiredPermissions: ['train_models'] }
+        redirect: { name: 'AutoPredict' }
       },
       {
         path: 'powerpredict',
         name: 'PowerPredict',
-        component: PowerPredict,
-        meta: { requiredPermissions: ['run_predictions'] }
+        redirect: { name: 'AutoPredict' }
       },
       {
         path: 'autopredict',
