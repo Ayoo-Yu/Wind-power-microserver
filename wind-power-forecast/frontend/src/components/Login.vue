@@ -3,6 +3,14 @@
     <section class="login-visual">
       <div class="texture-grid"></div>
       <div class="texture-lines"></div>
+      <div class="particle-layer">
+        <span class="particle p1"></span>
+        <span class="particle p2"></span>
+        <span class="particle p3"></span>
+        <span class="particle p4"></span>
+        <span class="particle p5"></span>
+      </div>
+      <div class="turbine-watermark" aria-hidden="true"></div>
       <div class="visual-overlay">
         <h1>风电功率预测系统</h1>
         <p>智慧能源 · 实时感知 · 智能决策</p>
@@ -52,6 +60,13 @@
             <el-button type="primary" class="login-button" :loading="loading" @click="handleLogin">登录</el-button>
           </el-form-item>
         </el-form>
+        <div class="form-meta">
+          <label class="remember-row">
+            <input v-model="rememberMe" type="checkbox" />
+            <span>记住账号</span>
+          </label>
+          <a href="#" class="helper-link" @click.prevent>联系管理员</a>
+        </div>
 
         <div class="footer">© 2026 中国三峡集团 风电功率预测系统</div>
       </div>
@@ -97,6 +112,7 @@ export default {
 
     const formData = reactive({ username: '', password: '' })
     const passwordData = reactive({ newPassword: '', confirmPassword: '' })
+    const rememberMe = ref(true)
     const loading = ref(false)
     const changingPassword = ref(false)
     const showChangePasswordDialog = ref(false)
@@ -186,6 +202,7 @@ export default {
       handleChangePassword,
       formData,
       passwordData,
+      rememberMe,
       User,
       Lock,
       OfficeBuilding,
@@ -214,7 +231,8 @@ export default {
 }
 
 .texture-grid,
-.texture-lines {
+.texture-lines,
+.particle-layer {
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -233,6 +251,36 @@ export default {
   background:
     repeating-linear-gradient(120deg, rgba(18, 215, 255, .12) 0, rgba(18, 215, 255, .12) 1px, transparent 1px, transparent 90px);
   animation: drift 18s linear infinite;
+}
+
+.particle {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(120, 223, 255, 0.65);
+  box-shadow: 0 0 12px rgba(120, 223, 255, 0.58);
+  animation: particleFloat 9s ease-in-out infinite;
+}
+
+.p1 { left: 12%; top: 20%; animation-delay: 0s; }
+.p2 { left: 32%; top: 65%; animation-delay: 1.3s; }
+.p3 { left: 48%; top: 30%; animation-delay: 2.6s; }
+.p4 { left: 62%; top: 78%; animation-delay: 3.1s; }
+.p5 { left: 82%; top: 26%; animation-delay: 4.4s; }
+
+.turbine-watermark {
+  position: absolute;
+  left: 32%;
+  top: 46%;
+  width: 420px;
+  height: 420px;
+  transform: translate(-50%, -50%);
+  opacity: .06;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Cg fill='none' stroke='%239ad6ff' stroke-width='2.2'%3E%3Cline x1='100' y1='74' x2='100' y2='188'/%3E%3Ccircle cx='100' cy='72' r='8'/%3E%3Cpath d='M100 72L164 48'/%3E%3Cpath d='M100 72L57 11'/%3E%3Cpath d='M100 72L50 117'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: contain;
 }
 
 .visual-overlay {
@@ -255,8 +303,8 @@ export default {
 
 .visual-overlay p {
   margin-top: 12px;
-  color: #d2e8fc;
-  letter-spacing: 2.2px;
+  color: #deefff;
+  letter-spacing: 2.8px;
   font-size: 14px;
 }
 
@@ -272,13 +320,14 @@ export default {
 .visual-metrics li {
   width: 320px;
   padding: 12px 14px;
-  border: 1px solid rgba(132, 191, 231, .22);
+  border: 1px solid rgba(132, 191, 231, .24);
   border-radius: 12px;
-  background: rgba(10, 29, 45, .48);
+  background: rgba(255, 255, 255, .03);
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
   position: relative;
+  box-shadow: inset 0 0 0 1px rgba(18, 215, 255, .08);
 }
 
 .visual-metrics strong {
@@ -286,6 +335,7 @@ export default {
   color: #53f0b0;
   font-size: 24px;
   line-height: 1;
+  text-shadow: 0 0 10px rgba(83, 240, 176, .42);
 }
 
 .metric-label {
@@ -299,7 +349,11 @@ export default {
 .metric-label .el-icon {
   color: #3ce5ff;
   filter: drop-shadow(0 0 8px rgba(60, 229, 255, .35));
+  animation: iconBob 4.8s ease-in-out infinite;
 }
+
+.visual-metrics li:nth-child(2) .metric-label .el-icon { animation-delay: .8s; }
+.visual-metrics li:nth-child(3) .metric-label .el-icon { animation-delay: 1.6s; }
 
 .metric-line {
   position: absolute;
@@ -360,6 +414,7 @@ export default {
   background: rgba(12, 38, 58, .88) !important;
   border: 1px solid rgba(88, 186, 235, .24);
   box-shadow: none !important;
+  border-radius: 8px;
 }
 
 .login-form :deep(.el-input__inner),
@@ -367,11 +422,17 @@ export default {
   color: #d7ebff !important;
 }
 
+.login-form :deep(.el-input__wrapper.is-focus) {
+  border-color: rgba(32, 229, 255, .86) !important;
+  box-shadow: 0 0 0 1px rgba(32, 229, 255, .35), 0 0 16px rgba(18, 215, 255, .22) !important;
+}
+
 .login-button {
   width: 100%;
   height: 42px;
+  border-radius: 22px;
   border: none !important;
-  background: linear-gradient(135deg, #0eb8db, #12d7ff) !important;
+  background: linear-gradient(90deg, #0a96b5, #19dfff) !important;
   box-shadow: 0 0 0 rgba(18, 215, 255, 0), 0 0 20px rgba(18, 215, 255, .35);
   transition: all .25s ease;
 }
@@ -379,6 +440,34 @@ export default {
 .login-button:hover {
   transform: translateY(-1px);
   box-shadow: 0 0 0 rgba(18, 215, 255, 0), 0 0 28px rgba(18, 215, 255, .48);
+}
+
+.form-meta {
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #a8c6dc;
+  font-size: 12px;
+}
+
+.remember-row {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.remember-row input {
+  accent-color: #12d7ff;
+}
+
+.helper-link {
+  color: #9fd5f7;
+  text-decoration: none;
+}
+
+.helper-link:hover {
+  color: #c4e7ff;
 }
 
 .footer {
@@ -391,6 +480,16 @@ export default {
 @keyframes drift {
   from { transform: translateX(0); }
   to { transform: translateX(-90px); }
+}
+
+@keyframes particleFloat {
+  0%, 100% { transform: translateY(0px) scale(1); opacity: .52; }
+  50% { transform: translateY(-12px) scale(1.12); opacity: .92; }
+}
+
+@keyframes iconBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
 }
 
 @media (max-width: 900px) {
@@ -409,6 +508,13 @@ export default {
 
   .visual-overlay {
     margin: 12px 0 0 0;
+  }
+
+  .turbine-watermark {
+    left: 50%;
+    top: 55%;
+    width: 280px;
+    height: 280px;
   }
 
   .visual-metrics {
