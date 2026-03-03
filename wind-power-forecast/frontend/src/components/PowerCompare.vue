@@ -14,23 +14,23 @@
       @click="refreshPage"
     ></el-button>
 
-    <h1 class="page-title">数据可视化与下载</h1>
+    <h1 class="page-title">{{ uiText.title }}</h1>
 
     <div class="summary-grid">
       <el-card class="summary-card">
-        <div class="summary-label">场站数量</div>
+        <div class="summary-label">{{ uiText.stationCount }}</div>
         <div class="summary-value">{{ fleetCompareFarms.length }}</div>
       </el-card>
       <el-card class="summary-card">
-        <div class="summary-label">平均准确率</div>
+        <div class="summary-label">{{ uiText.avgAccuracy }}</div>
         <div class="summary-value">{{ avgAccDisplay }}</div>
       </el-card>
       <el-card class="summary-card">
-        <div class="summary-label">峰值功率</div>
+        <div class="summary-label">{{ uiText.peakPower }}</div>
         <div class="summary-value">{{ peakPowerDisplay }}</div>
       </el-card>
       <el-card class="summary-card">
-        <div class="summary-label">未达标天数</div>
+        <div class="summary-label">{{ uiText.unqualifiedDays }}</div>
         <div class="summary-value summary-warning">{{ unqualifiedDays }}</div>
       </el-card>
     </div>
@@ -286,6 +286,7 @@ import { Chart, CategoryScale, LinearScale, LineElement, PointElement, Title, To
 import zoomPlugin from 'chartjs-plugin-zoom';
 import farmService from '../utils/farmService'
 import { getFleetMetrics, getFleetSeries, getPowerCompareData } from '../api/powerCompareApi'
+import { UI_TEXT } from '../constants/uiText'
 
 Chart.register(
   CategoryScale,
@@ -307,6 +308,7 @@ export default {
   name: 'PowerCompare',
   data() {
     return {
+      uiText: UI_TEXT.powerCompare,
       // API地址设置
       backendBaseUrl: window.location.hostname !== 'localhost' 
         ? `http://${window.location.hostname}:5000` 
@@ -414,7 +416,7 @@ export default {
       const acc = this.avgAccDisplay;
       const peak = this.peakPowerDisplay;
       const unqualified = this.unqualifiedDays;
-      return `Overview: Avg ACC ${acc}, Peak Power ${peak}, Unqualified Days ${unqualified}.`;
+      return `${this.uiText.overviewPrefix}: Avg ACC ${acc}, Peak Power ${peak}, Unqualified Days ${unqualified}.`;
     }
   },
   async mounted() {

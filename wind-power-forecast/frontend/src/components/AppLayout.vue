@@ -86,7 +86,7 @@
             <Fold v-if="!isCollapsed" />
             <Expand v-else />
           </el-icon>
-          <h1 class="header-title">中国三峡集团风电功率预测平台</h1>
+          <h1 class="header-title">{{ uiText.platformTitle }}</h1>
         </div>
         <div class="header-right">
           <el-badge :value="alertCount" :max="99" class="alert-badge">
@@ -96,7 +96,7 @@
           </el-badge>
           <div class="system-time-chip">
             <span class="time-dot"></span>
-            <span class="time-label">Updated:</span>
+            <span class="time-label">{{ uiText.updatedLabel }}</span>
             <span class="time-value">{{ systemTime }}</span>
           </div>
           <!-- 场站选择器 -->
@@ -135,6 +135,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getCurrentUser } from '../api/auth'
 import { isAuthReady, isAuthLoading } from '../store/authReady' // 导入认证状态
+import { UI_TEXT } from '../constants/uiText'
 
 // 引入 Element Plus 图标
 import {
@@ -176,6 +177,7 @@ export default {
     const isAnimatedBackground = ref(true)
     const router = useRouter()
     const route = useRoute()
+    const uiText = UI_TEXT.appLayout
     const systemTime = ref('')
     const alertCount = ref(0)
     let timeTicker = null
@@ -454,6 +456,7 @@ export default {
       userInitial,
       userName,
       alertCount,
+      uiText,
       systemTime,
       goAlerts,
       handleCommand,
