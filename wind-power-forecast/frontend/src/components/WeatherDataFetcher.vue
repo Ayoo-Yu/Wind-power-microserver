@@ -116,6 +116,12 @@
                  <span class="status-label">已调度任务:</span>
                  <el-tag type="primary" size="small">{{ schedulerInfo.total_jobs || 0 }} 个</el-tag>
                </div>
+               <div class="status-item">
+                 <span class="status-label">下次执行:</span>
+                 <el-tag :type="nextRunCountdown === '--' ? 'info' : 'success'" size="small">
+                   {{ nextRunCountdown }}
+                 </el-tag>
+               </div>
              </div>
            </div>
            <div class="scheduler-actions">
@@ -614,7 +620,7 @@
 </template>
 
 <script>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getWeatherConnections,
@@ -663,6 +669,8 @@ export default {
       jobs: [],
       total_jobs: 0
     })
+    const nowTs = ref(Date.now())
+    let countdownTimer = null
 
     const pipelineSteps = computed(() => {
       const hasConnection = connections.value.length > 0
@@ -697,6 +705,26 @@ export default {
           text: runningTask ? 'Running' : (enabledTasks.length > 0 ? 'Waiting' : 'No Task')
         }
       ]
+    })
+
+    const nextRunTargetTs = computed(() => {
+      const jobs = Array.isArray(schedulerInfo.value?.jobs) ? schedulerInfo.value.jobs : []
+      const timestamps = jobs
+        .map(job => new Date(job.next_run_time).getTime())
+        .filter(ts => Number.isFinite(ts) && ts > nowTs.value)
+      if (!timestamps.length) return null
+      return Math.min(...timestamps)
+    })
+
+    const nextRunCountdown = computed(() => {
+      if (!nextRunTargetTs.value) return '--'
+      const diff = nextRunTargetTs.value - nowTs.value
+      if (diff <= 0) return '00:00'
+      const totalSeconds = Math.floor(diff / 1000)
+      const hours = Math.floor(totalSeconds / 3600)
+      const minutes = Math.floor((totalSeconds % 3600) / 60)
+      const seconds = totalSeconds % 60
+      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
     })
     
     // 加载状态
@@ -1339,9 +1367,19 @@ export default {
 
     // 生命周期
     onMounted(() => {
+      countdownTimer = setInterval(() => {
+        nowTs.value = Date.now()
+      }, 1000)
       fetchConnections()
       fetchTasks()
       checkSchedulerStatus() // 检查调度器状态
+    })
+
+    onUnmounted(() => {
+      if (countdownTimer) {
+        clearInterval(countdownTimer)
+        countdownTimer = null
+      }
     })
 
     return {
@@ -1356,6 +1394,7 @@ export default {
       logLevel,
       schedulerInfo,
       pipelineSteps,
+      nextRunCountdown,
       // 加载状态
       loadingConnections,
       loadingTasks,

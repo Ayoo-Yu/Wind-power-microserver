@@ -8,6 +8,14 @@
       <p>数据上报配置与管理</p>
     </div>
 
+    <el-alert
+      class="summary-alert"
+      type="info"
+      :closable="false"
+      show-icon
+      :title="statsConclusion"
+    />
+
     <!-- 调度器状态卡片 -->
     <el-card class="info-card scheduler-status-card" shadow="hover">
       <template #header>
@@ -960,6 +968,22 @@ export default {
     const statistics = ref([])
     const dailyStats = ref({ completeness_rate: null, timeliness_rate: null })
     const monthlyStats = ref({ completeness_rate: null, timeliness_rate: null })
+    const statsConclusion = computed(() => {
+      const toNum = (val) => (val === null || val === undefined ? NaN : Number(val))
+      const candidates = [
+        { label: '今日日完整率', value: toNum(dailyStats.value.completeness_rate) },
+        { label: '今日日及时率', value: toNum(dailyStats.value.timeliness_rate) },
+        { label: '本月完整率', value: toNum(monthlyStats.value.completeness_rate) },
+        { label: '本月及时率', value: toNum(monthlyStats.value.timeliness_rate) }
+      ].filter(item => Number.isFinite(item.value))
+
+      if (!candidates.length) {
+        return '结论：当前筛选范围内暂无可用质量统计数据。'
+      }
+
+      const weakest = candidates.reduce((min, cur) => (cur.value < min.value ? cur : min), candidates[0])
+      return `结论：当前最薄弱指标为${weakest.label}（${weakest.value.toFixed(2)}%），建议优先关注该项。`
+    })
     
     // 场站对话框
     const farmDialogVisible = ref(false)
@@ -2311,6 +2335,7 @@ export default {
       statistics,
       dailyStats,
       monthlyStats,
+      statsConclusion,
 
       // 场站对话框
       farmDialogVisible,
@@ -2454,6 +2479,10 @@ export default {
   margin-bottom: 30px;
   color: white;
   text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+
+.summary-alert {
+  margin-bottom: 16px;
 }
 
 .page-title h1 {
