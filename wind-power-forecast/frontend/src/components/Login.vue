@@ -11,27 +11,33 @@
         <span class="particle p5"></span>
       </div>
       <div class="turbine-watermark" aria-hidden="true"></div>
+
       <div class="visual-overlay">
         <h1>风电功率预测系统</h1>
         <p>智慧能源 · 实时感知 · 智能决策</p>
+
         <ul class="visual-metrics">
           <li>
             <span class="metric-label"><el-icon><OfficeBuilding /></el-icon>场站接入</span>
-            <strong>24</strong>
+            <strong class="metric-value">{{ animatedMetrics.stationCount }}</strong>
             <i class="metric-line"></i>
           </li>
           <li>
             <span class="metric-label"><el-icon><Lightning /></el-icon>实时总功率</span>
-            <strong>1,286 MW</strong>
+            <strong class="metric-value">
+              {{ animatedMetrics.totalPower }}
+              <small class="metric-unit">MW</small>
+            </strong>
             <i class="metric-line"></i>
           </li>
           <li>
             <span class="metric-label"><el-icon><Aim /></el-icon>今日预测准确率</span>
-            <strong>96.2%</strong>
+            <strong class="metric-value">{{ animatedMetrics.accuracy }}%</strong>
             <i class="metric-line"></i>
           </li>
         </ul>
       </div>
+
       <div class="wind-scene" />
     </section>
 
@@ -39,7 +45,7 @@
       <div class="login-card">
         <div class="logo-line">
           <img src="@/assets/Sanxia_logo_black.png" alt="logo" class="logo" />
-          <h2>用户登录</h2>
+          <h2>三峡能源 用户登录</h2>
         </div>
 
         <el-form ref="loginForm" :model="formData" :rules="loginRules" class="login-form">
@@ -60,6 +66,7 @@
             <el-button type="primary" class="login-button" :loading="loading" @click="handleLogin">登录</el-button>
           </el-form-item>
         </el-form>
+
         <div class="form-meta">
           <label class="remember-row">
             <input v-model="rememberMe" type="checkbox" />
@@ -96,7 +103,7 @@
 </template>
 
 <script>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock, OfficeBuilding, Lightning, Aim } from '@element-plus/icons-vue'
@@ -116,6 +123,13 @@ export default {
     const loading = ref(false)
     const changingPassword = ref(false)
     const showChangePasswordDialog = ref(false)
+    const animationFrameId = ref(0)
+
+    const animatedMetrics = reactive({
+      stationCount: '0',
+      totalPower: '0',
+      accuracy: '0.0'
+    })
 
     const loginRules = {
       username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
@@ -137,6 +151,31 @@ export default {
           trigger: 'blur'
         }
       ]
+    }
+
+    const animateMetrics = () => {
+      const duration = 1400
+      const targets = {
+        stationCount: 24,
+        totalPower: 1286,
+        accuracy: 96.2
+      }
+      const startedAt = performance.now()
+
+      const frame = (now) => {
+        const progress = Math.min((now - startedAt) / duration, 1)
+        const eased = 1 - Math.pow(1 - progress, 3)
+
+        animatedMetrics.stationCount = Math.round(targets.stationCount * eased).toString()
+        animatedMetrics.totalPower = Math.round(targets.totalPower * eased).toLocaleString('en-US')
+        animatedMetrics.accuracy = (targets.accuracy * eased).toFixed(1)
+
+        if (progress < 1) {
+          animationFrameId.value = requestAnimationFrame(frame)
+        }
+      }
+
+      animationFrameId.value = requestAnimationFrame(frame)
     }
 
     const handleLogin = async () => {
@@ -190,6 +229,16 @@ export default {
       })
     }
 
+    onMounted(() => {
+      animateMetrics()
+    })
+
+    onBeforeUnmount(() => {
+      if (animationFrameId.value) {
+        cancelAnimationFrame(animationFrameId.value)
+      }
+    })
+
     return {
       loginForm,
       passwordForm,
@@ -203,6 +252,7 @@ export default {
       formData,
       passwordData,
       rememberMe,
+      animatedMetrics,
       User,
       Lock,
       OfficeBuilding,
@@ -239,17 +289,22 @@ export default {
 }
 
 .texture-grid {
-  opacity: .2;
+  opacity: 0.2;
   background:
-    linear-gradient(rgba(124, 178, 214, .08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(124, 178, 214, .08) 1px, transparent 1px);
+    linear-gradient(rgba(124, 178, 214, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124, 178, 214, 0.08) 1px, transparent 1px);
   background-size: 28px 28px;
 }
 
 .texture-lines {
-  opacity: .18;
-  background:
-    repeating-linear-gradient(120deg, rgba(18, 215, 255, .12) 0, rgba(18, 215, 255, .12) 1px, transparent 1px, transparent 90px);
+  opacity: 0.18;
+  background: repeating-linear-gradient(
+    120deg,
+    rgba(18, 215, 255, 0.12) 0,
+    rgba(18, 215, 255, 0.12) 1px,
+    transparent 1px,
+    transparent 90px
+  );
   animation: drift 18s linear infinite;
 }
 
@@ -263,11 +318,35 @@ export default {
   animation: particleFloat 9s ease-in-out infinite;
 }
 
-.p1 { left: 12%; top: 20%; animation-delay: 0s; }
-.p2 { left: 32%; top: 65%; animation-delay: 1.3s; }
-.p3 { left: 48%; top: 30%; animation-delay: 2.6s; }
-.p4 { left: 62%; top: 78%; animation-delay: 3.1s; }
-.p5 { left: 82%; top: 26%; animation-delay: 4.4s; }
+.p1 {
+  left: 12%;
+  top: 20%;
+  animation-delay: 0s;
+}
+
+.p2 {
+  left: 32%;
+  top: 65%;
+  animation-delay: 1.3s;
+}
+
+.p3 {
+  left: 48%;
+  top: 30%;
+  animation-delay: 2.6s;
+}
+
+.p4 {
+  left: 62%;
+  top: 78%;
+  animation-delay: 3.1s;
+}
+
+.p5 {
+  left: 82%;
+  top: 26%;
+  animation-delay: 4.4s;
+}
 
 .turbine-watermark {
   position: absolute;
@@ -276,7 +355,7 @@ export default {
   width: 420px;
   height: 420px;
   transform: translate(-50%, -50%);
-  opacity: .06;
+  opacity: 0.06;
   pointer-events: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Cg fill='none' stroke='%239ad6ff' stroke-width='2.2'%3E%3Cline x1='100' y1='74' x2='100' y2='188'/%3E%3Ccircle cx='100' cy='72' r='8'/%3E%3Cpath d='M100 72L164 48'/%3E%3Cpath d='M100 72L57 11'/%3E%3Cpath d='M100 72L50 117'/%3E%3C/g%3E%3C/svg%3E");
   background-repeat: no-repeat;
@@ -291,20 +370,21 @@ export default {
 }
 
 .visual-overlay h1 {
-  font-size: 44px;
   margin: 0;
-  letter-spacing: .8px;
+  font-size: 46px;
+  font-weight: 800;
+  letter-spacing: 1px;
   background: linear-gradient(180deg, #f6fbff 8%, #b8dfff 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  text-shadow: 0 0 18px rgba(116, 194, 255, .12);
+  text-shadow: 0 0 18px rgba(116, 194, 255, 0.12);
 }
 
 .visual-overlay p {
   margin-top: 12px;
-  color: #deefff;
-  letter-spacing: 2.8px;
+  color: #e7f2ff;
+  letter-spacing: 3px;
   font-size: 14px;
 }
 
@@ -318,42 +398,56 @@ export default {
 }
 
 .visual-metrics li {
-  width: 320px;
-  padding: 12px 14px;
-  border: 1px solid rgba(132, 191, 231, .24);
+  width: 328px;
+  padding: 12px 14px 14px;
+  border: 1px solid rgba(132, 191, 231, 0.24);
   border-radius: 12px;
-  background: rgba(255, 255, 255, .03);
+  background: rgba(255, 255, 255, 0.03);
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
+  align-items: center;
   position: relative;
-  box-shadow: inset 0 0 0 1px rgba(18, 215, 255, .08);
-}
-
-.visual-metrics strong {
-  font-family: "Consolas", monospace;
-  color: #53f0b0;
-  font-size: 24px;
-  line-height: 1;
-  text-shadow: 0 0 10px rgba(83, 240, 176, .42);
+  box-shadow: inset 0 0 0 1px rgba(18, 215, 255, 0.08);
 }
 
 .metric-label {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   color: #a9c7de;
   font-size: 13px;
 }
 
 .metric-label .el-icon {
   color: #3ce5ff;
-  filter: drop-shadow(0 0 8px rgba(60, 229, 255, .35));
+  filter: drop-shadow(0 0 8px rgba(60, 229, 255, 0.35));
   animation: iconBob 4.8s ease-in-out infinite;
 }
 
-.visual-metrics li:nth-child(2) .metric-label .el-icon { animation-delay: .8s; }
-.visual-metrics li:nth-child(3) .metric-label .el-icon { animation-delay: 1.6s; }
+.visual-metrics li:nth-child(2) .metric-label .el-icon {
+  animation-delay: 0.8s;
+}
+
+.visual-metrics li:nth-child(3) .metric-label .el-icon {
+  animation-delay: 1.6s;
+}
+
+.metric-value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: Consolas, Menlo, Monaco, monospace;
+  color: #53f0b0;
+  font-size: 24px;
+  line-height: 1;
+  text-shadow: 0 0 10px rgba(83, 240, 176, 0.42);
+}
+
+.metric-unit {
+  color: #8dcbb0;
+  font-size: 14px;
+  letter-spacing: 0.4px;
+}
 
 .metric-line {
   position: absolute;
@@ -361,18 +455,18 @@ export default {
   right: 14px;
   bottom: 8px;
   height: 1px;
-  background: linear-gradient(90deg, rgba(18, 215, 255, .1), rgba(83, 240, 176, .5), rgba(18, 215, 255, .1));
+  background: linear-gradient(90deg, rgba(18, 215, 255, 0.1), rgba(83, 240, 176, 0.5), rgba(18, 215, 255, 0.1));
 }
 
 .wind-scene {
   position: absolute;
   inset: 0;
-  opacity: .34;
+  opacity: 0.34;
   background:
-    linear-gradient(180deg, rgba(4, 12, 20, 0) 0%, rgba(4, 12, 20, .78) 100%),
-    radial-gradient(circle at 58% 82%, rgba(18, 215, 255, .24), transparent 42%),
-    repeating-radial-gradient(circle at 80% 90%, rgba(164, 209, 239, .08) 0, rgba(164, 209, 239, .08) 2px, transparent 3px, transparent 16px),
-    linear-gradient(0deg, rgba(8, 18, 30, .92), rgba(8, 18, 30, .3));
+    linear-gradient(180deg, rgba(4, 12, 20, 0) 0%, rgba(4, 12, 20, 0.78) 100%),
+    radial-gradient(circle at 58% 82%, rgba(18, 215, 255, 0.24), transparent 42%),
+    repeating-radial-gradient(circle at 80% 90%, rgba(164, 209, 239, 0.08) 0, rgba(164, 209, 239, 0.08) 2px, transparent 3px, transparent 16px),
+    linear-gradient(0deg, rgba(8, 18, 30, 0.92), rgba(8, 18, 30, 0.3));
 }
 
 .login-panel {
@@ -386,10 +480,10 @@ export default {
   width: min(420px, 92vw);
   border-radius: 14px;
   padding: 28px;
-  border: 1px solid rgba(163, 205, 235, .28);
+  border: 1px solid rgba(163, 205, 235, 0.28);
   background: rgba(255, 255, 255, 0.055);
   backdrop-filter: blur(10px);
-  box-shadow: 0 20px 46px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .08);
+  box-shadow: 0 20px 46px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .logo-line {
@@ -411,20 +505,21 @@ export default {
 }
 
 .login-form :deep(.el-input__wrapper) {
-  background: rgba(12, 38, 58, .88) !important;
-  border: 1px solid rgba(88, 186, 235, .24);
+  background: rgba(10, 28, 44, 0.9) !important;
+  border: 1px solid rgba(88, 186, 235, 0.24);
   box-shadow: none !important;
   border-radius: 8px;
 }
 
 .login-form :deep(.el-input__inner),
-.login-form :deep(.el-input__prefix-inner .el-icon) {
+.login-form :deep(.el-input__prefix-inner .el-icon),
+.login-form :deep(.el-input__suffix-inner .el-icon) {
   color: #d7ebff !important;
 }
 
 .login-form :deep(.el-input__wrapper.is-focus) {
-  border-color: rgba(32, 229, 255, .86) !important;
-  box-shadow: 0 0 0 1px rgba(32, 229, 255, .35), 0 0 16px rgba(18, 215, 255, .22) !important;
+  border-color: rgba(32, 229, 255, 0.86) !important;
+  box-shadow: 0 0 0 1px rgba(32, 229, 255, 0.35), 0 0 16px rgba(18, 215, 255, 0.22) !important;
 }
 
 .login-button {
@@ -433,13 +528,13 @@ export default {
   border-radius: 22px;
   border: none !important;
   background: linear-gradient(90deg, #0a96b5, #19dfff) !important;
-  box-shadow: 0 0 0 rgba(18, 215, 255, 0), 0 0 20px rgba(18, 215, 255, .35);
-  transition: all .25s ease;
+  box-shadow: 0 0 0 rgba(18, 215, 255, 0), 0 0 20px rgba(18, 215, 255, 0.35);
+  transition: all 0.25s ease;
 }
 
 .login-button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 0 0 rgba(18, 215, 255, 0), 0 0 28px rgba(18, 215, 255, .48);
+  box-shadow: 0 0 0 rgba(18, 215, 255, 0), 0 0 28px rgba(18, 215, 255, 0.48);
 }
 
 .form-meta {
@@ -478,18 +573,37 @@ export default {
 }
 
 @keyframes drift {
-  from { transform: translateX(0); }
-  to { transform: translateX(-90px); }
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-90px);
+  }
 }
 
 @keyframes particleFloat {
-  0%, 100% { transform: translateY(0px) scale(1); opacity: .52; }
-  50% { transform: translateY(-12px) scale(1.12); opacity: .92; }
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.52;
+  }
+
+  50% {
+    transform: translateY(-12px) scale(1.12);
+    opacity: 0.92;
+  }
 }
 
 @keyframes iconBob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-3px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-3px);
+  }
 }
 
 @media (max-width: 900px) {
@@ -502,12 +616,12 @@ export default {
     padding: 24px;
   }
 
-  .visual-overlay h1 {
-    font-size: 28px;
+  .visual-overlay {
+    margin: 12px 0 0;
   }
 
-  .visual-overlay {
-    margin: 12px 0 0 0;
+  .visual-overlay h1 {
+    font-size: 28px;
   }
 
   .turbine-watermark {
