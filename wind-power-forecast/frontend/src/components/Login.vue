@@ -1,13 +1,27 @@
 <template>
   <div class="login-shell">
     <section class="login-visual">
+      <div class="texture-grid"></div>
+      <div class="texture-lines"></div>
       <div class="visual-overlay">
         <h1>风电功率预测系统</h1>
         <p>智慧能源 · 实时感知 · 智能决策</p>
         <ul class="visual-metrics">
-          <li><span>场站接入</span><strong>24</strong></li>
-          <li><span>实时总功率</span><strong>1,286 MW</strong></li>
-          <li><span>今日预测准确率</span><strong>96.2%</strong></li>
+          <li>
+            <span class="metric-label"><el-icon><OfficeBuilding /></el-icon>场站接入</span>
+            <strong>24</strong>
+            <i class="metric-line"></i>
+          </li>
+          <li>
+            <span class="metric-label"><el-icon><Lightning /></el-icon>实时总功率</span>
+            <strong>1,286 MW</strong>
+            <i class="metric-line"></i>
+          </li>
+          <li>
+            <span class="metric-label"><el-icon><Aim /></el-icon>今日预测准确率</span>
+            <strong>96.2%</strong>
+            <i class="metric-line"></i>
+          </li>
         </ul>
       </div>
       <div class="wind-scene" />
@@ -39,7 +53,7 @@
           </el-form-item>
         </el-form>
 
-        <div class="footer">? 2026 中国三峡集团 风电功率预测系统</div>
+        <div class="footer">© 2026 中国三峡集团 风电功率预测系统</div>
       </div>
     </section>
 
@@ -70,7 +84,7 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { User, Lock } from '@element-plus/icons-vue'
+import { User, Lock, OfficeBuilding, Lightning, Aim } from '@element-plus/icons-vue'
 import { login, changePassword } from '../api/auth'
 import { isAuthReady, isAuthLoading } from '../store/authReady'
 
@@ -173,7 +187,10 @@ export default {
       formData,
       passwordData,
       User,
-      Lock
+      Lock,
+      OfficeBuilding,
+      Lightning,
+      Aim
     }
   }
 }
@@ -184,7 +201,10 @@ export default {
   min-height: 100vh;
   display: grid;
   grid-template-columns: 1.2fr 1fr;
-  background: radial-gradient(circle at 10% 10%, #113252 0%, #071727 40%, #06121f 100%);
+  background:
+    radial-gradient(circle at 15% 12%, rgba(30, 88, 130, 0.4) 0%, rgba(8, 26, 43, 0) 40%),
+    radial-gradient(circle at 80% 15%, rgba(16, 76, 118, 0.28) 0%, rgba(8, 26, 43, 0) 32%),
+    linear-gradient(140deg, #04101c 0%, #071a2c 55%, #050f1a 100%);
 }
 
 .login-visual {
@@ -193,54 +213,112 @@ export default {
   padding: 48px;
 }
 
+.texture-grid,
+.texture-lines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.texture-grid {
+  opacity: .2;
+  background:
+    linear-gradient(rgba(124, 178, 214, .08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124, 178, 214, .08) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.texture-lines {
+  opacity: .18;
+  background:
+    repeating-linear-gradient(120deg, rgba(18, 215, 255, .12) 0, rgba(18, 215, 255, .12) 1px, transparent 1px, transparent 90px);
+  animation: drift 18s linear infinite;
+}
+
 .visual-overlay {
   position: relative;
   z-index: 2;
+  max-width: 560px;
+  margin: 52px 0 0 58px;
 }
 
 .visual-overlay h1 {
-  font-size: 40px;
+  font-size: 44px;
   margin: 0;
+  letter-spacing: .8px;
+  background: linear-gradient(180deg, #f6fbff 8%, #b8dfff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 18px rgba(116, 194, 255, .12);
 }
 
 .visual-overlay p {
   margin-top: 12px;
-  color: #a5c3db;
+  color: #d2e8fc;
+  letter-spacing: 2.2px;
+  font-size: 14px;
 }
 
 .visual-metrics {
   list-style: none;
   padding: 0;
-  margin: 28px 0 0;
+  margin: 34px 0 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .visual-metrics li {
-  width: 280px;
-  padding: 10px 14px;
-  border: 1px solid rgba(150, 200, 234, .28);
-  border-radius: 10px;
-  background: rgba(10, 29, 45, .55);
+  width: 320px;
+  padding: 12px 14px;
+  border: 1px solid rgba(132, 191, 231, .22);
+  border-radius: 12px;
+  background: rgba(10, 29, 45, .48);
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-end;
+  position: relative;
 }
 
 .visual-metrics strong {
   font-family: "Consolas", monospace;
-  color: #12d7ff;
+  color: #53f0b0;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.metric-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #a9c7de;
+  font-size: 13px;
+}
+
+.metric-label .el-icon {
+  color: #3ce5ff;
+  filter: drop-shadow(0 0 8px rgba(60, 229, 255, .35));
+}
+
+.metric-line {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 8px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(18, 215, 255, .1), rgba(83, 240, 176, .5), rgba(18, 215, 255, .1));
 }
 
 .wind-scene {
   position: absolute;
   inset: 0;
-  opacity: .28;
+  opacity: .34;
   background:
-    linear-gradient(180deg, transparent 0%, rgba(6, 18, 31, 0.9) 100%),
-    radial-gradient(circle at 60% 80%, rgba(18, 215, 255, .35), transparent 45%),
-    repeating-linear-gradient(90deg, rgba(255,255,255,.03) 0, rgba(255,255,255,.03) 1px, transparent 1px, transparent 28px);
+    linear-gradient(180deg, rgba(4, 12, 20, 0) 0%, rgba(4, 12, 20, .78) 100%),
+    radial-gradient(circle at 58% 82%, rgba(18, 215, 255, .24), transparent 42%),
+    repeating-radial-gradient(circle at 80% 90%, rgba(164, 209, 239, .08) 0, rgba(164, 209, 239, .08) 2px, transparent 3px, transparent 16px),
+    linear-gradient(0deg, rgba(8, 18, 30, .92), rgba(8, 18, 30, .3));
 }
 
 .login-panel {
@@ -254,10 +332,10 @@ export default {
   width: min(420px, 92vw);
   border-radius: 14px;
   padding: 28px;
-  border: 1px solid rgba(163, 205, 235, .35);
-  background: rgba(13, 36, 54, 0.6);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 16px 45px rgba(0, 0, 0, .35);
+  border: 1px solid rgba(163, 205, 235, .28);
+  background: rgba(255, 255, 255, 0.055);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 20px 46px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .08);
 }
 
 .logo-line {
@@ -278,9 +356,29 @@ export default {
   color: #eaf4ff;
 }
 
+.login-form :deep(.el-input__wrapper) {
+  background: rgba(12, 38, 58, .88) !important;
+  border: 1px solid rgba(88, 186, 235, .24);
+  box-shadow: none !important;
+}
+
+.login-form :deep(.el-input__inner),
+.login-form :deep(.el-input__prefix-inner .el-icon) {
+  color: #d7ebff !important;
+}
+
 .login-button {
   width: 100%;
   height: 42px;
+  border: none !important;
+  background: linear-gradient(135deg, #0eb8db, #12d7ff) !important;
+  box-shadow: 0 0 0 rgba(18, 215, 255, 0), 0 0 20px rgba(18, 215, 255, .35);
+  transition: all .25s ease;
+}
+
+.login-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 rgba(18, 215, 255, 0), 0 0 28px rgba(18, 215, 255, .48);
 }
 
 .footer {
@@ -288,6 +386,11 @@ export default {
   font-size: 12px;
   color: #8ba8be;
   text-align: center;
+}
+
+@keyframes drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(-90px); }
 }
 
 @media (max-width: 900px) {
@@ -302,6 +405,10 @@ export default {
 
   .visual-overlay h1 {
     font-size: 28px;
+  }
+
+  .visual-overlay {
+    margin: 12px 0 0 0;
   }
 
   .visual-metrics {
