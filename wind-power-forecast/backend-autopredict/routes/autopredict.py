@@ -689,9 +689,6 @@ def get_autopredict_farms():
 def get_status():
     try:
         raw_farm_code = request.args.get('farm_code')
-        if raw_farm_code and not is_valid_farm_code(raw_farm_code):
-            return api_error(f'无效的场站代码: {raw_farm_code}', code=1001, status_code=400)
-
         # 查询指定场站的状态
         farm_code = resolve_farm_code(raw_farm_code)
         prediction_type = request.args.get('type')
