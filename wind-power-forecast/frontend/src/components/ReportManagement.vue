@@ -15,6 +15,7 @@
       show-icon
       :title="statsConclusion"
     />
+    <div class="meta-updated">Updated: {{ statsUpdatedAt || '--' }}</div>
 
     <!-- 调度器状态卡片 -->
     <el-card class="info-card scheduler-status-card" shadow="hover">
@@ -968,6 +969,7 @@ export default {
     const statistics = ref([])
     const dailyStats = ref({ completeness_rate: null, timeliness_rate: null })
     const monthlyStats = ref({ completeness_rate: null, timeliness_rate: null })
+    const statsUpdatedAt = ref('')
     const statsConclusion = computed(() => {
       const toNum = (val) => (val === null || val === undefined ? NaN : Number(val))
       const candidates = [
@@ -2141,6 +2143,17 @@ export default {
         return dateTime
       }
     }
+
+    const formatNow = () => {
+      const now = new Date()
+      const y = now.getFullYear()
+      const m = String(now.getMonth() + 1).padStart(2, '0')
+      const d = String(now.getDate()).padStart(2, '0')
+      const hh = String(now.getHours()).padStart(2, '0')
+      const mm = String(now.getMinutes()).padStart(2, '0')
+      const ss = String(now.getSeconds()).padStart(2, '0')
+      return `${y}-${m}-${d} ${hh}:${mm}:${ss}`
+    }
     
     // 防抖相关
     let tableUpdateTimer = null
@@ -2253,6 +2266,7 @@ export default {
         
         // 设置每日统计列表
         statistics.value = response.data.daily_stats || []
+        statsUpdatedAt.value = formatNow()
 
       } catch (error) {
         console.error('获取统计数据失败:', error)
@@ -2336,6 +2350,7 @@ export default {
       dailyStats,
       monthlyStats,
       statsConclusion,
+      statsUpdatedAt,
 
       // 场站对话框
       farmDialogVisible,
@@ -2483,6 +2498,13 @@ export default {
 
 .summary-alert {
   margin-bottom: 16px;
+}
+
+.meta-updated {
+  margin-bottom: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: "Consolas", "Roboto Mono", monospace;
 }
 
 .page-title h1 {

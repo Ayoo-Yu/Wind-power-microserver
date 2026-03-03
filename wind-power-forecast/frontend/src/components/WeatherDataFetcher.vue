@@ -8,6 +8,7 @@
       <h1 class="page-title">气象预报数据拉取</h1>
       <p class="page-description">配置SSH连接，实现气象预报数据的定时拉取、处理和上传</p>
     </div>
+    <div class="meta-updated">Scheduler Updated: {{ schedulerCheckedAt || '--' }}</div>
 
     <el-card class="flow-card" shadow="hover">
       <div class="flow-title">Data Pipeline</div>
@@ -669,6 +670,7 @@ export default {
       jobs: [],
       total_jobs: 0
     })
+    const schedulerCheckedAt = ref('')
     const nowTs = ref(Date.now())
     let countdownTimer = null
 
@@ -1239,6 +1241,17 @@ export default {
         return timeStr
       }
     }
+
+    const formatNow = () => {
+      const now = new Date()
+      const y = now.getFullYear()
+      const m = String(now.getMonth() + 1).padStart(2, '0')
+      const d = String(now.getDate()).padStart(2, '0')
+      const hh = String(now.getHours()).padStart(2, '0')
+      const mm = String(now.getMinutes()).padStart(2, '0')
+      const ss = String(now.getSeconds()).padStart(2, '0')
+      return `${y}-${m}-${d} ${hh}:${mm}:${ss}`
+    }
     
     // Cron表达式转换为用户友好的描述
     // 调度器管理方法
@@ -1247,6 +1260,7 @@ export default {
       try {
         const response = await getWeatherSchedulerStatus()
         schedulerInfo.value = response.data
+        schedulerCheckedAt.value = formatNow()
         ElMessage.success('调度器状态更新成功')
       } catch (error) {
         console.error('获取调度器状态失败:', error)
@@ -1270,6 +1284,7 @@ export default {
         restartingScheduler.value = true
         const response = await restartWeatherScheduler()
         schedulerInfo.value = response.data.status
+        schedulerCheckedAt.value = formatNow()
         ElMessage.success('调度器重启成功')
         
         // 刷新任务列表
@@ -1393,6 +1408,7 @@ export default {
       currentTaskName,
       logLevel,
       schedulerInfo,
+      schedulerCheckedAt,
       pipelineSteps,
       nextRunCountdown,
       // 加载状态
@@ -1507,6 +1523,13 @@ export default {
   opacity: 0.9;
   margin: 0;
   color: white;
+}
+
+.meta-updated {
+  margin-bottom: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: "Consolas", "Roboto Mono", monospace;
 }
 
 .flow-card {
