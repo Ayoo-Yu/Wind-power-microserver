@@ -47,6 +47,7 @@
     <div class="config-panel">
       <el-card class="merged-config-card"> 
         <!-- Row 1: Time Picker, Query Button, Download Buttons -->
+        <div class="toolbar-group-title">{{ uiText.groupQuery }}</div>
         <div class="config-row config-row-1">
           <div class="time-picker-wrapper-outer">
             <span class="label">选择时间范围：</span>
@@ -120,6 +121,7 @@
         </div>
 
         <!-- Row 2: Type Select -->
+        <div class="toolbar-group-title">{{ uiText.groupFleet }}</div>
         <div class="config-row config-row-3">
           <div class="fleet-compare-config">
             <span class="label">多场站指标对比：</span>
@@ -155,6 +157,7 @@
             </el-button>
           </div>
         </div>
+        <div class="toolbar-group-title">{{ uiText.groupSeries }}</div>
         <div class="config-row config-row-2">
           <div class="type-checkbox-group type-checkbox-group-row2">
             <span class="label">选择展示类型：</span>
@@ -2408,6 +2411,14 @@ canvas {
 
 .summary-insight :deep(.el-alert__content) {
   color: var(--text-primary);
+}
+
+.toolbar-group-title {
+  margin: 6px 0 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
 }
 
 .config-panel .config-row {

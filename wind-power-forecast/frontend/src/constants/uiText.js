@@ -1,14 +1,33 @@
 export const UI_TEXT = {
   appLayout: {
-    platformTitle: '中国三峡集团风电功率预测平台',
+    platformTitle: 'CTG Wind Power Forecast Platform',
     updatedLabel: 'Updated:'
   },
   powerCompare: {
-    title: '数据可视化与下载',
-    stationCount: '场站数量',
-    avgAccuracy: '平均准确率',
-    peakPower: '峰值功率',
-    unqualifiedDays: '未达标天数',
-    overviewPrefix: 'Overview'
+    title: 'Power Visualization and Export',
+    stationCount: 'Stations',
+    avgAccuracy: 'Avg Accuracy',
+    peakPower: 'Peak Power',
+    unqualifiedDays: 'Unqualified Days',
+    overviewPrefix: 'Overview',
+    groupQuery: 'Query Filters',
+    groupFleet: 'Fleet Compare',
+    groupSeries: 'Display Types'
+  },
+  userManagement: {
+    title: 'User Management',
+    description: 'Manage accounts, permissions and activity.',
+    totalUsers: 'Total Users',
+    activeUsers: 'Active Users',
+    admins: 'Admins',
+    todayLogin: 'Today Login'
+  },
+  farmManagement: {
+    title: 'Farm Management',
+    subtitle: 'Card/Table view switch supported',
+    createFarm: 'Create Farm',
+    emptyText: 'No farm data yet. Click Create Farm.',
+    capacityLabel: 'Capacity',
+    locationLabel: 'Location'
   }
 }

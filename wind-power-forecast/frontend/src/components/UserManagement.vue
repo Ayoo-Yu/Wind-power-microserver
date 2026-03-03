@@ -2,8 +2,8 @@
   <div class="user-management-container page-shell">
     <!-- 页面标题区域 -->
     <div class="page-header">
-      <h1 class="page-title">用户管理系统</h1>
-      <p class="page-description">管理系统用户账号、权限和状态</p>
+      <h1 class="page-title">{{ uiText.title }}</h1>
+      <p class="page-description">{{ uiText.description }}</p>
     </div>
     
     <!-- 内容区域的白色卡片 -->
@@ -12,7 +12,7 @@
         <!-- 操作按钮区域 -->
         <div class="card-header">
           <div class="header-left">
-            <h2 class="section-title">用户管理</h2>
+            <h2 class="section-title">{{ uiText.title }}</h2>
           </div>
           <div class="header-right">
             <el-button 
@@ -51,19 +51,19 @@
 
         <div class="stats-grid">
           <div class="stat-card">
-            <div class="stat-label">用户总数</div>
+            <div class="stat-label">{{ uiText.totalUsers }}</div>
             <div class="stat-value">{{ userStats.total }}</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">启用用户</div>
+            <div class="stat-label">{{ uiText.activeUsers }}</div>
             <div class="stat-value">{{ userStats.active }}</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">管理员</div>
+            <div class="stat-label">{{ uiText.admins }}</div>
             <div class="stat-value">{{ userStats.admin }}</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">今日登录</div>
+            <div class="stat-label">{{ uiText.todayLogin }}</div>
             <div class="stat-value">{{ userStats.todayLogin }}</div>
           </div>
         </div>
@@ -139,11 +139,9 @@
             :filter-method="filterByStatus"
           >
             <template #default="scope">
-              <el-tag 
-                :type="scope.row.is_active ? 'success' : 'danger'"
-                effect="plain"
-              >
-                {{ scope.row.is_active ? '启用' : '禁用' }}
+              <el-tag :type="scope.row.is_active ? 'success' : 'danger'" effect="plain" class="status-tag">
+                <StatusDot :active="scope.row.is_active" />
+                <span>{{ scope.row.is_active ? '启用' : '禁用' }}</span>
               </el-tag>
             </template>
           </el-table-column>
@@ -355,10 +353,16 @@ import {
 } from '@element-plus/icons-vue'
 import { getUsers, createUser, updateUser, deleteUser, resetUserPassword, getRoles } from '../api/auth'
 import { isAuthReady, isAuthLoading } from '../store/authReady' // 导入认证状态
+import StatusDot from './common/StatusDot.vue'
+import { UI_TEXT } from '../constants/uiText'
 
 export default {
   name: 'UserManagement',
+  components: {
+    StatusDot
+  },
   setup() {
+    const uiText = UI_TEXT.userManagement
     // 数据
     const users = ref([])
     const roles = ref([])
@@ -1020,6 +1024,7 @@ export default {
     })
     
     return {
+      uiText,
       users,
       roles,
       loading,
@@ -1385,6 +1390,12 @@ export default {
   font-size: 24px;
   font-family: "Consolas", monospace;
   font-weight: 700;
+}
+
+.status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 @media (max-width: 1200px) {

@@ -4,32 +4,35 @@
       <template #header>
         <div class="header-row">
           <div>
-            <div class="title">场站管理</div>
-            <div class="sub">支持卡片视图与表格视图切换</div>
+            <div class="title">{{ uiText.title }}</div>
+            <div class="sub">{{ uiText.subtitle }}</div>
           </div>
           <div class="actions">
             <el-radio-group v-model="viewMode" size="small">
               <el-radio-button label="card">卡片</el-radio-button>
               <el-radio-button label="table">表格</el-radio-button>
             </el-radio-group>
-            <el-button type="primary" @click="openCreateDialog">新增场站</el-button>
+            <el-button type="primary" @click="openCreateDialog">{{ uiText.createFarm }}</el-button>
           </div>
         </div>
       </template>
 
       <div v-if="!loading && farms.length === 0" class="empty-state panel-card">
         <el-icon><WindPower /></el-icon>
-        <p>暂无场站数据，请点击右上角新增场站。</p>
+        <p>{{ uiText.emptyText }}</p>
       </div>
 
       <div v-else-if="viewMode === 'card'" class="farm-grid">
         <div v-for="row in farms" :key="row.farm_code" class="farm-card panel-card">
           <div class="farm-name">{{ row.farm_name }}</div>
           <div class="farm-code">{{ row.farm_code }}</div>
-          <div class="farm-meta">装机容量：{{ row.capacity || '-' }} MW</div>
-          <div class="farm-meta">位置：{{ row.location || '-' }}</div>
+          <div class="farm-meta">{{ uiText.capacityLabel }}：{{ row.capacity || '-' }} MW</div>
+          <div class="farm-meta">{{ uiText.locationLabel }}：{{ row.location || '-' }}</div>
           <div class="farm-actions">
-            <el-tag :type="row.is_active ? 'success' : 'info'">{{ row.is_active ? '启用' : '停用' }}</el-tag>
+            <el-tag :type="row.is_active ? 'success' : 'info'" class="status-tag">
+              <StatusDot :active="row.is_active" />
+              <span>{{ row.is_active ? '启用' : '停用' }}</span>
+            </el-tag>
             <div>
               <el-button size="small" @click="openEditDialog(row)">编辑</el-button>
               <el-button size="small" type="warning" @click="handleToggle(row)">{{ row.is_active ? '停用' : '启用' }}</el-button>
@@ -46,7 +49,10 @@
         <el-table-column prop="location" label="位置" min-width="160" />
         <el-table-column label="状态" min-width="100">
           <template #default="{ row }">
-            <el-tag :type="row.is_active ? 'success' : 'info'">{{ row.is_active ? '启用' : '停用' }}</el-tag>
+            <el-tag :type="row.is_active ? 'success' : 'info'" class="status-tag">
+              <StatusDot :active="row.is_active" />
+              <span>{{ row.is_active ? '启用' : '停用' }}</span>
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" min-width="220" fixed="right">
@@ -90,6 +96,8 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { WindPower } from '@element-plus/icons-vue'
 import { createFarm, deleteFarm, getFarms, toggleFarm, updateFarm } from '@/api/farmApi'
+import StatusDot from './common/StatusDot.vue'
+import { UI_TEXT } from '../constants/uiText'
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -98,6 +106,7 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const viewMode = ref('card')
 const formRef = ref()
+const uiText = UI_TEXT.farmManagement
 
 const formData = reactive({
   farm_code: '',
@@ -243,6 +252,12 @@ onMounted(fetchFarms)
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+}
+
+.status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .empty-state {
