@@ -89,6 +89,16 @@
           <h1 class="header-title">中国三峡集团风电功率预测平台</h1>
         </div>
         <div class="header-right">
+          <el-badge :value="alertCount" :max="99" class="alert-badge">
+            <el-button class="alert-btn" text @click="goAlerts">
+              <el-icon><Bell /></el-icon>
+            </el-button>
+          </el-badge>
+          <div class="system-time-chip">
+            <span class="time-dot"></span>
+            <span class="time-label">Updated:</span>
+            <span class="time-value">{{ systemTime }}</span>
+          </div>
           <!-- 场站选择器 -->
           <FarmSelector @farm-changed="handleFarmChanged" />
 
@@ -120,7 +130,7 @@
 </template>
 
 <script>
-import { ref, computed, provide, onMounted } from 'vue'
+import { ref, computed, provide, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getCurrentUser } from '../api/auth'
@@ -137,7 +147,8 @@ import {
   Upload,
   Histogram,
   Cloudy,
-  OfficeBuilding
+  OfficeBuilding,
+  Bell
 } from '@element-plus/icons-vue'
 
 // 导入场站选择器组件
@@ -157,6 +168,7 @@ export default {
     Histogram,
     Cloudy,
     OfficeBuilding,
+    Bell,
     FarmSelector,
   },
   setup() {
@@ -164,6 +176,9 @@ export default {
     const isAnimatedBackground = ref(true)
     const router = useRouter()
     const route = useRoute()
+    const systemTime = ref('')
+    const alertCount = ref(0)
+    let timeTicker = null
     
     // 用户信息
     const currentUser = ref(null)
@@ -193,6 +208,20 @@ export default {
         .filter(r => r.meta?.keepAlive && typeof r.name === 'string')
         .map(r => r.name)
     )
+
+    const formatDateTime = (date) => {
+      const y = date.getFullYear()
+      const m = String(date.getMonth() + 1).padStart(2, '0')
+      const d = String(date.getDate()).padStart(2, '0')
+      const hh = String(date.getHours()).padStart(2, '0')
+      const mm = String(date.getMinutes()).padStart(2, '0')
+      const ss = String(date.getSeconds()).padStart(2, '0')
+      return `${y}-${m}-${d} ${hh}:${mm}:${ss}`
+    }
+
+    const refreshSystemTime = () => {
+      systemTime.value = formatDateTime(new Date())
+    }
     
     // 计算用户名首字母
     const userInitial = computed(() => {
@@ -374,6 +403,10 @@ export default {
       }
     }
 
+    const goAlerts = () => {
+      router.push('/reportmanagement')
+    }
+
     // 处理退出登录
     const handleLogout = () => {
       ElMessageBox.confirm('确定要退出登录吗?', '提示', {
@@ -398,7 +431,16 @@ export default {
     
     // 生命周期钩子
     onMounted(() => {
+      refreshSystemTime()
+      timeTicker = setInterval(refreshSystemTime, 1000)
       fetchCurrentUser()
+    })
+
+    onUnmounted(() => {
+      if (timeTicker) {
+        clearInterval(timeTicker)
+        timeTicker = null
+      }
     })
 
     return {
@@ -411,6 +453,9 @@ export default {
       currentUser,
       userInitial,
       userName,
+      alertCount,
+      systemTime,
+      goAlerts,
       handleCommand,
       handleFarmChanged,
       hasPermission,
@@ -583,6 +628,49 @@ export default {
   gap: 16px;
 }
 
+.alert-badge :deep(.el-badge__content) {
+  background: var(--danger);
+  border-color: transparent;
+}
+
+.alert-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid rgba(146, 186, 220, 0.35);
+  background: rgba(10, 25, 38, 0.6);
+  color: var(--text-primary);
+}
+
+.system-time-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(146, 186, 220, 0.35);
+  background: rgba(10, 25, 38, 0.6);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.time-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-2);
+  box-shadow: 0 0 8px rgba(45, 211, 111, 0.75);
+}
+
+.time-label {
+  opacity: 0.85;
+}
+
+.time-value {
+  color: var(--text-primary);
+  font-family: "Consolas", "Roboto Mono", monospace;
+}
+
 .user-profile {
   display: flex;
   align-items: center;
@@ -618,6 +706,10 @@ export default {
   }
 
   .username {
+    display: none;
+  }
+
+  .system-time-chip {
     display: none;
   }
 }

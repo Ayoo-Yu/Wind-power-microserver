@@ -1,5 +1,5 @@
 <template>
-  <div class="physical-simulation-container">
+  <div class="physical-simulation-container page-shell">
     <div class="content-wrapper">
       <h1 class="page-title">物理仿真数据展示</h1>
       <p class="page-subtitle">通过双线性插值计算任意工况下的风机表现</p>
@@ -793,5 +793,44 @@ export default {
   .card-content {
     padding: 16px;
   }
+}
+
+.physical-simulation-container .page-title {
+  color: var(--text-primary);
+  text-shadow: none;
+}
+
+.physical-simulation-container .page-subtitle {
+  color: var(--text-secondary);
+}
+
+.physical-simulation-container .card-header {
+  background: linear-gradient(120deg, rgba(18, 57, 86, 0.96), rgba(13, 41, 64, 0.96));
+}
+
+.physical-simulation-container .action-card,
+.physical-simulation-container .status-card,
+.physical-simulation-container .chart-card,
+.physical-simulation-container .table-card {
+  background: linear-gradient(180deg, rgba(18, 42, 64, 0.95), rgba(12, 31, 47, 0.94));
+  border: 1px solid rgba(146, 186, 220, 0.2);
+}
+
+.physical-simulation-container .predict-button {
+  background: linear-gradient(120deg, #0bb5d4, var(--accent));
+  color: #00111c;
+}
+
+.physical-simulation-container .param-item {
+  border-bottom-color: rgba(146, 186, 220, 0.2);
+}
+
+.physical-simulation-container .param-label {
+  color: var(--text-secondary);
+}
+
+.physical-simulation-container .param-value {
+  color: var(--text-primary);
+  font-family: "Consolas", "Roboto Mono", monospace;
 }
 </style> 

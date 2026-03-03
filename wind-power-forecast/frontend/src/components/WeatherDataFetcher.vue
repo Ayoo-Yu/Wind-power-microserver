@@ -1,5 +1,5 @@
 <template>
-  <div class="weather-data-fetcher">
+  <div class="weather-data-fetcher page-shell">
     <!-- 动态渐变背景 -->
     <div class="gradient-background"></div>
     
@@ -8,6 +8,23 @@
       <h1 class="page-title">气象预报数据拉取</h1>
       <p class="page-description">配置SSH连接，实现气象预报数据的定时拉取、处理和上传</p>
     </div>
+
+    <el-card class="flow-card" shadow="hover">
+      <div class="flow-title">Data Pipeline</div>
+      <div class="flow-steps">
+        <div
+          v-for="(step, index) in pipelineSteps"
+          :key="step.key"
+          class="flow-step"
+          :class="`is-${step.status}`"
+        >
+          <div class="flow-dot"></div>
+          <div class="flow-name">{{ step.name }}</div>
+          <div class="flow-state">{{ step.text }}</div>
+          <div v-if="index < pipelineSteps.length - 1" class="flow-link"></div>
+        </div>
+      </div>
+    </el-card>
 
     <!-- SSH连接配置卡片 -->
     <el-card class="config-card" shadow="hover">
@@ -597,7 +614,7 @@
 </template>
 
 <script>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getWeatherConnections,
@@ -645,6 +662,41 @@ export default {
       is_running: false,
       jobs: [],
       total_jobs: 0
+    })
+
+    const pipelineSteps = computed(() => {
+      const hasConnection = connections.value.length > 0
+      const connected = connections.value.some(item => item.status === 'connected')
+      const schedulerRunning = !!schedulerInfo.value?.is_running
+      const enabledTasks = tasks.value.filter(item => item.enabled)
+      const runningTask = tasks.value.some(item => item.running || item.status === 'running')
+
+      return [
+        {
+          key: 'source',
+          name: 'Weather Source',
+          status: hasConnection ? 'ready' : 'idle',
+          text: hasConnection ? 'Configured' : 'Pending'
+        },
+        {
+          key: 'connection',
+          name: 'SSH Tunnel',
+          status: connected ? 'ready' : (hasConnection ? 'warning' : 'idle'),
+          text: connected ? 'Connected' : (hasConnection ? 'Disconnected' : 'Pending')
+        },
+        {
+          key: 'scheduler',
+          name: 'Scheduler',
+          status: schedulerRunning ? 'ready' : 'warning',
+          text: schedulerRunning ? 'Running' : 'Stopped'
+        },
+        {
+          key: 'execution',
+          name: 'Task Execution',
+          status: runningTask ? 'ready' : (enabledTasks.length > 0 ? 'warning' : 'idle'),
+          text: runningTask ? 'Running' : (enabledTasks.length > 0 ? 'Waiting' : 'No Task')
+        }
+      ]
     })
     
     // 加载状态
@@ -1303,6 +1355,7 @@ export default {
       currentTaskName,
       logLevel,
       schedulerInfo,
+      pipelineSteps,
       // 加载状态
       loadingConnections,
       loadingTasks,
@@ -1415,6 +1468,74 @@ export default {
   opacity: 0.9;
   margin: 0;
   color: white;
+}
+
+.flow-card {
+  margin-bottom: 20px;
+}
+
+.flow-title {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.flow-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.flow-step {
+  position: relative;
+  border: 1px solid rgba(146, 186, 220, 0.25);
+  border-radius: 12px;
+  background: rgba(8, 24, 38, 0.58);
+  min-height: 76px;
+  padding: 10px 10px 10px 12px;
+}
+
+.flow-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-bottom: 8px;
+}
+
+.flow-name {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.flow-state {
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.flow-link {
+  position: absolute;
+  right: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 1px;
+  background: rgba(146, 186, 220, 0.4);
+}
+
+.flow-step.is-ready .flow-dot {
+  background: var(--accent-2);
+  box-shadow: 0 0 8px rgba(45, 211, 111, 0.7);
+}
+
+.flow-step.is-warning .flow-dot {
+  background: var(--warning);
+  box-shadow: 0 0 8px rgba(246, 183, 60, 0.7);
+}
+
+.flow-step.is-idle .flow-dot {
+  background: #7d90a5;
 }
 
 /* 卡片样式 */
@@ -2008,5 +2129,64 @@ export default {
 
 .logs-content::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
+}
+
+.weather-data-fetcher .page-header {
+  margin-bottom: 14px;
+}
+
+.weather-data-fetcher .page-title {
+  margin-bottom: 6px;
+  color: var(--text-primary);
+}
+
+.weather-data-fetcher .page-description {
+  color: var(--text-secondary);
+}
+
+.weather-data-fetcher .card-header {
+  min-height: 44px;
+}
+
+.weather-data-fetcher .status-label {
+  color: var(--text-secondary);
+}
+
+.weather-data-fetcher .job-item {
+  background: rgba(8, 24, 38, 0.65);
+  border: 1px solid rgba(146, 186, 220, 0.2);
+}
+
+.weather-data-fetcher .job-name {
+  color: var(--text-primary);
+}
+
+.weather-data-fetcher .job-next-run {
+  color: var(--text-secondary);
+  font-family: "Consolas", "Roboto Mono", monospace;
+}
+
+.weather-data-fetcher .logs-header {
+  border-bottom-color: rgba(146, 186, 220, 0.2);
+}
+
+.weather-data-fetcher .log-item {
+  background: rgba(8, 24, 38, 0.65);
+}
+
+@media (max-width: 1200px) {
+  .flow-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .flow-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .flow-link {
+    display: none;
+  }
 }
 </style> 

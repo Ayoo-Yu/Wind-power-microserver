@@ -1,5 +1,5 @@
 <template>
-  <div class="user-management-container">
+  <div class="user-management-container page-shell">
     <!-- 页面标题区域 -->
     <div class="page-header">
       <h1 class="page-title">用户管理系统</h1>
@@ -47,6 +47,25 @@
               :loading="loading"
             ></el-button>
           </el-tooltip>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-label">用户总数</div>
+            <div class="stat-value">{{ userStats.total }}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">启用用户</div>
+            <div class="stat-value">{{ userStats.active }}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">管理员</div>
+            <div class="stat-value">{{ userStats.admin }}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">今日登录</div>
+            <div class="stat-value">{{ userStats.todayLogin }}</div>
+          </div>
         </div>
         
         <!-- 用户列表表格 -->
@@ -454,6 +473,20 @@ export default {
       const startIndex = (currentPage.value - 1) * pageSize.value
       const endIndex = startIndex + pageSize.value
       return result.slice(startIndex, endIndex)
+    })
+
+    const userStats = computed(() => {
+      const allUsers = Array.isArray(users.value) ? users.value : []
+      const today = new Date().toISOString().slice(0, 10)
+      return {
+        total: allUsers.length,
+        active: allUsers.filter(item => !!item.is_active).length,
+        admin: allUsers.filter(item => item?.role?.name && String(item.role.name).includes('管理员')).length,
+        todayLogin: allUsers.filter(item => {
+          const login = item?.last_login
+          return typeof login === 'string' && login.slice(0, 10) === today
+        }).length
+      }
     })
     
     // 表单验证规则
@@ -997,6 +1030,7 @@ export default {
       currentPage,
       pageSize,
       filteredUsers,
+      userStats,
       roleFilters,
       userForm,
       resetPasswordForm,
@@ -1324,5 +1358,38 @@ export default {
 .compact-buttons :deep(.el-button) {
   padding: 5px 6px !important;
   min-width: 32px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0 16px;
+}
+
+.stat-card {
+  border: 1px solid rgba(130, 178, 212, 0.26);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(15, 37, 56, 0.6);
+}
+
+.stat-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.stat-value {
+  margin-top: 6px;
+  color: var(--text-primary);
+  font-size: 24px;
+  font-family: "Consolas", monospace;
+  font-weight: 700;
+}
+
+@media (max-width: 1200px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 </style> 

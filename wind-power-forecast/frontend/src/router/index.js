@@ -1,13 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import HomePage from '../components/HomePage.vue'
-import AppLayout from '../components/AppLayout.vue'
-import AutoPredict from '../components/AutoPredict.vue'
-import PowerCompare from '../components/PowerCompare.vue'
-import Login from '../components/Login.vue'
-import UserManagement from '../components/UserManagement.vue'
-import ReportManagement from '../components/ReportManagement.vue'
-import WeatherDataFetcher from '../components/WeatherDataFetcher.vue'
-import FarmManagement from '../components/FarmManagement.vue'
+const HomePage = () => import('../components/HomePage.vue')
+const AppLayout = () => import('../components/AppLayout.vue')
+const AutoPredict = () => import('../components/AutoPredict.vue')
+const PowerCompare = () => import('../components/PowerCompare.vue')
+const Login = () => import('../components/Login.vue')
+const UserManagement = () => import('../components/UserManagement.vue')
+const ReportManagement = () => import('../components/ReportManagement.vue')
+const WeatherDataFetcher = () => import('../components/WeatherDataFetcher.vue')
+const FarmManagement = () => import('../components/FarmManagement.vue')
 
 const routes = [
   {

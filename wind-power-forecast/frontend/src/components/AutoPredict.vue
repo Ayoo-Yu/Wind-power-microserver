@@ -7,6 +7,34 @@
     :class="{'animated-background': isAnimatedBackground.value, 'static-background': !isAnimatedBackground.value}"
   >
     <h1 class="page-title">自动化预测功能管理</h1>
+    <el-card class="matrix-table-card">
+      <template #header>
+        <span>预测类型运行矩阵</span>
+      </template>
+      <el-table :data="predictionTableRows" size="small" border>
+        <el-table-column prop="title" label="预测类型" min-width="180" />
+        <el-table-column label="状态" width="110">
+          <template #default="{ row }">
+            <StatusDot :active="row.status" />
+            <span class="status-text">{{ row.status ? '运行中' : '已停止' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="启停" width="120">
+          <template #default="{ row }">
+            <el-switch
+              :model-value="row.status"
+              :loading="isControlBusy(row.name)"
+              @change="(val) => handleSwitchToggle(row.name, val)"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column label="趋势预览" min-width="160">
+          <template #default="{ row }">
+            <SparklineMini :values="row.trend" />
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
     <div class="fleet-overview" v-loading="fleetLoading">
       <div class="fleet-title">多场站运行总览</div>
       <div class="fleet-filter-row">
@@ -220,6 +248,8 @@ import { ref, reactive, computed, inject, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import farmService from '../utils/farmService'
 import { getAutoPredictStatus, getAutoPredictStatusAll, getAutoPredictOverview, controlAutoPredict, controlAutoPredictAll, controlAutoPredictMatrix, getAutoPredictLogs } from '../api/autopredictApi'
+import StatusDot from './common/StatusDot.vue'
+import SparklineMini from './common/SparklineMini.vue'
 
 const isAnimatedBackground = inject('isAnimatedBackground');
 
@@ -240,6 +270,14 @@ const predictions = reactive([
     status: false
   }
 ])
+
+const predictionTableRows = computed(() => predictions.map((item, idx) => ({
+  ...item,
+  trend: Array.from({ length: 18 }, (_, i) => {
+    const base = item.status ? 72 : 48
+    return Number((base + Math.sin((i + idx) / 2.5) * 12 + i * 0.6).toFixed(2))
+  })
+})))
 
 const loading = ref(true)
 const controlBusyMap = reactive({
@@ -546,6 +584,11 @@ const handleControl = async (name, action) => {
   }
 }
 
+const handleSwitchToggle = (name, enabled) => {
+  const action = enabled ? 'start' : 'stop'
+  handleControl(name, action)
+}
+
 const handleControlAll = async (name, action) => {
   if (isFleetControlBusy(name)) {
     ElMessage.warning('批量操作正在处理中，请稍候')
@@ -783,6 +826,16 @@ const handleLogTypeChange = () => {
 .page-title {
   color: white;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.matrix-table-card {
+  margin: 8px 0 16px;
+}
+
+.status-text {
+  margin-left: 8px;
+  color: #c8ddf1;
+  font-size: 12px;
 }
 
 .fleet-overview {

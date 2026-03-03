@@ -1,33 +1,4 @@
-/* 确保输入框文字在任何背景下都可见 - 更强大的选择器 */
 :root {
-  --el-input-text-color: #333 !important;
+  --el-border-radius-base: 8px;
+  --el-color-primary: #12d7ff;
 }
-
-/* 输入框文字颜色 */
-.el-input__inner, 
-.el-textarea__inner,
-.el-select-dropdown__item,
-.el-date-editor .el-range-input,
-.el-date-editor .el-range-separator {
-  color: #333 !important;
-}
-
-/* El-Select下拉选项文字颜色 */
-.el-select-dropdown__item {
-  color: #333 !important;
-}
-
-/* 表单项标签颜色 */
-.el-form-item__label {
-  color: #333 !important;
-}
-
-/* 日期选择器文字颜色 */
-.el-date-table td {
-  color: #333 !important;
-}
-
-/* 日期选择器当前日期 */
-.el-date-table td.current:not(.disabled) span {
-  color: #fff !important;
-} 

@@ -1,5 +1,5 @@
 <template>
-  <div class="power-compare-container power-predict-container">
+  <div class="power-compare-container power-predict-container page-shell">
     <!-- 添加背景动画层 -->
     <div class="background-container">
       <div class="animated-background"></div>
@@ -15,6 +15,33 @@
     ></el-button>
 
     <h1 class="page-title">数据可视化与下载</h1>
+
+    <div class="summary-grid">
+      <el-card class="summary-card">
+        <div class="summary-label">场站数量</div>
+        <div class="summary-value">{{ fleetCompareFarms.length }}</div>
+      </el-card>
+      <el-card class="summary-card">
+        <div class="summary-label">平均准确率</div>
+        <div class="summary-value">{{ avgAccDisplay }}</div>
+      </el-card>
+      <el-card class="summary-card">
+        <div class="summary-label">峰值功率</div>
+        <div class="summary-value">{{ peakPowerDisplay }}</div>
+      </el-card>
+      <el-card class="summary-card">
+        <div class="summary-label">未达标天数</div>
+        <div class="summary-value summary-warning">{{ unqualifiedDays }}</div>
+      </el-card>
+    </div>
+
+    <el-alert
+      class="summary-insight"
+      type="info"
+      :closable="false"
+      show-icon
+      :title="summaryInsight"
+    />
 
     <!-- 时间选择与配置区域 -->
     <div class="config-panel">
@@ -338,6 +365,56 @@ export default {
       fleetSeriesData: [],
       fleetSeriesChart: null,
       farmChangeTimer: null
+    }
+  },
+  computed: {
+    avgAccDisplay() {
+      if (!this.dailyMetrics || typeof this.dailyMetrics !== 'object') {
+        return '--';
+      }
+      const values = [];
+      Object.values(this.dailyMetrics).forEach((days) => {
+        if (!Array.isArray(days)) return;
+        days.forEach((item) => {
+          if (Number.isFinite(item?.acc)) {
+            values.push(item.acc * 100);
+          }
+        });
+      });
+      if (!values.length) return '--';
+      const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
+      return `${avg.toFixed(2)}%`;
+    },
+    peakPowerDisplay() {
+      if (!this.chartData || typeof this.chartData !== 'object') {
+        return '--';
+      }
+      let maxPower = null;
+      Object.values(this.chartData).forEach((series) => {
+        if (!Array.isArray(series)) return;
+        series.forEach((point) => {
+          const power = Number(point?.power);
+          if (!Number.isFinite(power)) return;
+          maxPower = maxPower === null ? power : Math.max(maxPower, power);
+        });
+      });
+      return maxPower === null ? '--' : `${maxPower.toFixed(2)} MW`;
+    },
+    unqualifiedDays() {
+      if (!this.qualificationRates || typeof this.qualificationRates !== 'object') {
+        return 0;
+      }
+      return Object.values(this.qualificationRates).reduce((sum, item) => {
+        const total = Number(item?.totalDays) || 0;
+        const qualified = Number(item?.qualifiedDays) || 0;
+        return sum + Math.max(total - qualified, 0);
+      }, 0);
+    },
+    summaryInsight() {
+      const acc = this.avgAccDisplay;
+      const peak = this.peakPowerDisplay;
+      const unqualified = this.unqualifiedDays;
+      return `Overview: Avg ACC ${acc}, Peak Power ${peak}, Unqualified Days ${unqualified}.`;
     }
   },
   async mounted() {
@@ -2290,5 +2367,68 @@ canvas {
   font-size: 14px;
   line-height: 1.5;
   margin: 0;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.summary-card {
+  min-height: 92px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.summary-label {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.summary-value {
+  color: var(--text-primary);
+  font-size: 24px;
+  font-weight: 700;
+  font-family: "Consolas", "Roboto Mono", monospace;
+}
+
+.summary-warning {
+  color: var(--warning);
+}
+
+.summary-insight {
+  margin-bottom: 14px;
+}
+
+.summary-insight :deep(.el-alert__content) {
+  color: var(--text-primary);
+}
+
+.config-panel .config-row {
+  border: 1px solid rgba(146, 186, 220, 0.18);
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 10px;
+  background: rgba(10, 26, 42, 0.35);
+}
+
+.config-panel .config-row:last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 1280px) {
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style> 

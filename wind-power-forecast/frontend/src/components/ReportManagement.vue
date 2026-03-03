@@ -1,5 +1,5 @@
 <template>
-  <div class="report-management">
+  <div class="report-management page-shell">
     <!-- 动态渐变背景 -->
     <div class="gradient-background"></div>
     
@@ -124,6 +124,44 @@
               </div>
             </el-col>
           </el-row>
+          <div class="quality-gauge-grid">
+            <div class="quality-gauge-item">
+              <div class="quality-gauge-title">Daily Completeness</div>
+              <el-progress
+                type="dashboard"
+                :percentage="normalizeRate(dailyStats.completeness_rate)"
+                :color="getGaugeColor(normalizeRate(dailyStats.completeness_rate))"
+                :stroke-width="10"
+              />
+            </div>
+            <div class="quality-gauge-item">
+              <div class="quality-gauge-title">Daily Timeliness</div>
+              <el-progress
+                type="dashboard"
+                :percentage="normalizeRate(dailyStats.timeliness_rate)"
+                :color="getGaugeColor(normalizeRate(dailyStats.timeliness_rate))"
+                :stroke-width="10"
+              />
+            </div>
+            <div class="quality-gauge-item">
+              <div class="quality-gauge-title">Monthly Completeness</div>
+              <el-progress
+                type="dashboard"
+                :percentage="normalizeRate(monthlyStats.completeness_rate)"
+                :color="getGaugeColor(normalizeRate(monthlyStats.completeness_rate))"
+                :stroke-width="10"
+              />
+            </div>
+            <div class="quality-gauge-item">
+              <div class="quality-gauge-title">Monthly Timeliness</div>
+              <el-progress
+                type="dashboard"
+                :percentage="normalizeRate(monthlyStats.timeliness_rate)"
+                :color="getGaugeColor(normalizeRate(monthlyStats.timeliness_rate))"
+                :stroke-width="10"
+              />
+            </div>
+          </div>
           <el-table :data="statistics" style="width: 100%; margin-top: 20px;" max-height="250" empty-text="暂无数据">
             <el-table-column prop="date" label="日期" width="100" sortable fixed></el-table-column>
             <el-table-column prop="farm_name" label="场站" width="120" show-overflow-tooltip>
@@ -2213,6 +2251,23 @@ export default {
       return showUnit ? `${fixedRate}%` : fixedRate
     }
 
+    const normalizeRate = (rate) => {
+      if (rate === null || typeof rate === 'undefined') {
+        return 0
+      }
+      const value = Number(rate)
+      if (!Number.isFinite(value)) {
+        return 0
+      }
+      return Math.min(100, Math.max(0, Number(value.toFixed(2))))
+    }
+
+    const getGaugeColor = (percent) => {
+      if (percent >= 99) return '#2dd36f'
+      if (percent >= 95) return '#f6b73c'
+      return '#ff5d73'
+    }
+
     // 根据比率获取颜色
     const getRateColor = (rate) => {
       if (rate === null || typeof rate === 'undefined') {
@@ -2350,6 +2405,8 @@ export default {
       getStatusColor,
       formatDateTime,
       formatRate,
+      normalizeRate,
+      getGaugeColor,
       getRateColor,
       handleValueChange,
       getFarmNameFromCode
@@ -3242,6 +3299,27 @@ export default {
   text-align: center;
 }
 
+.quality-gauge-grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.quality-gauge-item {
+  padding: 12px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(146, 186, 220, 0.2);
+  background: rgba(8, 24, 38, 0.6);
+  text-align: center;
+}
+
+.quality-gauge-title {
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 .stat-box {
   padding: 15px;
   background-color: #f9fafb;
@@ -3349,5 +3427,56 @@ export default {
     flex-wrap: wrap;
     width: 100%;
   }
+
+  .quality-gauge-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .quality-gauge-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.report-management .page-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.report-management .page-title p {
+  margin: 0;
+  font-size: 18px;
+  color: var(--text-primary);
+  letter-spacing: 0.3px;
+}
+
+.report-management .scheduler-status-card {
+  border-left: 3px solid var(--accent);
+}
+
+.report-management .stat-box {
+  background: rgba(8, 24, 38, 0.75);
+  border: 1px solid rgba(146, 186, 220, 0.2);
+}
+
+.report-management .stat-label {
+  color: var(--text-secondary);
+}
+
+.report-management .stat-value {
+  color: var(--text-primary);
+}
+
+.report-management .log-item {
+  background: rgba(8, 24, 38, 0.7);
+  border-color: rgba(146, 186, 220, 0.2);
+}
+
+.report-management .log-time,
+.report-management .log-details {
+  font-family: "Consolas", "Roboto Mono", monospace;
 }
 </style> 

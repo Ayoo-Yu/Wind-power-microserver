@@ -1,31 +1,58 @@
 <template>
-  <div class="farm-management">
-    <el-card>
+  <div class="page-shell farm-management">
+    <el-card class="panel-card">
       <template #header>
         <div class="header-row">
-          <span>场站管理</span>
-          <el-button type="primary" @click="openCreateDialog">新增场站</el-button>
+          <div>
+            <div class="title">场站管理</div>
+            <div class="sub">支持卡片视图与表格视图切换</div>
+          </div>
+          <div class="actions">
+            <el-radio-group v-model="viewMode" size="small">
+              <el-radio-button label="card">卡片</el-radio-button>
+              <el-radio-button label="table">表格</el-radio-button>
+            </el-radio-group>
+            <el-button type="primary" @click="openCreateDialog">新增场站</el-button>
+          </div>
         </div>
       </template>
 
-      <el-table :data="farms" v-loading="loading" border>
+      <div v-if="!loading && farms.length === 0" class="empty-state panel-card">
+        <el-icon><WindPower /></el-icon>
+        <p>暂无场站数据，请点击右上角新增场站。</p>
+      </div>
+
+      <div v-else-if="viewMode === 'card'" class="farm-grid">
+        <div v-for="row in farms" :key="row.farm_code" class="farm-card panel-card">
+          <div class="farm-name">{{ row.farm_name }}</div>
+          <div class="farm-code">{{ row.farm_code }}</div>
+          <div class="farm-meta">装机容量：{{ row.capacity || '-' }} MW</div>
+          <div class="farm-meta">位置：{{ row.location || '-' }}</div>
+          <div class="farm-actions">
+            <el-tag :type="row.is_active ? 'success' : 'info'">{{ row.is_active ? '启用' : '停用' }}</el-tag>
+            <div>
+              <el-button size="small" @click="openEditDialog(row)">编辑</el-button>
+              <el-button size="small" type="warning" @click="handleToggle(row)">{{ row.is_active ? '停用' : '启用' }}</el-button>
+              <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <el-table v-else :data="farms" v-loading="loading" border>
         <el-table-column prop="farm_code" label="场站编码" min-width="140" />
         <el-table-column prop="farm_name" label="场站名称" min-width="180" />
         <el-table-column prop="capacity" label="装机容量(MW)" min-width="120" />
         <el-table-column prop="location" label="位置" min-width="160" />
         <el-table-column label="状态" min-width="100">
           <template #default="{ row }">
-            <el-tag :type="row.is_active ? 'success' : 'info'">
-              {{ row.is_active ? '启用' : '停用' }}
-            </el-tag>
+            <el-tag :type="row.is_active ? 'success' : 'info'">{{ row.is_active ? '启用' : '停用' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" min-width="220" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="openEditDialog(row)">编辑</el-button>
-            <el-button size="small" type="warning" @click="handleToggle(row)">
-              {{ row.is_active ? '停用' : '启用' }}
-            </el-button>
+            <el-button size="small" type="warning" @click="handleToggle(row)">{{ row.is_active ? '停用' : '启用' }}</el-button>
             <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -61,6 +88,7 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { WindPower } from '@element-plus/icons-vue'
 import { createFarm, deleteFarm, getFarms, toggleFarm, updateFarm } from '@/api/farmApi'
 
 const loading = ref(false)
@@ -68,6 +96,7 @@ const submitting = ref(false)
 const farms = ref([])
 const dialogVisible = ref(false)
 const isEdit = ref(false)
+const viewMode = ref('card')
 const formRef = ref()
 
 const formData = reactive({
@@ -164,5 +193,78 @@ onMounted(fetchFarms)
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 10px;
+}
+
+.title {
+  font-size: 18px;
+  color: var(--text-primary);
+}
+
+.sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.farm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.farm-card {
+  padding: 12px;
+}
+
+.farm-name {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.farm-code {
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.farm-meta {
+  margin-top: 8px;
+  color: var(--text-secondary);
+}
+
+.farm-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 32px 10px;
+  color: var(--text-secondary);
+}
+
+.empty-state .el-icon {
+  font-size: 42px;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 768px) {
+  .header-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .actions {
+    width: 100%;
+    justify-content: space-between;
+  }
 }
 </style>
