@@ -54,16 +54,6 @@
           <template #title>功率对比</template>
         </el-menu-item>
 
-        <el-menu-item index="/physicalsimulation" v-if="hasPermission('run_simulations')">
-          <el-icon><WindPower /></el-icon>
-          <template #title>物理仿真</template>
-        </el-menu-item>
-
-        <el-menu-item index="/systemmaintenance" v-if="hasPermission('system_maintenance')">
-          <el-icon><Tools /></el-icon>
-          <template #title>系统维护</template>
-        </el-menu-item>
-
         <el-menu-item index="/reportmanagement" v-if="hasPermission('manage_reports')">
           <el-icon><Upload /></el-icon>
           <template #title>上报管理</template>
@@ -72,6 +62,11 @@
         <el-menu-item index="/weatherdatafetcher" v-if="hasPermission('manage_weather_data')">
           <el-icon><Cloudy /></el-icon>
           <template #title>气象数据拉取</template>
+        </el-menu-item>
+
+        <el-menu-item index="/farmmanagement" v-if="hasPermission('manage_reports')">
+          <el-icon><OfficeBuilding /></el-icon>
+          <template #title>场站管理</template>
         </el-menu-item>
 
         <el-menu-item index="/users" v-if="hasPermission('manage_users')">
@@ -114,7 +109,11 @@
 
       <!-- 内容区域 -->
       <el-main class="main-content">
-        <router-view></router-view>
+        <router-view v-slot="{ Component, route: currentRoute }">
+          <keep-alive :include="keepAliveRouteNames">
+            <component :is="Component" :key="currentRoute.name || currentRoute.path" />
+          </keep-alive>
+        </router-view>
       </el-main>
     </el-container>
   </el-container>
@@ -135,11 +134,10 @@ import {
   Timer,
   User,
   Loading,
-  WindPower,
-  Tools,
   Upload,
   Histogram,
-  Cloudy
+  Cloudy,
+  OfficeBuilding
 } from '@element-plus/icons-vue'
 
 // 导入场站选择器组件
@@ -155,11 +153,10 @@ export default {
     Timer,
     User,
     Loading,
-    WindPower,
-    Tools,
     Upload,
     Histogram,
     Cloudy,
+    OfficeBuilding,
     FarmSelector,
   },
   setup() {
@@ -190,6 +187,12 @@ export default {
     }))
 
     const activeMenu = computed(() => (route.path === '/' ? '/' : route.path))
+    const keepAliveRouteNames = computed(() =>
+      router
+        .getRoutes()
+        .filter(r => r.meta?.keepAlive && typeof r.name === 'string')
+        .map(r => r.name)
+    )
     
     // 计算用户名首字母
     const userInitial = computed(() => {
@@ -411,6 +414,7 @@ export default {
       handleCommand,
       handleFarmChanged,
       hasPermission,
+      keepAliveRouteNames,
       isAuthReady, // 暴露认证状态
       isAuthLoading // 暴露认证加载状态
     }

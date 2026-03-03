@@ -49,3 +49,35 @@ export async function getFarms() {
   )
   return unwrapList(response?.data)
 }
+
+export async function createFarm(payload) {
+  const response = await withLegacyFallback(
+    () => axiosInstance.post('/api/v1/farms', payload),
+    () => axiosInstance.post('/api/farms', payload)
+  )
+  return response?.data
+}
+
+export async function updateFarm(farmCode, payload) {
+  const response = await withLegacyFallback(
+    () => axiosInstance.put(`/api/v1/farms/${farmCode}`, payload),
+    () => axiosInstance.put(`/api/farms/${farmCode}`, payload)
+  )
+  return response?.data
+}
+
+export async function deleteFarm(farmCode) {
+  const response = await withLegacyFallback(
+    () => axiosInstance.delete(`/api/v1/farms/${farmCode}`),
+    () => axiosInstance.delete(`/api/farms/${farmCode}`)
+  )
+  return response?.data
+}
+
+export async function toggleFarm(farmCode) {
+  const response = await withLegacyFallback(
+    () => axiosInstance.post(`/api/v1/farms/${farmCode}/toggle`),
+    () => axiosInstance.post(`/api/farms/${farmCode}/toggle`)
+  )
+  return response?.data
+}

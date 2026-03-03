@@ -1,15 +1,13 @@
-// src/router/index.js
 import { createRouter, createWebHistory } from 'vue-router'
-import HomePage from '../components/HomePage.vue' // 主页组件
-import AppLayout from '../components/AppLayout.vue' // 布局组件
-import AutoPredict  from '../components/AutoPredict.vue'
+import HomePage from '../components/HomePage.vue'
+import AppLayout from '../components/AppLayout.vue'
+import AutoPredict from '../components/AutoPredict.vue'
 import PowerCompare from '../components/PowerCompare.vue'
-import Login from '../components/Login.vue' // 登录组件
-import UserManagement from '../components/UserManagement.vue' // 用户管理组件
-import PhysicalSimulation from '../components/PhysicalSimulation.vue' // 物理仿真组件
-import SystemMaintenance from '../components/SystemMaintenance.vue' // 系统维护组件
-import ReportManagement from '../components/ReportManagement.vue' // 上报管理组件
-import WeatherDataFetcher from '../components/WeatherDataFetcher.vue' // 气象数据拉取组件
+import Login from '../components/Login.vue'
+import UserManagement from '../components/UserManagement.vue'
+import ReportManagement from '../components/ReportManagement.vue'
+import WeatherDataFetcher from '../components/WeatherDataFetcher.vue'
+import FarmManagement from '../components/FarmManagement.vue'
 
 const routes = [
   {
@@ -20,7 +18,7 @@ const routes = [
   },
   {
     path: '/',
-    component: AppLayout, // 使用布局组件作为基础
+    component: AppLayout,
     meta: { requiresAuth: true },
     children: [
       {
@@ -40,47 +38,40 @@ const routes = [
         path: 'autopredict',
         name: 'AutoPredict',
         component: AutoPredict,
-        meta: { requiredPermissions: ['auto_predictions'] }
+        meta: { requiredPermissions: ['auto_predictions'], keepAlive: true }
       },
       {
         path: 'powercompare',
         name: 'PowerCompare',
         component: PowerCompare,
-        meta: { requiredPermissions: ['view_all_data'] }
-      },
-      {
-        path: 'users',
-        name: 'UserManagement',
-        component: UserManagement,
-        meta: { requiredPermissions: ['manage_users'] }
-      },
-      {
-        path: 'physicalsimulation',
-        name: 'PhysicalSimulation',
-        component: PhysicalSimulation,
-        meta: { requiredPermissions: ['run_simulations'] }
-      },
-      {
-        path: 'systemmaintenance',
-        name: 'SystemMaintenance',
-        component: SystemMaintenance,
-        meta: { requiredPermissions: ['system_maintenance'] }
+        meta: { requiredPermissions: ['view_all_data'], keepAlive: true }
       },
       {
         path: 'reportmanagement',
         name: 'ReportManagement',
         component: ReportManagement,
-        meta: { requiredPermissions: ['manage_reports'] }
+        meta: { requiredPermissions: ['manage_reports'], keepAlive: true }
       },
       {
         path: 'weatherdatafetcher',
         name: 'WeatherDataFetcher',
         component: WeatherDataFetcher,
-        meta: { requiredPermissions: ['manage_weather_data'] }
+        meta: { requiredPermissions: ['manage_weather_data'], keepAlive: true }
+      },
+      {
+        path: 'farmmanagement',
+        name: 'FarmManagement',
+        component: FarmManagement,
+        meta: { requiredPermissions: ['manage_reports'], keepAlive: true }
+      },
+      {
+        path: 'users',
+        name: 'UserManagement',
+        component: UserManagement,
+        meta: { requiredPermissions: ['manage_users'], keepAlive: true }
       }
     ]
-  },
-  // 其他独立路由（如果有）
+  }
 ]
 
 const router = createRouter({
@@ -88,21 +79,15 @@ const router = createRouter({
   routes
 })
 
-// 路由守卫
 router.beforeEach((to, from, next) => {
   const userInfo = localStorage.getItem('user')
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
-  
-  // 如果需要认证但没有用户信息，重定向到登录页
+
   if (requiresAuth && !userInfo) {
     next({ name: 'Login' })
-  } 
-  // 如果已经有用户信息但访问登录页，重定向到首页
-  else if (userInfo && to.name === 'Login') {
+  } else if (userInfo && to.name === 'Login') {
     next({ name: 'HomePage' })
-  }
-  // 其他情况正常导航
-  else {
+  } else {
     next()
   }
 })
