@@ -11,6 +11,7 @@
         <span class="particle p5"></span>
       </div>
       <div class="turbine-watermark" aria-hidden="true"></div>
+      <div class="turbine-watermark turbine-watermark-far" aria-hidden="true"></div>
 
       <div class="visual-overlay">
         <h1>风电功率预测系统</h1>
@@ -18,12 +19,20 @@
 
         <ul class="visual-metrics">
           <li>
-            <span class="metric-label"><el-icon><OfficeBuilding /></el-icon>场站接入</span>
+            <span class="metric-label">
+              <el-icon><OfficeBuilding /></el-icon>
+              <i class="metric-pulse"></i>
+              场站接入
+            </span>
             <strong class="metric-value">{{ animatedMetrics.stationCount }}</strong>
             <i class="metric-line"></i>
           </li>
           <li>
-            <span class="metric-label"><el-icon><Lightning /></el-icon>实时总功率</span>
+            <span class="metric-label">
+              <el-icon><Lightning /></el-icon>
+              <i class="metric-pulse"></i>
+              实时总功率
+            </span>
             <strong class="metric-value">
               {{ animatedMetrics.totalPower }}
               <small class="metric-unit">MW</small>
@@ -31,7 +40,11 @@
             <i class="metric-line"></i>
           </li>
           <li>
-            <span class="metric-label"><el-icon><Aim /></el-icon>今日预测准确率</span>
+            <span class="metric-label">
+              <el-icon><Aim /></el-icon>
+              <i class="metric-pulse"></i>
+              今日预测准确率
+            </span>
             <strong class="metric-value">{{ animatedMetrics.accuracy }}%</strong>
             <i class="metric-line"></i>
           </li>
@@ -45,7 +58,10 @@
       <div class="login-card">
         <div class="logo-line">
           <img src="@/assets/Sanxia_logo_black.png" alt="logo" class="logo" />
-          <h2>三峡能源 用户登录</h2>
+          <div class="logo-copy">
+            <h2>三峡能源</h2>
+            <span>用户登录</span>
+          </div>
         </div>
 
         <el-form ref="loginForm" :model="formData" :rules="loginRules" class="login-form">
@@ -265,17 +281,43 @@ export default {
 
 <style scoped>
 .login-shell {
+  position: relative;
   min-height: 100vh;
   display: grid;
   grid-template-columns: 1.2fr 1fr;
+  overflow: hidden;
   background:
     radial-gradient(circle at 15% 12%, rgba(30, 88, 130, 0.4) 0%, rgba(8, 26, 43, 0) 40%),
     radial-gradient(circle at 80% 15%, rgba(16, 76, 118, 0.28) 0%, rgba(8, 26, 43, 0) 32%),
     linear-gradient(140deg, #04101c 0%, #071a2c 55%, #050f1a 100%);
 }
 
+.login-shell::before,
+.login-shell::after {
+  content: '';
+  position: absolute;
+  width: 620px;
+  height: 620px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.login-shell::before {
+  left: -220px;
+  top: -280px;
+  background: radial-gradient(circle, rgba(18, 215, 255, 0.08) 0%, rgba(18, 215, 255, 0) 72%);
+}
+
+.login-shell::after {
+  right: -260px;
+  bottom: -320px;
+  background: radial-gradient(circle, rgba(35, 98, 148, 0.14) 0%, rgba(35, 98, 148, 0) 72%);
+}
+
 .login-visual {
   position: relative;
+  z-index: 1;
   overflow: hidden;
   padding: 48px;
 }
@@ -350,16 +392,24 @@ export default {
 
 .turbine-watermark {
   position: absolute;
-  left: 32%;
-  top: 46%;
-  width: 420px;
-  height: 420px;
+  left: 48%;
+  top: 50%;
+  width: 500px;
+  height: 500px;
   transform: translate(-50%, -50%);
-  opacity: 0.06;
+  opacity: 0.08;
   pointer-events: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Cg fill='none' stroke='%239ad6ff' stroke-width='2.2'%3E%3Cline x1='100' y1='74' x2='100' y2='188'/%3E%3Ccircle cx='100' cy='72' r='8'/%3E%3Cpath d='M100 72L164 48'/%3E%3Cpath d='M100 72L57 11'/%3E%3Cpath d='M100 72L50 117'/%3E%3C/g%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-size: contain;
+}
+
+.turbine-watermark-far {
+  left: 74%;
+  top: 60%;
+  width: 260px;
+  height: 260px;
+  opacity: 0.035;
 }
 
 .visual-overlay {
@@ -394,15 +444,15 @@ export default {
   margin: 34px 0 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .visual-metrics li {
-  width: 328px;
-  padding: 12px 14px 14px;
+  width: 344px;
+  padding: 14px 16px 16px;
   border: 1px solid rgba(132, 191, 231, 0.24);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.035);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -418,17 +468,28 @@ export default {
   font-size: 13px;
 }
 
+.metric-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #38e0ff;
+  box-shadow: 0 0 10px rgba(56, 224, 255, 0.75);
+  animation: pulse 2.6s ease-in-out infinite;
+}
+
 .metric-label .el-icon {
   color: #3ce5ff;
   filter: drop-shadow(0 0 8px rgba(60, 229, 255, 0.35));
   animation: iconBob 4.8s ease-in-out infinite;
 }
 
-.visual-metrics li:nth-child(2) .metric-label .el-icon {
+.visual-metrics li:nth-child(2) .metric-label .el-icon,
+.visual-metrics li:nth-child(2) .metric-pulse {
   animation-delay: 0.8s;
 }
 
-.visual-metrics li:nth-child(3) .metric-label .el-icon {
+.visual-metrics li:nth-child(3) .metric-label .el-icon,
+.visual-metrics li:nth-child(3) .metric-pulse {
   animation-delay: 1.6s;
 }
 
@@ -451,8 +512,8 @@ export default {
 
 .metric-line {
   position: absolute;
-  left: 14px;
-  right: 14px;
+  left: 16px;
+  right: 16px;
   bottom: 8px;
   height: 1px;
   background: linear-gradient(90deg, rgba(18, 215, 255, 0.1), rgba(83, 240, 176, 0.5), rgba(18, 215, 255, 0.1));
@@ -470,6 +531,8 @@ export default {
 }
 
 .login-panel {
+  position: relative;
+  z-index: 1;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -489,37 +552,57 @@ export default {
 .logo-line {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
   margin-bottom: 18px;
 }
 
 .logo {
-  height: 36px;
-  filter: grayscale(100%) brightness(1.7);
+  height: 38px;
+  filter: grayscale(100%) brightness(2.15) contrast(1.08) drop-shadow(0 0 6px rgba(199, 236, 255, 0.2));
 }
 
-.logo-line h2 {
+.logo-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.logo-copy h2 {
   margin: 0;
   font-size: 22px;
-  color: #eaf4ff;
+  color: #eef7ff;
+  letter-spacing: 0.6px;
+}
+
+.logo-copy span {
+  font-size: 13px;
+  letter-spacing: 2px;
+  color: #a8c7df;
 }
 
 .login-form :deep(.el-input__wrapper) {
-  background: rgba(10, 28, 44, 0.9) !important;
-  border: 1px solid rgba(88, 186, 235, 0.24);
+  background: rgba(0, 24, 48, 0.6) !important;
+  border: 1px solid rgba(107, 188, 230, 0.35);
   box-shadow: none !important;
   border-radius: 8px;
 }
 
-.login-form :deep(.el-input__inner),
+.login-form :deep(.el-input__inner) {
+  color: #e9f7ff !important;
+}
+
+.login-form :deep(.el-input__inner::placeholder) {
+  color: #9ec4da !important;
+}
+
 .login-form :deep(.el-input__prefix-inner .el-icon),
 .login-form :deep(.el-input__suffix-inner .el-icon) {
-  color: #d7ebff !important;
+  color: #b8d8ea !important;
 }
 
 .login-form :deep(.el-input__wrapper.is-focus) {
-  border-color: rgba(32, 229, 255, 0.86) !important;
-  box-shadow: 0 0 0 1px rgba(32, 229, 255, 0.35), 0 0 16px rgba(18, 215, 255, 0.22) !important;
+  border-color: rgba(32, 229, 255, 0.88) !important;
+  box-shadow: 0 0 0 1px rgba(32, 229, 255, 0.38), 0 0 18px rgba(18, 215, 255, 0.28) !important;
 }
 
 .login-button {
@@ -606,6 +689,19 @@ export default {
   }
 }
 
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
 @media (max-width: 900px) {
   .login-shell {
     grid-template-columns: 1fr;
@@ -627,8 +723,12 @@ export default {
   .turbine-watermark {
     left: 50%;
     top: 55%;
-    width: 280px;
-    height: 280px;
+    width: 320px;
+    height: 320px;
+  }
+
+  .turbine-watermark-far {
+    display: none;
   }
 
   .visual-metrics {
@@ -637,7 +737,7 @@ export default {
   }
 
   .visual-metrics li {
-    width: calc(50% - 6px);
+    width: calc(50% - 7px);
   }
 }
 </style>

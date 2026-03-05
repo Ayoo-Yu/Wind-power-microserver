@@ -4,7 +4,7 @@ from minio.commonconfig import ENABLED
 import json
 from dotenv import load_dotenv
 
-# 鍔犺浇鐜鍙橀噺
+# 加载环境变量
 load_dotenv()
 
 # 统一去掉环境变量首尾空格，避免连接串解析失败
@@ -12,23 +12,23 @@ def _env(name, default):
     value = os.environ.get(name, default)
     return str(value).strip() if value is not None else str(default).strip()
 
-# 鑾峰彇鐜鍙橀噺锛屽鏋滀笉瀛樺湪鍒欎娇鐢ㄩ粯璁ゅ€?
+# 获取环境变量，如果不存在则使用默认值
 DB_HOST = _env('DB_HOST', 'kingbase')
 DB_PORT = _env('DB_PORT', '54321')
 DB_USER = _env('DB_USER', 'system')
 DB_PASSWORD = _env('DB_PASSWORD', '12345678ab')
 DB_NAME = _env('DB_NAME', 'windpower')
 
-# MinIO閰嶇疆
+# MinIO 配置
 MINIO_ENDPOINT = _env('MINIO_ENDPOINT', 'minio')
 MINIO_PORT = _env('MINIO_PORT', '9900')
 MINIO_ACCESS_KEY = _env('MINIO_ACCESS_KEY', 'minioadmin')
 MINIO_SECRET_KEY = _env('MINIO_SECRET_KEY', 'minioadmin')
 MINIO_SECURE = _env('MINIO_SECURE', 'False').lower() == 'true'
 
-# 鎵撳嵃閰嶇疆淇℃伅鐢ㄤ簬璋冭瘯
-print(f"鏁版嵁搴撹繛鎺ラ厤缃? {DB_HOST}:{DB_PORT}/{DB_NAME}")
-print(f"MinIO杩炴帴閰嶇疆: {'https' if MINIO_SECURE else 'http'}://{MINIO_ENDPOINT}:{MINIO_PORT}")
+# 打印连接配置用于调试
+print(f"数据库连接配置: {DB_HOST}:{DB_PORT}/{DB_NAME}")
+print(f"MinIO 连接配置: {'https' if MINIO_SECURE else 'http'}://{MINIO_ENDPOINT}:{MINIO_PORT}")
 
 # Database Configuration
 # For local development, set DB_HOST_OVERRIDE and DB_PORT_OVERRIDE environment variables.
@@ -80,7 +80,7 @@ class Config:
     MAX_CONTENT_LENGTH = 200 * 1024 * 1024  # 200MB
     ALLOWED_EXTENSIONS = {'csv', 'xlsx', 'xls', 'pkl', 'json', 'joblib', 'h5', 'hdf5', 'pb', 'pt', 'pth'}
     
-    # 娣诲姞鑴氭湰璺緞閰嶇疆
+    # 增加脚本路径配置
     AUTOSCRIPT_BASE_DIR = os.path.join(BASE_DIR, 'auto_scripts', 'scripts')
     SCRIPT_PATHS = {
         'short': os.path.join(AUTOSCRIPT_BASE_DIR, 'short', 'scheduler_short.py'),
@@ -88,7 +88,7 @@ class Config:
         'supershort': os.path.join(AUTOSCRIPT_BASE_DIR, 'supershort', 'scheduler_supershort.py'),
     }
     
-    # 娣诲姞鏃ュ織鐩綍閰嶇疆
+    # 增加日志目录配置
     LOG_DIRS = {
         'short': {
             'base': os.path.join(AUTOSCRIPT_BASE_DIR, 'short', 'logs'),
@@ -149,10 +149,10 @@ class Config:
     DEBUG = _env('FLASK_DEBUG', 'True').lower() == 'true'
     SESSION_TYPE = 'filesystem'
     SESSION_PERMANENT = False
-    PERMANENT_SESSION_LIFETIME = 1800  # 30鍒嗛挓
+    PERMANENT_SESSION_LIFETIME = 1800  # 30分钟
 
 def set_bucket_policy(client, bucket_name, policy):
-    """鏇寸簿纭殑绛栫暐閰嶇疆"""
+    """设置更精细的桶策略"""
     policy_json_str = None # Initialize to None
 
     if policy == "private":
@@ -217,13 +217,13 @@ def set_bucket_policy(client, bucket_name, policy):
         }
         policy_json_str = json.dumps(policy_data)
     else:
-        print(f"璀﹀憡: 鏈煡鐨勫瓨鍌ㄦ《绛栫暐绫诲瀷 '{policy}' (瀛樺偍妗? {bucket_name}). 灏嗕笉浼氳缃瓥鐣?")
+        print(f"警告: 未知的存储桶策略类型 '{policy}' (存储桶: {bucket_name})，将不会设置策略。")
 
     if policy_json_str:
         try:
             client.set_bucket_policy(bucket_name, policy_json_str)
-            print(f"[OK] 鎴愬姛涓哄瓨鍌ㄦ《 '{bucket_name}' 璁剧疆绛栫暐: '{policy}'")
+            print(f"[OK] 成功为存储桶 '{bucket_name}' 设置策略: '{policy}'")
         except Exception as e:
-            print(f"[ERROR] 涓哄瓨鍌ㄦ《 '{bucket_name}' (绛栫暐: '{policy}') 璁剧疆绛栫暐澶辫触: {e}")
+            print(f"[ERROR] 为存储桶 '{bucket_name}' (策略: '{policy}') 设置策略失败: {e}")
     # else: policy_json_str is None, so we do nothing (already warned)
 

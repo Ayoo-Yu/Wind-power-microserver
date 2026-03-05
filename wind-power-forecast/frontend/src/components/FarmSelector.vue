@@ -46,41 +46,41 @@ export default {
   },
   emits: ['farm-changed'],
   setup(props, { emit }) {
-    // 褰撳墠閫変腑鐨勯鍦?
+    // 当前选中的风场
     const currentFarm = ref(farmService.getCurrentFarm())
 
-    // 鍙敤鐨勯鍦哄垪琛?
+    // 可用风场列表
     const availableFarms = ref(farmService.getAvailableFarms())
 
-    // 璁＄畻褰撳墠椋庡満鍚嶇О
+    // 计算当前风场名称
     const currentFarmName = computed(() => {
       const farm = availableFarms.value.find(f => f.code === currentFarm.value)
-      return farm ? farm.name : '鏈煡椋庡満'
+      return farm ? farm.name : '未知风场'
     })
 
-    // 澶勭悊椋庡満鍒囨崲
+    // 处理风场切换
     const handleFarmChange = (farmCode) => {
       if (farmCode !== currentFarm.value) {
-        // 浣跨敤farmService璁剧疆褰撳墠鍦虹珯
+        // 使用 farmService 设置当前场站
         farmService.setCurrentFarm(farmCode)
         currentFarm.value = farmCode
 
-        // 鍙戦€佷簨浠堕€氱煡鐖剁粍浠?
+        // 发送事件通知父组件
         emit('farm-changed', farmCode)
 
-        ElMessage.success(`宸插垏鎹㈠埌 ${currentFarmName.value}`)
+        ElMessage.success(`已切换到 ${currentFarmName.value}`)
       }
     }
 
-    // 鐩戝惉farmService涓殑椋庡満鍙樺寲
+    // 监听 farmService 中的风场变化
     const handleFarmServiceChange = (farmCode) => {
       currentFarm.value = farmCode
       emit('farm-changed', farmCode)
     }
 
-    // 鐩戝惉椋庡満鍙樺寲锛屽彲浠ュ湪杩欓噷娣诲姞棰濆鐨勯€昏緫
+    // 监听风场变化，可在这里追加额外逻辑
     watch(currentFarm, (newFarm, oldFarm) => {
-      console.log(`椋庡満宸蹭粠 ${oldFarm} 鍒囨崲鍒?${newFarm}`)
+      console.log(`风场已从 ${oldFarm} 切换到 ${newFarm}`)
     })
 
     // 组件挂载时，初始化场站列表并同步当前选择
@@ -208,7 +208,7 @@ export default {
   color: #065f46 !important;
 }
 
-/* 鍝嶅簲寮忚璁?*/
+/* 响应式设计 */
 @media (max-width: 768px) {
   .farm-selector-trigger {
     padding: 6px 12px;

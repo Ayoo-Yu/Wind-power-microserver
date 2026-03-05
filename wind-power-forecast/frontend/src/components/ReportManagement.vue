@@ -15,7 +15,7 @@
       show-icon
       :title="statsConclusion"
     />
-    <div class="meta-updated">Updated: {{ statsUpdatedAt || '--' }}</div>
+    <div class="meta-updated">更新时间：{{ statsUpdatedAt || '--' }}</div>
 
     <!-- 调度器状态卡片 -->
     <el-card class="info-card scheduler-status-card" shadow="hover">
@@ -135,7 +135,7 @@
           </el-row>
           <div class="quality-gauge-grid">
             <div class="quality-gauge-item">
-              <div class="quality-gauge-title">Daily Completeness</div>
+              <div class="quality-gauge-title">日完整率</div>
               <el-progress
                 type="dashboard"
                 :percentage="normalizeRate(dailyStats.completeness_rate)"
@@ -144,7 +144,7 @@
               />
             </div>
             <div class="quality-gauge-item">
-              <div class="quality-gauge-title">Daily Timeliness</div>
+              <div class="quality-gauge-title">日及时率</div>
               <el-progress
                 type="dashboard"
                 :percentage="normalizeRate(dailyStats.timeliness_rate)"
@@ -153,7 +153,7 @@
               />
             </div>
             <div class="quality-gauge-item">
-              <div class="quality-gauge-title">Monthly Completeness</div>
+              <div class="quality-gauge-title">月完整率</div>
               <el-progress
                 type="dashboard"
                 :percentage="normalizeRate(monthlyStats.completeness_rate)"
@@ -162,7 +162,7 @@
               />
             </div>
             <div class="quality-gauge-item">
-              <div class="quality-gauge-title">Monthly Timeliness</div>
+              <div class="quality-gauge-title">月及时率</div>
               <el-progress
                 type="dashboard"
                 :percentage="normalizeRate(monthlyStats.timeliness_rate)"

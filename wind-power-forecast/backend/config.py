@@ -4,7 +4,7 @@ from minio.commonconfig import ENABLED
 import json
 from dotenv import load_dotenv
 
-# 鍔犺浇鐜鍙橀噺
+# 加载环境变量
 load_dotenv()
 
 # 统一去掉环境变量首尾空格，避免连接串解析失败
@@ -12,23 +12,23 @@ def _env(name, default):
     value = os.environ.get(name, default)
     return str(value).strip() if value is not None else str(default).strip()
 
-# 鑾峰彇鐜鍙橀噺锛屽鏋滀笉瀛樺湪鍒欎娇鐢ㄩ粯璁ゅ€?
-DB_HOST = _env('DB_HOST', 'localhost')  # 鏀逛负localhost
+# 获取环境变量，如果不存在则使用默认值
+DB_HOST = _env('DB_HOST', 'localhost')  # 本地默认 localhost
 DB_PORT = _env('DB_PORT', '54321')
 DB_USER = _env('DB_USER', 'system')
 DB_PASSWORD = _env('DB_PASSWORD', '12345678ab')
 DB_NAME = _env('DB_NAME', 'windpower')
 
-# MinIO閰嶇疆
+# MinIO 配置
 MINIO_ENDPOINT = _env('MINIO_ENDPOINT', 'minio')
 MINIO_PORT = _env('MINIO_PORT', '9900')
 MINIO_ACCESS_KEY = _env('MINIO_ACCESS_KEY', 'minioadmin')
 MINIO_SECRET_KEY = _env('MINIO_SECRET_KEY', 'minioadmin')
 MINIO_SECURE = _env('MINIO_SECURE', 'False').lower() == 'true'
 
-# 鎵撳嵃閰嶇疆淇℃伅鐢ㄤ簬璋冭瘯
-print(f"鏁版嵁搴撹繛鎺ラ厤缃? {DB_HOST}:{DB_PORT}/{DB_NAME}")
-print(f"MinIO杩炴帴閰嶇疆: {'https' if MINIO_SECURE else 'http'}://{MINIO_ENDPOINT}:{MINIO_PORT}")
+# 打印连接配置用于调试
+print(f"数据库连接配置: {DB_HOST}:{DB_PORT}/{DB_NAME}")
+print(f"MinIO 连接配置: {'https' if MINIO_SECURE else 'http'}://{MINIO_ENDPOINT}:{MINIO_PORT}")
 
 KINGBASE_CONFIG = {
     "host": DB_HOST,
@@ -113,10 +113,10 @@ class Config:
     DEBUG = _env('FLASK_DEBUG', 'True').lower() == 'true'
     SESSION_TYPE = 'filesystem'
     SESSION_PERMANENT = False
-    PERMANENT_SESSION_LIFETIME = 1800  # 30鍒嗛挓
+    PERMANENT_SESSION_LIFETIME = 1800  # 30分钟
 
 def set_bucket_policy(client, bucket_name, policy):
-    """鏇寸簿纭殑绛栫暐閰嶇疆"""
+    """设置更精细的桶策略"""
     if policy == "private":
         policy_json = json.dumps({
             "Version": "2012-10-17",

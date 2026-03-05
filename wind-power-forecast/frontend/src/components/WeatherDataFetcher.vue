@@ -8,10 +8,10 @@
       <h1 class="page-title">气象预报数据拉取</h1>
       <p class="page-description">配置SSH连接，实现气象预报数据的定时拉取、处理和上传</p>
     </div>
-    <div class="meta-updated">Scheduler Updated: {{ schedulerCheckedAt || '--' }}</div>
+    <div class="meta-updated">调度器更新时间：{{ schedulerCheckedAt || '--' }}</div>
 
     <el-card class="flow-card" shadow="hover">
-      <div class="flow-title">Data Pipeline</div>
+      <div class="flow-title">数据流程</div>
       <div class="flow-steps">
         <div
           v-for="(step, index) in pipelineSteps"
@@ -684,27 +684,27 @@ export default {
       return [
         {
           key: 'source',
-          name: 'Weather Source',
+          name: '气象数据源',
           status: hasConnection ? 'ready' : 'idle',
-          text: hasConnection ? 'Configured' : 'Pending'
+          text: hasConnection ? '已配置' : '待配置'
         },
         {
           key: 'connection',
-          name: 'SSH Tunnel',
+          name: 'SSH 通道',
           status: connected ? 'ready' : (hasConnection ? 'warning' : 'idle'),
-          text: connected ? 'Connected' : (hasConnection ? 'Disconnected' : 'Pending')
+          text: connected ? '已连接' : (hasConnection ? '已断开' : '待配置')
         },
         {
           key: 'scheduler',
-          name: 'Scheduler',
+          name: '调度器',
           status: schedulerRunning ? 'ready' : 'warning',
-          text: schedulerRunning ? 'Running' : 'Stopped'
+          text: schedulerRunning ? '运行中' : '已停止'
         },
         {
           key: 'execution',
-          name: 'Task Execution',
+          name: '任务执行',
           status: runningTask ? 'ready' : (enabledTasks.length > 0 ? 'warning' : 'idle'),
-          text: runningTask ? 'Running' : (enabledTasks.length > 0 ? 'Waiting' : 'No Task')
+          text: runningTask ? '运行中' : (enabledTasks.length > 0 ? '等待中' : '无任务')
         }
       ]
     })

@@ -148,12 +148,12 @@
             <el-button type="primary" :loading="fleetCompareLoading" @click="fetchFleetMetricsCompare">
               场站指标对比
             </el-button>
-            <el-checkbox v-model="fleetSeriesIncludeActual">Include Actual</el-checkbox>
+            <el-checkbox v-model="fleetSeriesIncludeActual">包含实测</el-checkbox>
             <el-button type="primary" :loading="fleetSeriesLoading" @click="fetchFleetSeriesCompare">
-              Compare Curves
+              对比曲线
             </el-button>
             <el-button type="success" :disabled="fleetSeriesData.length === 0" @click="downloadFleetSeriesCSV">
-              Export Curve CSV
+              导出曲线 CSV
             </el-button>
           </div>
         </div>
@@ -200,7 +200,7 @@
     <div class="fleet-series-container" v-if="fleetSeriesData.length > 0">
       <el-card class="fleet-series-card">
         <template #header>
-          <div class="fleet-metrics-header">Fleet Curve Overlay ({{ fleetComparePredictionType }})</div>
+          <div class="fleet-metrics-header">多场站曲线叠加（{{ fleetComparePredictionType }}）</div>
         </template>
         <div class="chart-wrapper fleet-series-wrapper">
           <canvas ref="fleetSeriesCanvas" style="height: 56vh !important;"></canvas>
@@ -419,7 +419,7 @@ export default {
       const acc = this.avgAccDisplay;
       const peak = this.peakPowerDisplay;
       const unqualified = this.unqualifiedDays;
-      return `${this.uiText.overviewPrefix}: Avg ACC ${acc}, Peak Power ${peak}, Unqualified Days ${unqualified}.`;
+      return `${this.uiText.overviewPrefix}：平均准确率 ${acc}，峰值功率 ${peak}，不合格天数 ${unqualified}。`;
     }
   },
   async mounted() {
@@ -615,7 +615,27 @@ export default {
           maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },
           plugins: {
-            legend: { position: 'top' }
+            legend: {
+              position: 'top',
+              labels: { color: '#d9e9ff', usePointStyle: true, boxWidth: 8 }
+            },
+            tooltip: {
+              backgroundColor: 'rgba(6, 18, 33, 0.95)',
+              borderColor: 'rgba(18, 215, 255, 0.4)',
+              borderWidth: 1,
+              titleColor: '#eaf4ff',
+              bodyColor: '#c5d9ee'
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(159,182,204,0.14)' },
+              ticks: { color: '#9fb6cc' }
+            },
+            y: {
+              grid: { color: 'rgba(159,182,204,0.14)' },
+              ticks: { color: '#9fb6cc' }
+            }
           }
         }
       });
@@ -791,11 +811,17 @@ export default {
                 labels: {
                   padding: 20,
                   font: { size: 13 },
+                  color: '#d9e9ff',
                   usePointStyle: true,
                   pointStyle: 'line'
                 }
               },
               tooltip: { 
+                backgroundColor: 'rgba(6, 18, 33, 0.95)',
+                borderColor: 'rgba(18, 215, 255, 0.4)',
+                borderWidth: 1,
+                titleColor: '#eaf4ff',
+                bodyColor: '#c5d9ee',
                 callbacks: {
                     label: function(context) {
                         let label = context.dataset.label || '';
@@ -841,7 +867,7 @@ export default {
               x: {
                 grid: { color: 'rgba(255,255,255,0.1)' },
                 ticks: { 
-                  color: '#666',
+                  color: '#9fb6cc',
                   maxRotation: 45,
                   minRotation: 45
                 }
@@ -855,10 +881,10 @@ export default {
                 title: {
                   display: true,
                   text: '功率 (MW)',
-                  color: '#666'
+                  color: '#9fb6cc'
                 },
                 grid: { color: 'rgba(255,255,255,0.1)' },
-                ticks: { color: '#666' }
+                ticks: { color: '#9fb6cc' }
               },
               [YAXIS_WINDSPEED]: { 
                 type: 'linear',
@@ -869,12 +895,12 @@ export default {
                 title: {
                   display: true,
                   text: '风速 (m/s)', 
-                  color: '#666'
+                  color: '#9fb6cc'
                 },
                 grid: { 
                   drawOnChartArea: false, 
                 },
-                ticks: { color: '#666' }
+                ticks: { color: '#9fb6cc' }
               }
             }
           }
@@ -1251,12 +1277,12 @@ export default {
 
                 // 指标配置
                 const metricConfig = {
-                    acc: { label: 'ACC (%)', min: 0, max: 100 },
-                    mae: { label: 'MAE (MW)', min: 0 },
-                    mse: { label: 'MSE (MW²)', min: 0 },
-                    rmse: { label: 'RMSE (MW)', min: 0 },
+                    acc: { label: '准确率 ACC (%)', min: 0, max: 100 },
+                    mae: { label: '平均绝对误差 MAE (MW)', min: 0 },
+                    mse: { label: '均方误差 MSE (MW²)', min: 0 },
+                    rmse: { label: '均方根误差 RMSE (MW)', min: 0 },
                     k: { label: 'K值', min: -1, max: 1 },
-                    pe: { label: 'Pe (MW)', min: 0 }
+                    pe: { label: '平均误差 Pe (MW)', min: 0 }
                 }[this.currentMetric];
 
                 // 合格线插件
@@ -1306,15 +1332,21 @@ export default {
                             plugins: {
                                 legend: {
                                     position: 'top',
-                                    labels: { font: { size: 13 } }
+                                    labels: { font: { size: 13 }, color: '#d9e9ff' }
                                 },
                                 title: {
                                     display: true,
                                     text: metricConfig.label,
+                                    color: '#eaf4ff',
                                     font: { size: 16 },
                                     padding: 20
                                 },
                                 tooltip: {
+                                    backgroundColor: 'rgba(6, 18, 33, 0.95)',
+                                    borderColor: 'rgba(18, 215, 255, 0.4)',
+                                    borderWidth: 1,
+                                    titleColor: '#eaf4ff',
+                                    bodyColor: '#c5d9ee',
                                     callbacks: {
                                         label: (context) => {
                                             let label = context.dataset.label.split(' (')[0] + ': ';
@@ -1341,7 +1373,7 @@ export default {
                                     display: true,
                                     grid: { color: 'rgba(200,200,200,0.1)' },
                                     ticks: { 
-                                        color: '#666',
+                                        color: '#9fb6cc',
                                         maxRotation: 45,
                                         minRotation: 45
                                     }
@@ -1353,7 +1385,7 @@ export default {
                                     max: metricConfig.max,
                                     grid: { color: 'rgba(200,200,200,0.1)' },
                                     ticks: {
-                                        color: '#666',
+                                        color: '#9fb6cc',
                                         callback: (value) => {
                                             switch (this.currentMetric) {
                                                 case 'acc': return value.toFixed(1) + '%';
@@ -2431,6 +2463,156 @@ canvas {
 
 .config-panel .config-row:last-child {
   margin-bottom: 0;
+}
+
+/* Dark tech polish overrides */
+.power-compare-container {
+  padding: 20px 24px 28px;
+  color: var(--text-primary);
+}
+
+.animated-background {
+  background:
+    radial-gradient(circle at 16% 14%, rgba(18, 215, 255, 0.08), transparent 42%),
+    radial-gradient(circle at 86% 80%, rgba(45, 211, 111, 0.06), transparent 44%),
+    linear-gradient(145deg, #06121f 0%, #081a2c 52%, #0a1f34 100%);
+  animation: none;
+}
+
+.page-title {
+  margin: 10px 0 18px;
+  font-size: 28px;
+}
+
+.summary-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(146, 186, 220, 0.18) !important;
+  background: linear-gradient(135deg, rgba(14, 36, 56, 0.92), rgba(9, 24, 40, 0.92)) !important;
+  box-shadow: inset 0 0 24px rgba(18, 215, 255, 0.05), 0 10px 28px rgba(0, 0, 0, 0.25);
+}
+
+.summary-card::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(18, 215, 255, 0.8), rgba(45, 211, 111, 0.6));
+}
+
+.summary-label {
+  position: relative;
+  color: #9fb6cc;
+  padding-left: 14px;
+}
+
+.summary-label::before {
+  content: "";
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #12d7ff;
+  box-shadow: 0 0 10px rgba(18, 215, 255, 0.8);
+}
+
+.summary-value {
+  color: #eaf4ff;
+  font-size: 28px;
+  text-shadow: 0 0 14px rgba(18, 215, 255, 0.24);
+}
+
+.summary-warning {
+  color: #f6b73c;
+  text-shadow: 0 0 12px rgba(246, 183, 60, 0.25);
+}
+
+.summary-insight :deep(.el-alert) {
+  border: 1px solid rgba(146, 186, 220, 0.2) !important;
+  background: rgba(16, 38, 58, 0.55) !important;
+}
+
+.summary-insight :deep(.el-alert__title),
+.summary-insight :deep(.el-alert__icon) {
+  color: #c5d9ee !important;
+}
+
+.merged-config-card,
+.fleet-metrics-card,
+.fleet-series-card,
+.chart-container,
+.metrics-card,
+.qualification-card,
+.empty-data-card {
+  border: 1px solid rgba(146, 186, 220, 0.18) !important;
+  background: linear-gradient(160deg, rgba(12, 31, 48, 0.92), rgba(9, 22, 36, 0.92)) !important;
+  box-shadow: inset 0 0 22px rgba(18, 215, 255, 0.04), 0 12px 30px rgba(2, 9, 18, 0.34);
+}
+
+.metrics-chart-wrapper {
+  background: rgba(8, 21, 34, 0.84);
+  border: 1px solid rgba(146, 186, 220, 0.15);
+  border-radius: 12px;
+}
+
+.download-buttons .el-button {
+  background: rgba(9, 24, 40, 0.45) !important;
+  border: 1px solid rgba(146, 186, 220, 0.28) !important;
+  color: #c5d9ee !important;
+}
+
+.download-buttons .el-button:hover {
+  border-color: rgba(18, 215, 255, 0.5) !important;
+  color: #eaf4ff !important;
+}
+
+.fleet-compare-config :deep(.el-button--success) {
+  background: rgba(9, 24, 40, 0.45) !important;
+  border: 1px solid rgba(146, 186, 220, 0.28) !important;
+  color: #c5d9ee !important;
+}
+
+:deep(.merged-config-card .el-input__wrapper),
+:deep(.merged-config-card .el-textarea__inner),
+:deep(.merged-config-card .el-select__wrapper) {
+  background: rgba(3, 16, 28, 0.74) !important;
+  box-shadow: 0 0 0 1px rgba(146, 186, 220, 0.2) inset !important;
+}
+
+:deep(.merged-config-card .el-input__inner),
+:deep(.merged-config-card .el-range-input),
+:deep(.merged-config-card .el-select__placeholder),
+:deep(.merged-config-card .el-checkbox__label) {
+  color: #c5d9ee !important;
+}
+
+:deep(.merged-config-card .el-input__wrapper.is-focus),
+:deep(.merged-config-card .el-select__wrapper.is-focused) {
+  box-shadow: 0 0 0 1px rgba(18, 215, 255, 0.65) inset, 0 0 10px rgba(18, 215, 255, 0.2) !important;
+}
+
+:deep(.el-checkbox__input.is-checked .el-checkbox__inner) {
+  background: #12d7ff;
+  border-color: #12d7ff;
+}
+
+:deep(.el-checkbox__label) {
+  color: #9fb6cc;
+}
+
+:deep(.el-table) {
+  --el-table-bg-color: #0b1d2d;
+  --el-table-tr-bg-color: #0b1d2d;
+  --el-table-header-bg-color: #10263a;
+  --el-table-border-color: rgba(146, 186, 220, 0.18);
+  --el-table-row-hover-bg-color: rgba(18, 215, 255, 0.08);
+  --el-table-text-color: #d9e9ff;
+  --el-table-header-text-color: #9fb6cc;
 }
 
 @media (max-width: 1280px) {

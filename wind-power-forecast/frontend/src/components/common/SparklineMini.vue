@@ -11,6 +11,10 @@ const props = defineProps({
   values: {
     type: Array,
     default: () => []
+  },
+  active: {
+    type: Boolean,
+    default: true
   }
 })
 
@@ -28,8 +32,8 @@ function render() {
       data: props.values,
       smooth: true,
       showSymbol: false,
-      lineStyle: { width: 1.5, color: '#12d7ff' },
-      areaStyle: { color: 'rgba(18,215,255,.12)' }
+      lineStyle: { width: 1.8, color: props.active ? '#21dcff' : '#6f8194' },
+      areaStyle: { color: props.active ? 'rgba(18,215,255,.16)' : 'rgba(120,136,154,.12)' }
     }]
   }, true)
 }
@@ -39,7 +43,7 @@ onMounted(() => {
   render()
 })
 
-watch(() => props.values, render, { deep: true })
+watch(() => [props.values, props.active], render, { deep: true })
 
 onBeforeUnmount(() => {
   chart?.dispose()
