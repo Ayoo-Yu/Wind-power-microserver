@@ -17,45 +17,58 @@ const props = defineProps({
 const chartRef = ref(null)
 let chart
 
+function resolveNowIndex(labels) {
+  const now = new Date()
+  const nowMinutes = now.getHours() * 60 + now.getMinutes()
+  let best = 0
+  let bestDelta = Number.POSITIVE_INFINITY
+
+  labels.forEach((label, idx) => {
+    const m = String(label).match(/^(\d{2}):(\d{2})$/)
+    if (!m) return
+    const minutes = Number(m[1]) * 60 + Number(m[2])
+    const delta = Math.abs(minutes - nowMinutes)
+    if (delta < bestDelta) {
+      bestDelta = delta
+      best = idx
+    }
+  })
+  return best
+}
+
 function render() {
   if (!chart) return
 
-  const labels = props.points.map(item => item.time)
+  const labels = props.points.map(item => item.label || item.time)
   const actual = props.points.map(item => item.actual)
-  const predicted = props.points.map(item => item.predicted)
-  const windSpeed = props.points.map(item => item.windSpeed)
+  const shortTerm = props.points.map(item => item.shortTerm)
+  const ultraShort = props.points.map(item => item.ultraShort)
+  const availableCap = props.points.map(item => item.availableCap)
+  const nowIndex = resolveNowIndex(labels)
 
   chart.setOption(
     {
       tooltip: { trigger: 'axis' },
       legend: {
-        data: ['实际功率', '预测功率', '风速'],
+        data: ['实绩功率', '短期预测', '超短期预测', '可用容量上限'],
         right: 0,
         textStyle: { color: '#d7ecff' }
       },
-      grid: { top: 30, right: 18, bottom: 40, left: 58 },
+      grid: { top: 30, right: 20, bottom: 42, left: 58 },
       xAxis: {
         type: 'category',
         data: labels,
         axisLabel: { color: '#9fb6cc', hideOverlap: true },
-        axisLine: { lineStyle: { color: 'rgba(159,182,204,.35)' } }
+        axisLine: { lineStyle: { color: 'rgba(159,182,204,.35)' } },
+        splitLine: { show: false }
       },
-      yAxis: [
-        {
-          type: 'value',
-          name: '功率 (MW)',
-          nameTextStyle: { color: '#8eb3cc' },
-          axisLabel: { color: '#9fb6cc' },
-          splitLine: { lineStyle: { color: 'rgba(159,182,204,.2)', type: 'dashed' } }
-        },
-        {
-          type: 'value',
-          name: '风速 (m/s)',
-          nameTextStyle: { color: '#8eb3cc' },
-          axisLabel: { color: '#9fb6cc' },
-          splitLine: { show: false }
-        }
-      ],
+      yAxis: {
+        type: 'value',
+        name: '功率 (MW)',
+        nameTextStyle: { color: '#8eb3cc' },
+        axisLabel: { color: '#9fb6cc' },
+        splitLine: { lineStyle: { color: 'rgba(159,182,204,.2)', type: 'dashed' } }
+      },
       dataZoom: [
         { type: 'inside' },
         {
@@ -69,43 +82,48 @@ function render() {
       ],
       series: [
         {
-          name: '实际功率',
+          name: '实绩功率',
           type: 'line',
           smooth: true,
           showSymbol: false,
-          lineStyle: { width: 2, color: '#2dd36f' },
+          lineStyle: { width: 2.2, color: '#2dd36f', type: 'solid' },
           data: actual
         },
         {
-          name: '预测功率',
+          name: '短期预测',
           type: 'line',
           smooth: true,
           showSymbol: false,
-          lineStyle: { width: 2, color: '#12d7ff' },
-          areaStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: 'rgba(18,215,255,0.25)' },
-              { offset: 1, color: 'rgba(18,215,255,0.02)' }
-            ])
-          },
-          markPoint: {
-            symbolSize: 26,
-            label: { color: '#00111c', fontSize: 11 },
-            data: [
-              { type: 'max', name: '最大值', itemStyle: { color: '#53f0b0' } },
-              { type: 'min', name: '最小值', itemStyle: { color: '#f6b73c' } }
-            ]
-          },
-          data: predicted
+          lineStyle: { width: 2, color: '#12d7ff', type: 'dashed' },
+          data: shortTerm
         },
         {
-          name: '风速',
+          name: '超短期预测',
           type: 'line',
-          yAxisIndex: 1,
           smooth: true,
           showSymbol: false,
-          lineStyle: { width: 1.5, color: '#f6b73c', type: 'dashed' },
-          data: windSpeed
+          lineStyle: { width: 2, color: '#f6b73c', type: [8, 4, 2, 4] },
+          data: ultraShort,
+          markLine: {
+            symbol: 'none',
+            lineStyle: { color: '#ff5d73', width: 1.5, type: 'solid' },
+            label: {
+              show: true,
+              formatter: 'Now',
+              color: '#ffb8c2',
+              backgroundColor: 'rgba(255,93,115,.15)',
+              padding: [2, 6, 2, 6]
+            },
+            data: [{ xAxis: nowIndex }]
+          }
+        },
+        {
+          name: '可用容量上限',
+          type: 'line',
+          smooth: true,
+          showSymbol: false,
+          lineStyle: { width: 1.8, color: '#d7e4ef', type: 'solid' },
+          data: availableCap
         }
       ]
     },
@@ -130,6 +148,6 @@ onBeforeUnmount(() => {
 <style scoped>
 .chart-host {
   width: 100%;
-  height: 320px;
+  height: 360px;
 }
 </style>

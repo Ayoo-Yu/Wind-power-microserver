@@ -1,2629 +1,748 @@
+﻿
 <template>
   <div class="power-compare-container power-predict-container page-shell">
-    <!-- 添加背景动画层 -->
-    <div class="background-container">
-      <div class="animated-background"></div>
-    </div>
+    <h1 class="page-title">功率对比与考核分析</h1>
 
-    <!-- 刷新按钮 -->
-    <el-button 
-      icon="Refresh" 
-      circle 
-      class="refresh-button"
-      title="刷新页面"
-      @click="refreshPage"
-    ></el-button>
-
-    <h1 class="page-title">{{ uiText.title }}</h1>
+    <el-tabs v-model="analysisTab" class="analysis-tabs">
+      <el-tab-pane label="单站深度分析" name="single" />
+      <el-tab-pane label="多站横向对比" name="fleet" />
+    </el-tabs>
 
     <div class="summary-grid">
-      <el-card class="summary-card">
-        <div class="summary-label">{{ uiText.stationCount }}</div>
-        <div class="summary-value">{{ fleetCompareFarms.length }}</div>
-      </el-card>
-      <el-card class="summary-card">
-        <div class="summary-label">{{ uiText.avgAccuracy }}</div>
-        <div class="summary-value">{{ avgAccDisplay }}</div>
-      </el-card>
-      <el-card class="summary-card">
-        <div class="summary-label">{{ uiText.peakPower }}</div>
-        <div class="summary-value">{{ peakPowerDisplay }}</div>
-      </el-card>
-      <el-card class="summary-card">
-        <div class="summary-label">{{ uiText.unqualifiedDays }}</div>
-        <div class="summary-value summary-warning">{{ unqualifiedDays }}</div>
+      <el-card class="summary-card" v-for="(card, idx) in kpiCards" :key="idx">
+        <div class="summary-label">{{ card.label }}</div>
+        <div class="summary-value" :class="{ 'summary-warning': idx === 3 }">{{ card.value }}</div>
       </el-card>
     </div>
 
-    <el-alert
-      class="summary-insight"
-      type="info"
-      :closable="false"
-      show-icon
-      :title="summaryInsight"
-    />
+    <el-card class="control-card">
+      <div class="group-title">Group 1: 数据范围定义</div>
+      <div class="control-row">
+        <el-select v-if="analysisTab === 'single'" v-model="singleFarmCode" filterable class="farm-select" placeholder="选择场站">
+          <el-option v-for="farm in fleetCompareFarms" :key="farm.code" :label="`${farm.name} (${farm.code})`" :value="farm.code" />
+        </el-select>
+        <el-select v-else v-model="fleetCompareFarmCodes" multiple collapse-tags filterable class="farm-select" placeholder="选择多个场站">
+          <el-option v-for="farm in fleetCompareFarms" :key="farm.code" :label="`${farm.name} (${farm.code})`" :value="farm.code" />
+        </el-select>
 
-    <!-- 时间选择与配置区域 -->
-    <div class="config-panel">
-      <el-card class="merged-config-card"> 
-        <!-- Row 1: Time Picker, Query Button, Download Buttons -->
-        <div class="toolbar-group-title">{{ uiText.groupQuery }}</div>
-        <div class="config-row config-row-1">
-          <div class="time-picker-wrapper-outer">
-            <span class="label">选择时间范围：</span>
-            <el-date-picker
-              v-model="timeRange"
-              type="datetimerange"
-              range-separator="至"
-              start-placeholder="开始时间"
-              end-placeholder="结束时间"
-              value-format="YYYY-MM-DD HH:mm:ss"
-              class="time-range-picker-element" 
-            />
-          </div>
-          <el-button-group class="quick-time-select-buttons" style="margin-left: 10px; margin-right: 10px;">
-            <el-button type="info" plain size="small" @click="setQuickTimeRange('today')" :disabled="isQuickTimeSwitching">今日</el-button>
-            <el-button type="info" plain size="small" @click="setQuickTimeRange('3d')" :disabled="isQuickTimeSwitching">近三天</el-button>
-            <el-button type="info" plain size="small" @click="setQuickTimeRange('1w')" :disabled="isQuickTimeSwitching">近一周</el-button>
-            <el-button type="info" plain size="small" @click="setQuickTimeRange('1m')" :disabled="isQuickTimeSwitching">近一个月</el-button>
-          </el-button-group>
-          <el-button 
-            type="primary" 
-            @click="fetchComparisonData"
-            :loading="loading"
-            class="query-button"
-          >
-            查询数据
-          </el-button>
-          <el-button-group class="download-buttons download-buttons-row1">
-            <el-button 
-              type="success" 
-              @click="downloadCSV"
-              :disabled="!exportData.comparison"
-            >
-              数据下载
-            </el-button>
-            <el-button 
-              type="success" 
-              @click="downloadMetricsCSV"
-              :disabled="!exportData.metrics"
-            >
-              指标下载
-            </el-button>
-            <el-button 
-              type="success" 
-              @click="downloadSVG"
-              :disabled="!chartData"
-            >
-              功率图下载
-            </el-button>
-            <el-button 
-              type="success" 
-              @click="downloadMetricSVG"
-              :disabled="!dailyMetrics"
-            >
-              指标图下载
-            </el-button>
-            <el-button
-              type="success"
-              @click="showDailyMetricsAnalysis = !showDailyMetricsAnalysis"
-            >
-              {{ showDailyMetricsAnalysis ? '隐藏' : '显示' }}每日指标
-            </el-button>
-            <el-button
-              type="success"
-              @click="showQualificationRateAnalysis = !showQualificationRateAnalysis"
-              :disabled="!qualificationRates || Object.keys(qualificationRates).length === 0"
-            >
-              {{ showQualificationRateAnalysis ? '隐藏' : '显示' }}合格率分析
-            </el-button>
-          </el-button-group>
-        </div>
+        <el-date-picker
+          v-model="timeRange"
+          type="datetimerange"
+          range-separator="至"
+          start-placeholder="开始时间"
+          end-placeholder="结束时间"
+          value-format="YYYY-MM-DD HH:mm:ss"
+          class="time-range-picker"
+        />
 
-        <!-- Row 2: Type Select -->
-        <div class="toolbar-group-title">{{ uiText.groupFleet }}</div>
-        <div class="config-row config-row-3">
-          <div class="fleet-compare-config">
-            <span class="label">多场站指标对比：</span>
-            <el-select
-              v-model="fleetCompareFarmCodes"
-              multiple
-              collapse-tags
-              collapse-tags-tooltip
-              placeholder="选择场站"
-              class="fleet-farm-select"
-            >
-              <el-option
-                v-for="farm in fleetCompareFarms"
-                :key="farm.code"
-                :label="`${farm.name} (${farm.code})`"
-                :value="farm.code"
-              />
-            </el-select>
-            <el-select v-model="fleetComparePredictionType" class="fleet-type-select">
-              <el-option label="短期预测" value="short" />
-              <el-option label="中期预测" value="mid" />
-              <el-option label="超短期预测(P2)" value="supershort" />
-            </el-select>
-            <el-button type="primary" :loading="fleetCompareLoading" @click="fetchFleetMetricsCompare">
-              场站指标对比
-            </el-button>
-            <el-checkbox v-model="fleetSeriesIncludeActual">包含实测</el-checkbox>
-            <el-button type="primary" :loading="fleetSeriesLoading" @click="fetchFleetSeriesCompare">
-              对比曲线
-            </el-button>
-            <el-button type="success" :disabled="fleetSeriesData.length === 0" @click="downloadFleetSeriesCSV">
-              导出曲线 CSV
-            </el-button>
-          </div>
-        </div>
-        <div class="toolbar-group-title">{{ uiText.groupSeries }}</div>
-        <div class="config-row config-row-2">
-          <div class="type-checkbox-group type-checkbox-group-row2">
-            <span class="label">选择展示类型：</span>
-            <el-checkbox-group v-model="selectedTypes" class="type-selector-group">
-              <el-checkbox label="实测值" />
-              <el-checkbox label="超短期预测" />
-              <el-checkbox label="短期预测" />
-              <el-checkbox label="中期预测" />
-              <el-checkbox label="短期风速预测" />
-              <el-checkbox label="中期风速预测" />
-            </el-checkbox-group>
-          </div>
-        </div>
-      </el-card>
-    </div>
+        <el-button-group>
+          <el-button type="info" plain size="small" @click="setQuickTimeRange('today')">今日</el-button>
+          <el-button type="info" plain size="small" @click="setQuickTimeRange('3d')">近三天</el-button>
+          <el-button type="info" plain size="small" @click="setQuickTimeRange('1w')">近一周</el-button>
+        </el-button-group>
 
-    <!-- 图表展示区域 -->
-    <div class="fleet-metrics-container" v-if="fleetCompareRows.length > 0">
-      <el-card class="fleet-metrics-card">
-        <template #header>
-          <div class="fleet-metrics-header">多场站指标对比结果（{{ fleetComparePredictionType }}）</div>
+        <el-button type="primary" :loading="loading" class="query-btn" @click="fetchComparisonData">查询</el-button>
+      </div>
+
+      <div class="group-title">Group 2: 图表展示控制</div>
+      <div class="control-row">
+        <el-checkbox-group v-model="selectedTypes">
+          <el-checkbox label="实测值" />
+          <el-checkbox label="超短期预测" />
+          <el-checkbox label="短期预测" />
+          <el-checkbox label="中期预测" />
+          <el-checkbox label="短期风速预测" />
+          <el-checkbox label="中期风速预测" />
+        </el-checkbox-group>
+        <el-switch v-model="showCapacityLine" active-text="显示可用容量线" />
+        <el-switch v-model="showCurtailmentTag" active-text="显示限电标识" />
+      </div>
+
+      <div class="group-title">Group 3: 数据与报表导出</div>
+      <el-dropdown @command="handleExportCommand">
+        <el-button type="success">
+          📥 导出报表
+          <el-icon class="el-icon--right"><Download /></el-icon>
+        </el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="raw_csv">导出原始数据(CSV)</el-dropdown-item>
+            <el-dropdown-item command="metrics_excel">导出考核指标(Excel)</el-dropdown-item>
+            <el-dropdown-item command="chart_png">导出图表(PNG)</el-dropdown-item>
+          </el-dropdown-menu>
         </template>
-        <el-table :data="fleetCompareRows" border size="small" style="width: 100%">
-          <el-table-column prop="farm_code" label="场站编码" min-width="140" />
+      </el-dropdown>
+    </el-card>
+
+    <template v-if="analysisTab === 'single'">
+      <el-tabs v-model="singleViewTab" class="single-view-tabs">
+        <el-tab-pane label="曲线分析" name="curve" />
+        <el-tab-pane label="风机出力特性（散点图）" name="scatter" />
+      </el-tabs>
+
+      <template v-if="singleViewTab === 'curve'">
+        <el-card class="chart-card" v-if="chartData">
+          <template #header><div class="card-header">主曲线（双Y轴）</div></template>
+          <div class="chart-wrapper" ref="mainChartEl" />
+        </el-card>
+        <el-card class="chart-card" v-if="chartData">
+          <template #header><div class="card-header">误差曲线（预测值 - 实测值）</div></template>
+          <div class="chart-wrapper small" ref="errorChartEl" />
+        </el-card>
+      </template>
+
+      <template v-else>
+        <el-card class="chart-card" v-if="chartData">
+          <template #header><div class="card-header">风机出力特性（散点图）</div></template>
+          <div class="chart-wrapper" ref="scatterChartEl" />
+        </el-card>
+      </template>
+    </template>
+
+    <template v-else>
+      <el-card class="chart-card" v-if="fleetCompareRows.length > 0">
+        <template #header><div class="card-header">多站准确率对比（短期 vs 超短期）</div></template>
+        <div class="chart-wrapper" ref="fleetBarChartEl" />
+      </el-card>
+      <el-card class="chart-card" v-if="fleetCompareRows.length > 0">
+        <template #header><div class="card-header">多场站详细指标表</div></template>
+        <el-table :data="fleetCompareRows" border size="small">
           <el-table-column prop="farm_name" label="场站名称" min-width="160" />
-          <el-table-column prop="points" label="对齐点数" width="100" />
-          <el-table-column label="MAE" width="110">
-            <template #default="scope">{{ formatMetricNumber(scope.row.mae) }}</template>
-          </el-table-column>
-          <el-table-column label="RMSE" width="110">
-            <template #default="scope">{{ formatMetricNumber(scope.row.rmse) }}</template>
-          </el-table-column>
-          <el-table-column label="MSE" width="110">
-            <template #default="scope">{{ formatMetricNumber(scope.row.mse) }}</template>
-          </el-table-column>
+          <el-table-column prop="farm_code" label="场站编码" min-width="130" />
+          <el-table-column label="短期准确率(%)" width="130"><template #default="scope">{{ formatPct(scope.row.short_acc) }}</template></el-table-column>
+          <el-table-column label="短期合格率(%)" width="130"><template #default="scope">{{ formatPct(scope.row.short_qualified_rate) }}</template></el-table-column>
+          <el-table-column label="超短期准确率(%)" width="140"><template #default="scope">{{ formatPct(scope.row.supershort_acc) }}</template></el-table-column>
+          <el-table-column label="超短期合格率(%)" width="140"><template #default="scope">{{ formatPct(scope.row.supershort_qualified_rate) }}</template></el-table-column>
+          <el-table-column label="RMSE" width="110"><template #default="scope">{{ formatNum(scope.row.rmse_avg) }}</template></el-table-column>
+          <el-table-column label="MAE" width="110"><template #default="scope">{{ formatNum(scope.row.mae_avg) }}</template></el-table-column>
+          <el-table-column prop="unqualified_points" label="不合格点数" width="120" />
         </el-table>
       </el-card>
+    </template>
+
+    <div class="empty-data-container" v-if="!loading && showEmptyState">
+      <el-card class="empty-data-card"><div class="empty-data-content"><h3>暂无数据</h3><p>请选择时间范围并点击“查询”。</p></div></el-card>
     </div>
 
-    <div class="fleet-series-container" v-if="fleetSeriesData.length > 0">
-      <el-card class="fleet-series-card">
-        <template #header>
-          <div class="fleet-metrics-header">多场站曲线叠加（{{ fleetComparePredictionType }}）</div>
-        </template>
-        <div class="chart-wrapper fleet-series-wrapper">
-          <canvas ref="fleetSeriesCanvas" style="height: 56vh !important;"></canvas>
-        </div>
-      </el-card>
-    </div>
-
-    <div class="chart-container" v-if="chartData">
-      <div class="chart-wrapper" :key="chartKey">
-        <canvas ref="chartCanvas" style="height: 70vh !important;"></canvas>
-      </div>
-    </div>
-
-    <!-- 每日指标区域 -->
-    <div class="daily-metrics-container" v-if="showDailyMetricsAnalysis && dailyMetrics">
-      <el-card class="metrics-card">
-        <div class="metrics-header">
-          <h3>每日评估指标</h3>
-          <div class="metric-buttons">
-            <el-radio-group v-model="currentMetric" @change="handleMetricChange">
-              <el-radio-button label="acc" :disabled="isMetricButtonCooling">ACC (%)</el-radio-button>
-              <el-radio-button label="mae" :disabled="isMetricButtonCooling">MAE (MW)</el-radio-button>
-              <el-radio-button label="mse" :disabled="isMetricButtonCooling">MSE (MW²)</el-radio-button>
-              <el-radio-button label="rmse" :disabled="isMetricButtonCooling">RMSE (MW)</el-radio-button>
-              <el-radio-button label="k" :disabled="isMetricButtonCooling">K值</el-radio-button>
-              <el-radio-button label="pe" :disabled="isMetricButtonCooling">Pe (MW)</el-radio-button>
-            </el-radio-group>
-          </div>
-        </div>
-        <div class="metrics-chart-wrapper">
-          <canvas 
-            ref="metricChart" 
-            style="width: 100%; height: 100%; display: block;"
-          ></canvas>
-        </div>
-      </el-card>
-    </div>
-
-    <!-- 数据提示区域 -->
-    <div class="empty-data-container" v-if="!chartData">
-      <el-card class="empty-data-card">
-        <div class="empty-data-content">
-          <el-icon class="empty-icon"><PieChart /></el-icon>
-          <h3>暂无数据</h3>
-          <p class="empty-text">请选择时间范围并点击查询数据按钮</p>
-        </div>
-      </el-card>
-    </div>
-
-    <!-- 合格率分析区域 -->
-    <div class="qualification-container" v-if="showQualificationRateAnalysis && qualificationRates && Object.keys(qualificationRates).length > 0">
-      <el-card class="qualification-card">
-        <div class="qualification-header">
-          <h3>预测合格率分析</h3>
-        </div>
-        <div class="qualification-content">
-          <div v-for="(data, type) in qualificationRates" :key="type" class="qualification-item">
-            <div class="qualification-type">
-              <span class="type-label">{{ type }}</span>
-              <span class="threshold-label">合格标准: K值 > {{ data.threshold }}</span>
-            </div>
-            <el-progress 
-              :percentage="data.rate" 
-              :color="getQualificationColor(data.rate)"
-              :format="percent => `${percent.toFixed(1)}%`"
-              :stroke-width="18"
-            />
-            <div class="qualification-details">
-              <span>合格天数: {{ data.qualifiedDays }}/{{ data.totalDays }}</span>
-            </div>
-          </div>
-        </div>
-      </el-card>
-    </div>
-
-    <!-- 加载状态 -->
-    <LoadingIndicator 
-      :visible="loading" 
-      message="数据加载中..."
-    />
+    <LoadingIndicator :visible="loading" message="数据加载中..." />
   </div>
 </template>
 
 <script>
-import { Chart, CategoryScale, LinearScale, LineElement, PointElement, Title, Tooltip, Legend, LineController } from 'chart.js'
-import zoomPlugin from 'chartjs-plugin-zoom';
+import * as echarts from 'echarts'
+import { Download } from '@element-plus/icons-vue'
 import farmService from '../utils/farmService'
-import { getFleetMetrics, getFleetSeries, getPowerCompareData } from '../api/powerCompareApi'
-import { UI_TEXT } from '../constants/uiText'
+import { getFleetMetrics, getPowerCompareData } from '../api/powerCompareApi'
+import LoadingIndicator from './LoadingIndicator.vue'
 
-Chart.register(
-  CategoryScale,
-  LinearScale,
-  LineElement,
-  PointElement,
-  Title,
-  Tooltip,
-  Legend,
-  LineController,
-  zoomPlugin // Register the zoom plugin
-)
-
-// Define Y-axis constants at a higher scope
-const YAXIS_POWER = 'yPower';
-const YAXIS_WINDSPEED = 'yWindSpeed';
+const YAXIS_POWER = 0
+const YAXIS_WINDSPEED = 1
 
 export default {
   name: 'PowerCompare',
+  components: { LoadingIndicator, Download },
   data() {
     return {
-      uiText: UI_TEXT.powerCompare,
-      // API地址设置
-      backendBaseUrl: window.location.hostname !== 'localhost' 
-        ? `http://${window.location.hostname}:5000` 
-        : 'http://localhost:5000',
+      analysisTab: 'single',
+      singleViewTab: 'curve',
       timeRange: [],
-      selectedTypes: ['实测值', '超短期预测', '短期预测', '中期预测','短期风速预测','中期风速预测'],
-      chartData: null,
-      chartInstance: null,
       loading: false,
-      wfcapacity: 453.5,
-      currentMetric: 'acc',
-      dailyMetrics: null,
-      metricChart: null,
-      colors: {
-        '实测值': '#FF6B6B',
-        '超短期预测': '#4ECDC4',
-        '短期预测': '#45B7D1',
-        '中期预测': '#96CEB4'
-      },
-      windSpeedColors: {
-        '短期风速': '#FFD700',
-        '中期风速': '#DA70D6',
-      },
-      exportData: {
-        comparison: null,
-        metrics: null
-      },
-      qualifiedThresholds: {
-        '超短期预测': 0.65,
-        '短期预测': 0.6,
-        '中期预测': 0.4
-      },
-      qualificationRates: null,
-      showDailyMetricsAnalysis: false,
-      showQualificationRateAnalysis: false,
-      selectedSupershortHorizon: ['average'],
-      supershortHorizons: [
-        { value: 'average', label: '平均值' },
-        ...Array.from({ length: 16 }, (_, i) => ({
-          value: `wp_pred${i + 2}`,
-          label: `P${i + 1}`,
-        })),
-      ],
-      chartKey: 0,
-      isProcessingChart: false,
-      isQuickTimeSwitching: false, // Flag for quick time range button cooldown
-      isUpdatingMetricChart: false, // Added for updateMetricChart lock
-      isMetricButtonCooling: false, // 指标按钮的冷却状态标志
+      chartData: null,
       fleetCompareFarms: [],
+      singleFarmCode: '',
       fleetCompareFarmCodes: [],
-      fleetComparePredictionType: 'short',
-      fleetCompareLoading: false,
-      fleetCompareRows: [],
-      fleetSeriesLoading: false,
-      fleetSeriesIncludeActual: true,
-      fleetSeriesData: [],
-      fleetSeriesChart: null,
-      farmChangeTimer: null
+      selectedTypes: ['实测值', '超短期预测', '短期预测', '中期预测', '短期风速预测', '中期风速预测'],
+      showCapacityLine: true,
+      showCurtailmentTag: true,
+      installedCapacity: 453.5,
+      mainChart: null,
+      errorChart: null,
+      scatterChart: null,
+      fleetBarChart: null,
+      exportData: { comparison: null, metrics: null },
+      singleSeriesState: null,
+      singleMetricsSummary: {
+        shortAcc: null,
+        shortQualifiedRate: null,
+        supershortAcc: null,
+        supershortQualifiedRate: null,
+        rmse: null,
+        mae: null,
+        unqualifiedPoints: 0,
+        assessmentEnergy: 0
+      },
+      fleetCompareRows: []
     }
   },
   computed: {
-    avgAccDisplay() {
-      if (!this.dailyMetrics || typeof this.dailyMetrics !== 'object') {
-        return '--';
-      }
-      const values = [];
-      Object.values(this.dailyMetrics).forEach((days) => {
-        if (!Array.isArray(days)) return;
-        days.forEach((item) => {
-          if (Number.isFinite(item?.acc)) {
-            values.push(item.acc * 100);
-          }
-        });
-      });
-      if (!values.length) return '--';
-      const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
-      return `${avg.toFixed(2)}%`;
+    showEmptyState() {
+      return this.analysisTab === 'single' ? !this.chartData : this.fleetCompareRows.length === 0
     },
-    peakPowerDisplay() {
-      if (!this.chartData || typeof this.chartData !== 'object') {
-        return '--';
+    kpiCards() {
+      if (this.analysisTab === 'single') {
+        return [
+          { label: '短期预测指标', value: `准确率 ${this.formatPct(this.singleMetricsSummary.shortAcc)} | 合格率 ${this.formatPct(this.singleMetricsSummary.shortQualifiedRate)}` },
+          { label: '超短期预测指标', value: `准确率 ${this.formatPct(this.singleMetricsSummary.supershortAcc)} | 合格率 ${this.formatPct(this.singleMetricsSummary.supershortQualifiedRate)}` },
+          { label: '误差统计 (RMSE/MAE)', value: `RMSE ${this.formatNum(this.singleMetricsSummary.rmse)} | MAE ${this.formatNum(this.singleMetricsSummary.mae)}` },
+          { label: '损失/受累电量评估', value: `不合格点 ${this.singleMetricsSummary.unqualifiedPoints} | 考核电量 ${this.formatNum(this.singleMetricsSummary.assessmentEnergy)} MWh` }
+        ]
       }
-      let maxPower = null;
-      Object.values(this.chartData).forEach((series) => {
-        if (!Array.isArray(series)) return;
-        series.forEach((point) => {
-          const power = Number(point?.power);
-          if (!Number.isFinite(power)) return;
-          maxPower = maxPower === null ? power : Math.max(maxPower, power);
-        });
-      });
-      return maxPower === null ? '--' : `${maxPower.toFixed(2)} MW`;
-    },
-    unqualifiedDays() {
-      if (!this.qualificationRates || typeof this.qualificationRates !== 'object') {
-        return 0;
-      }
-      return Object.values(this.qualificationRates).reduce((sum, item) => {
-        const total = Number(item?.totalDays) || 0;
-        const qualified = Number(item?.qualifiedDays) || 0;
-        return sum + Math.max(total - qualified, 0);
-      }, 0);
-    },
-    summaryInsight() {
-      const acc = this.avgAccDisplay;
-      const peak = this.peakPowerDisplay;
-      const unqualified = this.unqualifiedDays;
-      return `${this.uiText.overviewPrefix}：平均准确率 ${acc}，峰值功率 ${peak}，不合格天数 ${unqualified}。`;
+      const rows = this.fleetCompareRows
+      const avgShort = this.mean(rows.map(v => v.short_acc))
+      const avgUltra = this.mean(rows.map(v => v.supershort_acc))
+      const avgRmse = this.mean(rows.map(v => v.rmse_avg))
+      const totalUnqualified = rows.reduce((s, r) => s + (Number(r.unqualified_points) || 0), 0)
+      return [
+        { label: '参与场站数', value: `${rows.length}` },
+        { label: '短期平均准确率', value: this.formatPct(avgShort) },
+        { label: '超短期平均准确率', value: this.formatPct(avgUltra) },
+        { label: 'RMSE/不合格点', value: `${this.formatNum(avgRmse)} / ${totalUnqualified}` }
+      ]
     }
   },
   async mounted() {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = (today.getMonth() + 1).toString().padStart(2, '0');
-    const day = today.getDate().toString().padStart(2, '0');
-    
-    this.timeRange = [
-      `${year}-${month}-${day} 00:00:00`,
-      `${year}-${month}-${day} 23:59:59`,
-    ];
-    await this.loadFleetCompareFarms();
-    farmService.addListener(this.handleFarmServiceChanged);
-    this.fetchComparisonData();
+    const now = new Date()
+    const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    this.timeRange = [`${fmt(now)} 00:00:00`, `${fmt(now)} 23:59:59`]
+    await this.loadFleetCompareFarms()
+    this.singleFarmCode = farmService.getCurrentFarm() || this.fleetCompareFarms[0]?.code || ''
+    this.fleetCompareFarmCodes = this.fleetCompareFarms.map(v => v.code)
+    farmService.addListener(this.handleFarmChanged)
+    this.fetchComparisonData()
+    window.addEventListener('resize', this.resizeCharts)
+  },
+  beforeUnmount() {
+    farmService.removeListener(this.handleFarmChanged)
+    window.removeEventListener('resize', this.resizeCharts)
+    this.destroyAllCharts()
   },
   methods: {
-    refreshPage() {
-      window.location.reload();
-    },
-
-    handleFarmServiceChanged() {
-      if (this.farmChangeTimer) {
-        clearTimeout(this.farmChangeTimer);
+    handleFarmChanged(code) {
+      if (this.analysisTab === 'single') {
+        this.singleFarmCode = code
+        this.fetchComparisonData()
       }
-      this.farmChangeTimer = setTimeout(() => {
-        this.fetchComparisonData();
-      }, 300);
     },
-
     async loadFleetCompareFarms() {
-      try {
-        const farms = await farmService.loadAvailableFarms(true);
-        const normalized = Array.isArray(farms) ? farms : [];
-        this.fleetCompareFarms = normalized.map(item => ({
-          code: item.code,
-          name: item.name || item.code
-        }));
-        this.fleetCompareFarmCodes = this.fleetCompareFarms.map(item => item.code);
-      } catch (error) {
-        console.error('loadFleetCompareFarms failed:', error);
-        this.fleetCompareFarms = [];
-        this.fleetCompareFarmCodes = [];
-      }
+      const farms = await farmService.loadAvailableFarms(true)
+      this.fleetCompareFarms = (Array.isArray(farms) ? farms : []).map(f => ({ code: f.code, name: f.name || f.code }))
     },
-
-    formatMetricNumber(value) {
-      if (value === null || value === undefined || Number.isNaN(Number(value))) {
-        return '-';
-      }
-      return Number(value).toFixed(3);
+    formatPct(value) {
+      if (!Number.isFinite(Number(value))) return '--'
+      return `${Number(value).toFixed(2)}%`
     },
-
-    async fetchFleetMetricsCompare() {
-      if (!this.timeRange || this.timeRange.length !== 2) {
-        this.$message.error('请先选择完整时间范围');
-        return;
-      }
-      if (!Array.isArray(this.fleetCompareFarmCodes) || this.fleetCompareFarmCodes.length === 0) {
-        this.$message.warning('请至少选择一个场站');
-        return;
-      }
-
-      this.fleetCompareLoading = true;
-      try {
-        const payload = {
-          start: this.timeRange[0],
-          end: this.timeRange[1],
-          farm_codes: this.fleetCompareFarmCodes,
-          prediction_type: this.fleetComparePredictionType
-        };
-
-        const response = await getFleetMetrics(payload);
-
-        const data = response?.data?.data || {};
-        const rows = Array.isArray(data.items) ? data.items : [];
-        this.fleetCompareRows = rows.map(item => ({
-          ...item,
-          points: item.points || 0
-        }));
-        if (this.fleetCompareRows.length === 0) {
-          this.$message.info('当前条件下没有可对比的数据');
-        }
-      } catch (error) {
-        console.error('fetchFleetMetricsCompare failed:', error);
-        this.$message.error('多场站指标对比失败');
-      } finally {
-        this.fleetCompareLoading = false;
-      }
+    formatNum(value) {
+      if (!Number.isFinite(Number(value))) return '--'
+      return Number(value).toFixed(2)
     },
-    
-    // 格式化K值为三位有效数字
-    async fetchFleetSeriesCompare() {
-      if (!this.timeRange || this.timeRange.length !== 2) {
-        this.$message.error('Please choose a complete time range');
-        return;
-      }
-      if (!Array.isArray(this.fleetCompareFarmCodes) || this.fleetCompareFarmCodes.length === 0) {
-        this.$message.warning('Please select at least one farm');
-        return;
-      }
-
-      this.fleetSeriesLoading = true;
-      try {
-        const payload = {
-          start: this.timeRange[0],
-          end: this.timeRange[1],
-          farm_codes: this.fleetCompareFarmCodes,
-          prediction_type: this.fleetComparePredictionType,
-          include_actual: this.fleetSeriesIncludeActual
-        };
-
-        const response = await getFleetSeries(payload);
-
-        const data = response?.data?.data || {};
-        this.fleetSeriesData = Array.isArray(data.items) ? data.items : [];
-        if (this.fleetSeriesData.length === 0) {
-          this.$message.info('No curve data under current conditions');
-          return;
-        }
-        this.$nextTick(() => this.renderFleetSeriesChart());
-      } catch (error) {
-        console.error('fetchFleetSeriesCompare failed:', error);
-        this.$message.error('Fleet curve compare failed');
-      } finally {
-        this.fleetSeriesLoading = false;
-      }
+    mean(values) {
+      const arr = values.map(Number).filter(Number.isFinite)
+      if (!arr.length) return null
+      return arr.reduce((s, v) => s + v, 0) / arr.length
     },
-
-    renderFleetSeriesChart() {
-      const canvas = this.$refs.fleetSeriesCanvas;
-      if (!canvas || !this.fleetSeriesData || this.fleetSeriesData.length === 0) {
-        return;
-      }
-      const allTimestampSet = new Set();
-      this.fleetSeriesData.forEach(item => {
-        (item.predicted || []).forEach(point => allTimestampSet.add(point.timestamp));
-        if (this.fleetSeriesIncludeActual) {
-          (item.actual || []).forEach(point => allTimestampSet.add(point.timestamp));
-        }
-      });
-      const sortedTimestamps = Array.from(allTimestampSet)
-        .map(ts => new Date(ts).getTime())
-        .sort((a, b) => a - b)
-        .map(ts => new Date(ts).toISOString());
-
-      const labels = sortedTimestamps.map(ts => {
-        const date = new Date(ts);
-        return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
-      });
-
-      const palette = ['#2563eb', '#dc2626', '#059669', '#7c3aed', '#ea580c', '#0ea5e9', '#4f46e5', '#16a34a', '#be123c', '#475569'];
-      const datasets = [];
-      this.fleetSeriesData.forEach((farm, idx) => {
-        const color = palette[idx % palette.length];
-        const predMap = new Map((farm.predicted || []).map(p => [new Date(p.timestamp).toISOString(), p.power]));
-        datasets.push({
-          label: `${farm.farm_name || farm.farm_code} Pred`,
-          data: sortedTimestamps.map(ts => predMap.has(ts) ? predMap.get(ts) : null),
-          borderColor: color,
-          backgroundColor: `${color}33`,
-          pointRadius: 1,
-          borderWidth: 2,
-          tension: 0.2,
-          spanGaps: true
-        });
-        if (this.fleetSeriesIncludeActual) {
-          const actualMap = new Map((farm.actual || []).map(p => [new Date(p.timestamp).toISOString(), p.power]));
-          datasets.push({
-            label: `${farm.farm_name || farm.farm_code} Actual`,
-            data: sortedTimestamps.map(ts => actualMap.has(ts) ? actualMap.get(ts) : null),
-            borderColor: color,
-            backgroundColor: `${color}22`,
-            pointRadius: 0,
-            borderWidth: 1,
-            borderDash: [4, 4],
-            tension: 0.2,
-            spanGaps: true
-          });
-        }
-      });
-
-      if (this.fleetSeriesChart) {
-        this.fleetSeriesChart.destroy();
-        this.fleetSeriesChart = null;
-      }
-
-      this.fleetSeriesChart = new Chart(canvas.getContext('2d'), {
-        type: 'line',
-        data: { labels, datasets },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          interaction: { mode: 'index', intersect: false },
-          plugins: {
-            legend: {
-              position: 'top',
-              labels: { color: '#d9e9ff', usePointStyle: true, boxWidth: 8 }
-            },
-            tooltip: {
-              backgroundColor: 'rgba(6, 18, 33, 0.95)',
-              borderColor: 'rgba(18, 215, 255, 0.4)',
-              borderWidth: 1,
-              titleColor: '#eaf4ff',
-              bodyColor: '#c5d9ee'
-            }
-          },
-          scales: {
-            x: {
-              grid: { color: 'rgba(159,182,204,0.14)' },
-              ticks: { color: '#9fb6cc' }
-            },
-            y: {
-              grid: { color: 'rgba(159,182,204,0.14)' },
-              ticks: { color: '#9fb6cc' }
-            }
-          }
-        }
-      });
+    getWindDirectionArrow(deg) {
+      const d = Number(deg)
+      if (!Number.isFinite(d)) return ''
+      const normalized = ((d % 360) + 360) % 360
+      const arrows = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖']
+      return arrows[Math.round(normalized / 45) % 8]
     },
-
-    downloadFleetSeriesCSV() {
-      if (!Array.isArray(this.fleetSeriesData) || this.fleetSeriesData.length === 0) {
-        this.$message.warning('No curve data to export');
-        return;
-      }
-      const rows = ['farm_code,farm_name,series_type,timestamp,power'];
-      this.fleetSeriesData.forEach(item => {
-        const farmCode = item.farm_code || '';
-        const farmName = (item.farm_name || '').replace(/"/g, '""');
-        (item.predicted || []).forEach(point => {
-          rows.push(`${farmCode},"${farmName}",predicted,${point.timestamp},${point.power ?? ''}`);
-        });
-        if (this.fleetSeriesIncludeActual) {
-          (item.actual || []).forEach(point => {
-            rows.push(`${farmCode},"${farmName}",actual,${point.timestamp},${point.power ?? ''}`);
-          });
-        }
-      });
-
-      const blob = new Blob([`\uFEFF${rows.join('\n')}`], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `fleet_series_${this.fleetComparePredictionType}_${Date.now()}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      this.$message.success('Curve CSV exported');
+    resizeCharts() {
+      [this.mainChart, this.errorChart, this.scatterChart, this.fleetBarChart].forEach((chart) => chart && chart.resize())
     },
-
-    formatKValue(kValue) {
-      if (kValue === null || kValue === undefined || isNaN(kValue)) {
-        return '0.000';
-      }
-      
-      // 使用 toPrecision(3) 保留三位有效数字
-      let formatted = Number(kValue).toPrecision(3);
-      
-      // 如果结果是科学记数法，转换为普通数字格式
-      if (formatted.includes('e')) {
-        formatted = Number(formatted).toFixed(6);
-        // 移除末尾的零
-        formatted = parseFloat(formatted).toString();
-      }
-      
-      return formatted;
+    setQuickTimeRange(period) {
+      const end = new Date()
+      const start = new Date(end)
+      start.setHours(0, 0, 0, 0)
+      end.setHours(23, 59, 59, 999)
+      if (period === '3d') start.setDate(end.getDate() - 2)
+      if (period === '1w') start.setDate(end.getDate() - 6)
+      const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      this.timeRange = [`${fmt(start)} 00:00:00`, `${fmt(end)} 23:59:59`]
+      this.fetchComparisonData()
+    },
+    destroyAllCharts() {
+      [this.mainChart, this.errorChart, this.scatterChart, this.fleetBarChart].forEach((chart) => { if (chart) chart.dispose() })
+      this.mainChart = null
+      this.errorChart = null
+      this.scatterChart = null
+      this.fleetBarChart = null
+    },
+    normalizeTypeName(str) {
+      return String(str || '').replace(/[\s_]/g, '').toLowerCase()
+    },
+    getSeries(apiData, names = []) {
+      const entries = Object.entries(apiData || {})
+      const targetNorms = names.map(this.normalizeTypeName)
+      const match = entries.find(([k]) => {
+        const nk = this.normalizeTypeName(k)
+        return targetNorms.some(t => nk.includes(t))
+      })
+      return match ? match[1] : []
+    },
+    alignedSeries(baseSeries, targetSeries, valueKey = 'power') {
+      const map = new Map((targetSeries || []).map(v => [new Date(v.timestamp).toISOString(), Number(v[valueKey])]))
+      return (baseSeries || []).map(v => {
+        const key = new Date(v.timestamp).toISOString()
+        const val = map.get(key)
+        return Number.isFinite(val) ? val : null
+      })
+    },
+    calcMetrics(actual, predicted) {
+      const pairs = []
+      actual.forEach((a, i) => {
+        const p = predicted[i]
+        if (Number.isFinite(a) && Number.isFinite(p)) pairs.push([a, p])
+      })
+      if (!pairs.length) return { mae: null, rmse: null, mse: null, acc: null, k: null, unqualifiedPoints: 0, pe: 0 }
+      const threshold = 0.2 * this.installedCapacity
+      const absErrors = pairs.map(([a, p]) => Math.abs(p - a))
+      const sqErrors = pairs.map(([a, p]) => (p - a) ** 2)
+      const mse = sqErrors.reduce((s, v) => s + v, 0) / pairs.length
+      const rmse = Math.sqrt(mse)
+      const mae = absErrors.reduce((s, v) => s + v, 0) / pairs.length
+      const acc = 1 - rmse / this.installedCapacity
+      const kArr = pairs.map(([a, p]) => ((p - a) / Math.max(Math.abs(a), threshold)) ** 2)
+      const k = 1 - Math.sqrt(kArr.reduce((s, v) => s + v, 0) / kArr.length)
+      const unqualifiedPoints = pairs.filter(([a, p]) => Math.abs(p - a) > threshold).length
+      const pe = acc < 0.83 ? (0.83 - acc) * this.installedCapacity : 0
+      return { mae, rmse, mse, acc, k, unqualifiedPoints, pe }
+    },
+    calcDailyStats(actualSeries, predSeries, qualifiedThreshold) {
+      const actualMap = new Map((actualSeries || []).map(v => [new Date(v.timestamp).toISOString(), Number(v.power)]))
+      const predMap = new Map((predSeries || []).map(v => [new Date(v.timestamp).toISOString(), Number(v.power)]))
+      const dayBucket = {}
+      Array.from(predMap.keys()).forEach((ts) => {
+        if (!actualMap.has(ts)) return
+        const d = ts.slice(0, 10)
+        if (!dayBucket[d]) dayBucket[d] = { actual: [], pred: [] }
+        const a = actualMap.get(ts)
+        const p = predMap.get(ts)
+        if (Number.isFinite(a) && Number.isFinite(p)) {
+          dayBucket[d].actual.push(a)
+          dayBucket[d].pred.push(p)
+        }
+      })
+      const days = Object.values(dayBucket).filter(v => v.actual.length > 0)
+      if (!days.length) return { avgAcc: null, qualifiedRate: null }
+      const metrics = days.map(d => this.calcMetrics(d.actual, d.pred))
+      const accs = metrics.map(m => m.acc).filter(Number.isFinite)
+      const avgAcc = accs.length ? (accs.reduce((s, v) => s + v, 0) / accs.length) * 100 : null
+      const qualified = metrics.filter(m => Number.isFinite(m.k) && m.k > qualifiedThreshold).length
+      return { avgAcc, qualifiedRate: (qualified / metrics.length) * 100 }
     },
     async fetchComparisonData() {
-      if (this.isProcessingChart) {
-        this.$message.warning('正在处理上一个请求，请稍候...');
-        return;
-      }
-      this.isProcessingChart = true;
-      this.loading = true;
-
       if (!this.timeRange || this.timeRange.length !== 2) {
-        this.$message.error('请选择完整的时间范围');
-        this.loading = false; // Release loading state
-        this.isProcessingChart = false; // Release lock
-        return;
+        this.$message.warning('请先选择完整时间范围')
+        return
       }
-
+      this.loading = true
       try {
-        const payload = {
-          start: this.timeRange[0],
-          end: this.timeRange[1],
-          types: this.selectedTypes,
-          farm_code: farmService.getCurrentFarm(),
-          ...(this.selectedTypes.includes('超短期预测') && { supershort_horizon: 'average' })
-        };
-
-        const response = await getPowerCompareData(payload);
-        await this.processChartData(response.data); 
-      } catch (error) {
-        this.$message.error('数据获取失败');
-        console.error(error);
-        this.chartData = null; 
+        if (this.analysisTab === 'single') {
+          await this.fetchSingleStationData()
+        } else {
+          await this.fetchFleetCompareData()
+        }
       } finally {
-        this.loading = false;
-        this.isProcessingChart = false; // Ensure lock is released in finally
+        this.loading = false
       }
     },
+    async fetchSingleStationData() {
+      const farmCode = this.singleFarmCode || farmService.getCurrentFarm()
+      if (!farmCode) {
+        this.$message.warning('请先选择场站')
+        return
+      }
+      farmService.setCurrentFarm(farmCode)
+      const payload = { start: this.timeRange[0], end: this.timeRange[1], types: this.selectedTypes, farm_code: farmCode, supershort_horizon: 'average' }
+      const response = await getPowerCompareData(payload)
+      const apiData = response?.data?.data || response?.data || {}
+      this.chartData = apiData
 
-    async processChartData(apiData) {
-      try {
-          console.log('ProcessChartData - 原始API数据:', apiData);
+      const actual = this.getSeries(apiData, ['实测值', 'actual'])
+      const supershort = this.getSeries(apiData, ['超短期预测', 'supershort'])
+      const short = this.getSeries(apiData, ['短期预测', 'short'])
+      const mid = this.getSeries(apiData, ['中期预测', 'mid'])
+      const shortWind = this.getSeries(apiData, ['短期风速预测', '短期风速', 'shortwindspeed'])
+      const midWind = this.getSeries(apiData, ['中期风速预测', '中期风速', 'midwindspeed'])
+      const capacitySeries = this.getSeries(apiData, ['可用容量', 'availablecapacity'])
+      const curtailmentSeries = this.getSeries(apiData, ['限电', 'curtail'])
+      const windDirectionSeries = this.getSeries(apiData, ['风向', 'winddirection'])
 
-          // 提前处理 apiData 为空或无效的情况
-          if (!apiData || (typeof apiData === 'object' && Object.keys(apiData).length === 0)) {
-              console.warn("ProcessChartData - apiData 无效或为空, 将清空图表并显示无数据提示。");
-              this.chartData = null; // 这将触发 v-if="!chartData" 显示"暂无数据"
-              if (this.chartInstance) {
-                  console.log('ProcessChartData - 销毁因空数据产生的旧主图表实例');
-                  this.chartInstance.destroy();
-                  this.chartInstance = null;
-              }
-              // 如果指标图表也依赖于此，也需要清空
-              if (this.showDailyMetricsAnalysis) {
-                  this.dailyMetrics = null; // 清空指标数据
-                  await this.$nextTick(); // 等待 DOM 更新（如果 metricChart 的 canvas 依赖 v-if）
-                  this.updateMetricChart(); // updateMetricChart 内部会处理 dailyMetrics 为 null 的情况
-              }
-              this.exportData.comparison = null;
-              this.exportData.metrics = null;
-              return; // 处理完毕，提前返回
-          }
+      const sortedActual = [...actual].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+      const labels = sortedActual.map(v => {
+        const d = new Date(v.timestamp)
+        return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+      })
+      const actualValues = sortedActual.map(v => Number(v.power))
+      const superValues = this.alignedSeries(sortedActual, supershort)
+      const shortValues = this.alignedSeries(sortedActual, short)
+      const midValues = this.alignedSeries(sortedActual, mid)
+      const shortWindValues = this.alignedSeries(sortedActual, shortWind, 'wind_speed')
+      const midWindValues = this.alignedSeries(sortedActual, midWind, 'wind_speed')
+      const windDirectionValues = this.alignedSeries(sortedActual, windDirectionSeries, 'wind_direction')
+      const capacityValuesRaw = this.alignedSeries(sortedActual, capacitySeries, 'available_capacity')
 
-          this.chartData = apiData; 
+      const installed = Math.max(this.installedCapacity, ...actualValues.filter(Number.isFinite), ...shortValues.filter(Number.isFinite), ...superValues.filter(Number.isFinite), ...capacityValuesRaw.filter(Number.isFinite), 0)
+      this.installedCapacity = installed > 0 ? Number((installed * 1.1).toFixed(2)) : this.installedCapacity
 
-          await this.$nextTick(); 
+      const capacityValues = capacityValuesRaw.some(Number.isFinite) ? capacityValuesRaw : labels.map(() => this.installedCapacity)
+      const curtailmentValues = this.alignedSeries(sortedActual, curtailmentSeries, 'value')
 
-          if (this.chartInstance) {
-            console.log('ProcessChartData - 销毁旧的主图表实例:', this.chartInstance.id);
-            this.chartInstance.destroy();
-            this.chartInstance = null;
-          }
+      const shortDaily = this.calcDailyStats(sortedActual, short, 0.6)
+      const superDaily = this.calcDailyStats(sortedActual, supershort, 0.65)
+      const shortMetrics = this.calcMetrics(actualValues, shortValues)
+      const superMetrics = this.calcMetrics(actualValues, superValues)
+      this.singleMetricsSummary = {
+        shortAcc: shortDaily.avgAcc,
+        shortQualifiedRate: shortDaily.qualifiedRate,
+        supershortAcc: superDaily.avgAcc,
+        supershortQualifiedRate: superDaily.qualifiedRate,
+        rmse: this.mean([shortMetrics.rmse, superMetrics.rmse]),
+        mae: this.mean([shortMetrics.mae, superMetrics.mae]),
+        unqualifiedPoints: (shortMetrics.unqualifiedPoints || 0) + (superMetrics.unqualifiedPoints || 0),
+        assessmentEnergy: (shortMetrics.pe || 0) + (superMetrics.pe || 0)
+      }
+      this.exportData.metrics = this.singleMetricsSummary
 
-          this.chartKey++;
-          console.log('ProcessChartData - chartKey incremented to:', this.chartKey);
-
-          await this.$nextTick(); 
-          console.log('ProcessChartData - $nextTick after incrementing chartKey');
-
-          const canvasEl = this.$refs.chartCanvas;
-          if (!canvasEl) {
-            console.error('ProcessChartData - 主图表 Canvas 元素 (this.$refs.chartCanvas) 未找到!');
-            return;
-          }
-          
-          const ctx = canvasEl.getContext('2d');
-          if (!ctx) {
-            console.error('ProcessChartData - 获取主图表 Canvas 的 2D 上下文失败!');
-            return;
-          }
-          
-          // ... (rest of the processChartData method, including calculateDailyMetrics, prepareChartJsDataForMainChart, new Chart, updateMetricChart call)
-          // The following is a placeholder for the rest of your processChartData, ensure the actual content is there.
-          console.log('ProcessChartData - 开始计算每日指标');
-          this.dailyMetrics = this.calculateDailyMetrics(apiData); 
-          console.log('ProcessChartData - 每日指标计算结果:', this.dailyMetrics);
-
-          const { labels, datasets: chartJSDatasets, sortedTimestamps } = this.prepareChartJsDataForMainChart(apiData);
-          console.log('ProcessChartData - 为主图表准备的 Labels:', labels);
-          console.log('ProcessChartData - 为主图表准备的 Datasets:', chartJSDatasets);
-
-          if (labels.length === 0 && chartJSDatasets.length === 0 && Object.keys(apiData).length > 0) {
-              console.warn("ProcessChartData - API有数据但处理后图表数据为空,检查prepareChartJsDataForMainChart逻辑");
-          }
-
-          try {
-        this.chartInstance = new Chart(ctx, {
-          type: 'line',
-          data: {
-                labels: labels,
-                datasets: chartJSDatasets
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                intersect: false,
-                mode: 'index',
-            },
-            plugins: {
-              legend: {
-                position: 'top',
-                labels: {
-                  padding: 20,
-                  font: { size: 13 },
-                  color: '#d9e9ff',
-                  usePointStyle: true,
-                  pointStyle: 'line'
-                }
-              },
-              tooltip: { 
-                backgroundColor: 'rgba(6, 18, 33, 0.95)',
-                borderColor: 'rgba(18, 215, 255, 0.4)',
-                borderWidth: 1,
-                titleColor: '#eaf4ff',
-                bodyColor: '#c5d9ee',
-                callbacks: {
-                    label: function(context) {
-                        let label = context.dataset.label || '';
-                        if (label) {
-                            label += ': ';
-                        }
-                        if (context.parsed.y !== null) {
-                            label += context.parsed.y.toFixed(2);
-                            if (context.dataset.yAxisID === YAXIS_POWER) {
-                                label += ' MW';
-                            } else if (context.dataset.yAxisID === YAXIS_WINDSPEED) {
-                                label += ' m/s'; 
-                            }
-                        }
-                        return label;
-                    }
-                }
-                  },
-                  zoom: { 
-                    pan: {
-                      enabled: true,
-                      mode: 'x',
-                      threshold: 5,
-                    },
-                    zoom: {
-                      wheel: {
-                        enabled: true,
-                      },
-                      pinch: {
-                        enabled: true
-                      },
-                      mode: 'x',
-                      drag: {
-                        enabled: true,
-                        backgroundColor: 'rgba(0,123,255,0.25)'
-                      }
-                    },
-                    limits: {
-                    },
-              }
-            },
-            scales: {
-              x: {
-                grid: { color: 'rgba(255,255,255,0.1)' },
-                ticks: { 
-                  color: '#9fb6cc',
-                  maxRotation: 45,
-                  minRotation: 45
-                }
-              },
-              [YAXIS_POWER]: { 
-                type: 'linear',
-                display: true,
-                position: 'left',
-                beginAtZero: true,
-                suggestedMax: this.wfcapacity * 1.1, 
-                title: {
-                  display: true,
-                  text: '功率 (MW)',
-                  color: '#9fb6cc'
-                },
-                grid: { color: 'rgba(255,255,255,0.1)' },
-                ticks: { color: '#9fb6cc' }
-              },
-              [YAXIS_WINDSPEED]: { 
-                type: 'linear',
-                    display: chartJSDatasets.some(ds => ds.yAxisID === YAXIS_WINDSPEED), 
-                position: 'right',
-                beginAtZero: true,
-                suggestedMax: 30, 
-                title: {
-                  display: true,
-                  text: '风速 (m/s)', 
-                  color: '#9fb6cc'
-                },
-                grid: { 
-                  drawOnChartArea: false, 
-                },
-                ticks: { color: '#9fb6cc' }
-              }
-            }
-          }
-            });
-            console.log('ProcessChartData - 新的主图表实例创建成功:', this.chartInstance.id);
-          } catch (e) {
-            console.error("ProcessChartData - 创建主图表实例时出错:", e);
-            return;
-          }
+      this.singleSeriesState = {
+        labels,
+        actualValues,
+        superValues,
+        shortValues,
+        midValues,
+        shortWindValues,
+        midWindValues,
+        windDirectionValues,
+        capacityValues,
+        curtailmentValues,
+        sortedActual
+      }
+      this.exportData.comparison = {
+        labels,
+        datasets: {
+          '实测值': actualValues,
+          '超短期预测': superValues,
+          '短期预测': shortValues,
+          '中期预测': midValues,
+          '短期风速': shortWindValues,
+          '中期风速': midWindValues,
+          '风向(°)': windDirectionValues,
+          '可用容量': capacityValues
+        }
+      }
 
       this.$nextTick(() => {
-            if (this.showDailyMetricsAnalysis && this.dailyMetrics) {
-              console.log('ProcessChartData - 调用 updateMetricChart');
-              this.updateMetricChart();
-            }
-          });
-
-          const exportComparisonDatasets = {};
-          chartJSDatasets.forEach(dataset => {
-              let cleanKey = dataset.label;
-              // 修改正则表达式来正确处理超短期预测的label格式
-              // 对于超短期预测，匹配到指标括号之前的内容（包含horizon信息）
-              const matchMetrics = dataset.label.match(/^(.*?)\s*\(\s*MAE\s*:/); 
-              if (matchMetrics && matchMetrics[1]) {
-                  cleanKey = matchMetrics[1].trim();
-              }
-              // 处理风速数据的右轴标记
-              if (dataset.yAxisID === YAXIS_WINDSPEED) {
-                  cleanKey = cleanKey.replace(' (右轴)', '').trim();
-              }
-              exportComparisonDatasets[cleanKey] = dataset.data;
-          });
-
-      this.exportData.comparison = {
-        labels: labels,
-        rawTimestamps: sortedTimestamps,
-            datasets: exportComparisonDatasets
-          };
-          this.exportData.metrics = this.dailyMetrics;
-          console.log('ProcessChartData - 导出数据已准备:', this.exportData);
-
-      } catch(e) {
-          console.error("Error in processChartData:", e);
-      } 
+        this.renderSingleCharts()
+      })
     },
+    buildCurtailmentMarkAreas(labels, curtailmentValues) {
+      if (!this.showCurtailmentTag || !Array.isArray(curtailmentValues) || !curtailmentValues.length) return []
+      const areas = []
+      let startIndex = null
+      curtailmentValues.forEach((v, i) => {
+        const isOn = Number(v) > 0
+        if (isOn && startIndex === null) startIndex = i
+        if (!isOn && startIndex !== null) {
+          areas.push([{ xAxis: labels[startIndex] }, { xAxis: labels[i - 1] }])
+          startIndex = null
+        }
+      })
+      if (startIndex !== null && labels.length) {
+        areas.push([{ xAxis: labels[startIndex] }, { xAxis: labels[labels.length - 1] }])
+      }
+      return areas
+    },
+    getMainSeriesFromState() {
+      const s = this.singleSeriesState
+      if (!s) return []
+      const series = []
+      const pushPower = (name, data, color) => {
+        series.push({ name, type: 'line', data, smooth: false, showSymbol: false, lineStyle: { width: 1.7, color }, itemStyle: { color }, yAxisIndex: YAXIS_POWER, connectNulls: true })
+      }
+      const pushWind = (name, data, color) => {
+        series.push({ name, type: 'line', data, smooth: true, showSymbol: false, lineStyle: { width: 1.4, color, type: 'dashed' }, itemStyle: { color }, yAxisIndex: YAXIS_WINDSPEED, connectNulls: true })
+      }
 
-    // 辅助方法：为主要对比图表准备 Chart.js 数据格式
-    prepareChartJsDataForMainChart(apiData) {
-      const datasets = [];
-      const powerColors = {
-        '实测值': '#FF6B6B',
-        '超短期预测': this.colors['超短期预测'], // 确保 this.colors 定义了这些
-        '短期预测': this.colors['短期预测'],
-        '中期预测': this.colors['中期预测']
-      };
-      const windSpeedColors = this.windSpeedColors; // 确保 this.windSpeedColors 定义了这些
+      if (this.selectedTypes.includes('实测值')) pushPower('实测值', s.actualValues, '#fb7185')
+      if (this.selectedTypes.includes('超短期预测')) pushPower('超短期预测', s.superValues, '#22d3ee')
+      if (this.selectedTypes.includes('短期预测')) pushPower('短期预测', s.shortValues, '#60a5fa')
+      if (this.selectedTypes.includes('中期预测')) pushPower('中期预测', s.midValues, '#4ade80')
+      if (this.selectedTypes.includes('短期风速预测')) pushWind('短期风速', s.shortWindValues, '#fbbf24')
+      if (this.selectedTypes.includes('中期风速预测')) pushWind('中期风速', s.midWindValues, '#c084fc')
+      if (this.showCapacityLine) pushPower('可用容量', s.capacityValues, '#f59e0b')
 
-      let timestamps = new Set();
-      if (apiData && typeof apiData === 'object' && Object.keys(apiData).length > 0) {
-        Object.values(apiData).forEach(seriesArray => {
-          if (Array.isArray(seriesArray)) {
-            seriesArray.forEach(v => {
-              if (v && v.timestamp) timestamps.add(v.timestamp);
-            });
-          }
-        });
+      const markAreas = this.buildCurtailmentMarkAreas(s.labels, s.curtailmentValues)
+      if (markAreas.length && series.length) {
+        series[0].markArea = {
+          silent: true,
+          itemStyle: { color: 'rgba(255, 99, 71, 0.12)' },
+          data: markAreas,
+          label: { show: true, color: '#ffd7cc', formatter: '限电时段' }
+        }
+      }
+      return series
+    },
+    renderSingleCharts() {
+      if (!this.singleSeriesState) return
+      if (this.singleViewTab === 'curve') {
+        this.renderMainChart()
+        this.renderErrorChart()
       } else {
-          console.warn("prepareChartJsDataForMainChart: apiData 无效或为空, 返回空图表数据");
-          return { labels: [], datasets: [], sortedTimestamps: [] };
+        this.renderScatterChart()
       }
-
-
-      const sortedTimestamps = Array.from(timestamps)
-        .map(ts => new Date(ts).getTime())
-        .sort((a, b) => a - b)
-        .map(ts => new Date(ts).toISOString());
-
-      const labels = sortedTimestamps.map(ts => {
-        const date = new Date(ts);
-        return `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${date.getMinutes().toString().padStart(2,'0')}`;
-      });
-
-      // --- 处理功率数据 ---
-      if (apiData['实测值'] && Array.isArray(apiData['实测值'])) {
-        const actualMap = new Map(apiData['实测值'].map(v => [
-          new Date(v.timestamp).toISOString(),
-          v.power
-        ]));
-        datasets.push({
-          label: '实测值',
-          data: sortedTimestamps.map(ts => actualMap.get(ts) === undefined ? null : actualMap.get(ts)),
-          borderColor: powerColors['实测值'],
-          backgroundColor: `${powerColors['实测值']}33`,
-          tension: 0.3,
-          pointRadius: 3,
-          spanGaps: true,
-          yAxisID: YAXIS_POWER
-        });
-      }
-
-      const predictionKeys = ['超短期预测', '短期预测', '中期预测'];
-      const selectedPredictionTypes = predictionKeys.filter(type => this.selectedTypes.includes(type) && apiData[type] && Array.isArray(apiData[type]));
-
-      selectedPredictionTypes.forEach(type => {
-        const predictedMap = new Map(apiData[type].map(v => [
-          new Date(v.timestamp).toISOString(),
-          v.power
-        ]));
-
-        let metricsTextLabel = type;
-        // 'average' 是默认的，但如果 selectedSupershortHorizon 可以是其他值，需要处理
-        const horizon = (type === '超短期预测' && this.selectedSupershortHorizon && this.selectedSupershortHorizon.length > 0)
-                            ? this.selectedSupershortHorizon.join(', ') : 'average';
-        if (type === '超短期预测') {
-            metricsTextLabel = `${type} (${horizon})`;
-        }
-
-        // 计算图例显示的整体指标，使用正确的按天K值计算方式
-        if (apiData['实测值'] && Array.isArray(apiData['实测值']) && apiData[type] && Array.isArray(apiData[type])) {
-          // 先计算该预测类型的每日指标（确保K值按天计算）
-          const tempDailyMetrics = this.calculateDailyMetricsForType(apiData, type);
-          
-          if (tempDailyMetrics && tempDailyMetrics.length > 0) {
-            // 计算所有天的指标平均值
-            const avgMAE = tempDailyMetrics.reduce((sum, day) => sum + day.mae, 0) / tempDailyMetrics.length;
-            const avgRMSE = tempDailyMetrics.reduce((sum, day) => sum + day.rmse, 0) / tempDailyMetrics.length;
-            const avgACC = tempDailyMetrics.reduce((sum, day) => sum + day.acc, 0) / tempDailyMetrics.length;
-            const avgK = tempDailyMetrics.reduce((sum, day) => sum + day.k, 0) / tempDailyMetrics.length;
-            const avgPe = tempDailyMetrics.reduce((sum, day) => sum + day.pe, 0) / tempDailyMetrics.length;
-            
-            metricsTextLabel = `${metricsTextLabel} (MAE: ${avgMAE.toFixed(1)} | RMSE: ${avgRMSE.toFixed(1)} | ACC: ${(avgACC * 100).toFixed(1)}% | K: ${this.formatKValue(avgK)} | Pe: ${avgPe.toFixed(1)})`;
-          } else {
-            console.warn(`prepareChartJsDataForMainChart: 类型 ${type} 无法计算每日指标`);
-          }
-        }
-        
-        datasets.push({
-          label: metricsTextLabel,
-          data: sortedTimestamps.map(ts => predictedMap.get(ts) === undefined ? null : predictedMap.get(ts)),
-          borderColor: powerColors[type],
-          backgroundColor: `${powerColors[type]}33`,
-          tension: 0.3,
-          pointRadius: 3,
-          spanGaps: true,
-          yAxisID: YAXIS_POWER
-        });
-      });
-
-      // --- 处理风速数据 ---
-      // 你的 selectedTypes 包含 "短期风速预测", "中期风速预测"
-      // 但 apiData 的 key 可能是 "短期风速", "中期风速"
-      const windSpeedApiKeys = {
-          '短期风速预测': '短期风速',
-          '中期风速预测': '中期风速'
-      };
-      const selectedWindSpeedTypes = Object.keys(windSpeedApiKeys)
-                                      .filter(type => this.selectedTypes.includes(type) && apiData[windSpeedApiKeys[type]] && Array.isArray(apiData[windSpeedApiKeys[type]]));
-
-      selectedWindSpeedTypes.forEach(selectedTypeKey => { // e.g., "短期风速预测"
-        const apiKey = windSpeedApiKeys[selectedTypeKey]; // e.g., "短期风速"
-        const wsMap = new Map(apiData[apiKey].map(v => [
-            new Date(v.timestamp).toISOString(),
-            v.wind_speed
-        ]));
-        datasets.push({
-            label: `${apiKey} (右轴)`, // 使用 apiKey "短期风速" 作为图例标签基础
-            data: sortedTimestamps.map(ts => wsMap.get(ts) === undefined ? null : wsMap.get(ts)),
-            borderColor: windSpeedColors[apiKey], // 使用 apiKey "短期风速"
-            backgroundColor: `${windSpeedColors[apiKey]}33`,
-            tension: 0.4,
-            pointRadius: 2,
-            borderDash: [5, 5],
-            spanGaps: true,
-            yAxisID: YAXIS_WINDSPEED
-        });
-      });
-      
-      return { labels, datasets, sortedTimestamps };
     },
+    renderMainChart() {
+      const state = this.singleSeriesState
+      if (!state || !this.$refs.mainChartEl) return
+      if (!this.mainChart) this.mainChart = echarts.init(this.$refs.mainChartEl)
+      const series = this.getMainSeriesFromState()
 
-    calculateMetrics(actual, predicted) {
-      const threshold = 0.2 * this.wfcapacity
-      
-      // 过滤掉实测值为null的数据点
-      const validIndices = actual.map((val, idx) => val !== null ? idx : null).filter(idx => idx !== null)
-      const filteredActual = validIndices.map(idx => actual[idx])
-      const filteredPredicted = validIndices.map(idx => predicted[idx])
-      
-      // 如果没有有效数据点，返回默认值
-      if (filteredActual.length === 0) {
-        return { mae: 0, mse: 0, rmse: 0, acc: 0, k: 0, pe: 0 }
-      }
-      
-      const mae = filteredPredicted.reduce((sum, p, i) => sum + Math.abs(p - filteredActual[i]), 0) / filteredPredicted.length
-      
-      const mse = filteredPredicted.reduce((sum, p, i) => sum + Math.pow(p - filteredActual[i], 2), 0) / filteredPredicted.length
-      const rmse = Math.sqrt(mse)
-      
-      const acc = 1 - rmse / this.wfcapacity
-      
-      const pe = acc < 0.83 ? (0.83 - acc) * this.wfcapacity : 0
-      
-      // 修正K值计算：使用实际值的绝对值作为分母的基础
-      const m_values = filteredPredicted.map((p, i) => {
-        const actualVal = Math.max(Math.abs(filteredActual[i]), threshold)
-        return Math.pow((p - filteredActual[i]) / actualVal, 2)
-      })
-      const k = m_values.length > 0 ? 1 - Math.sqrt(m_values.reduce((sum, v) => sum + v, 0) / m_values.length) : 0
-      
-      return { mae, mse, rmse, acc, k, pe }
-    },
-
-    calculateDailyMetrics(data) {
-      console.log('计算每日指标的输入数据:', data)
-      if (!data['实测值']) {
-        console.warn('没有实测值数据，无法计算评估指标')
-        return null
-      }
-
-      const dailyMetrics = {}
-      const predictionTypes = this.selectedTypes.filter(type => 
-        type !== '实测值' && data[type]
-      )
-      console.log('预测类型:', predictionTypes)
-
-      predictionTypes.forEach(type => {
-        dailyMetrics[type] = this.calculateDailyMetricsForType(data, type)
-      })
-
-      this.calculateQualificationRates(dailyMetrics)
-
-      return dailyMetrics
-    },
-
-    calculateDailyMetricsForType(data, type) {
-      console.log(`处理预测类型: ${type}`)
-      const metricsByDay = {}
-      
-      data[type].forEach(pred => {
-        const dateObj = new Date(pred.timestamp)
-        const date = `${dateObj.getFullYear()}-${(dateObj.getMonth()+1).toString().padStart(2,'0')}-${dateObj.getDate().toString().padStart(2,'0')}`
-        
-        if (!metricsByDay[date]) {
-          metricsByDay[date] = {
-            predicted: [],
-            actual: []
-          }
-        }
-
-        const actualPoint = data['实测值'].find(
-          act => new Date(act.timestamp).getTime() === new Date(pred.timestamp).getTime()
-        )
-        // 即使实测值可能为null，也收集这个数据点
-        if (actualPoint) {
-          metricsByDay[date].predicted.push(pred.power)
-          metricsByDay[date].actual.push(actualPoint.power)
-        }
-      })
-
-      console.log(`${type} 的每日数据:`, metricsByDay)
-
-      // 收集所有日期，以确保日期连续性
-      const allDates = Object.keys(metricsByDay).sort()
-      
-      return allDates
-        .filter(dateStr => {
-          const date = new Date(dateStr)
-          const startDate = new Date(this.timeRange[0])
-          const endDate = new Date(this.timeRange[1])
-          return date >= startDate && date <= endDate
-        })
-        .filter(dateStr => {
-          // 确保至少有一些预测数据点
-          return metricsByDay[dateStr].predicted.length > 0
-        })
-        .map(date => {
-          const dayData = metricsByDay[date]
-          // 计算指标 - calculateMetrics会自动过滤掉actual为null的点
-          const metrics = this.calculateMetrics(dayData.actual, dayData.predicted)
-          const threshold = this.qualifiedThresholds[type] || 0
-          const isQualified = metrics.k > threshold
-          
-          // 记录有效数据点的百分比
-          const totalPoints = dayData.actual.length
-          const validPoints = dayData.actual.filter(val => val !== null).length
-          const validDataPercentage = totalPoints > 0 ? (validPoints / totalPoints) * 100 : 0
-          
-          return { 
-            date, 
-            ...metrics, 
-            isQualified,
-            totalPoints,
-            validPoints,
-            validDataPercentage
-          }
-        })
-        .sort((a, b) => new Date(a.date) - new Date(b.date))
-    },
-
-    calculateQualificationRates(dailyMetrics) {
-      const qualificationRates = {}
-      
-      Object.entries(dailyMetrics).forEach(([type, metrics]) => {
-        const qualifiedDays = metrics.filter(day => day.isQualified)
-        const rate = metrics.length > 0 ? (qualifiedDays.length / metrics.length) * 100 : 0
-        qualificationRates[type] = {
-          totalDays: metrics.length,
-          qualifiedDays: qualifiedDays.length,
-          rate: rate,
-          threshold: this.qualifiedThresholds[type]
-        }
-      })
-      
-      this.qualificationRates = qualificationRates
-    },
-
-    updateMetricChart() {
-        console.log('开始更新指标图表');
-        
-        // 防止同时多次更新
-        if (this.isUpdatingMetricChart) {
-            console.log('已有更新操作正在进行，忽略此次调用');
-            return;
-        }
-        
-        this.isUpdatingMetricChart = true;
-        
-        // 销毁旧图表
-        if (this.metricChart) {
-            try {
-                this.metricChart.destroy();
-            } catch (error) {
-                console.warn('销毁旧图表实例时出错:', error);
-            }
-            this.metricChart = null;
-        }
-
-        // 获取Canvas元素
-        this.$nextTick(() => {
-            try {
-                const canvas = this.$refs.metricChart;
-                if (!canvas) {
-                    console.error('指标图表Canvas元素未找到');
-                    this.isUpdatingMetricChart = false;
-                    return;
-                }
-
-                // 检查数据有效性
-                if (!this.dailyMetrics || Object.keys(this.dailyMetrics).length === 0) {
-                    const ctx = canvas.getContext('2d');
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    ctx.font = "16px Arial";
-                    ctx.fillStyle = "#888";
-                    ctx.textAlign = "center";
-                    ctx.fillText("暂无指标数据", canvas.width / 2, canvas.height / 2);
-                    this.isUpdatingMetricChart = false;
-                    return;
-                }
-
-                // 准备图表数据
-                const { labels, datasets } = this.prepareMetricChartData();
-                
-                // 如果没有有效数据，显示提示
-                if (!labels.length || !datasets.length) {
-                    const ctx = canvas.getContext('2d');
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    ctx.font = "16px Arial";
-                    ctx.fillStyle = "#888";
-                    ctx.textAlign = "center";
-                    ctx.fillText("所选指标无数据", canvas.width / 2, canvas.height / 2);
-                    this.isUpdatingMetricChart = false;
-                    return;
-                }
-
-                // 指标配置
-                const metricConfig = {
-                    acc: { label: '准确率 ACC (%)', min: 0, max: 100 },
-                    mae: { label: '平均绝对误差 MAE (MW)', min: 0 },
-                    mse: { label: '均方误差 MSE (MW²)', min: 0 },
-                    rmse: { label: '均方根误差 RMSE (MW)', min: 0 },
-                    k: { label: 'K值', min: -1, max: 1 },
-                    pe: { label: '平均误差 Pe (MW)', min: 0 }
-                }[this.currentMetric];
-
-                // 合格线插件
-                const qualificationLinePlugin = {
-                    id: 'qualificationLine',
-                    beforeDraw: (chart) => {
-                        if (this.currentMetric === 'k') {
-                            const ctx = chart.ctx;
-                            const yAxis = chart.scales.y;
-                            const chartArea = chart.chartArea;
-
-                            Object.entries(this.qualifiedThresholds).forEach(([type, threshold]) => {
-                                if (this.selectedTypes.includes(type)) {
-                                    const y = yAxis.getPixelForValue(threshold);
-                                    ctx.save();
-                                    ctx.beginPath();
-                                    ctx.moveTo(chartArea.left, y);
-                                    ctx.lineTo(chartArea.right, y);
-                                    ctx.lineWidth = 1;
-                                    ctx.strokeStyle = `${this.colors[type]}99`;
-                                    ctx.setLineDash([5, 5]);
-                                    ctx.stroke();
-                                    
-                                    ctx.textAlign = 'left';
-                                    ctx.textBaseline = 'bottom';
-                                    ctx.fillStyle = this.colors[type];
-                                    ctx.font = '12px Arial';
-                                    ctx.fillText(`${type}合格线: K > ${threshold}`, chartArea.left + 10, y - 2);
-                                    ctx.restore();
-                                }
-                            });
-                        }
-                    }
-                };
-
-                // 创建图表
-                try {
-                    this.metricChart = new Chart(canvas.getContext('2d'), {
-                        type: 'line',
-                        data: {
-                            labels: labels,
-                            datasets: datasets
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: {
-                                    position: 'top',
-                                    labels: { font: { size: 13 }, color: '#d9e9ff' }
-                                },
-                                title: {
-                                    display: true,
-                                    text: metricConfig.label,
-                                    color: '#eaf4ff',
-                                    font: { size: 16 },
-                                    padding: 20
-                                },
-                                tooltip: {
-                                    backgroundColor: 'rgba(6, 18, 33, 0.95)',
-                                    borderColor: 'rgba(18, 215, 255, 0.4)',
-                                    borderWidth: 1,
-                                    titleColor: '#eaf4ff',
-                                    bodyColor: '#c5d9ee',
-                                    callbacks: {
-                                        label: (context) => {
-                                            let label = context.dataset.label.split(' (')[0] + ': ';
-                                            if (context.parsed.y !== null) {
-                                                // 判断当前指标类型并使用相应的格式化方法
-                                                if (this.currentMetric === 'k') {
-                                                    label += this.formatKValue(context.parsed.y);
-                                                } else {
-                                                    label += context.parsed.y.toFixed(2);
-                                                    if (context.chart.options.plugins.title.text.includes('%')) {
-                                                        label += '%';
-                                                    } else if (context.chart.options.plugins.title.text.includes('MW')) {
-                                                        label += ' MW';
-                                                    }
-                                                }
-                                            }
-                                            return label;
-                                        }
-                                    }
-                                }
-                            },
-                            scales: {
-                                x: {
-                                    display: true,
-                                    grid: { color: 'rgba(200,200,200,0.1)' },
-                                    ticks: { 
-                                        color: '#9fb6cc',
-                                        maxRotation: 45,
-                                        minRotation: 45
-                                    }
-                                },
-                                y: {
-                                    display: true,
-                                    beginAtZero: true,
-                                    min: metricConfig.min,
-                                    max: metricConfig.max,
-                                    grid: { color: 'rgba(200,200,200,0.1)' },
-                                    ticks: {
-                                        color: '#9fb6cc',
-                                        callback: (value) => {
-                                            switch (this.currentMetric) {
-                                                case 'acc': return value.toFixed(1) + '%';
-                                                case 'mse': return value.toFixed(1) + ' MW²';
-                                                case 'k': return this.formatKValue(value);
-                                                default: return value.toFixed(1) + ' MW';
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                        plugins: [qualificationLinePlugin]
-                    });
-                    
-                    console.log('指标图表创建成功');
-                } catch (error) {
-                    console.error('创建指标图表时出错:', error);
-                } finally {
-                    this.isUpdatingMetricChart = false;
-                }
-            } catch (error) {
-                console.error('绘制图表过程中发生错误:', error);
-                this.isUpdatingMetricChart = false;
-            }
-        });
-    },
-
-    prepareMetricChartData() {
-        // 直接使用与指标下载相同的数据源
-        if (!this.exportData.metrics) {
-            console.warn('没有可用于图表的指标数据');
-            return { labels: [], datasets: [] };
-        }
-
-        const metrics = this.exportData.metrics;
-        const predictionTypes = Object.keys(metrics).filter(type => 
-            this.selectedTypes.includes(type) && type !== '实测值'
-        );
-
-        if (predictionTypes.length === 0) {
-            console.warn('没有选中的预测类型');
-            return { labels: [], datasets: [] };
-        }
-
-        // 收集所有唯一日期并排序
-        const allDates = new Set();
-        predictionTypes.forEach(type => {
-            metrics[type].forEach(day => {
-                allDates.add(day.date);
-            });
-        });
-        const sortedDates = Array.from(allDates).sort();
-
-        // 创建日期标签
-        const dateLabels = sortedDates.map(date => {
-            const dateObj = new Date(date);
-            return `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
-        });
-
-        console.log('图表日期标签:', dateLabels, '原始日期:', sortedDates);
-
-        // 创建数据集
-        const datasets = [];
-
-        // 为每个预测类型创建一个数据集
-        predictionTypes.forEach(type => {
-            // 创建一个日期到指标值的映射
-            const dateToMetric = {};
-            metrics[type].forEach(day => {
-                dateToMetric[day.date] = day;
-            });
-
-            // 为所有日期创建数据点
-            const dataPoints = sortedDates.map(date => {
-                const day = dateToMetric[date];
-                if (!day) return null;
-
-                // 获取当前选择的指标值
-                let value = day[this.currentMetric];
-                if (this.currentMetric === 'acc') {
-                    value = value * 100; // 转换为百分比
-                }
-                return value;
-            });
-
-            // 计算平均值 (排除null值)
-            const validValues = dataPoints.filter(v => v !== null && !isNaN(v));
-            const avg = validValues.length > 0 ? 
-                validValues.reduce((sum, val) => sum + val, 0) / validValues.length : 0;
-            
-            // 创建数据集
-            const avgFormatted = this.currentMetric === 'k' ? this.formatKValue(avg) : avg.toFixed(2);
-            datasets.push({
-                label: `${type} (平均: ${avgFormatted}${this.currentMetric === 'acc' ? '%' : ''})`,
-                data: dataPoints,
-                borderColor: this.colors[type],
-                backgroundColor: `${this.colors[type]}33`,
-                tension: 0.3,
-                borderWidth: 2,
-                pointRadius: 4,
-                pointHoverRadius: 6,
-                spanGaps: true
-            });
-
-            console.log(`预测类型: ${type}, 指标: ${this.currentMetric}`, {
-                日期: dateLabels,
-                数据: dataPoints,
-                平均值: avg
-            });
-        });
-
-        return { labels: dateLabels, datasets };
-    },
-    
-    // 辅助函数：将十六进制颜色转为RGB格式
-    hexToRgb(hex) {
-        // 去掉可能的#前缀
-        hex = hex.replace(/^#/, '');
-        
-        // 解析颜色
-        let bigint = parseInt(hex, 16);
-        let r = (bigint >> 16) & 255;
-        let g = (bigint >> 8) & 255;
-        let b = bigint & 255;
-        
-        return `${r}, ${g}, ${b}`;
-    },
-    
-    // ... other methods like generateComparisonCSV, downloadMetricsCSV, downloadSVG, downloadMetricSVG, getQualificationColor, setQuickTimeRange etc.
-    // Ensure they are still present
-    generateComparisonCSV() {
-        if (!this.exportData.comparison || 
-            !this.exportData.comparison.rawTimestamps || 
-            !this.exportData.comparison.datasets) {
-            this.$message.warning('导出数据尚未准备好')
-            return ''
-        }
-
-        const headers = ['时间戳'];
-        const dataKeys = []; 
-
-        if (this.selectedTypes.includes('实测值') && this.exportData.comparison.datasets['实测值']) {
-            headers.push('实测值(MW)');
-            dataKeys.push('实测值');
-        }
-        
-        const selectedPowerPredictionTypes = (this.selectedTypes || [])
-            .filter(type => { 
-                if (type === '实测值' || type.includes('风速')) return false;
-                
-                let keyToFindPrefix = type; 
-                if (type === '超短期预测' && this.selectedSupershortHorizon.length > 0) {
-                    keyToFindPrefix = `${type} (${this.selectedSupershortHorizon.join(', ')})`; 
-                }
-                return Object.keys(this.exportData.comparison.datasets).some(exportKey => exportKey.startsWith(keyToFindPrefix));
-            });
-
-        selectedPowerPredictionTypes.forEach(type => { 
-            let csvHeaderName = type; 
-            if (type === '超短期预测' && this.selectedSupershortHorizon.length > 0) {
-                csvHeaderName = `${type} (${this.selectedSupershortHorizon.join(', ')})`; 
-            }
-            headers.push(`${csvHeaderName}(MW)`); 
-
-            const actualDatasetKey = Object.keys(this.exportData.comparison.datasets)
-                                       .find(k => k.startsWith(csvHeaderName)); 
-            if (actualDatasetKey) {
-                dataKeys.push(actualDatasetKey);
-            } else {
-                console.warn(`CSV Export: Could not find dataset key for power type: ${csvHeaderName}`);
-                dataKeys.push(csvHeaderName); 
-            }
-        });
-
-        const selectedWindSpeedTypes = (this.selectedTypes || [])
-            .filter(type => { 
-                if (!type.includes('风速预测')) return false;
-                const keyToFind = type.replace('预测', ''); 
-                return !!this.exportData.comparison.datasets[keyToFind];
-            });
-
-        selectedWindSpeedTypes.forEach(type => { 
-            const csvHeaderName = type.replace('预测', ''); 
-            headers.push(`${csvHeaderName}(m/s)`); 
-            dataKeys.push(csvHeaderName); 
-        });
-
-        const dataRows = this.exportData.comparison.rawTimestamps.map((ts, index) => {
-            const date = new Date(ts);
-            const beijingDate = new Date(date.getTime() + 8 * 60 * 60 * 1000);
-            const formattedDate = 
-                `${beijingDate.getUTCFullYear()}-` +
-                `${(beijingDate.getUTCMonth() + 1).toString().padStart(2, '0')}-` +
-                `${beijingDate.getUTCDate().toString().padStart(2, '0')} ` +
-                `${beijingDate.getUTCHours().toString().padStart(2, '0')}:` +
-                `${beijingDate.getUTCMinutes().toString().padStart(2, '0')}:` +
-                `${beijingDate.getUTCSeconds().toString().padStart(2, '0')}`;
-
-            const row = [formattedDate];
-            dataKeys.forEach(key => { 
-                const dataSet = this.exportData.comparison.datasets[key] || [];
-                const value = dataSet[index];
-                row.push(value !== undefined && value !== null ? Number(value).toFixed(2) : '');
-            });
-            return row;
-        });
-
-        const csvData = [
-            headers,
-            ...dataRows,
-        ];
-
-        return csvData
-            .filter(row => Array.isArray(row))
-            .map(row => {
-                const processedRow = row.map(cell => {
-                    if (Array.isArray(cell)) return cell.join(',');
-                    return typeof cell === 'string' ? cell : String(cell);
-                });
-                return processedRow.join(',');
+      this.mainChart.setOption({
+        backgroundColor: 'transparent',
+        grid: { left: 54, right: 54, top: 36, bottom: 78 },
+        legend: { top: 4, textStyle: { color: '#d9e9ff' } },
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { type: 'cross' },
+          formatter: (params) => {
+            const idx = params?.[0]?.dataIndex ?? 0
+            const actual = state.actualValues[idx]
+            const lines = [`时间: ${state.labels[idx] || '--'}`]
+            params.forEach((p) => {
+              const unit = p.seriesName.includes('风速') ? 'm/s' : 'MW'
+              const val = Number.isFinite(p.data) ? Number(p.data).toFixed(2) : '--'
+              lines.push(`${p.marker}${p.seriesName}: ${val}${Number.isFinite(p.data) ? unit : ''}`)
+              if (Number.isFinite(actual) && (p.seriesName === '短期预测' || p.seriesName === '超短期预测') && Number.isFinite(p.data)) {
+                const dev = ((Number(p.data) - actual) / Math.max(Math.abs(actual), 1e-6)) * 100
+                lines.push(`${p.seriesName}瞬时误差率: ${dev >= 0 ? '+' : ''}${dev.toFixed(1)}%${Math.abs(dev) > 20 ? ' ⚠️' : ''}`)
+              }
             })
-            .join('\n');
+            const windDirection = state.windDirectionValues[idx]
+            if (Number.isFinite(windDirection)) lines.push(`风向: ${windDirection.toFixed(0)}° ${this.getWindDirectionArrow(windDirection)}`)
+            return lines.join('<br/>')
+          }
+        },
+        xAxis: { type: 'category', data: state.labels, axisLabel: { color: '#9fb6cc' }, axisLine: { lineStyle: { color: '#6b8aa3' } } },
+        yAxis: [
+          { type: 'value', name: '功率(MW)', axisLabel: { color: '#9fb6cc' }, nameTextStyle: { color: '#9fb6cc' }, splitLine: { lineStyle: { color: 'rgba(159, 182, 204, 0.12)' } } },
+          { type: 'value', name: '风速(m/s)', axisLabel: { color: '#9fb6cc' }, nameTextStyle: { color: '#9fb6cc' }, splitLine: { show: false } }
+        ],
+        dataZoom: [
+          { type: 'inside', xAxisIndex: [0], filterMode: 'none' },
+          { type: 'slider', xAxisIndex: [0], bottom: 22, height: 18, borderColor: '#37536b', fillerColor: 'rgba(74, 222, 128, 0.2)', textStyle: { color: '#9fb6cc' } }
+        ],
+        series
+      }, true)
     },
-    // 将这个方法添加到你的 export default { ... methods: { ... } } 中
-    downloadCSV() {
-      const csvString = this.generateComparisonCSV(); // 这个方法你需要确保也存在且工作正常
-      // 清晰地打印返回的字符串，便于调试
-      console.log('--- BEGIN GENERATED CSV STRING ---');
-      console.log(csvString);
-      console.log('--- END GENERATED CSV STRING ---');
+    renderErrorChart() {
+      const state = this.singleSeriesState
+      if (!state || !this.$refs.errorChartEl) return
+      if (!this.errorChart) this.errorChart = echarts.init(this.$refs.errorChartEl)
+      const toErr = (arr) => arr.map((v, i) => (Number.isFinite(v) && Number.isFinite(state.actualValues[i]) ? Number(v) - Number(state.actualValues[i]) : null))
+      const shortErr = toErr(state.shortValues)
+      const superErr = toErr(state.superValues)
 
-      if (!csvString) { 
-        // generateComparisonCSV 内部通常已经有 $message.warning 了，
-        // 这里可以不再重复提示或保留一个通用提示。
-        // 例如: this.$message.info('未能生成CSV文件内容或内容为空。');
-        return;
-      }
-
-      // BOM 头，确保 Excel 能正确识别 UTF-8 编码的 CSV
-      const blob = new Blob(["\ufeff" + csvString], { type: 'text/csv;charset=utf-8' });
-      const link = document.createElement('a');
-
-      if (link.download !== undefined) { // 检查浏览器是否支持 download 属性
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        // 文件名可以根据需要调整
-        link.setAttribute('download', `功率对比数据_${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }).replace(/[/\s:]/g, '-')}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url); // 及时释放
-      } else {
-        // 对于不支持 download 属性的旧浏览器 (例如 IE)
-        // 你可能需要一个不同的策略，或者提示用户手动复制数据
-        this.$message.error('您的浏览器不支持自动下载，请尝试更新浏览器或手动复制数据。');
-        // navigator.msSaveBlob(blob, filename); // IE10+ 的特定方法
-      }
+      this.errorChart.setOption({
+        backgroundColor: 'transparent',
+        grid: { left: 54, right: 26, top: 30, bottom: 64 },
+        legend: { top: 4, textStyle: { color: '#d9e9ff' } },
+        tooltip: { trigger: 'axis' },
+        xAxis: { type: 'category', data: state.labels, axisLabel: { color: '#9fb6cc' }, axisLine: { lineStyle: { color: '#6b8aa3' } } },
+        yAxis: { type: 'value', name: '误差(MW)', axisLabel: { color: '#9fb6cc' }, nameTextStyle: { color: '#9fb6cc' }, splitLine: { lineStyle: { color: 'rgba(159, 182, 204, 0.12)' } } },
+        dataZoom: [
+          { type: 'inside', xAxisIndex: [0], filterMode: 'none' },
+          { type: 'slider', xAxisIndex: [0], bottom: 12, height: 18, borderColor: '#37536b', fillerColor: 'rgba(96, 165, 250, 0.2)', textStyle: { color: '#9fb6cc' } }
+        ],
+        series: [
+          { name: '短期误差', type: 'bar', data: shortErr, itemStyle: { color: 'rgba(96, 165, 250, 0.7)' } },
+          { name: '超短期误差', type: 'line', data: superErr, smooth: true, showSymbol: false, lineStyle: { color: '#22d3ee', width: 1.6 } },
+          { name: '0轴', type: 'line', data: state.labels.map(() => 0), showSymbol: false, lineStyle: { color: '#f1f5f9', type: 'dashed' } }
+        ]
+      }, true)
     },
-    downloadMetricsCSV() {
-      if (!this.exportData.metrics) {
-        this.$message.warning('暂无可导出的指标数据')
-        return
-      }
-
-      const headers = ['日期', '预测类型', 'ACC(%)', 'MAE(MW)', 'MSE(MW²)', 'RMSE(MW)', 'K值', 'Pe(MW)', 
-                      '合格标准', '是否合格', '总数据点', '有效数据点', '有效数据百分比(%)']
-      const rows = []
-      
-      Object.entries(this.exportData.metrics).forEach(([type, days]) => {
-        const threshold = this.qualifiedThresholds[type] || 0
-        days.forEach(day => {
-          rows.push([
-            day.date,
-            type,
-            (day.acc * 100).toFixed(2),
-            day.mae.toFixed(2),
-            day.mse.toFixed(2),
-            day.rmse.toFixed(2),
-            this.formatKValue(day.k),
-            day.pe.toFixed(2),
-            `K值 > ${threshold}`,
-            day.isQualified ? '是' : '否',
-            day.totalPoints || '未知',
-            day.validPoints || '未知',
-            day.validDataPercentage ? day.validDataPercentage.toFixed(1) : '100.0'
-          ])
-        })
+    renderScatterChart() {
+      const state = this.singleSeriesState
+      if (!state || !this.$refs.scatterChartEl) return
+      if (!this.scatterChart) this.scatterChart = echarts.init(this.$refs.scatterChartEl)
+      const points = []
+      state.sortedActual.forEach((_, i) => {
+        const ws = Number.isFinite(state.shortWindValues[i]) ? state.shortWindValues[i] : state.midWindValues[i]
+        const power = state.actualValues[i]
+        if (Number.isFinite(ws) && Number.isFinite(power)) points.push([ws, power])
       })
 
-      if (this.qualificationRates) {
-        rows.push([])
-        rows.push(['合格率汇总'])
-        rows.push(['预测类型', '合格标准', '合格天数', '总天数', '合格率(%)'])
-        
-        Object.entries(this.qualificationRates).forEach(([type, data]) => {
-          rows.push([
-            type,
-            `K值 > ${data.threshold}`,
-            data.qualifiedDays,
-            data.totalDays,
-            data.rate.toFixed(1)
-          ])
+      this.scatterChart.setOption({
+        backgroundColor: 'transparent',
+        grid: { left: 54, right: 24, top: 30, bottom: 42 },
+        tooltip: { trigger: 'item', formatter: (p) => `风速: ${Number(p.value[0]).toFixed(2)} m/s<br/>功率: ${Number(p.value[1]).toFixed(2)} MW` },
+        xAxis: { type: 'value', name: '实测风速(m/s)', axisLabel: { color: '#9fb6cc' }, nameTextStyle: { color: '#9fb6cc' }, splitLine: { lineStyle: { color: 'rgba(159, 182, 204, 0.12)' } } },
+        yAxis: { type: 'value', name: '实测功率(MW)', axisLabel: { color: '#9fb6cc' }, nameTextStyle: { color: '#9fb6cc' }, splitLine: { lineStyle: { color: 'rgba(159, 182, 204, 0.12)' } } },
+        series: [{ name: '实测风速-实测功率', type: 'scatter', symbolSize: 6, data: points, itemStyle: { color: 'rgba(45, 212, 191, 0.55)' } }]
+      }, true)
+    },
+    async fetchFleetCompareData() {
+      const farmCodes = Array.isArray(this.fleetCompareFarmCodes) ? this.fleetCompareFarmCodes.filter(Boolean) : []
+      if (!farmCodes.length) {
+        this.$message.warning('请至少选择一个场站')
+        return
+      }
+      const [shortResp, superResp] = await Promise.all([
+        getFleetMetrics({ start: this.timeRange[0], end: this.timeRange[1], farm_codes: farmCodes, prediction_type: 'short' }),
+        getFleetMetrics({ start: this.timeRange[0], end: this.timeRange[1], farm_codes: farmCodes, prediction_type: 'supershort' })
+      ])
+      const shortItems = shortResp?.data?.data?.items || []
+      const superItems = superResp?.data?.data?.items || []
+      const map = new Map()
+      shortItems.forEach((item) => {
+        map.set(item.farm_code, {
+          farm_code: item.farm_code,
+          farm_name: item.farm_name || item.farm_code,
+          short_acc: Number.isFinite(item.rmse) ? Math.max(0, 100 * (1 - item.rmse / this.installedCapacity)) : null,
+          short_qualified_rate: Number.isFinite(item.rmse) ? (item.rmse / this.installedCapacity <= 0.2 ? 100 : 0) : null,
+          supershort_acc: null,
+          supershort_qualified_rate: null,
+          rmse_avg: item.rmse,
+          mae_avg: item.mae,
+          unqualified_points: Number.isFinite(item.points) && Number.isFinite(item.rmse) && item.rmse / this.installedCapacity > 0.2 ? item.points : 0
         })
+      })
+      superItems.forEach((item) => {
+        const cur = map.get(item.farm_code)
+        if (!cur) return
+        cur.supershort_acc = Number.isFinite(item.rmse) ? Math.max(0, 100 * (1 - item.rmse / this.installedCapacity)) : null
+        cur.supershort_qualified_rate = Number.isFinite(item.rmse) ? (item.rmse / this.installedCapacity <= 0.2 ? 100 : 0) : null
+        cur.rmse_avg = this.mean([cur.rmse_avg, item.rmse])
+        cur.mae_avg = this.mean([cur.mae_avg, item.mae])
+        cur.unqualified_points += Number.isFinite(item.points) && Number.isFinite(item.rmse) && item.rmse / this.installedCapacity > 0.2 ? item.points : 0
+      })
+      this.fleetCompareRows = Array.from(map.values())
+      this.exportData.metrics = this.fleetCompareRows
+      this.exportData.comparison = null
+      this.$nextTick(() => this.renderFleetBarChart())
+    },
+    renderFleetBarChart() {
+      if (!this.$refs.fleetBarChartEl) return
+      if (!this.fleetBarChart) this.fleetBarChart = echarts.init(this.$refs.fleetBarChartEl)
+      this.fleetBarChart.setOption({
+        backgroundColor: 'transparent',
+        grid: { left: 54, right: 24, top: 36, bottom: 84 },
+        legend: { top: 4, textStyle: { color: '#d9e9ff' } },
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+        xAxis: { type: 'category', data: this.fleetCompareRows.map(v => v.farm_name || v.farm_code), axisLabel: { color: '#9fb6cc' } },
+        yAxis: { type: 'value', min: 0, max: 100, axisLabel: { color: '#9fb6cc' }, splitLine: { lineStyle: { color: 'rgba(159, 182, 204, 0.12)' } } },
+        dataZoom: [
+          { type: 'inside', xAxisIndex: [0], filterMode: 'none' },
+          { type: 'slider', xAxisIndex: [0], bottom: 18, height: 18, borderColor: '#37536b', fillerColor: 'rgba(45, 212, 191, 0.2)', textStyle: { color: '#9fb6cc' } }
+        ],
+        series: [
+          { name: '短期准确率(%)', type: 'bar', data: this.fleetCompareRows.map(v => v.short_acc), itemStyle: { color: 'rgba(96, 165, 250, 0.75)' } },
+          { name: '超短期准确率(%)', type: 'bar', data: this.fleetCompareRows.map(v => v.supershort_acc), itemStyle: { color: 'rgba(34, 211, 238, 0.75)' } }
+        ]
+      }, true)
+    },
+    handleExportCommand(command) {
+      if (command === 'raw_csv') this.downloadRawCSV()
+      if (command === 'metrics_excel') this.downloadMetricsExcel()
+      if (command === 'chart_png') this.downloadChartPNG()
+    },
+    downloadRawCSV() {
+      if (!this.exportData.comparison?.datasets) return this.$message.warning('暂无可导出的原始数据')
+      const labels = this.exportData.comparison.labels || []
+      const datasets = this.exportData.comparison.datasets
+      const keys = Object.keys(datasets)
+      const rows = [['时间', ...keys]]
+      labels.forEach((ts, i) => rows.push([ts, ...keys.map(k => datasets[k][i] ?? '')]))
+      this.downloadBlob(`\uFEFF${rows.map(r => r.join(',')).join('\n')}`, 'text/csv;charset=utf-8;', `功率对比原始数据_${Date.now()}.csv`)
+    },
+    downloadMetricsExcel() {
+      const rows = []
+      if (this.analysisTab === 'single') {
+        rows.push(['指标', '值'])
+        rows.push(['短期准确率(%)', this.formatPct(this.singleMetricsSummary.shortAcc)])
+        rows.push(['短期合格率(%)', this.formatPct(this.singleMetricsSummary.shortQualifiedRate)])
+        rows.push(['超短期准确率(%)', this.formatPct(this.singleMetricsSummary.supershortAcc)])
+        rows.push(['超短期合格率(%)', this.formatPct(this.singleMetricsSummary.supershortQualifiedRate)])
+        rows.push(['RMSE', this.formatNum(this.singleMetricsSummary.rmse)])
+        rows.push(['MAE', this.formatNum(this.singleMetricsSummary.mae)])
+        rows.push(['不合格点数', this.singleMetricsSummary.unqualifiedPoints])
+        rows.push(['考核电量(MWh)', this.formatNum(this.singleMetricsSummary.assessmentEnergy)])
+      } else {
+        rows.push(['场站编码', '场站名称', '短期准确率(%)', '超短期准确率(%)', 'RMSE', 'MAE', '不合格点数'])
+        this.fleetCompareRows.forEach((r) => rows.push([r.farm_code, r.farm_name, this.formatPct(r.short_acc), this.formatPct(r.supershort_acc), this.formatNum(r.rmse_avg), this.formatNum(r.mae_avg), r.unqualified_points]))
       }
-
-      const csvContent = [headers, ...rows]
-        .map(row => row.join(','))
-        .join('\n')
-
-      const blob = new Blob(["\ufeff" + csvContent], { type: 'text/csv;charset=utf-8' })
+      const html = `<html><head><meta charset="UTF-8"></head><body><table border="1">${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</table></body></html>`
+      this.downloadBlob(html, 'application/vnd.ms-excel;charset=utf-8;', `考核指标_${Date.now()}.xls`)
+    },
+    downloadChartPNG() {
+      const chart = this.analysisTab === 'single'
+        ? (this.singleViewTab === 'curve' ? this.mainChart : this.scatterChart)
+        : this.fleetBarChart
+      if (!chart) return this.$message.warning('暂无可导出的图表')
       const link = document.createElement('a')
-      link.href = URL.createObjectURL(blob)
-      link.download = `每日评估指标_${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }).replace(/[/\s:]/g, '-')}.csv`
+      link.href = chart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#081827' })
+      link.download = `图表导出_${Date.now()}.png`
       link.click()
     },
-
-    downloadSVG() {
-      const canvas = this.$refs.chartCanvas
-      if (!canvas) {
-        this.$message.warning('暂无可导出的图表')
-        return
-      }
-      const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}">
-        <foreignObject width="100%" height="100%">
-          <div xmlns="http://www.w3.org/1999/xhtml">
-            <img src="${canvas.toDataURL('image/png')}" width="100%" height="100%"/>
-          </div>
-        </foreignObject>
-      </svg>`
-      const blob = new Blob([svgContent], { type: 'image/svg+xml' })
+    downloadBlob(content, mimeType, fileName) {
+      const blob = new Blob([content], { type: mimeType })
+      const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
-      link.href = URL.createObjectURL(blob)
-      link.download = `功率对比图表_${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }).replace(/[/\s:]/g, '-')}.svg`
+      link.href = url
+      link.download = fileName
+      document.body.appendChild(link)
       link.click()
-    },
-
-    downloadMetricSVG() {
-      const canvas = this.$refs.metricChart
-      if (!canvas) {
-        this.$message.warning('暂无可导出的指标图表')
-        return
-      }
-      const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}">
-          <foreignObject width="100%" height="100%">
-              <div xmlns="http://www.w3.org/1999/xhtml">
-                  <img src="${canvas.toDataURL('image/png')}" width="100%" height="100%"/>
-              </div>
-          </foreignObject>
-      </svg>`
-      const blob = new Blob([svgContent], { type: 'image/svg+xml' })
-      const link = document.createElement('a')
-      link.href = URL.createObjectURL(blob)
-      link.download = `指标图表_${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }).replace(/[/\s:]/g, '-')}.svg`
-      link.click()
-    },
-
-    getQualificationColor(rate) {
-      if (rate >= 80) return '#4CAF50';
-      if (rate >= 60) return '#FFC107';
-      return '#F44336';
-    },
-
-    setQuickTimeRange(period) {
-      if (this.isQuickTimeSwitching) {
-        this.$message.warning('请勿频繁操作快速选择按钮，请等待5秒...');
-        return;
-      }
-      this.isQuickTimeSwitching = true;
-
-      const endDate = new Date();
-      let startDate = new Date();
-      
-      endDate.setHours(23, 59, 59, 999);
-      startDate.setHours(0, 0, 0, 0);
-
-      switch (period) {
-        case 'today': {
-          break;
-        }
-        case '3d':{
-          startDate.setDate(endDate.getDate() - 2); 
-          break;
-        }
-        case '1w':{
-          startDate.setDate(endDate.getDate() - 6); 
-          break;
-        }
-        case '1m': {
-            startDate = new Date(endDate);
-          startDate.setMonth(endDate.getMonth() - 1);
-             startDate.setHours(0,0,0,0); // ensure time is reset
-             // If original day was 31st and prev month has 30, it rolls.
-             // Check if we rolled into the *same* month as endDate by going back then forward for month day
-             const checkStartDate = new Date(endDate);
-             checkStartDate.setMonth(endDate.getMonth() -1);
-             if (checkStartDate.getMonth() === endDate.getMonth()) { // e.g. Mar 31 to Feb rolled to Mar 3
-                 startDate = new Date(endDate.getFullYear(), endDate.getMonth(), 1); // Beginning of current month
-                 startDate.setDate(0); // End of previous month
-                 startDate.setHours(0,0,0,0);
-           } else {
-                // If day doesn't exist in prev month (e.g. Mar 31st -> Feb 31st doesn't exist)
-                // it auto-adjusts. e.g. Mar 31st -> March 3rd (if Feb has 28 days).
-                // We want it to be Feb 28th.
-                // So, if startDate's month after setMonth is not (endDate.getMonth() - 1 + 12) % 12
-                // it means it rolled over.
-                const targetMonth = (endDate.getMonth() - 1 + 12) % 12;
-                if (startDate.getMonth() !== targetMonth) {
-                    // It rolled. Set to last day of target month.
-                    startDate = new Date(endDate.getFullYear(), targetMonth + 1, 0); // day 0 of next month is last day of targetMonth
-                    startDate.setHours(0,0,0,0);
-                }
-             }
-          break;
-        }
-        case '3m':{
-          startDate = new Date(endDate);
-          startDate.setMonth(endDate.getMonth() - 3);
-          startDate.setHours(0,0,0,0);
-          // Similar month-end/roll-over logic as '1m' might be needed if very precise "calendar 3 months"
-          // For simplicity, this will be "date X, 3 months ago"
-          break;
-        }
-        case '6m':{ 
-          startDate = new Date(endDate);
-          startDate.setMonth(endDate.getMonth() - 6);
-          startDate.setHours(0,0,0,0);
-          break;
-        }
-        case '1y':{
-          startDate = new Date(endDate);
-          startDate.setFullYear(endDate.getFullYear() - 1);
-          startDate.setHours(0,0,0,0);
-          break;
-        }
-        default:
-          this.$message.error('无效的快速选择周期');
-          return;
-      }
-      startDate.setHours(0,0,0,0);
-
-
-      const formatDateVal = (date) => {
-        const year = date.getFullYear();
-        const month = (date.getMonth() + 1).toString().padStart(2, '0');
-        const day = date.getDate().toString().padStart(2, '0');
-        return `${year}-${month}-${day}`;
-      };
-
-      this.timeRange = [
-        `${formatDateVal(startDate)} 00:00:00`,
-        `${formatDateVal(endDate)} 23:59:59`,
-      ];
-      this.fetchComparisonData();
-
-      setTimeout(() => {
-        this.isQuickTimeSwitching = false;
-      }, 5000); // 5-second cooldown
-    },
-
-    // 指标按钮点击处理 - 增加冷却功能
-    handleMetricChange() {
-      // 如果已经在冷却中，不进行操作
-      if (this.isMetricButtonCooling) {
-        this.$message.warning('操作过于频繁，请稍候再试');
-        return;
-      }
-      
-      // 设置冷却状态
-      this.isMetricButtonCooling = true;
-      
-      // 更新图表
-      this.updateMetricChart();
-      
-      // 3秒后解除冷却
-      setTimeout(() => {
-        this.isMetricButtonCooling = false;
-      }, 2000);
-    },
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    }
   },
   watch: {
-    showDailyMetricsAnalysis(newValue) {
-      if (newValue) { 
-        this.$nextTick(() => { 
-          if (this.dailyMetrics) { 
-            this.updateMetricChart();
-          } else {
-            console.log("showDailyMetricsAnalysis changed to true, but dailyMetrics is still null/empty. Metric chart not updated yet.");
-          }
-        });
-      } else if (this.metricChart) { 
-          this.metricChart.destroy();
-          this.metricChart = null;
-      }
+    analysisTab() {
+      this.fetchComparisonData()
     },
-    dailyMetrics(newMetrics) {
-        if (this.showDailyMetricsAnalysis && newMetrics && Object.keys(newMetrics).length > 0) {
-            this.$nextTick(() => {
-                this.updateMetricChart();
-            });
-        }
+    singleViewTab() {
+      this.$nextTick(() => this.renderSingleCharts())
     },
-    // 监听currentMetric变化时的处理已移至handleMetricChange方法
-  },
-
-  beforeUnmount() {
-    farmService.removeListener(this.handleFarmServiceChanged);
-    if (this.farmChangeTimer) {
-      clearTimeout(this.farmChangeTimer);
-      this.farmChangeTimer = null;
-    }
-    if (this.chartInstance) {
-      this.chartInstance.destroy();
-      this.chartInstance = null;
-    }
-    if (this.metricChart) {
-      this.metricChart.destroy();
-      this.metricChart = null;
-    }
-    if (this.fleetSeriesChart) {
-      this.fleetSeriesChart.destroy();
-      this.fleetSeriesChart = null;
+    singleFarmCode(newCode) {
+      if (this.analysisTab === 'single' && newCode) farmService.setCurrentFarm(newCode)
+    },
+    selectedTypes() {
+      if (this.analysisTab === 'single' && this.singleSeriesState) this.$nextTick(() => this.renderSingleCharts())
+    },
+    showCapacityLine() {
+      if (this.analysisTab === 'single' && this.singleSeriesState) this.$nextTick(() => this.renderSingleCharts())
+    },
+    showCurtailmentTag() {
+      if (this.analysisTab === 'single' && this.singleSeriesState) this.$nextTick(() => this.renderSingleCharts())
     }
   }
 }
 </script>
 
 <style scoped>
-.power-compare-container {
-  min-height: 100vh;
-  position: relative;
-  padding: 40px;
-  color: #fff;
-  overflow: hidden;  /* 确保背景动画不会溢出 */
-}
-
-.refresh-button {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  z-index: 1000; /*确保在其他元素之上*/
-  background-color: rgba(255, 255, 255, 0.8) !important; /* 确保背景颜色不被全局样式覆盖 */
-  border: 1px solid #dcdfe6 !important; /* 添加边框以增加可见性 */
-  color: #606266 !important; /* 图标颜色 */
-}
-
-.refresh-button:hover {
-  background-color: rgba(240, 240, 240, 0.9) !important;
-  border-color: #c0c4cc !important;
-  color: #303133 !important;
-}
-
-/* 添加背景容器样式 */
-.background-container {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: -1;
-}
-
-/* 添加动画背景样式 */
-.animated-background {
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: linear-gradient(
-    135deg,
-    #43cea2 0%,
-    #185a9d 50%,
-    #43cea2 100%
-  );
-  animation: gradient 15s ease infinite;
-  transform-origin: center center;
-  z-index: -1;
-}
-
-/* 添加背景动画关键帧 */
-@keyframes gradient {
-  0% {
-    transform: rotate(0deg);
-  }
-  50% {
-    transform: rotate(180deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-.page-title {
-  color: #ffffff;
-  font-size: 32px;
-  font-weight: 600;
-  margin-bottom: 40px;
-  text-align: center;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.config-panel {
-  margin-bottom: 24px;
-}
-
-.merged-config-card {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(10px);
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px; /* Consistent gap between rows */
-}
-
-.config-row {
-  display: flex;
-  align-items: center; 
-  gap: 16px; 
-  flex-wrap: wrap; 
-}
-
-/* Row 1: Time Picker, Query Button, Download Buttons */
-.config-row-1 {
-  /* justify-content: space-between; */ /* Let items flow naturally with gaps */
-}
-
-.config-row-1 .time-picker-wrapper-outer {
-  display: flex;
-  align-items: center;
-  gap: 8px; 
-}
-
-.time-range-picker-element {
-  min-width: 300px; /* Give date picker enough space */
-}
-
-.config-row-1 .query-button {
-  /* margin-left: auto; */ /* Removed to keep it next to picker */
-}
-
-.download-buttons-row1 {
-  margin-left: 16px; /* Add some space if query button is not pushing it far enough */
-  /* Or use flex-grow on an element or justify-content on parent if more complex spacing is needed */
-}
-
-/* Row 2: Type Select */
-.config-row-2 .type-checkbox-group-row2 {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%; /* Allow it to take full width for its checkboxes */
-}
-
-/* Row 3: Fleet compare */
-.config-row-3 .fleet-compare-config {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  flex-wrap: wrap;
-}
-
-.fleet-farm-select {
-  min-width: 320px;
-}
-
-.fleet-type-select {
-  min-width: 180px;
-}
-
-/* General styling for checkbox groups within rows */
-.type-selector-group, .horizon-selector-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px 15px; /* row-gap column-gap */
-}
-
-.type-selector-group .el-checkbox,
-.horizon-selector-group .el-checkbox {
-  margin-right: 0px !important; /* Override Element Plus default if any */
-  margin-left: 0 !important; 
-}
-
-/* Label styling remains the same */
-.label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  color: #333;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.chart-container {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(10px);
-  padding: 24px;
-  height: 75vh;
-  margin-top: 20px;
-}
-
-.fleet-metrics-container {
-  margin-top: 16px;
-}
-
-.fleet-metrics-card {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(10px);
-}
-
-.fleet-metrics-header {
-  font-weight: 600;
-  color: #1f2937;
-}
-
-.fleet-series-container {
-  margin-top: 16px;
-}
-
-.fleet-series-card {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(10px);
-}
-
-.fleet-series-wrapper {
-  height: 56vh;
-}
-
-.chart-wrapper {
-  width: 100%;
-  height: 100%;
-  position: relative;
-}
-
-.empty-chart {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  color: #909399;
-}
-
-.empty-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
-}
-
-canvas {
-  width: 100% !important;
-  height: 100% !important;
-}
-
-:deep(.chartjs-size-monitor) {
-  width: 100% !important;
-  height: 100% !important;
-}
-
-.daily-metrics-container {
-  margin-top: 24px;
-}
-
-.metrics-card {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(10px);
-}
-
-.metrics-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.metrics-header h3 {
-  margin: 0;
-  color: #333;
-}
-
-.metric-buttons {
-  display: flex;
-  gap: 10px;
-}
-
-.metrics-chart-wrapper {
-  height: 500px;
-  min-height: 400px;
-  position: relative;
-  width: 100%;
-  background: white;
-  padding: 20px;
-  overflow: hidden;
-}
-
-.metrics-chart-wrapper canvas {
-  width: 100% !important;
-  height: 100% !important;
-  display: block !important;
-}
-
-.download-buttons {
-  display: flex;
-  gap: 8px;
-}
-
-.download-buttons .el-button {
-  padding: 8px 15px;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  white-space: nowrap;
-}
-
-.el-button--primary {
-  padding: 8px 20px;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.qualification-container {
-  margin-top: 24px;
-}
-
-.qualification-card {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(10px);
-  padding: 20px;
-}
-
-.qualification-header {
-  margin-bottom: 20px;
-}
-
-.qualification-header h3 {
-  margin: 0;
-  color: #333;
-}
-
-.qualification-content {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 20px;
-}
-
-.qualification-item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.qualification-type {
-  margin-bottom: 10px;
-}
-
-.type-label {
-  font-weight: 500;
-}
-
-.threshold-label {
-  color: #909399;
-}
-
-.qualification-details {
-  margin-top: 10px;
-}
-
-.daily-qualification-table {
-  margin-top: 20px;
-}
-
-.daily-qualification-cell {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.big-item {
-  flex: 1 0 100%;
-  margin-bottom: 20px;
-  background-color: rgba(255, 255, 255, 0.8);
-  border-radius: 12px;
-  padding: 15px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-}
-
-.qualification-chart {
-  padding: 20px;
-  height: 100%;
-  overflow-y: auto;
-}
-
-.qualification-type {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 15px;
-}
-
-.type-label {
-  font-size: 16px;
-  font-weight: 600;
-  color: #333;
-}
-
-.threshold-label {
-  padding: 4px 10px;
-  background: #f5f7fa;
-  border-radius: 12px;
-  font-size: 14px;
-}
-
-.qualification-details {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 10px;
-  font-size: 14px;
-  color: #666;
-}
-
-.daily-qualification-table {
-  margin-top: 30px;
-  background-color: rgba(255, 255, 255, 0.8);
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-}
-
-.daily-qualification-table h4 {
-  margin-top: 0;
-  margin-bottom: 15px;
-  color: #333;
-  font-size: 16px;
-}
-
-.daily-qualification-cell {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-:deep(.el-table) {
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-:deep(.el-table th) {
-  background-color: #f5f7fa;
-  color: #333;
-  font-weight: 600;
-}
-
-:deep(.el-progress-bar__inner) {
-  transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-:deep(.el-progress) {
-  margin-bottom: 5px;
-}
-
-:deep(.el-progress-bar__outer) {
-  border-radius: 12px;
-  background-color: rgba(0, 0, 0, 0.05);
-}
-
-/* 添加空数据提示样式 */
-.empty-data-container {
-  margin-top: 30px;
-}
-
-.empty-data-card {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(10px);
-}
-
-.empty-data-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 80px 20px;
-  color: #909399;
-  text-align: center;
-}
-
-.empty-icon {
-  font-size: 60px;
-  margin-bottom: 20px;
-  color: #DCDFE6;
-}
-
-.empty-data-content h3 {
-  font-size: 18px;
-  font-weight: 500;
-  margin: 0 0 10px 0;
-}
-
-.empty-text {
-  font-size: 14px;
-  line-height: 1.5;
-  margin: 0;
-}
-
-.summary-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.summary-card {
-  min-height: 92px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.summary-label {
-  color: var(--text-secondary);
-  font-size: 13px;
-  margin-bottom: 6px;
-}
-
-.summary-value {
-  color: var(--text-primary);
-  font-size: 24px;
-  font-weight: 700;
-  font-family: "Consolas", "Roboto Mono", monospace;
-}
-
-.summary-warning {
-  color: var(--warning);
-}
-
-.summary-insight {
-  margin-bottom: 14px;
-}
-
-.summary-insight :deep(.el-alert__content) {
-  color: var(--text-primary);
-}
-
-.toolbar-group-title {
-  margin: 6px 0 8px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-}
-
-.config-panel .config-row {
-  border: 1px solid rgba(146, 186, 220, 0.18);
-  border-radius: 10px;
-  padding: 10px;
-  margin-bottom: 10px;
-  background: rgba(10, 26, 42, 0.35);
-}
-
-.config-panel .config-row:last-child {
-  margin-bottom: 0;
-}
-
-/* Dark tech polish overrides */
-.power-compare-container {
-  padding: 20px 24px 28px;
-  color: var(--text-primary);
-}
-
-.animated-background {
-  background:
-    radial-gradient(circle at 16% 14%, rgba(18, 215, 255, 0.08), transparent 42%),
-    radial-gradient(circle at 86% 80%, rgba(45, 211, 111, 0.06), transparent 44%),
-    linear-gradient(145deg, #06121f 0%, #081a2c 52%, #0a1f34 100%);
-  animation: none;
-}
-
-.page-title {
-  margin: 10px 0 18px;
-  font-size: 28px;
-}
-
-.summary-card {
-  position: relative;
-  overflow: hidden;
-  border: 1px solid rgba(146, 186, 220, 0.18) !important;
-  background: linear-gradient(135deg, rgba(14, 36, 56, 0.92), rgba(9, 24, 40, 0.92)) !important;
-  box-shadow: inset 0 0 24px rgba(18, 215, 255, 0.05), 0 10px 28px rgba(0, 0, 0, 0.25);
-}
-
-.summary-card::after {
-  content: "";
-  position: absolute;
-  left: 14px;
-  right: 14px;
-  top: 0;
-  height: 2px;
-  background: linear-gradient(90deg, rgba(18, 215, 255, 0.8), rgba(45, 211, 111, 0.6));
-}
-
-.summary-label {
-  position: relative;
-  color: #9fb6cc;
-  padding-left: 14px;
-}
-
-.summary-label::before {
-  content: "";
-  position: absolute;
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  background: #12d7ff;
-  box-shadow: 0 0 10px rgba(18, 215, 255, 0.8);
-}
-
-.summary-value {
-  color: #eaf4ff;
-  font-size: 28px;
-  text-shadow: 0 0 14px rgba(18, 215, 255, 0.24);
-}
-
-.summary-warning {
-  color: #f6b73c;
-  text-shadow: 0 0 12px rgba(246, 183, 60, 0.25);
-}
-
-.summary-insight :deep(.el-alert) {
-  border: 1px solid rgba(146, 186, 220, 0.2) !important;
-  background: rgba(16, 38, 58, 0.55) !important;
-}
-
-.summary-insight :deep(.el-alert__title),
-.summary-insight :deep(.el-alert__icon) {
-  color: #c5d9ee !important;
-}
-
-.merged-config-card,
-.fleet-metrics-card,
-.fleet-series-card,
-.chart-container,
-.metrics-card,
-.qualification-card,
-.empty-data-card {
-  border: 1px solid rgba(146, 186, 220, 0.18) !important;
-  background: linear-gradient(160deg, rgba(12, 31, 48, 0.92), rgba(9, 22, 36, 0.92)) !important;
-  box-shadow: inset 0 0 22px rgba(18, 215, 255, 0.04), 0 12px 30px rgba(2, 9, 18, 0.34);
-}
-
-.metrics-chart-wrapper {
-  background: rgba(8, 21, 34, 0.84);
-  border: 1px solid rgba(146, 186, 220, 0.15);
-  border-radius: 12px;
-}
-
-.download-buttons .el-button {
-  background: rgba(9, 24, 40, 0.45) !important;
-  border: 1px solid rgba(146, 186, 220, 0.28) !important;
-  color: #c5d9ee !important;
-}
-
-.download-buttons .el-button:hover {
-  border-color: rgba(18, 215, 255, 0.5) !important;
-  color: #eaf4ff !important;
-}
-
-.fleet-compare-config :deep(.el-button--success) {
-  background: rgba(9, 24, 40, 0.45) !important;
-  border: 1px solid rgba(146, 186, 220, 0.28) !important;
-  color: #c5d9ee !important;
-}
-
-:deep(.merged-config-card .el-input__wrapper),
-:deep(.merged-config-card .el-textarea__inner),
-:deep(.merged-config-card .el-select__wrapper) {
-  background: rgba(3, 16, 28, 0.74) !important;
-  box-shadow: 0 0 0 1px rgba(146, 186, 220, 0.2) inset !important;
-}
-
-:deep(.merged-config-card .el-input__inner),
-:deep(.merged-config-card .el-range-input),
-:deep(.merged-config-card .el-select__placeholder),
-:deep(.merged-config-card .el-checkbox__label) {
-  color: #c5d9ee !important;
-}
-
-:deep(.merged-config-card .el-input__wrapper.is-focus),
-:deep(.merged-config-card .el-select__wrapper.is-focused) {
-  box-shadow: 0 0 0 1px rgba(18, 215, 255, 0.65) inset, 0 0 10px rgba(18, 215, 255, 0.2) !important;
-}
-
-:deep(.el-checkbox__input.is-checked .el-checkbox__inner) {
-  background: #12d7ff;
-  border-color: #12d7ff;
-}
-
-:deep(.el-checkbox__label) {
-  color: #9fb6cc;
-}
-
-:deep(.el-table) {
-  --el-table-bg-color: #0b1d2d;
-  --el-table-tr-bg-color: #0b1d2d;
-  --el-table-header-bg-color: #10263a;
-  --el-table-border-color: rgba(146, 186, 220, 0.18);
-  --el-table-row-hover-bg-color: rgba(18, 215, 255, 0.08);
-  --el-table-text-color: #d9e9ff;
-  --el-table-header-text-color: #9fb6cc;
-}
-
-@media (max-width: 1280px) {
-  .summary-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 768px) {
-  .summary-grid {
-    grid-template-columns: 1fr;
-  }
-}
-</style> 
+.power-compare-container { min-height: 100vh; padding: 18px 22px 28px; color: #fff; }
+.page-title { margin: 0 0 14px; color: #f2f7ff; font-size: 28px; font-weight: 700; }
+.analysis-tabs { margin-bottom: 12px; }
+.single-view-tabs { margin: 8px 0 12px; }
+.summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.summary-card, .control-card, .chart-card, .empty-data-card { background: rgba(8, 24, 39, 0.75); border: 1px solid rgba(116, 174, 214, 0.25); }
+.summary-label { color: #9fc1d8; font-size: 12px; margin-bottom: 4px; }
+.summary-value { color: #e8f6ff; font-family: Consolas, Menlo, Monaco, monospace; font-size: 16px; line-height: 1.3; }
+.summary-warning { color: #ffb867; }
+.control-card { margin-bottom: 14px; }
+.group-title { color: #b8d7eb; font-size: 12px; margin: 8px 0; }
+.control-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.farm-select { min-width: 280px; }
+.time-range-picker { min-width: 360px; }
+.query-btn { min-width: 92px; }
+.card-header { color: #d8edff; font-weight: 600; }
+.chart-card { margin-bottom: 12px; }
+.chart-wrapper { height: 54vh; }
+.chart-wrapper.small { height: 30vh; }
+.empty-data-content { text-align: center; color: #a9c9de; }
+@media (max-width: 980px) {
+  .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .farm-select, .time-range-picker { min-width: 100%; }
+  .chart-wrapper { height: 42vh; }
+}
+</style>

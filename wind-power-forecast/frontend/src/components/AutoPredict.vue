@@ -36,14 +36,18 @@
       </el-table>
     </el-card>
     <div class="fleet-overview" v-loading="fleetLoading">
-      <div class="fleet-title">多场站运行总览</div>
+      <div class="fleet-title">多场站业务状态监控矩阵</div>
+      <div class="degrade-strategy-tip">
+        失败降级策略：NWP 缺失时可使用持续法/历史相似日法，状态将标记为“降级预测中”。
+      </div>
       <div class="fleet-filter-row">
         <el-select
           v-model="selectedFleetFarmCodes"
           multiple
           collapse-tags
           collapse-tags-tooltip
-          placeholder="选择批量操作场站（默认全部）"
+          clearable
+          placeholder="筛选场站（默认显示全部）"
           class="fleet-farm-select"
         >
           <el-option
@@ -53,29 +57,59 @@
             :value="farm.farm_code"
           />
         </el-select>
-        <el-button size="small" plain class="minor-action-btn" @click="selectAllFleetFarms">全选</el-button>
-        <el-button size="small" plain class="minor-action-btn" @click="clearFleetFarmSelection">清空</el-button>
-      </div>
-      <div class="fleet-matrix-row">
         <el-checkbox-group v-model="selectedBatchTypes">
           <el-checkbox label="supershort">超短期</el-checkbox>
           <el-checkbox label="short">短期</el-checkbox>
           <el-checkbox label="medium">中期</el-checkbox>
         </el-checkbox-group>
-        <el-button type="primary" plain size="small" :loading="matrixControlLoading" @click="handleControlMatrix('start')">选中场站+类型 批量启用</el-button>
-        <el-button type="warning" plain size="small" :loading="matrixControlLoading" @click="handleControlMatrix('stop')">选中场站+类型 批量停止</el-button>
-        <el-button type="danger" plain size="small" :loading="matrixControlLoading" @click="handleControlMatrix('delete')">选中场站+类型 批量删除</el-button>
+        <el-button size="small" plain class="minor-action-btn" @click="selectAllVisibleMatrixRows">全选当前表格</el-button>
+        <el-button size="small" plain class="minor-action-btn" @click="clearMatrixSelection">清空勾选</el-button>
+        <el-button type="primary" plain size="small" :loading="matrixControlLoading" @click="handleControlMatrix('start')">批量启用</el-button>
+        <el-button type="warning" plain size="small" :loading="matrixControlLoading" @click="handleControlMatrix('stop')">批量停止</el-button>
+        <el-button type="danger" plain size="small" :loading="matrixControlLoading" @click="handleControlMatrix('delete')">批量删除</el-button>
       </div>
-      <div class="fleet-list">
-        <div class="fleet-item" v-for="farm in fleetStatus" :key="farm.farm_code">
-          <div class="fleet-name">{{ farm.farm_name }} ({{ farm.farm_code }})</div>
-          <div class="fleet-tags">
-            <el-tag size="small" :type="farm.status?.supershort ? 'success' : 'info'">超短期</el-tag>
-            <el-tag size="small" :type="farm.status?.short ? 'success' : 'info'">短期</el-tag>
-            <el-tag size="small" :type="farm.status?.medium ? 'success' : 'info'">中期</el-tag>
-          </div>
-        </div>
-      </div>
+      <el-table
+        ref="matrixTableRef"
+        :data="fleetMatrixRows"
+        border
+        size="small"
+        row-key="farm_code"
+        @selection-change="handleMatrixSelectionChange"
+      >
+        <el-table-column type="selection" width="44" />
+        <el-table-column label="场站名称" min-width="220">
+          <template #default="{ row }">
+            <span class="fleet-name">{{ row.farm_name }}</span>
+            <span class="fleet-code">({{ row.farm_code }})</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="气象数据(NWP)状态" min-width="170">
+          <template #default="{ row }">
+            <span class="biz-status" :class="`biz-${row.nwpState.level}`">{{ row.nwpState.text }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="超短期预测 (4h/15min)" min-width="190">
+          <template #default="{ row }">
+            <span class="biz-status" :class="`biz-${row.supershortState.level}`">{{ row.supershortState.text }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="短期预测 (72h/日)" min-width="170">
+          <template #default="{ row }">
+            <span class="biz-status" :class="`biz-${row.shortState.level}`">{{ row.shortState.text }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="中期预测" min-width="130">
+          <template #default="{ row }">
+            <span class="biz-status" :class="`biz-${row.mediumState.level}`">{{ row.mediumState.text }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="220" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" text @click="openFarmCurve(row)">查看当前曲线</el-button>
+            <el-button size="small" text type="warning" @click="openManualCorrection(row)">人工修正</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
     </div>
     <div class="hero-section">
       <el-row :gutter="18">
@@ -88,15 +122,15 @@
                   {{ item.title }}
                 </h3>
                 <div class="card-status">
-                  <StatusDot :active="item.status" />
-                  <span>{{ item.status ? '运行中' : '已停止' }}</span>
+                  <StatusDot :active="globalPredictStatus[item.name]" />
+                  <span>{{ globalPredictStatus[item.name] ? '运行中' : '已停止' }}</span>
                 </div>
               </div>
               <div class="card-actions">
                 <el-switch
-                  :model-value="item.status"
-                  :loading="isControlBusy(item.name)"
-                  @change="(val) => handleSwitchToggle(item.name, val)"
+                  :model-value="globalPredictStatus[item.name]"
+                  :loading="isGlobalControlBusy(item.name)"
+                  @change="(val) => handleGlobalSwitchToggle(item.name, val)"
                 />
                 <el-dropdown trigger="click" popper-class="predict-more-menu" @command="(cmd) => handleCardCommand(cmd, item)">
                   <el-button text class="more-btn">
@@ -126,9 +160,36 @@
                 <strong>{{ getPredictMetrics(item.name).nextRun }}</strong>
               </div>
               <div class="metric-item">
-                <span><el-icon><Grid /></el-icon>运行场站数</span>
-                <strong>{{ getPredictMetrics(item.name).runningFarms }}</strong>
+                <span><el-icon><Grid /></el-icon>场站聚合状态</span>
+                <strong>
+                  成功: {{ getPredictMetrics(item.name).aggregate.success }}
+                  <span class="metric-divider">|</span>
+                  <span
+                    class="metric-failed"
+                    :class="{ clickable: getPredictMetrics(item.name).aggregate.failed > 0 }"
+                    @click="openFailedStationsDialog(item.name)"
+                  >
+                    失败: {{ getPredictMetrics(item.name).aggregate.failed }}
+                  </span>
+                  <span class="metric-divider">|</span>
+                  未启用: {{ getPredictMetrics(item.name).aggregate.disabled }}
+                </strong>
               </div>
+            </div>
+
+            <div class="countdown-box">
+              <div class="countdown-label">距离下次执行</div>
+              <div class="countdown-value">{{ getPredictMetrics(item.name).countdownText }}</div>
+              <el-progress
+                :percentage="getPredictMetrics(item.name).countdownProgress"
+                :stroke-width="8"
+                :show-text="false"
+                status="success"
+              />
+              <div class="countdown-note">执行周期：{{ getPredictMetrics(item.name).scheduleLabel }}</div>
+            </div>
+            <div class="degraded-alert" v-if="getPredictMetrics(item.name).aggregate.degraded > 0">
+              降级预测中：{{ getPredictMetrics(item.name).aggregate.degraded }} 个场站（建议人工复核）
             </div>
 
             <div class="card-footer">
@@ -258,21 +319,52 @@
       </template>
     </el-dialog>
 
+    <el-dialog
+      :title="`失败场站明细 - ${predictionTypeLabelMap[failedDialogPredictionType] || '-'}`"
+      v-model="failedStationsDialogVisible"
+      width="45%"
+    >
+      <el-table :data="failedStationsForDialog" border size="small">
+        <el-table-column prop="farm_name" label="场站名称" min-width="140" />
+        <el-table-column prop="farm_code" label="场站编码" min-width="120" />
+        <el-table-column prop="reason" label="失败原因" min-width="180" />
+      </el-table>
+      <template #footer>
+        <div class="dialog-footer-buttons">
+          <el-button type="primary" @click="failedStationsDialogVisible = false">关闭</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
     <!-- 任务历史记录对话框已移除 -->
     <!-- 历史记录详情对话框已移除 -->
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, inject, onMounted, onUnmounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, reactive, computed, inject, onMounted, onUnmounted, nextTick } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { MoreFilled, DataAnalysis, Clock, AlarmClock, Grid, Timer } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
 import farmService from '../utils/farmService'
 import { getAutoPredictStatus, getAutoPredictStatusAll, getAutoPredictOverview, controlAutoPredict, controlAutoPredictMatrix, getAutoPredictLogs } from '../api/autopredictApi'
 import StatusDot from './common/StatusDot.vue'
 import SparklineMini from './common/SparklineMini.vue'
 
-const isAnimatedBackground = inject('isAnimatedBackground');
+const isAnimatedBackground = inject('isAnimatedBackground')
+const router = useRouter()
+
+const predictionTypeLabelMap = {
+  supershort: '超短期',
+  short: '短期',
+  medium: '中期'
+}
+
+const predictionCycleMap = {
+  supershort: { intervalMinutes: 15, anchorMinuteOfDay: 0, label: '每15分钟滚动执行' },
+  short: { intervalMinutes: 1440, anchorMinuteOfDay: 10, label: '每天 00:10 定时执行' },
+  medium: { intervalMinutes: 720, anchorMinuteOfDay: 30, label: '每12小时执行（00:30/12:30）' }
+}
 
 const predictions = reactive([
   {
@@ -324,8 +416,18 @@ const logsFilters = reactive({
 const fleetStatus = ref([])
 const fleetLoading = ref(false)
 const selectedFleetFarmCodes = ref([])
+const selectedMatrixFarmCodes = ref([])
 const selectedBatchTypes = ref(['supershort', 'short', 'medium'])
 const matrixControlLoading = ref(false)
+const matrixTableRef = ref(null)
+const globalControlBusyMap = reactive({
+  supershort: false,
+  short: false,
+  medium: false
+})
+const nowTick = ref(Date.now())
+const failedStationsDialogVisible = ref(false)
+const failedDialogPredictionType = ref('supershort')
 
 const errorDialogVisible = ref(false)
 const errorDetails = ref('')
@@ -394,6 +496,7 @@ const confirmDialog = reactive({
 const POLLING_INTERVAL = 60000
 const FARM_CHANGE_DEBOUNCE_MS = 300
 let intervalId = null
+let countdownTimerId = null
 let farmChangeTimerId = null
 let statusRequestSeq = 0
 const currentFarm = ref(farmService.getCurrentFarm())
@@ -420,21 +523,179 @@ const formatHms = (dateLike) => {
   return `${hh}:${mm}:${ss}`
 }
 
-const getPredictMetrics = (predictionName) => {
-  const mapping = { supershort: 15, short: 30, medium: 60 }
-  const intervalMinutes = mapping[predictionName] || 30
-  const base = statusUpdatedAt.value ? new Date(statusUpdatedAt.value) : new Date()
-  const next = new Date(base.getTime() + intervalMinutes * 60 * 1000)
+const formatCountdown = (seconds) => {
+  if (!Number.isFinite(seconds) || seconds < 0) return '--:--'
+  const hh = Math.floor(seconds / 3600)
+  const mm = Math.floor((seconds % 3600) / 60)
+  const ss = Math.floor(seconds % 60)
+  if (hh > 0) {
+    return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
+  }
+  return `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
+}
 
-  const runningFarms = Array.isArray(fleetStatus.value)
-    ? fleetStatus.value.reduce((count, farm) => count + (farm.status?.[predictionName] ? 1 : 0), 0)
-    : 0
+const computeNextRunByType = (predictionName) => {
+  const cycle = predictionCycleMap[predictionName] || predictionCycleMap.short
+  const now = new Date(nowTick.value)
+  const startOfDay = new Date(now)
+  startOfDay.setHours(0, 0, 0, 0)
+
+  const nowMinute = now.getHours() * 60 + now.getMinutes()
+  let nextMinute = cycle.anchorMinuteOfDay
+  while (nextMinute <= nowMinute) {
+    nextMinute += cycle.intervalMinutes
+  }
+
+  const dayOffset = Math.floor(nextMinute / 1440)
+  const minuteInDay = nextMinute % 1440
+  const next = new Date(startOfDay)
+  next.setDate(next.getDate() + dayOffset)
+  next.setMinutes(minuteInDay)
+  next.setSeconds(0, 0)
+  return next
+}
+
+const normalizeBizState = (raw, fallback = 'disabled', ts = statusUpdatedAt.value) => {
+  if (typeof raw === 'boolean') {
+    return raw
+      ? { level: 'ready', text: `${formatHms(ts)} 已更新`, reason: '' }
+      : { level: 'disabled', text: '未启用', reason: '' }
+  }
+
+  const payload = raw && typeof raw === 'object' ? raw : {}
+  const stateToken = String(payload.state || payload.status || payload.level || '').toLowerCase()
+  const message = String(payload.message || payload.desc || payload.reason || '').trim()
+  const updatedAt = payload.updated_at || payload.updatedAt || payload.timestamp || ts
+  const merged = `${stateToken} ${message}`.toLowerCase()
+
+  if (merged.includes('degrad') || merged.includes('fallback') || merged.includes('降级')) {
+    return { level: 'degraded', text: message || '降级预测中', reason: message || '降级预测中' }
+  }
+  if (merged.includes('delay') || merged.includes('延时')) {
+    return { level: 'delayed', text: message || '延时', reason: message || '延时' }
+  }
+  if (merged.includes('running') || merged.includes('processing') || merged.includes('计算中')) {
+    return { level: 'running', text: message || '计算中...', reason: message || '计算中...' }
+  }
+  if (merged.includes('error') || merged.includes('fail') || merged.includes('缺失') || merged.includes('missing') || merged.includes('报错')) {
+    return { level: 'failed', text: message || '失败/缺数据', reason: message || '失败/缺数据' }
+  }
+  if (merged.includes('ready') || merged.includes('success') || merged.includes('ok') || merged.includes('updated')) {
+    return { level: 'ready', text: `${formatHms(updatedAt)} 已更新`, reason: '' }
+  }
+  if (merged.includes('disable') || merged.includes('stop') || merged.includes('未启用')) {
+    return { level: 'disabled', text: '未启用', reason: '' }
+  }
+  if (fallback === 'ready') {
+    return { level: 'ready', text: `${formatHms(updatedAt)} 已更新`, reason: '' }
+  }
+  return { level: fallback, text: fallback === 'unknown' ? '状态未知' : '未启用', reason: message }
+}
+
+const fleetMatrixRows = computed(() => {
+  const rows = Array.isArray(fleetStatus.value) ? fleetStatus.value : []
+  const filterCodes = Array.isArray(selectedFleetFarmCodes.value) ? selectedFleetFarmCodes.value : []
+  const applyFilter = filterCodes.length > 0
+  const baseTs = statusUpdatedAt.value
+
+  return rows
+    .filter((farm) => !applyFilter || filterCodes.includes(farm.farm_code))
+    .map((farm) => {
+      const nwpRaw = farm.nwp_status || farm.nwp || farm.weather_status || farm.weather || null
+      const nwpState = nwpRaw
+        ? normalizeBizState(nwpRaw, 'unknown', baseTs)
+        : normalizeBizState(farm.status?.supershort || farm.status?.short || farm.status?.medium, 'unknown', baseTs)
+
+      const supershortState = nwpState.level === 'failed'
+        ? { level: 'failed', text: 'NWP缺失', reason: 'NWP缺失' }
+        : normalizeBizState(farm.status?.supershort, 'disabled', baseTs)
+      const shortState = normalizeBizState(farm.status?.short, 'disabled', baseTs)
+      const mediumState = normalizeBizState(farm.status?.medium, 'disabled', baseTs)
+
+      return {
+        ...farm,
+        nwpState,
+        supershortState,
+        shortState,
+        mediumState
+      }
+    })
+})
+
+const globalPredictStatus = computed(() => {
+  const result = { supershort: false, short: false, medium: false }
+  const rows = Array.isArray(fleetStatus.value) ? fleetStatus.value : []
+  rows.forEach((farm) => {
+    result.supershort = result.supershort || !!farm.status?.supershort
+    result.short = result.short || !!farm.status?.short
+    result.medium = result.medium || !!farm.status?.medium
+  })
+  return result
+})
+
+const aggregateByTypeMap = computed(() => {
+  const base = {
+    supershort: { success: 0, failed: 0, disabled: 0, degraded: 0 },
+    short: { success: 0, failed: 0, disabled: 0, degraded: 0 },
+    medium: { success: 0, failed: 0, disabled: 0, degraded: 0 }
+  }
+  fleetMatrixRows.value.forEach((row) => {
+    const entries = [
+      ['supershort', row.supershortState],
+      ['short', row.shortState],
+      ['medium', row.mediumState]
+    ]
+    entries.forEach(([type, state]) => {
+      if (state.level === 'ready' || state.level === 'running') {
+        base[type].success += 1
+      } else if (state.level === 'failed') {
+        base[type].failed += 1
+      } else if (state.level === 'degraded' || state.level === 'delayed') {
+        base[type].degraded += 1
+      } else {
+        base[type].disabled += 1
+      }
+    })
+  })
+  return base
+})
+
+const failedStationsMap = computed(() => {
+  const map = { supershort: [], short: [], medium: [] }
+  fleetMatrixRows.value.forEach((row) => {
+    if (row.supershortState.level === 'failed') {
+      map.supershort.push({ farm_name: row.farm_name, farm_code: row.farm_code, reason: row.supershortState.reason || row.supershortState.text })
+    }
+    if (row.shortState.level === 'failed') {
+      map.short.push({ farm_name: row.farm_name, farm_code: row.farm_code, reason: row.shortState.reason || row.shortState.text })
+    }
+    if (row.mediumState.level === 'failed') {
+      map.medium.push({ farm_name: row.farm_name, farm_code: row.farm_code, reason: row.mediumState.reason || row.mediumState.text })
+    }
+  })
+  return map
+})
+
+const failedStationsForDialog = computed(() => failedStationsMap.value[failedDialogPredictionType.value] || [])
+
+const getPredictMetrics = (predictionName) => {
+  const cycle = predictionCycleMap[predictionName] || predictionCycleMap.short
+  const nextRunDate = computeNextRunByType(predictionName)
+  const now = new Date(nowTick.value)
+  const countdownSeconds = Math.max(0, Math.floor((nextRunDate.getTime() - now.getTime()) / 1000))
+  const cycleSeconds = cycle.intervalMinutes * 60
+  const progress = cycleSeconds > 0 ? Math.min(100, Math.max(0, Number((((cycleSeconds - countdownSeconds) / cycleSeconds) * 100).toFixed(2)))) : 0
+  const aggregate = aggregateByTypeMap.value[predictionName] || { success: 0, failed: 0, disabled: 0, degraded: 0 }
+  const base = statusUpdatedAt.value ? new Date(statusUpdatedAt.value) : now
 
   return {
     lastRun: formatHms(base),
     duration: `${(0.8 + (predictionName.length % 4) * 0.35).toFixed(1)}s`,
-    nextRun: formatHms(next),
-    runningFarms
+    nextRun: formatHms(nextRunDate),
+    countdownText: formatCountdown(countdownSeconds),
+    countdownProgress: progress,
+    scheduleLabel: cycle.label,
+    aggregate
   }
 }
 
@@ -454,6 +715,9 @@ onMounted(async () => {
   currentFarm.value = farmService.getCurrentFarm()
   fetchStatus()
   fetchFleetStatus()
+  countdownTimerId = setInterval(() => {
+    nowTick.value = Date.now()
+  }, 1000)
   intervalId = setInterval(() => {
     fetchStatus()
     fetchFleetStatus()
@@ -465,6 +729,10 @@ onUnmounted(() => {
   if (intervalId) {
     clearInterval(intervalId)
     intervalId = null
+  }
+  if (countdownTimerId) {
+    clearInterval(countdownTimerId)
+    countdownTimerId = null
   }
   if (farmChangeTimerId) {
     clearTimeout(farmChangeTimerId)
@@ -522,11 +790,8 @@ const fetchFleetStatus = async () => {
     fleetStatus.value = items
 
     const availableCodes = items.map(item => item.farm_code).filter(Boolean)
-    if (selectedFleetFarmCodes.value.length === 0 && availableCodes.length > 0) {
-      selectedFleetFarmCodes.value = [...availableCodes]
-    } else {
-      selectedFleetFarmCodes.value = selectedFleetFarmCodes.value.filter(code => availableCodes.includes(code))
-    }
+    selectedFleetFarmCodes.value = selectedFleetFarmCodes.value.filter(code => availableCodes.includes(code))
+    selectedMatrixFarmCodes.value = selectedMatrixFarmCodes.value.filter(code => availableCodes.includes(code))
   } catch (error) {
     console.error('获取多场站状态失败:', error)
   } finally {
@@ -534,14 +799,48 @@ const fetchFleetStatus = async () => {
   }
 }
 
-const selectAllFleetFarms = () => {
-  selectedFleetFarmCodes.value = fleetStatus.value
+const handleMatrixSelectionChange = (selection) => {
+  selectedMatrixFarmCodes.value = (Array.isArray(selection) ? selection : [])
     .map(item => item.farm_code)
     .filter(Boolean)
 }
 
-const clearFleetFarmSelection = () => {
-  selectedFleetFarmCodes.value = []
+const selectAllVisibleMatrixRows = async () => {
+  await nextTick()
+  const table = matrixTableRef.value
+  if (!table) return
+  table.clearSelection()
+  fleetMatrixRows.value.forEach((row) => {
+    table.toggleRowSelection(row, true)
+  })
+}
+
+const clearMatrixSelection = () => {
+  selectedMatrixFarmCodes.value = []
+  matrixTableRef.value?.clearSelection()
+}
+
+const openFarmCurve = (row) => {
+  farmService.setCurrentFarm(row.farm_code)
+  router.push({
+    name: 'PowerCompare',
+    query: { farm_code: row.farm_code, prediction_type: predictionTypeLabelMap.supershort }
+  })
+}
+
+const openManualCorrection = (row) => {
+  farmService.setCurrentFarm(row.farm_code)
+  router.push({
+    name: 'ReportManagement',
+    query: { farm_code: row.farm_code, source: 'autopredict_matrix', mode: 'manual_correction' }
+  })
+}
+
+const openFailedStationsDialog = (predictionType) => {
+  const failed = aggregateByTypeMap.value[predictionType]?.failed || 0
+  if (failed <= 0) return
+  failedDialogPredictionType.value = predictionType
+  failedStationsDialogVisible.value = true
 }
 
 const exportFailedBatchItems = () => {
@@ -641,21 +940,83 @@ const handleSwitchToggle = (name, enabled) => {
   handleControl(name, action)
 }
 
+const isGlobalControlBusy = (predictionName) => {
+  return !!globalControlBusyMap[predictionName]
+}
+
+const handleGlobalSwitchToggle = async (predictionType, enabled) => {
+  if (isGlobalControlBusy(predictionType)) {
+    ElMessage.warning('全局操作正在处理中，请稍候')
+    return
+  }
+
+  const allFarmCodes = fleetStatus.value.map(item => item.farm_code).filter(Boolean)
+  if (allFarmCodes.length === 0) {
+    ElMessage.warning('暂无可操作场站')
+    return
+  }
+
+  const action = enabled ? 'start' : 'stop'
+  if (!enabled) {
+    try {
+      await ElMessageBox.confirm(
+        `您确定要停止所有场站的${predictionTypeLabelMap[predictionType]}预测吗？这将导致无法自动上报！`,
+        '高危操作确认',
+        {
+          confirmButtonText: '确认停止',
+          cancelButtonText: '取消',
+          type: 'warning',
+          confirmButtonClass: 'el-button--danger'
+        }
+      )
+    } catch {
+      return
+    }
+  }
+
+  globalControlBusyMap[predictionType] = true
+  loading.value = true
+  try {
+    const res = await controlAutoPredictMatrix(action, [predictionType], allFarmCodes)
+    const payload = res.data?.data || res.data || {}
+    const summary = payload.summary || {}
+    const success = Number(summary.success || 0)
+    const failed = Number(summary.failed || 0)
+    if (failed > 0) {
+      ElMessage.warning(`全局${action}完成：成功 ${success}，失败 ${failed}`)
+    } else {
+      ElMessage.success(`全局${action}完成：成功 ${success}`)
+    }
+    await fetchStatus()
+    await fetchFleetStatus()
+  } catch (error) {
+    if (error?.response?.status === 409) {
+      ElMessage.warning(error?.response?.data?.message || '全局操作冲突，请稍后再试')
+      return
+    }
+    const message = error?.response?.data?.details || error?.response?.data?.error || error?.message || '未知错误'
+    showErrorDialog(`全局${action}失败`, message)
+  } finally {
+    globalControlBusyMap[predictionType] = false
+    loading.value = false
+  }
+}
+
 const handleControlMatrix = async (action) => {
   if (matrixControlLoading.value) {
     ElMessage.warning('矩阵批量操作正在处理中，请稍候')
     return
   }
 
-  const targetFarmCodes = Array.isArray(selectedFleetFarmCodes.value)
-    ? selectedFleetFarmCodes.value.filter(Boolean)
+  const targetFarmCodes = Array.isArray(selectedMatrixFarmCodes.value)
+    ? selectedMatrixFarmCodes.value.filter(Boolean)
     : []
   const targetTypes = Array.isArray(selectedBatchTypes.value)
     ? selectedBatchTypes.value.filter(Boolean)
     : []
 
   if (targetFarmCodes.length === 0) {
-    ElMessage.warning('请至少选择一个场站')
+    ElMessage.warning('请先勾选至少一个场站')
     return
   }
   if (targetTypes.length === 0) {
@@ -838,16 +1199,23 @@ const handleLogTypeChange = () => {
 }
 
 .fleet-title {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   color: #d6ebff;
+}
+
+.degrade-strategy-tip {
+  font-size: 12px;
+  color: #ffd58f;
+  margin-bottom: 10px;
 }
 
 .fleet-filter-row {
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
   margin-bottom: 10px;
 }
 
@@ -857,62 +1225,84 @@ const handleLogTypeChange = () => {
   color: #d0e8ff !important;
 }
 
-.fleet-matrix-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
-}
-
 .fleet-farm-select {
   min-width: 360px;
   max-width: 680px;
 }
 
-.fleet-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 8px;
-}
-
-.fleet-item {
-  border: 1px solid rgba(128, 182, 220, 0.2);
-  border-radius: 10px;
-  padding: 8px 10px;
-  background: rgba(8, 24, 38, 0.68);
+.fleet-code {
+  margin-left: 6px;
+  color: #8db7d6;
+  font-size: 12px;
 }
 
 .fleet-name {
   font-size: 13px;
   color: #d6ebff;
-  margin-bottom: 6px;
+  margin-bottom: 0;
 }
 
-.fleet-tags {
-  display: flex;
-  gap: 6px;
-}
-
-.fleet-matrix-row .el-button--primary.is-plain,
-.fleet-matrix-row .el-button--warning.is-plain,
-.fleet-matrix-row .el-button--danger.is-plain {
+.fleet-filter-row .el-button--primary.is-plain,
+.fleet-filter-row .el-button--warning.is-plain,
+.fleet-filter-row .el-button--danger.is-plain {
   background: transparent !important;
 }
 
-.fleet-matrix-row .el-button--primary.is-plain {
+.fleet-filter-row .el-button--primary.is-plain {
   color: #4ac6ff !important;
   border-color: rgba(74, 198, 255, 0.55) !important;
 }
 
-.fleet-matrix-row .el-button--warning.is-plain {
+.fleet-filter-row .el-button--warning.is-plain {
   color: #f6b73c !important;
   border-color: rgba(246, 183, 60, 0.55) !important;
 }
 
-.fleet-matrix-row .el-button--danger.is-plain {
+.fleet-filter-row .el-button--danger.is-plain {
   color: #ff7b92 !important;
   border-color: rgba(255, 123, 146, 0.55) !important;
+}
+
+.biz-status {
+  display: inline-block;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  padding: 2px 10px;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.biz-ready {
+  color: #7ef3b7;
+  border-color: rgba(126, 243, 183, 0.35);
+  background: rgba(26, 79, 59, 0.35);
+}
+
+.biz-running {
+  color: #f7db6d;
+  border-color: rgba(247, 219, 109, 0.38);
+  background: rgba(90, 79, 20, 0.32);
+}
+
+.biz-delayed,
+.biz-degraded {
+  color: #ffbe73;
+  border-color: rgba(255, 190, 115, 0.4);
+  background: rgba(104, 63, 19, 0.34);
+}
+
+.biz-failed {
+  color: #ff8f9f;
+  border-color: rgba(255, 143, 159, 0.45);
+  background: rgba(88, 20, 33, 0.38);
+}
+
+.biz-disabled,
+.biz-unknown {
+  color: #b7c4d0;
+  border-color: rgba(183, 196, 208, 0.35);
+  background: rgba(59, 66, 72, 0.38);
 }
 
 .hero-section {
@@ -1197,6 +1587,53 @@ const handleLogTypeChange = () => {
   text-shadow: 0 0 10px rgba(18, 215, 255, 0.2);
 }
 
+.metric-divider {
+  margin: 0 5px;
+  color: #8fb0c5;
+}
+
+.metric-failed {
+  color: #ff8f9f;
+}
+
+.metric-failed.clickable {
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.countdown-box {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid rgba(123, 178, 213, 0.25);
+  border-radius: 10px;
+  background: rgba(8, 25, 39, 0.55);
+}
+
+.countdown-label {
+  color: #9ab8cc;
+  font-size: 12px;
+}
+
+.countdown-value {
+  color: #ffe196;
+  font-size: 22px;
+  font-family: Consolas, Menlo, Monaco, monospace;
+  margin: 2px 0 8px;
+  text-shadow: 0 0 12px rgba(255, 225, 150, 0.25);
+}
+
+.countdown-note {
+  margin-top: 6px;
+  color: #8eb0c7;
+  font-size: 12px;
+}
+
+.degraded-alert {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #ffbf72;
+}
+
 .card-footer {
   margin-top: 12px;
   display: flex;
@@ -1333,11 +1770,6 @@ const handleLogTypeChange = () => {
   }
 
   .fleet-filter-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .fleet-matrix-row {
     flex-direction: column;
     align-items: stretch;
   }

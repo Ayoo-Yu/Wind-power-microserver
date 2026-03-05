@@ -1,5 +1,6 @@
 ﻿// src/utils/farmService.js
 import { getAutoPredictFarms, getReportFarms, getFarms } from '../api/farmApi'
+import { getUserMeta } from './userMetaStore'
 /**
  * 场站管理服务
  * 提供场站选择、状态管理和数据隔离功能
@@ -50,6 +51,27 @@ class FarmService {
     return this.availableFarms
   }
 
+  getCurrentUserScopeCodes() {
+    try {
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
+      if (!currentUser?.username) return null
+      const meta = getUserMeta(currentUser.username)
+      const stations = Array.isArray(meta?.stations) ? meta.stations : []
+      if (stations.includes('__ALL__')) return null
+      return stations.length > 0 ? stations : null
+    } catch (error) {
+      return null
+    }
+  }
+
+  applyUserScope(farms = []) {
+    const scopeCodes = this.getCurrentUserScopeCodes()
+    if (!scopeCodes) return farms
+    const whitelist = new Set(scopeCodes.map(item => String(item).toLowerCase()))
+    const filtered = farms.filter(farm => whitelist.has(String(farm.code).toLowerCase()))
+    return filtered.length > 0 ? filtered : [{ code: 'DEFAULT_FARM', name: '默认风场' }]
+  }
+
   /**
    * 使用新列表覆盖当前场站列表，并校验当前场站是否有效
    */
@@ -58,7 +80,7 @@ class FarmService {
       this.availableFarms = [{ code: 'DEFAULT_FARM', name: '默认风场' }]
       this.farmsLoaded = false
     } else {
-      this.availableFarms = farms
+      this.availableFarms = this.applyUserScope(farms)
     }
 
     const exists = this.availableFarms.some(f => f.code === this.currentFarm)

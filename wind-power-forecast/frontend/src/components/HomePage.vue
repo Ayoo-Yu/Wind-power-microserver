@@ -2,8 +2,8 @@
   <div class="page-shell home-dashboard">
     <div class="dashboard-head panel-card">
       <div class="title-wrap">
-        <h1>风电数字驾驶舱</h1>
-        <p>更新时间：{{ updatedAt }}</p>
+        <h1>风电预测业务总览</h1>
+        <p>更新时间: {{ updatedAt }}</p>
         <div class="title-deco">
           <span class="title-dot"></span>
           <i class="title-line"></i>
@@ -15,26 +15,35 @@
     <KpiCards :items="cards" />
 
     <div class="dashboard-grid">
+      <div class="panel-card panel-trend">
+        <div class="panel-title">日功率预测（实绩 / 短期 / 超短期 / 可用容量）</div>
+        <PowerTrendChart :points="trendPoints" />
+      </div>
+
       <div class="panel-card panel-left">
         <div class="panel-title">场站出力排名</div>
         <StationRankChart :rows="rankRows" />
       </div>
 
       <div class="panel-card panel-center">
-        <div class="panel-title">场站拓扑</div>
+        <div class="panel-title">多场站预测任务监控矩阵</div>
         <FleetMap :points="topologyPoints" />
-      </div>
-
-      <div class="panel-card panel-right">
-        <div class="panel-title">日功率预测</div>
-        <PowerTrendChart :points="trendPoints" />
       </div>
     </div>
 
     <div class="dashboard-bottom">
       <div class="panel-card weather-card">
         <div class="panel-title">气象概览</div>
-        <div class="weather-grid">
+
+        <div v-if="weatherMode === 'fleet'" class="fleet-weather-grid">
+          <div v-for="item in weatherRows" :key="item.code" class="fleet-weather-item">
+            <div class="fleet-label">{{ item.label }}</div>
+            <div class="fleet-value">{{ item.value }} {{ item.unit }}</div>
+            <div class="fleet-hint">{{ item.hint }}</div>
+          </div>
+        </div>
+
+        <div v-else class="weather-grid">
           <div v-for="item in weatherRows" :key="item.code" class="weather-item">
             <div class="weather-name">{{ item.name }}</div>
             <div class="weather-main">
@@ -53,7 +62,20 @@
       </div>
 
       <div class="panel-card events-card">
-        <div class="panel-title">实时事件 / 告警</div>
+        <div class="panel-title event-title-row">
+          <span>实时事件 / 告警</span>
+          <div class="event-tabs">
+            <button
+              v-for="tab in eventTabs"
+              :key="tab.key"
+              class="event-tab-btn"
+              :class="{ active: activeEventTab === tab.key }"
+              @click="activeEventTab = tab.key"
+            >
+              {{ tab.label }}
+            </button>
+          </div>
+        </div>
         <ul class="event-list">
           <li v-for="event in scrollingEvents" :key="event.id" class="event-item">
             <span class="event-time">
@@ -89,10 +111,20 @@ const cards = ref([])
 const topologyPoints = ref([])
 const rankRows = ref([])
 const trendPoints = ref([])
+const weatherMode = ref('fleet')
 const weatherRows = ref([])
 const events = ref([])
 const updatedAt = ref('--')
+
+const eventTabs = [
+  { key: 'all', label: 'All' },
+  { key: 'system', label: 'System' },
+  { key: 'business', label: 'Business' }
+]
+const activeEventTab = ref('all')
+
 let eventTicker = null
+let farmListener = null
 
 function formatNow() {
   const d = new Date()
@@ -121,7 +153,8 @@ async function loadData() {
     topologyPoints.value = overview.topology || []
     rankRows.value = rank || []
     trendPoints.value = trend || []
-    weatherRows.value = weather || []
+    weatherMode.value = weather?.mode || 'fleet'
+    weatherRows.value = weather?.rows || []
     events.value = eventRows || []
     updatedAt.value = formatNow()
   } finally {
@@ -139,14 +172,18 @@ function windLevelStyle(speed) {
   return { width, background }
 }
 
-const scrollingEvents = computed(() => events.value.slice(0, 8))
+const filteredEvents = computed(() => {
+  if (activeEventTab.value === 'all') return events.value
+  return events.value.filter(event => event.category === activeEventTab.value)
+})
+
+const scrollingEvents = computed(() => filteredEvents.value.slice(0, 8))
 
 function startEventTicker() {
   if (eventTicker) clearInterval(eventTicker)
   eventTicker = setInterval(() => {
     if (events.value.length > 1) {
-      const first = events.value.shift()
-      events.value.push(first)
+      events.value = [...events.value.slice(1), events.value[0]]
     }
   }, 2600)
 }
@@ -155,12 +192,21 @@ onMounted(async () => {
   await farmService.loadAvailableFarms()
   await loadData()
   startEventTicker()
+
+  farmListener = async () => {
+    await loadData()
+  }
+  farmService.addListener(farmListener)
 })
 
 onBeforeUnmount(() => {
   if (eventTicker) {
     clearInterval(eventTicker)
     eventTicker = null
+  }
+  if (farmListener) {
+    farmService.removeListener(farmListener)
+    farmListener = null
   }
 })
 </script>
@@ -219,8 +265,16 @@ onBeforeUnmount(() => {
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 1fr 1.25fr 1fr;
+  grid-template-columns: 1fr 1.8fr;
   gap: 12px;
+}
+
+.panel-trend {
+  grid-column: 1 / 3;
+}
+
+.panel-center {
+  grid-column: 1 / 3;
 }
 
 .dashboard-bottom {
@@ -325,6 +379,65 @@ onBeforeUnmount(() => {
   color: var(--text-secondary);
 }
 
+.fleet-weather-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.fleet-weather-item {
+  border: 1px solid rgba(136, 186, 217, 0.2);
+  border-radius: 10px;
+  background: rgba(7, 24, 39, 0.58);
+  padding: 10px;
+}
+
+.fleet-label {
+  font-size: 13px;
+  color: #9fc4df;
+}
+
+.fleet-value {
+  margin-top: 8px;
+  font-family: Consolas, Menlo, Monaco, monospace;
+  font-size: 24px;
+  color: #49ecff;
+}
+
+.fleet-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #b2cee3;
+}
+
+.event-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.event-tabs {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.event-tab-btn {
+  border: 1px solid rgba(136, 186, 217, 0.25);
+  background: rgba(7, 24, 39, 0.58);
+  color: #8fb2ca;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.event-tab-btn.active {
+  color: #dff3ff;
+  border-color: rgba(18, 215, 255, 0.5);
+  background: rgba(18, 215, 255, 0.12);
+}
+
 .event-list {
   list-style: none;
   margin: 0;
@@ -332,7 +445,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 190px;
+  max-height: 220px;
   overflow: auto;
 }
 
@@ -424,13 +537,19 @@ onBeforeUnmount(() => {
     grid-template-columns: 1fr;
   }
 
+  .panel-trend,
+  .panel-center {
+    grid-column: 1;
+  }
+
   .dashboard-bottom {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 720px) {
-  .weather-grid {
+  .weather-grid,
+  .fleet-weather-grid {
     grid-template-columns: 1fr;
   }
 

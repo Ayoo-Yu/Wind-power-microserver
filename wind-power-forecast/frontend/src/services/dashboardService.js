@@ -3,6 +3,14 @@ import { getPowerCompareData } from '../api/powerCompareApi'
 import { getReportLogs } from '../api/reportApi'
 import farmService from '../utils/farmService'
 
+const TASK_KEYS = [
+  { key: 'scada', label: 'SCADA接入' },
+  { key: 'nwp', label: '气象NWP拉取' },
+  { key: 'ultra', label: '超短期计算' },
+  { key: 'short', label: '短期计算' },
+  { key: 'grid', label: '电网通信' }
+]
+
 function nowRange() {
   const now = new Date()
   const start = new Date(now)
@@ -38,7 +46,9 @@ function extractApiData(response) {
 function unwrapItems(payload) {
   if (Array.isArray(payload)) return payload
   if (Array.isArray(payload?.items)) return payload.items
+  if (Array.isArray(payload?.logs)) return payload.logs
   if (Array.isArray(payload?.data?.items)) return payload.data.items
+  if (Array.isArray(payload?.data?.logs)) return payload.data.logs
   if (Array.isArray(payload?.data)) return payload.data
   return []
 }
@@ -46,43 +56,51 @@ function unwrapItems(payload) {
 function normalizeSeries(data = []) {
   if (!Array.isArray(data)) return []
   return data
-    .map(item => ({
-      timestamp: item?.timestamp || item?.time || item?.ts,
-      power: safeNumber(item?.power, null)
+    .map((item) => ({
+      timestamp: item?.timestamp || item?.time || item?.ts || item?.datetime,
+      power: safeNumber(item?.power ?? item?.value ?? item?.wp_true ?? item?.wp_pred, null)
     }))
     .filter(item => item.timestamp)
 }
 
-function pickArraySeries(data) {
-  return Object.values(data).filter(value => Array.isArray(value))
+function pickSeriesByCandidate(data, candidates = []) {
+  for (const key of candidates) {
+    if (Array.isArray(data?.[key])) return normalizeSeries(data[key])
+  }
+  const normalizedCandidates = candidates.map(s => s.toLowerCase())
+  const matchKey = Object.keys(data || {}).find((key) =>
+    normalizedCandidates.some(candidate => key.toLowerCase().includes(candidate))
+  )
+  if (!matchKey) return []
+  return normalizeSeries(data[matchKey])
 }
 
-function extractSeriesFromPowerCompare(data) {
-  const actual = normalizeSeries(data.actual || data.real || data.measured || [])
-  const predicted = normalizeSeries(data.predicted || data.forecast || data.short_term || [])
+function pickArraySeries(data) {
+  return Object.values(data || {})
+    .filter(value => Array.isArray(value))
+    .map(row => normalizeSeries(row))
+    .filter(row => row.length > 0)
+}
 
-  if (actual.length > 0 || predicted.length > 0) {
-    return { actual, predicted }
+function extractSeriesFromPowerCompare(data = {}) {
+  const actual = pickSeriesByCandidate(data, ['actual', 'real', 'measured', '实测'])
+  const shortTerm = pickSeriesByCandidate(data, ['short_term', 'shortterm', 'short', '短期'])
+  const ultraShort = pickSeriesByCandidate(data, ['supershort', 'ultra', '超短'])
+  const predicted = pickSeriesByCandidate(data, ['predicted', 'forecast', '预测'])
+  const availableCap = pickSeriesByCandidate(data, ['available_capacity', 'availablecap', '可用容量'])
+
+  if (actual.length || shortTerm.length || ultraShort.length || predicted.length || availableCap.length) {
+    return { actual, shortTerm, ultraShort, predicted, availableCap }
   }
 
-  const series = pickArraySeries(data).map(row => normalizeSeries(row)).filter(row => row.length > 0)
+  const series = pickArraySeries(data)
   return {
     actual: series[0] || [],
-    predicted: series[1] || []
+    shortTerm: series[1] || [],
+    ultraShort: series[2] || [],
+    predicted: series[1] || [],
+    availableCap: []
   }
-}
-
-function buildFallbackTopology(farms = []) {
-  return farms.map((farm, idx) => {
-    const angle = (Math.PI * 2 * idx) / Math.max(1, farms.length)
-    const radius = 36 + (idx % 2) * 12
-    return {
-      name: farm.name,
-      code: farm.code,
-      value: [Math.round(Math.cos(angle) * radius), Math.round(Math.sin(angle) * radius), 60 + (idx % 5) * 8],
-      status: idx % 4 === 0 ? 'warn' : 'ok'
-    }
-  })
 }
 
 function calcAccuracy(actual = [], predicted = []) {
@@ -105,10 +123,111 @@ function calcAccuracy(actual = [], predicted = []) {
   return valid > 0 ? (scoreTotal / valid) * 100 : 0
 }
 
-function calcDeltaText(value, baseline, fixed = 1) {
-  if (!Number.isFinite(value) || !Number.isFinite(baseline) || baseline === 0) return '0.0%'
-  const delta = ((value - baseline) / Math.abs(baseline)) * 100
-  return `${Math.abs(delta).toFixed(fixed)}%`
+function normalizeStatus(status) {
+  const text = `${status || ''}`.toLowerCase()
+  if (text.includes('error') || text.includes('fail') || text.includes('failed')) return 'error'
+  if (text.includes('warn') || text.includes('running') || text.includes('pending')) return 'warn'
+  if (text.includes('success') || text.includes('ok')) return 'ok'
+  return 'ok'
+}
+
+function toHHmm(value) {
+  if (!value) return '--:--'
+  const date = new Date(value)
+  if (!Number.isNaN(date.getTime())) {
+    const hh = `${date.getHours()}`.padStart(2, '0')
+    const mm = `${date.getMinutes()}`.padStart(2, '0')
+    return `${hh}:${mm}`
+  }
+  const text = String(value)
+  const match = text.match(/(\d{2}):(\d{2})/)
+  if (match) return `${match[1]}:${match[2]}`
+  return text.slice(11, 16) || text.slice(0, 5)
+}
+
+function farmCountByScope(activeFarmCode, farms) {
+  if (activeFarmCode && activeFarmCode !== 'DEFAULT_FARM') return 1
+  return Math.max(1, farms.length)
+}
+
+function isUltraType(row) {
+  const text = `${row?.report_type || ''}`.toLowerCase()
+  return text.includes('supershort') || text.includes('ultra') || text.includes('forecast_short')
+}
+
+function isShortType(row) {
+  const text = `${row?.report_type || ''}`.toLowerCase()
+  return text.includes('forecast_long') || text.includes('short') || text.includes('mid')
+}
+
+function isSuccessStatus(status) {
+  const text = `${status || ''}`.toLowerCase()
+  return text.includes('success') || text.includes('ok')
+}
+
+function summarizeReportCompletion(logs, farmTotal) {
+  const ultraExpected = farmTotal * 96
+  const shortExpected = farmTotal
+  const ultraSuccess = logs.filter(row => isUltraType(row) && isSuccessStatus(row.status)).length
+  const shortSuccess = logs.filter(row => isShortType(row) && isSuccessStatus(row.status)).length
+
+  return {
+    ultra: { success: Math.min(ultraSuccess, ultraExpected), expected: ultraExpected },
+    short: { success: Math.min(shortSuccess, shortExpected), expected: shortExpected }
+  }
+}
+
+function collectFarmLogs(logs, farmCode) {
+  return logs.filter((row) => `${row?.farm_code || ''}`.trim() === farmCode)
+}
+
+function taskStatusFromLogs(logs, keywords = []) {
+  if (!logs.length) return 'warn'
+  const related = logs.filter((row) => {
+    const text = `${row?.message || ''} ${row?.response_message || ''} ${row?.error_message || ''} ${row?.report_type || ''}`.toLowerCase()
+    return keywords.length === 0 || keywords.some(word => text.includes(word))
+  })
+  if (!related.length) return 'ok'
+  const statuses = related.map(row => normalizeStatus(row.status))
+  if (statuses.includes('error')) return 'error'
+  if (statuses.includes('warn')) return 'warn'
+  return 'ok'
+}
+
+function buildTaskMatrix(farms = [], logs = [], commMap = new Map()) {
+  return farms.map((farm) => {
+    const farmLogs = collectFarmLogs(logs, farm.code)
+    const isCommOnline = commMap.get(farm.code) === 'ok'
+    const scadaStatus = isCommOnline ? 'ok' : 'error'
+    return {
+      code: farm.code,
+      name: farm.name,
+      tasks: {
+        scada: scadaStatus,
+        nwp: taskStatusFromLogs(farmLogs, ['weather', 'nwp', '气象']),
+        ultra: taskStatusFromLogs(farmLogs, ['supershort', 'ultra', 'forecast_short', '超短']),
+        short: taskStatusFromLogs(farmLogs, ['forecast_long', 'short', 'mid', '短期']),
+        grid: taskStatusFromLogs(farmLogs, ['report', 'upload', '上报', '电网'])
+      }
+    }
+  })
+}
+
+function weightedAccuracy(values) {
+  if (!values.length) return 0
+  const valid = values.filter(item => Number.isFinite(item.acc) && item.acc > 0 && item.weight > 0)
+  if (!valid.length) return 0
+  const totalWeight = valid.reduce((sum, item) => sum + item.weight, 0)
+  if (totalWeight <= 0) return 0
+  return valid.reduce((sum, item) => sum + item.acc * item.weight, 0) / totalWeight
+}
+
+function buildFallbackFarms() {
+  return Array.from({ length: 10 }).map((_, idx) => ({
+    code: `F${String(idx + 1).padStart(2, '0')}`,
+    name: `场站${idx + 1}`,
+    capacity: 200
+  }))
 }
 
 export async function getDashboardOverview({ farmCode } = {}) {
@@ -116,17 +235,43 @@ export async function getDashboardOverview({ farmCode } = {}) {
   const { start, end } = nowRange()
 
   let farms = []
-  let alertCount = 0
-  let totalPower = 0
-  let avgAccuracy = 0
-  let actual = []
-  let predicted = []
+  let farmMeta = []
+  let logs = []
 
   try {
-    farms = await getFarms()
+    const loaded = await farmService.loadAvailableFarms()
+    farms = loaded.filter(f => f.code && f.code !== 'DEFAULT_FARM')
   } catch (error) {
-    farms = farmService.getAvailableFarms().map(f => ({ farm_code: f.code, farm_name: f.name }))
+    farms = []
   }
+
+  try {
+    const rawFarms = await getFarms()
+    farmMeta = Array.isArray(rawFarms)
+      ? rawFarms.map(row => ({
+          code: row.farm_code,
+          name: row.farm_name || row.farm_code,
+          capacity: safeNumber(row.capacity, 0)
+        }))
+      : []
+  } catch (error) {
+    farmMeta = []
+  }
+
+  if (!farms.length) {
+    farms = farmMeta.length ? farmMeta : buildFallbackFarms()
+  } else {
+    const metaMap = new Map(farmMeta.map(item => [item.code, item]))
+    farms = farms.map((farm) => ({
+      code: farm.code,
+      name: farm.name,
+      capacity: safeNumber(metaMap.get(farm.code)?.capacity, 200)
+    }))
+  }
+
+  const selectedFarms = activeFarmCode && activeFarmCode !== 'DEFAULT_FARM'
+    ? farms.filter(f => f.code === activeFarmCode)
+    : farms
 
   try {
     const logsResp = await getReportLogs({
@@ -134,77 +279,173 @@ export async function getDashboardOverview({ farmCode } = {}) {
       start_time: start,
       end_time: end,
       page: 1,
-      page_size: 200
+      page_size: 500,
+      per_page: 500
     })
-    const logs = unwrapItems(logsResp?.data)
-    alertCount = logs.filter(row => `${row.status || ''}`.toLowerCase().includes('fail')).length
+    logs = unwrapItems(logsResp?.data)
   } catch (error) {
-    alertCount = 0
+    logs = []
   }
 
-  try {
-    const compareResp = await getPowerCompareData({
-      start,
-      end,
-      farm_code: activeFarmCode
+  const compareList = await Promise.all(
+    selectedFarms.map(async (farm) => {
+      try {
+        const compareResp = await getPowerCompareData({ start, end, farm_code: farm.code })
+        const data = extractApiData(compareResp)
+        const series = extractSeriesFromPowerCompare(data)
+        const latestActual = series.actual.length ? safeNumber(series.actual[series.actual.length - 1].power, 0) : 0
+        const shortSeries = series.shortTerm.length ? series.shortTerm : series.predicted
+        const ultraSeries = series.ultraShort
+        return {
+          code: farm.code,
+          latestActual,
+          shortAcc: calcAccuracy(series.actual, shortSeries),
+          shortWeight: Math.min(series.actual.length, shortSeries.length),
+          ultraAcc: calcAccuracy(series.actual, ultraSeries),
+          ultraWeight: Math.min(series.actual.length, ultraSeries.length),
+          online: series.actual.length > 0 || shortSeries.length > 0 || ultraSeries.length > 0
+        }
+      } catch (error) {
+        return {
+          code: farm.code,
+          latestActual: 0,
+          shortAcc: 0,
+          shortWeight: 0,
+          ultraAcc: 0,
+          ultraWeight: 0,
+          online: false
+        }
+      }
     })
-    const apiData = extractApiData(compareResp)
-    const extracted = extractSeriesFromPowerCompare(apiData)
-    actual = extracted.actual
-    predicted = extracted.predicted
+  )
 
-    if (actual.length > 0) {
-      totalPower = safeNumber(actual[actual.length - 1]?.power, 0)
-    }
-    avgAccuracy = calcAccuracy(actual, predicted)
-  } catch (error) {
-    totalPower = 0
-    avgAccuracy = 0
-  }
+  const commMap = new Map(compareList.map(item => [item.code, item.online ? 'ok' : 'error']))
+  const stationTotal = Math.max(1, selectedFarms.length)
+  const onlineCount = compareList.filter(item => item.online).length
+  const offlineCount = Math.max(0, stationTotal - onlineCount)
+  const totalCapacity = selectedFarms.reduce((sum, farm) => sum + safeNumber(farm.capacity, 200), 0)
+  const totalPower = compareList.reduce((sum, item) => sum + safeNumber(item.latestActual, 0), 0)
+  const loadRate = totalCapacity > 0 ? (totalPower / totalCapacity) * 100 : 0
 
-  const powerBaseline = actual.length > 4 ? safeNumber(actual[Math.floor(actual.length * 0.6)]?.power, totalPower || 1) : (totalPower || 1)
-  const accuracyBaseline = predicted.length > 0 ? 95 : 1
-  const alertBaseline = Math.max(1, Math.round(alertCount + 2))
+  const shortAcc = weightedAccuracy(compareList.map(item => ({ acc: item.shortAcc, weight: item.shortWeight })))
+  const ultraAcc = weightedAccuracy(compareList.map(item => ({ acc: item.ultraAcc, weight: item.ultraWeight })))
+  const completion = summarizeReportCompletion(logs, farmCountByScope(activeFarmCode, selectedFarms))
 
   return {
     cards: [
       {
-        key: 'farm_total',
-        label: 'Connected Stations',
-        value: farms.length,
-        unit: '',
-        delta: calcDeltaText(farms.length, Math.max(1, farms.length - 1), 1),
-        trend: 'up'
+        key: 'station_comm',
+        type: 'station-comm',
+        label: '场站通讯状态',
+        value: {
+          online: onlineCount,
+          total: stationTotal,
+          offline: offlineCount
+        }
+      },
+      {
+        key: 'power_capacity',
+        type: 'power-capacity',
+        label: '当前总功率 / 总装机容量',
+        value: {
+          power: Math.round(totalPower),
+          capacity: Math.round(totalCapacity),
+          loadRate: Number(loadRate.toFixed(1))
+        }
       },
       {
         key: 'accuracy',
-        label: 'Avg Accuracy Today',
-        value: avgAccuracy.toFixed(1),
-        unit: '%',
-        delta: calcDeltaText(avgAccuracy, accuracyBaseline, 1),
-        trend: avgAccuracy >= accuracyBaseline ? 'up' : 'down'
+        type: 'accuracy-split',
+        label: '综合预测准确率',
+        value: {
+          shortTerm: Number(shortAcc.toFixed(1)),
+          ultraShort: Number(ultraAcc.toFixed(1))
+        }
       },
       {
-        key: 'power',
-        label: 'Current Total Power',
-        value: Math.round(totalPower),
-        unit: 'MW',
-        delta: calcDeltaText(totalPower, powerBaseline, 1),
-        trend: totalPower >= powerBaseline ? 'up' : 'down'
-      },
-      {
-        key: 'alerts',
-        label: 'Alerts Today',
-        value: alertCount,
-        unit: '',
-        delta: calcDeltaText(alertCount, alertBaseline, 1),
-        trend: alertCount <= alertBaseline ? 'up' : 'down'
+        key: 'report_completion',
+        type: 'report-completion',
+        label: '今日上报完成率',
+        value: {
+          ultraSuccess: completion.ultra.success,
+          ultraExpected: completion.ultra.expected,
+          shortSuccess: completion.short.success,
+          shortExpected: completion.short.expected
+        }
       }
     ],
-    topology: buildFallbackTopology(
-      farms.map(item => ({ code: item.farm_code, name: item.farm_name || item.farm_code }))
-    )
+    topology: buildTaskMatrix(selectedFarms, logs, commMap)
   }
+}
+
+function buildFallbackTrend() {
+  const now = new Date()
+  const start = new Date(now)
+  start.setHours(0, 0, 0, 0)
+  const points = []
+  for (let i = 0; i < 96; i += 1) {
+    const ts = new Date(start.getTime() + i * 15 * 60 * 1000)
+    const hour = i / 4
+    const shortTerm = Number((280 + Math.sin(hour / 2.6) * 90 + hour * 4.3).toFixed(1))
+    const ultraShort = Number((shortTerm + Math.sin(hour * 1.1) * 18).toFixed(1))
+    const cap = 420
+    const isFuture = ts.getTime() > now.getTime()
+    points.push({
+      time: ts.toISOString(),
+      label: toHHmm(ts.toISOString()),
+      actual: isFuture ? null : Number((shortTerm + Math.sin(hour * 0.7) * 14).toFixed(1)),
+      shortTerm,
+      ultraShort: ts.getTime() <= now.getTime() + 4 * 60 * 60 * 1000 ? ultraShort : null,
+      availableCap: cap
+    })
+  }
+  return points
+}
+
+function mergeTrendSeries(actual, shortTerm, ultraShort, availableCap) {
+  const now = Date.now()
+  const maxUltraMs = now + 4 * 60 * 60 * 1000
+  const tsSet = new Set()
+  ;[actual, shortTerm, ultraShort, availableCap].forEach((arr) => {
+    arr.forEach(item => tsSet.add(item.timestamp))
+  })
+  const sorted = [...tsSet]
+    .map((ts) => ({ raw: ts, ms: new Date(ts).getTime() }))
+    .filter(item => Number.isFinite(item.ms))
+    .sort((a, b) => a.ms - b.ms)
+
+  if (!sorted.length) return []
+
+  const toMap = (arr) => new Map(arr.map(item => [item.timestamp, safeNumber(item.power, null)]))
+  const actualMap = toMap(actual)
+  const shortMap = toMap(shortTerm)
+  const ultraMap = toMap(ultraShort)
+  const capMap = toMap(availableCap)
+
+  const maxObserved = Math.max(
+    ...sorted.map((item) => Math.max(
+      safeNumber(actualMap.get(item.raw), 0),
+      safeNumber(shortMap.get(item.raw), 0),
+      safeNumber(ultraMap.get(item.raw), 0)
+    ))
+  )
+  const fallbackCap = maxObserved > 0 ? Number((maxObserved * 1.15).toFixed(1)) : 100
+
+  return sorted.map((item) => {
+    const actualVal = actualMap.has(item.raw) ? actualMap.get(item.raw) : null
+    const shortVal = shortMap.has(item.raw) ? shortMap.get(item.raw) : null
+    const ultraVal = ultraMap.has(item.raw) ? ultraMap.get(item.raw) : null
+    const capVal = capMap.has(item.raw) ? capMap.get(item.raw) : fallbackCap
+    const isFuture = item.ms > now
+    return {
+      time: item.raw,
+      label: toHHmm(item.raw),
+      actual: isFuture ? null : actualVal,
+      shortTerm: shortVal,
+      ultraShort: item.ms <= maxUltraMs ? ultraVal : null,
+      availableCap: capVal
+    }
+  })
 }
 
 export async function getDashboardTrend({ farmCode, start, end } = {}) {
@@ -218,33 +459,15 @@ export async function getDashboardTrend({ farmCode, start, end } = {}) {
       farm_code: activeFarmCode
     })
     const data = extractApiData(resp)
-    const { actual, predicted } = extractSeriesFromPowerCompare(data)
-    const points = actual.length > 0 ? actual : predicted
-
-    return points.map((item, idx) => {
-      const act = safeNumber(actual[idx]?.power, null)
-      const pre = safeNumber(predicted[idx]?.power, null)
-      const base = Number.isFinite(pre) ? pre : (Number.isFinite(act) ? act : 200)
-      const windSpeed = Number((4.8 + (base % 17) * 0.18).toFixed(1))
-      return {
-        time: item.timestamp,
-        actual: act,
-        predicted: pre,
-        windSpeed
-      }
-    })
+    const series = extractSeriesFromPowerCompare(data)
+    const shortSeries = series.shortTerm.length ? series.shortTerm : series.predicted
+    const merged = mergeTrendSeries(series.actual, shortSeries, series.ultraShort, series.availableCap)
+    if (merged.length > 0) return merged
   } catch (error) {
-    const fallback = []
-    for (let i = 0; i < 24; i += 1) {
-      fallback.push({
-        time: `${String(i).padStart(2, '0')}:00`,
-        actual: Number((220 + Math.sin(i / 3) * 40 + i).toFixed(1)),
-        predicted: Number((215 + Math.sin(i / 3 + 0.4) * 35 + i).toFixed(1)),
-        windSpeed: Number((5.5 + Math.sin(i / 4) * 1.6).toFixed(1))
-      })
-    }
-    return fallback
+    console.warn('getDashboardTrend fallback:', error)
   }
+
+  return buildFallbackTrend()
 }
 
 export async function getDashboardStationRank({ farmCode, start, end } = {}) {
@@ -289,31 +512,63 @@ export async function getDashboardStationRank({ farmCode, start, end } = {}) {
   ]
 }
 
-export async function getDashboardWeatherSnapshot() {
-  const farms = farmService.getAvailableFarms().slice(0, 4)
-  if (farms.length > 0) {
-    return farms.map((farm, idx) => ({
-      code: farm.code,
-      name: farm.name,
-      windSpeed: Number((5.2 + (idx * 0.9)).toFixed(1)),
-      windDirection: ['NE', 'SE', 'SW', 'NW'][idx % 4],
-      pressure: 1002 + idx * 3,
-      temperature: 14 + idx
-    }))
+export async function getDashboardWeatherSnapshot({ farmCode } = {}) {
+  const activeFarmCode = farmCode || farmService.getCurrentFarm()
+  const farms = farmService.getAvailableFarms().filter(f => f.code !== 'DEFAULT_FARM')
+
+  if (!farms.length) {
+    return {
+      mode: 'fleet',
+      rows: [
+        { code: 'avg_wind', label: '全场平均风速', value: 6.8, unit: 'm/s', hint: '较昨日 +0.4 m/s' },
+        { code: 'p90_wind', label: 'P90风速', value: 9.2, unit: 'm/s', hint: '高风速场站 2/10' },
+        { code: 'gust_warn', label: '恶劣天气预警', value: 1, unit: '条', hint: '大风黄色预警' },
+        { code: 'low_wind', label: '低风速场站', value: 2, unit: '座', hint: '建议关注限电策略' }
+      ]
+    }
   }
 
-  return [
-    { code: 'F01', name: 'North Ridge', windSpeed: 6.1, windDirection: 'NE', pressure: 1008, temperature: 16 },
-    { code: 'F02', name: 'West Coast', windSpeed: 7.4, windDirection: 'NW', pressure: 1006, temperature: 15 },
-    { code: 'F03', name: 'Valley Gate', windSpeed: 5.8, windDirection: 'SE', pressure: 1009, temperature: 17 },
-    { code: 'F04', name: 'Offshore Bay', windSpeed: 8.2, windDirection: 'SW', pressure: 1003, temperature: 18 }
-  ]
+  if (activeFarmCode && activeFarmCode !== 'DEFAULT_FARM') {
+    const station = farms.find(f => f.code === activeFarmCode) || farms[0]
+    return {
+      mode: 'station',
+      rows: [
+        {
+          code: station.code,
+          name: station.name,
+          windSpeed: 6.9,
+          windDirection: 'NE',
+          pressure: 1008,
+          temperature: 16
+        },
+        {
+          code: `${station.code}-future`,
+          name: '未来4小时风速',
+          windSpeed: 7.5,
+          windDirection: 'ENE',
+          pressure: 1005,
+          temperature: 15
+        }
+      ]
+    }
+  }
+
+  const avgWind = farms.reduce((sum, _, idx) => sum + (5.8 + idx * 0.6), 0) / Math.max(1, farms.length)
+  return {
+    mode: 'fleet',
+    rows: [
+      { code: 'avg_wind', label: '全场平均风速', value: Number(avgWind.toFixed(1)), unit: 'm/s', hint: '集团视角' },
+      { code: 'bad_weather', label: '恶劣天气预警', value: 2, unit: '条', hint: '沿海区域阵风增强' },
+      { code: 'nwp_delay', label: 'NWP延迟场站', value: 1, unit: '座', hint: '建议优先排查链路' },
+      { code: 'high_load', label: '高负荷场站', value: 3, unit: '座', hint: '负荷率 > 80%' }
+    ]
+  }
 }
 
 function normalizeEventLevel(row) {
   const status = `${row?.status || ''}`.toLowerCase()
   if (status.includes('fail') || status.includes('error')) return 'error'
-  if (status.includes('warn') || status.includes('running')) return 'warn'
+  if (status.includes('warn') || status.includes('running') || status.includes('pending')) return 'warn'
   return 'info'
 }
 
@@ -321,6 +576,21 @@ function levelText(level) {
   if (level === 'error') return 'ERROR'
   if (level === 'warn') return 'WARN'
   return 'INFO'
+}
+
+function resolveEventCategory(row) {
+  const text = `${row?.report_type || ''} ${row?.message || ''} ${row?.response_message || ''} ${row?.error_message || ''}`.toLowerCase()
+  if (
+    text.includes('forecast') ||
+    text.includes('report') ||
+    text.includes('short') ||
+    text.includes('supershort') ||
+    text.includes('上报') ||
+    text.includes('误差')
+  ) {
+    return 'business'
+  }
+  return 'system'
 }
 
 export async function getDashboardEvents({ farmCode, limit = 10 } = {}) {
@@ -333,31 +603,37 @@ export async function getDashboardEvents({ farmCode, limit = 10 } = {}) {
       start_time: start,
       end_time: end,
       page: 1,
-      page_size: Math.max(limit, 10)
+      page_size: Math.max(limit * 3, 20),
+      per_page: Math.max(limit * 3, 20)
     })
 
     const rows = unwrapItems(resp?.data)
-    const mapped = rows.slice(0, limit).map((row, idx) => {
+    const mapped = rows.slice(0, limit * 3).map((row, idx) => {
       const level = normalizeEventLevel(row)
+      const farmName = row.farm_code ? `[${row.farm_code}] ` : ''
+      const message = row.error_message || row.response_message || row.message || `${row.report_type || 'system'} task updated`
       return {
-        id: row.id || row.log_id || `${idx}-${row.created_at || row.timestamp || 'evt'}`,
-        time: (row.created_at || row.timestamp || '--').toString().slice(11, 19),
+        id: row.id || row.log_id || `${idx}-${row.report_time || row.created_at || 'evt'}`,
+        time: toHHmm(row.report_time || row.created_at || row.timestamp || '--:--'),
         level,
         levelText: levelText(level),
-        message: row.message || row.detail || row.content || 'System task completed'
+        category: resolveEventCategory(row),
+        message: `${farmName}${message}`
       }
     })
 
-    if (mapped.length > 0) return mapped
+    if (mapped.length > 0) return mapped.slice(0, limit)
   } catch (error) {
     console.warn('getDashboardEvents fallback:', error)
   }
 
   return [
-    { id: 'evt-1', time: '14:15:22', level: 'info', levelText: 'INFO', message: 'Data pull finished for West Coast station' },
-    { id: 'evt-2', time: '14:10:05', level: 'warn', levelText: 'WARN', message: 'Forecast deviation approaching threshold at Valley Gate' },
-    { id: 'evt-3', time: '14:03:17', level: 'info', levelText: 'INFO', message: 'Short-term forecast generated and stored' },
-    { id: 'evt-4', time: '13:56:08', level: 'error', levelText: 'ERROR', message: 'North Ridge reporting endpoint timed out' },
-    { id: 'evt-5', time: '13:42:44', level: 'info', levelText: 'INFO', message: 'Scheduler heartbeat is healthy' }
+    { id: 'evt-1', time: '14:15', level: 'info', levelText: 'INFO', category: 'system', message: '气象数据拉取成功，耗时 1.2s' },
+    { id: 'evt-2', time: '14:10', level: 'warn', levelText: 'WARN', category: 'business', message: '[F02] 超短期预测误差率接近阈值' },
+    { id: 'evt-3', time: '14:03', level: 'info', levelText: 'INFO', category: 'business', message: '[F01] 短期预测上报成功' },
+    { id: 'evt-4', time: '13:56', level: 'error', levelText: 'ERROR', category: 'business', message: '[F03] 14:15 超短期上报失败' },
+    { id: 'evt-5', time: '13:42', level: 'info', levelText: 'INFO', category: 'system', message: '数据库连接恢复正常' }
   ]
 }
+
+export { TASK_KEYS }

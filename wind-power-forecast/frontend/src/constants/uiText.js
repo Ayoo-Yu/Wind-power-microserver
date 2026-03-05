@@ -1,4 +1,4 @@
-export const UI_TEXT = {
+﻿export const UI_TEXT = {
   appLayout: {
     platformTitle: '三峡风电功率预测平台',
     updatedLabel: '更新于：'

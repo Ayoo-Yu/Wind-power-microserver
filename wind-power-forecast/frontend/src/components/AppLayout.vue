@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <el-container class="app-container">
     <div v-if="isAuthLoading" class="auth-loading-overlay">
       <div class="auth-loading-container">
@@ -40,7 +40,7 @@
 
         <el-menu-item index="/weatherdatafetcher" v-if="hasPermission('manage_weather_data')">
           <el-icon><Cloudy /></el-icon>
-          <template #title>气象数据拉取</template>
+          <template #title>气象数据抓取</template>
         </el-menu-item>
 
         <el-menu-item index="/farmmanagement" v-if="hasPermission('manage_reports')">
@@ -48,10 +48,15 @@
           <template #title>场站管理</template>
         </el-menu-item>
 
-        <el-menu-item index="/users" v-if="hasPermission('manage_users')">
-          <el-icon><User /></el-icon>
-          <template #title>用户管理</template>
-        </el-menu-item>
+        <el-sub-menu index="/users" v-if="hasPermission('manage_users') || hasPermission('manage_roles')">
+          <template #title>
+            <el-icon><User /></el-icon>
+            <span>用户管理</span>
+          </template>
+          <el-menu-item index="/users" v-if="hasPermission('manage_users')">用户列表</el-menu-item>
+          <el-menu-item index="/users/roles" v-if="hasPermission('manage_roles')">角色管理</el-menu-item>
+          <el-menu-item index="/users/audit-logs" v-if="hasPermission('manage_users')">操作日志</el-menu-item>
+        </el-sub-menu>
       </el-menu>
     </el-aside>
 
@@ -178,7 +183,7 @@ export default {
 
     const userInitial = computed(() => {
       const userStr = localStorage.getItem('user')
-      if (!userStr) return 'U'
+      if (!userStr) return '用户'
       const user = JSON.parse(userStr)
       return user.full_name ? user.full_name.charAt(0).toUpperCase() : user.username.charAt(0).toUpperCase()
     })
@@ -241,7 +246,8 @@ export default {
       if (!currentUser.value) return false
 
       const role = currentUser.value.role
-      if (role === '系统管理员' || role === 'admin' || role === 'Administrator') {
+      const roleName = typeof role === 'string' ? role : role?.name
+      if (roleName === '系统管理员' || roleName === 'admin' || roleName === 'Administrator') {
         return true
       }
 
@@ -278,7 +284,7 @@ export default {
     }
 
     const handleLogout = () => {
-      ElMessageBox.confirm('确定要退出登录吗?', '提示', {
+      ElMessageBox.confirm('确定要退出登录吗？', '提示', {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
         type: 'warning'
@@ -396,6 +402,19 @@ export default {
   color: var(--text-secondary);
   height: 50px;
   margin: 8px 0;
+}
+
+:deep(.el-sub-menu__title) {
+  color: var(--text-secondary);
+  height: 50px;
+  margin: 8px 0;
+}
+
+:deep(.el-sub-menu .el-menu-item) {
+  min-width: 0;
+  height: 44px;
+  margin: 0;
+  padding-left: 54px !important;
 }
 
 .el-menu-item.is-active {
@@ -566,3 +585,5 @@ export default {
   }
 }
 </style>
+
+

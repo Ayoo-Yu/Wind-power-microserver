@@ -3,14 +3,49 @@
     <div v-for="item in items" :key="item.key" class="kpi-card panel-card">
       <div class="kpi-head">
         <span class="kpi-label">{{ item.label }}</span>
-        <el-icon class="kpi-icon" :class="`kpi-icon-${item.key}`">
+        <el-icon class="kpi-icon">
           <component :is="resolveIcon(item.key)" />
         </el-icon>
       </div>
-      <div class="kpi-value">{{ displayValue(item) }}<span class="kpi-unit">{{ item.unit }}</span></div>
-      <div class="kpi-trend" :class="item.trend === 'up' ? 'trend-up' : 'trend-down'">
-        <span>{{ item.trend === 'up' ? '上升' : '下降' }} {{ item.delta }}</span>
-        <small>较昨日</small>
+
+      <div v-if="item.type === 'station-comm'" class="kpi-body">
+        <div class="kpi-main">
+          正常运行:
+          <strong>{{ item.value?.online ?? 0 }}</strong>
+          / 总场站:
+          <strong>{{ item.value?.total ?? 0 }}</strong>
+        </div>
+        <div class="kpi-subline">
+          离线:
+          <span class="danger">{{ item.value?.offline ?? 0 }}</span>
+        </div>
+      </div>
+
+      <div v-else-if="item.type === 'power-capacity'" class="kpi-body kpi-body-row">
+        <div class="kpi-main">
+          <strong>{{ item.value?.power ?? 0 }}</strong> / <strong>{{ item.value?.capacity ?? 0 }}</strong> MW
+        </div>
+        <div class="load-ring" :style="ringStyle(item.value?.loadRate)">
+          <span>{{ Math.round(item.value?.loadRate || 0) }}%</span>
+        </div>
+      </div>
+
+      <div v-else-if="item.type === 'accuracy-split'" class="kpi-body">
+        <div class="kpi-main">综合准确率</div>
+        <div class="kpi-subline">
+          短期准确率 {{ item.value?.shortTerm ?? 0 }}%
+          <span class="sep">|</span>
+          超短期准确率 {{ item.value?.ultraShort ?? 0 }}%
+        </div>
+      </div>
+
+      <div v-else-if="item.type === 'report-completion'" class="kpi-body">
+        <div class="kpi-main">超短期成功: {{ item.value?.ultraSuccess ?? 0 }}/{{ item.value?.ultraExpected ?? 0 }}</div>
+        <div class="kpi-subline">短期成功: {{ item.value?.shortSuccess ?? 0 }}/{{ item.value?.shortExpected ?? 0 }}</div>
+      </div>
+
+      <div v-else class="kpi-body">
+        <div class="kpi-main">{{ item.value }}</div>
       </div>
     </div>
   </div>
@@ -18,78 +53,28 @@
 
 <script setup>
 /* global defineProps */
-import { onBeforeUnmount, ref, watch } from 'vue'
 import { OfficeBuilding, Aim, Lightning, Bell } from '@element-plus/icons-vue'
 
-const props = defineProps({
+defineProps({
   items: {
     type: Array,
     default: () => []
   }
 })
-const displayMap = ref({})
-let frameId = 0
-
-function parseNumeric(value) {
-  if (value === null || value === undefined) return null
-  const normalized = String(value).replace(/,/g, '')
-  const n = Number(normalized)
-  return Number.isFinite(n) ? n : null
-}
-
-function displayValue(item) {
-  const animated = displayMap.value[item.key]
-  if (animated !== undefined) return animated
-  return item.value
-}
-
-function formatAnimatedValue(target, current) {
-  const isDecimal = String(target).includes('.')
-  if (isDecimal) {
-    return current.toFixed(1)
-  }
-  return Math.round(current).toLocaleString('en-US')
-}
-
-function animateValues() {
-  if (frameId) cancelAnimationFrame(frameId)
-  const startAt = performance.now()
-  const duration = 900
-  const trackers = props.items.map((item) => {
-    const target = parseNumeric(item.value)
-    if (target === null) {
-      displayMap.value[item.key] = item.value
-      return null
-    }
-    return { key: item.key, target }
-  }).filter(Boolean)
-
-  const tick = (now) => {
-    const progress = Math.min((now - startAt) / duration, 1)
-    const eased = 1 - Math.pow(1 - progress, 3)
-    trackers.forEach(({ key, target }) => {
-      displayMap.value[key] = formatAnimatedValue(target, target * eased)
-    })
-    if (progress < 1) {
-      frameId = requestAnimationFrame(tick)
-    }
-  }
-
-  frameId = requestAnimationFrame(tick)
-}
-
-watch(() => props.items, animateValues, { deep: true, immediate: true })
-
-onBeforeUnmount(() => {
-  if (frameId) cancelAnimationFrame(frameId)
-})
 
 function resolveIcon(key) {
-  if (key === 'farm_total') return OfficeBuilding
+  if (key === 'station_comm') return OfficeBuilding
   if (key === 'accuracy') return Aim
-  if (key === 'power') return Lightning
-  if (key === 'alerts') return Bell
+  if (key === 'power_capacity') return Lightning
+  if (key === 'report_completion') return Bell
   return OfficeBuilding
+}
+
+function ringStyle(rate) {
+  const value = Math.max(0, Math.min(100, Number(rate) || 0))
+  return {
+    background: `conic-gradient(#12d7ff ${value * 3.6}deg, rgba(125, 170, 200, 0.2) 0deg)`
+  }
 }
 </script>
 
@@ -118,51 +103,74 @@ function resolveIcon(key) {
 .kpi-icon {
   font-size: 18px;
   color: #63ddff;
-  filter: drop-shadow(0 0 8px rgba(18, 215, 255, 0.42));
 }
 
-.kpi-icon-alerts {
-  color: #ff7b92;
-  filter: drop-shadow(0 0 8px rgba(255, 93, 115, 0.32));
+.kpi-body {
+  margin-top: 10px;
 }
 
-.kpi-value {
-  margin-top: 8px;
-  font-size: 30px;
-  font-family: Consolas, Menlo, Monaco, monospace;
-  font-weight: 700;
-  color: #49ecff;
-  text-shadow: 0 0 11px rgba(18, 215, 255, 0.24);
-}
-
-.kpi-unit {
-  margin-left: 6px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  text-shadow: none;
-}
-
-.kpi-trend {
-  margin-top: 6px;
+.kpi-body-row {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-size: 12px;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
 }
 
-.kpi-trend small {
-  color: #89a6bd;
+.kpi-main {
+  color: #dff3ff;
+  font-size: 20px;
+  font-family: Consolas, Menlo, Monaco, monospace;
 }
 
-.trend-up {
-  color: #2dd36f;
+.kpi-main strong {
+  color: #49ecff;
 }
 
-.trend-down {
+.kpi-subline {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #9ec0d8;
+}
+
+.danger {
   color: #ff5d73;
+  font-weight: 700;
 }
 
-@media (max-width: 1100px) {
+.sep {
+  margin: 0 8px;
+  color: rgba(158, 192, 216, 0.5);
+}
+
+.load-ring {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.load-ring::after {
+  content: '';
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(6, 24, 39, 0.94);
+}
+
+.load-ring span {
+  position: relative;
+  z-index: 1;
+  color: #dff3ff;
+  font-size: 12px;
+  font-family: Consolas, Menlo, Monaco, monospace;
+}
+
+@media (max-width: 1280px) {
   .kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

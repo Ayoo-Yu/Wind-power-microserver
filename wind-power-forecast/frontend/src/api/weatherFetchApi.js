@@ -128,3 +128,25 @@ export function restartWeatherScheduler() {
     () => axiosInstance.post('/api/weather-fetch/scheduler/restart')
   )
 }
+
+export async function uploadManualWeatherFile(formData) {
+  const headers = { 'Content-Type': 'multipart/form-data' }
+  try {
+    return await withLegacyFallback(
+      () => axiosInstance.post('/api/v1/weather-fetch/manual-upload', formData, { headers }),
+      () => axiosInstance.post('/api/weather-fetch/manual-upload', formData, { headers })
+    )
+  } catch (error) {
+    const file = formData?.get?.('file')
+    const isCsv = typeof file?.name === 'string' && file.name.toLowerCase().endsWith('.csv')
+    if (!isCsv) {
+      throw error
+    }
+
+    const fallbackData = new FormData()
+    fallbackData.append('file', file)
+    fallbackData.append('farm_code', formData.get('farm_code') || 'DEFAULT_FARM')
+    fallbackData.append('table_name', 'weather_data')
+    return axiosInstance.post('/operational/api/upload_operational_csv', fallbackData, { headers })
+  }
+}

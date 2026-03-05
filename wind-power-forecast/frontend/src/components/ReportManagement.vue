@@ -213,58 +213,103 @@
         </div>
       </el-card>
 
-      <!-- 风电场站管理卡片 -->
-      <el-card class="info-card" shadow="hover">
+      <!-- 今日实时上报监控矩阵 -->
+      <el-card class="info-card monitor-card" shadow="hover">
         <template #header>
           <div class="card-header">
-            <span><i class="el-icon-office-building"></i> 风电场站管理</span>
-            <el-button type="primary" size="small" @click="showAddFarmDialog">
-              <i class="el-icon-plus"></i> 添加场站
-            </el-button>
+            <span><i class="el-icon-odometer"></i> 今日实时上报监控矩阵</span>
+            <div>
+              <el-select
+                v-model="monitorFarmCode"
+                placeholder="选择场站"
+                clearable
+                size="small"
+                style="width: 180px;"
+                @change="refreshRealtimeMonitor">
+                <el-option
+                  v-for="farm in windFarms"
+                  :key="farm.farm_code"
+                  :label="farm.farm_name"
+                  :value="farm.farm_code">
+                </el-option>
+              </el-select>
+              <el-button type="primary" size="small" @click="refreshRealtimeMonitor" :loading="monitorLoading">
+                <el-icon><Refresh /></el-icon>
+                刷新矩阵
+              </el-button>
+            </div>
           </div>
         </template>
-        
-        <el-table :data="windFarms" style="width: 100%" v-loading="farmsLoading">
-          <el-table-column prop="farm_code" label="场站编码" max-width="140"></el-table-column>
-          <el-table-column prop="farm_name" label="场站名称" max-width="140" show-overflow-tooltip></el-table-column>
-          <el-table-column prop="capacity" label="装机容量(MW)" max-width="140" align="center">
+
+        <div class="monitor-summary-row">
+          <el-tag :type="shortTermStatus.tagType" size="small">今日短期(08:00)</el-tag>
+          <span class="short-term-status-text">{{ shortTermStatus.text }}</span>
+        </div>
+
+        <el-table :data="realtimeMonitorRows" style="width: 100%" v-loading="monitorLoading" size="small">
+          <el-table-column prop="timeLabel" label="任务时刻" width="110"></el-table-column>
+          <el-table-column label="状态" width="160" align="center">
             <template #default="scope">
-              {{ scope.row.capacity || '-' }}
+              <el-tag :type="scope.row.statusType" effect="dark">{{ scope.row.statusText }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="location" label="地理位置" max-width="140" show-overflow-tooltip></el-table-column>
-          <el-table-column prop="is_active" label="状态" max-width="140" align="center">
+          <el-table-column label="说明" min-width="320">
             <template #default="scope">
-              <el-tag :type="scope.row.is_active ? 'success' : 'danger'">
-                {{ scope.row.is_active ? '启用' : '禁用' }}
-              </el-tag>
+              <span class="monitor-reason-text">{{ scope.row.reason || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" max-width="360" align="center" fixed="right">
+          <el-table-column label="应急操作" width="150" align="center">
             <template #default="scope">
-              <div class="action-buttons">
-                <el-button 
-                  size="small" 
-                  @click="editFarm(scope.row)" 
-                  type="primary"
-                  plain
-                  class="action-btn">
-                  <el-icon><Edit /></el-icon>
-                  编辑
-                </el-button>
-                <el-button 
-                  size="small" 
-                  @click="viewFarmConfigs(scope.row)" 
-                  type="success"
-                  plain
-                  class="action-btn">
-                  <el-icon><Setting /></el-icon>
-                  配置
-                </el-button>
-              </div>
+              <el-button
+                v-if="scope.row.canRetry"
+                type="danger"
+                size="small"
+                @click="retryMonitorTask(scope.row)"
+                :loading="scope.row.retrying">
+                手动重发
+              </el-button>
+              <span v-else>-</span>
             </template>
           </el-table-column>
         </el-table>
+      </el-card>
+
+      <!-- 手动上报工具 -->
+      <el-card class="info-card manual-tool-card" shadow="hover">
+        <template #header>
+          <div class="card-header">
+            <span><i class="el-icon-magic-stick"></i> 手动上报工具</span>
+          </div>
+        </template>
+        <el-form :inline="true" :model="manualToolForm" class="manual-tool-form">
+          <el-form-item label="场站">
+            <el-select v-model="manualToolForm.farm_id" placeholder="选择场站" style="width: 180px;">
+              <el-option
+                v-for="farm in windFarms"
+                :key="farm.id"
+                :label="farm.farm_name"
+                :value="farm.id">
+              </el-option>
+            </el-select>
+          </el-form-item>
+          <el-form-item label="文件类型">
+            <el-select v-model="manualToolForm.report_type" style="width: 170px;">
+              <el-option label="短期" value="forecast_long"></el-option>
+              <el-option label="超短期" value="forecast_short"></el-option>
+            </el-select>
+          </el-form-item>
+          <el-form-item label="时间">
+            <el-date-picker v-model="manualToolForm.report_date" type="date" value-format="YYYY-MM-DD" style="width: 160px;"></el-date-picker>
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" :loading="manualToolLoading" @click="generateManualFile">生成文件</el-button>
+            <el-button :disabled="!manualGeneratedText" @click="openManualPreview">预览文件内容</el-button>
+            <el-button :disabled="!manualGeneratedText" @click="downloadManualFile">下载到本地</el-button>
+            <el-button type="danger" :disabled="!manualGeneratedPayload.length" :loading="manualPushing" @click="forcePushManualFile">
+              强制推送至目标服务器
+            </el-button>
+          </el-form-item>
+        </el-form>
       </el-card>
 
       <!-- 上报配置管理卡片 -->
@@ -302,6 +347,13 @@
               {{ scope.row.target_ip }}:{{ scope.row.target_port }}
             </template>
           </el-table-column>
+          <el-table-column label="协议" width="100" align="center">
+            <template #default="scope">
+              <el-tag size="small">{{ (scope.row.protocol_type || 'sftp').toUpperCase() }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="remote_directory" label="远程目录" min-width="160" show-overflow-tooltip></el-table-column>
+          <el-table-column prop="file_name_template" label="文件名模板" min-width="220" show-overflow-tooltip></el-table-column>
           <el-table-column label="上报设置" max-width="140" align="center">
             <template #default="scope">
               <div v-if="scope.row.report_type === 'forecast_long'">
@@ -465,6 +517,13 @@
             </template>
           </el-table-column>
           <el-table-column prop="response_code" label="响应码" max-width="140" align="center"></el-table-column>
+          <el-table-column label="失败原因/响应" min-width="320">
+            <template #default="scope">
+              <span class="log-reason-inline" :class="{ 'is-error': scope.row.status !== 'success' }">
+                {{ getLogInlineReason(scope.row) }}
+              </span>
+            </template>
+          </el-table-column>
           <el-table-column label="详情" max-width="140" align="center" fixed="right">
             <template #default="scope">
               <el-button 
@@ -489,37 +548,6 @@
         </el-pagination>
       </el-card>
     </div>
-
-    <!-- 添加/编辑场站对话框 -->
-    <el-dialog 
-      v-model="farmDialogVisible" 
-      :title="farmDialogTitle" 
-      width="500px"
-      @close="resetFarmForm">
-      <el-form :model="farmForm" :rules="farmRules" ref="farmFormRef" label-width="100px">
-        <el-form-item label="场站编码" prop="farm_code">
-          <el-input v-model="farmForm.farm_code" :disabled="farmForm.id"></el-input>
-        </el-form-item>
-        <el-form-item label="场站名称" prop="farm_name">
-          <el-input v-model="farmForm.farm_name"></el-input>
-        </el-form-item>
-        <el-form-item label="装机容量" prop="capacity">
-          <el-input v-model.number="farmForm.capacity" type="number" placeholder="单位：MW"></el-input>
-        </el-form-item>
-        <el-form-item label="地理位置" prop="location">
-          <el-input v-model="farmForm.location"></el-input>
-        </el-form-item>
-        <el-form-item label="启用状态" prop="is_active">
-          <el-switch v-model="farmForm.is_active"></el-switch>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="farmDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="saveFarm" :loading="farmSaving">确定</el-button>
-        </span>
-      </template>
-    </el-dialog>
 
     <!-- 添加/编辑配置对话框 -->
     <el-dialog 
@@ -564,11 +592,31 @@
             <i class="el-icon-info"></i> 此类型采用周期性上报，需设置上报间隔时间
           </div>
         </el-form-item>
-        <el-form-item label="目标IP" prop="target_ip">
+        <el-form-item label="协议类型" prop="protocol_type">
+          <el-select v-model="configForm.protocol_type">
+            <el-option label="FTP" value="ftp"></el-option>
+            <el-option label="SFTP" value="sftp"></el-option>
+            <el-option label="102规约" value="iec102"></el-option>
+            <el-option label="专用API" value="api"></el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="服务器IP" prop="target_ip">
           <el-input v-model="configForm.target_ip" placeholder="192.168.1.100"></el-input>
         </el-form-item>
-        <el-form-item label="目标端口" prop="target_port">
+        <el-form-item label="服务器端口" prop="target_port">
           <el-input v-model.number="configForm.target_port" type="number" placeholder="8080"></el-input>
+        </el-form-item>
+        <el-form-item label="用户名" prop="server_username">
+          <el-input v-model="configForm.server_username" placeholder="用户名"></el-input>
+        </el-form-item>
+        <el-form-item label="密码" prop="server_password">
+          <el-input v-model="configForm.server_password" type="password" show-password placeholder="密码"></el-input>
+        </el-form-item>
+        <el-form-item label="远程目录路径" prop="remote_directory">
+          <el-input v-model="configForm.remote_directory" placeholder="/upload/forecast/"></el-input>
+        </el-form-item>
+        <el-form-item label="文件名模板" prop="file_name_template">
+          <el-input v-model="configForm.file_name_template" placeholder="${FARM_CODE}_${YYYYMMDD}_${HHmm}_DQ.RB"></el-input>
         </el-form-item>
         <el-form-item label="上报周期" prop="report_interval" v-if="configForm.report_type !== 'forecast_long'">
           <el-input v-model.number="configForm.report_interval" type="number" placeholder="15">
@@ -902,13 +950,17 @@
         </span>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="manualPreviewVisible" title="文件内容预览" width="760px">
+      <el-input v-model="manualGeneratedText" type="textarea" :rows="18" readonly />
+    </el-dialog>
   </div>
 </template>
 
 <script>
 import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Edit, Setting, Delete, View, Plus, Refresh, Search, RefreshLeft } from '@element-plus/icons-vue'
+import { Edit, Delete, View, Plus, Refresh, Search, RefreshLeft } from '@element-plus/icons-vue'
 import {
   getReportFarms,
   getReportConfigs,
@@ -916,8 +968,6 @@ import {
   startReportScheduler,
   stopReportScheduler,
   getReportLogs,
-  createReportFarm,
-  updateReportFarm,
   createReportConfig,
   updateReportConfig,
   deleteReportConfig,
@@ -930,7 +980,6 @@ export default {
   name: 'ReportManagement',
   components: {
     Edit,
-    Setting,
     Delete,
     View,
     Plus,
@@ -987,23 +1036,6 @@ export default {
       return `结论：当前最薄弱指标为${weakest.label}（${weakest.value.toFixed(2)}%），建议优先关注该项。`
     })
     
-    // 场站对话框
-    const farmDialogVisible = ref(false)
-    const farmSaving = ref(false)
-    const farmForm = reactive({
-      id: null,
-      farm_code: '',
-      farm_name: '',
-      capacity: null,
-      location: '',
-      is_active: true
-    })
-    
-    const farmRules = {
-      farm_code: [{ required: true, message: '请输入场站编码', trigger: 'blur' }],
-      farm_name: [{ required: true, message: '请输入场站名称', trigger: 'blur' }]
-    }
-    
     // 配置对话框
     const configDialogVisible = ref(false)
     const configSaving = ref(false)
@@ -1011,8 +1043,13 @@ export default {
       id: null,
       farm_id: null,
       report_type: '',
+      protocol_type: 'sftp',
       target_ip: '',
       target_port: null,
+      server_username: '',
+      server_password: '',
+      remote_directory: '/upload/forecast/',
+      file_name_template: '${FARM_CODE}_${YYYYMMDD}_${HHmm}_${TYPE}.txt',
       report_interval: 15,
       report_time: null,
       report_format: 'json',
@@ -1026,8 +1063,13 @@ export default {
       const baseRules = {
         farm_id: [{ required: true, message: '请选择风电场站', trigger: 'change' }],
         report_type: [{ required: true, message: '请选择上报类型', trigger: 'change' }],
-        target_ip: [{ required: true, message: '请输入目标IP', trigger: 'blur' }],
-        target_port: [{ required: true, message: '请输入目标端口', trigger: 'blur' }]
+        protocol_type: [{ required: true, message: '请选择协议类型', trigger: 'change' }],
+        target_ip: [{ required: true, message: '请输入服务器IP', trigger: 'blur' }],
+        target_port: [{ required: true, message: '请输入服务器端口', trigger: 'blur' }],
+        server_username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+        server_password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
+        remote_directory: [{ required: true, message: '请输入远程目录路径', trigger: 'blur' }],
+        file_name_template: [{ required: true, message: '请输入文件名模板', trigger: 'blur' }]
       }
       
       // 根据上报类型动态添加必填规则
@@ -1074,11 +1116,28 @@ export default {
     const allEditableData = ref([])  // 存储所有数据
     const isPaginated = ref(false)   // 是否启用分页
     
-    // 计算属性
-    const farmDialogTitle = computed(() => {
-      return farmForm.id ? '编辑风电场站' : '添加风电场站'
+    const monitorFarmCode = ref('')
+    const monitorLoading = ref(false)
+    const realtimeMonitorRows = ref([])
+    const shortTermStatus = ref({
+      tagType: 'info',
+      text: '暂无数据'
     })
-    
+
+    const manualToolLoading = ref(false)
+    const manualPushing = ref(false)
+    const manualToolForm = reactive({
+      farm_id: null,
+      report_type: 'forecast_short',
+      report_date: new Date().toISOString().slice(0, 10)
+    })
+    const manualGeneratedPayload = ref([])
+    const manualGeneratedText = ref('')
+    const manualGeneratedFilename = ref('')
+    const manualTargetConfigId = ref(null)
+    const manualPreviewVisible = ref(false)
+
+    // 计算属性
     const configDialogTitle = computed(() => {
       return configForm.id ? '编辑上报配置' : '添加上报配置'
     })
@@ -1274,6 +1333,45 @@ export default {
       }
     }
     
+    const CONFIG_META_STORAGE_KEY = 'report_config_meta_v2'
+
+    const getConfigMetaMap = () => {
+      try {
+        const raw = localStorage.getItem(CONFIG_META_STORAGE_KEY)
+        const parsed = raw ? JSON.parse(raw) : {}
+        return parsed && typeof parsed === 'object' ? parsed : {}
+      } catch {
+        return {}
+      }
+    }
+
+    const saveConfigMetaMap = (metaMap) => {
+      localStorage.setItem(CONFIG_META_STORAGE_KEY, JSON.stringify(metaMap || {}))
+    }
+
+    const normalizeConfig = (config, storedMeta = {}) => ({
+      ...config,
+      protocol_type: storedMeta.protocol_type || config.protocol_type || 'sftp',
+      server_username: storedMeta.server_username || config.server_username || '',
+      server_password: storedMeta.server_password || config.server_password || '',
+      remote_directory: storedMeta.remote_directory || config.remote_directory || '/upload/forecast/',
+      file_name_template: storedMeta.file_name_template || config.file_name_template || '${FARM_CODE}_${YYYYMMDD}_${HHmm}_${TYPE}.txt',
+      reporting: false
+    })
+
+    const persistConfigMeta = (configId, payload) => {
+      if (!configId) return
+      const metaMap = getConfigMetaMap()
+      metaMap[String(configId)] = {
+        protocol_type: payload.protocol_type,
+        server_username: payload.server_username,
+        server_password: payload.server_password,
+        remote_directory: payload.remote_directory,
+        file_name_template: payload.file_name_template
+      }
+      saveConfigMetaMap(metaMap)
+    }
+
     // 获取上报配置列表
     const fetchConfigs = async () => {
       configsLoading.value = true
@@ -1284,10 +1382,8 @@ export default {
         }
         
         const response = await getReportConfigs(params)
-        reportConfigs.value = response.data.map(config => ({
-          ...config,
-          reporting: false // 添加手动上报状态
-        }))
+        const metaMap = getConfigMetaMap()
+        reportConfigs.value = response.data.map(config => normalizeConfig(config, metaMap[String(config.id)]))
       } catch (error) {
         console.error('获取上报配置列表失败:', error)
         ElMessage.error('获取上报配置列表失败')
@@ -1380,59 +1476,6 @@ export default {
       }
     }
     
-    // 显示添加场站对话框
-    const showAddFarmDialog = () => {
-      resetFarmForm()
-      farmDialogVisible.value = true
-    }
-    
-    // 编辑场站
-    const editFarm = (farm) => {
-      Object.assign(farmForm, farm)
-      farmDialogVisible.value = true
-    }
-    
-    // 保存场站
-    const saveFarm = async () => {
-      farmSaving.value = true
-      try {
-        if (farmForm.id) {
-          // 更新
-          await updateReportFarm(farmForm.id, farmForm)
-          ElMessage.success('场站更新成功')
-        } else {
-          // 创建
-          await createReportFarm(farmForm)
-          ElMessage.success('场站创建成功')
-        }
-        farmDialogVisible.value = false
-        await fetchFarms()
-      } catch (error) {
-        console.error('保存场站失败:', error)
-        ElMessage.error(error.response?.data?.error || '保存场站失败')
-      } finally {
-        farmSaving.value = false
-      }
-    }
-    
-    // 重置场站表单
-    const resetFarmForm = () => {
-      Object.assign(farmForm, {
-        id: null,
-        farm_code: '',
-        farm_name: '',
-        capacity: null,
-        location: '',
-        is_active: true
-      })
-    }
-    
-    // 查看场站配置
-    const viewFarmConfigs = (farm) => {
-      selectedFarmId.value = farm.id
-      fetchConfigs()
-    }
-    
     // 显示添加配置对话框
     const showAddConfigDialog = () => {
       resetConfigForm()
@@ -1491,10 +1534,12 @@ export default {
         if (configForm.id) {
           // 更新
           await updateReportConfig(configForm.id, saveData)
+          persistConfigMeta(configForm.id, saveData)
           ElMessage.success('配置更新成功')
         } else {
           // 创建
-          await createReportConfig(saveData)
+          const createResp = await createReportConfig(saveData)
+          persistConfigMeta(createResp?.data?.config_id, saveData)
           ElMessage.success('配置创建成功')
         }
         configDialogVisible.value = false
@@ -1513,8 +1558,13 @@ export default {
         id: null,
         farm_id: null,
         report_type: '',
+        protocol_type: 'sftp',
         target_ip: '',
         target_port: null,
+        server_username: '',
+        server_password: '',
+        remote_directory: '/upload/forecast/',
+        file_name_template: '${FARM_CODE}_${YYYYMMDD}_${HHmm}_${TYPE}.txt',
         report_interval: 15,  // 非长期预测的默认值
         report_time: null,
         report_format: 'json',
@@ -1565,6 +1615,9 @@ export default {
         })
         
         await deleteReportConfig(config.id)
+        const metaMap = getConfigMetaMap()
+        delete metaMap[String(config.id)]
+        saveConfigMetaMap(metaMap)
         
         ElMessage.success('配置删除成功')
         await fetchConfigs()
@@ -2065,6 +2118,282 @@ export default {
     const refreshLogs = () => {
       fetchLogs()
     }
+
+    const getLogInlineReason = (row) => {
+      const reason = row?.error_message || row?.response_message || ''
+      if (reason) return reason
+      return row?.status === 'success' ? '执行成功' : '无详细错误信息'
+    }
+
+    const floorToQuarter = (dateLike) => {
+      const dt = new Date(dateLike)
+      const minutes = dt.getMinutes()
+      dt.setMinutes(Math.floor(minutes / 15) * 15, 0, 0)
+      return dt
+    }
+
+    const getSlotLabel = (dateLike) => {
+      const dt = new Date(dateLike)
+      return `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`
+    }
+
+    const toApiDateTime = (dateLike) => {
+      const dt = new Date(dateLike)
+      const y = dt.getFullYear()
+      const m = String(dt.getMonth() + 1).padStart(2, '0')
+      const d = String(dt.getDate()).padStart(2, '0')
+      const hh = String(dt.getHours()).padStart(2, '0')
+      const mm = String(dt.getMinutes()).padStart(2, '0')
+      const ss = String(dt.getSeconds()).padStart(2, '0')
+      return `${y}-${m}-${d}T${hh}:${mm}:${ss}`
+    }
+
+    const resolveRetryConfigId = async (farmCode, reportType) => {
+      if (!farmCode || !reportType) return null
+      const farm = windFarms.value.find(item => item.farm_code === farmCode)
+      if (!farm?.id) return null
+      const resp = await getReportConfigs({ farm_id: farm.id })
+      const matched = (resp.data || []).find(item => item.report_type === reportType)
+      return matched?.id || null
+    }
+
+    const refreshRealtimeMonitor = async () => {
+      monitorLoading.value = true
+      try {
+        const now = new Date()
+        const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
+        const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000)
+        const monitorParams = {
+          page: 1,
+          per_page: 300,
+          report_type: 'forecast_short',
+          start_date: toApiDateTime(oneHourAgo)
+        }
+        if (monitorFarmCode.value) {
+          monitorParams.farm_code = monitorFarmCode.value
+        }
+        const resp = await getReportLogs(monitorParams)
+        const rows = Array.isArray(resp.data?.logs) ? resp.data.logs : []
+        const logBySlot = new Map()
+        rows.forEach((log) => {
+          if (!log?.report_time) return
+          const slotKey = floorToQuarter(log.report_time).toISOString()
+          const prev = logBySlot.get(slotKey)
+          if (!prev || new Date(log.report_time) > new Date(prev.report_time)) {
+            logBySlot.set(slotKey, log)
+          }
+        })
+
+        const matrixRows = []
+        for (let offsetMin = -60; offsetMin <= 60; offsetMin += 15) {
+          const slot = floorToQuarter(new Date(now.getTime() + offsetMin * 60 * 1000))
+          if (slot > oneHourLater) continue
+          const slotKey = slot.toISOString()
+          const log = logBySlot.get(slotKey)
+          let statusType = 'info'
+          let statusText = '等待中'
+          let reason = '未来任务，等待调度执行'
+          let canRetry = false
+          let configId = null
+          if (log) {
+            statusType = getStatusColor(log.status) || 'info'
+            statusText = getStatusName(log.status) || '未知'
+            reason = getLogInlineReason(log)
+            if (log.status === 'failed' || log.status === 'timeout') {
+              canRetry = true
+              configId = log.config_id || null
+            }
+          } else if (slot <= now) {
+            statusType = 'warning'
+            statusText = '未上报'
+            reason = '时刻已过，但未发现对应上报日志'
+          }
+
+          matrixRows.push({
+            timeLabel: getSlotLabel(slot),
+            statusType,
+            statusText,
+            reason,
+            canRetry,
+            configId,
+            farmCode: monitorFarmCode.value || rows[0]?.farm_code || '',
+            reportType: 'forecast_short',
+            retrying: false
+          })
+        }
+        realtimeMonitorRows.value = matrixRows
+
+        const todayStart = new Date(now)
+        todayStart.setHours(0, 0, 0, 0)
+        const shortParams = {
+          page: 1,
+          per_page: 80,
+          report_type: 'forecast_long',
+          start_date: toApiDateTime(todayStart)
+        }
+        if (monitorFarmCode.value) {
+          shortParams.farm_code = monitorFarmCode.value
+        }
+        const shortResp = await getReportLogs(shortParams)
+        const shortLogs = Array.isArray(shortResp.data?.logs) ? shortResp.data.logs : []
+        const targetTime = new Date(todayStart)
+        targetTime.setHours(8, 0, 0, 0)
+        const matched = shortLogs.find((item) => {
+          if (!item?.report_time) return false
+          const reportTime = new Date(item.report_time)
+          return Math.abs(reportTime.getTime() - targetTime.getTime()) <= 90 * 60 * 1000
+        })
+        if (!matched) {
+          shortTermStatus.value = { tagType: 'warning', text: '08:00短期任务尚未确认成功（无匹配日志）' }
+        } else if (matched.status === 'success') {
+          shortTermStatus.value = { tagType: 'success', text: `已成功（${formatDateTime(matched.report_time)}）` }
+        } else {
+          shortTermStatus.value = { tagType: 'danger', text: `失败：${getLogInlineReason(matched)}` }
+        }
+      } catch (error) {
+        console.error('刷新实时监控矩阵失败:', error)
+        ElMessage.error('刷新实时监控矩阵失败')
+      } finally {
+        monitorLoading.value = false
+      }
+    }
+
+    const retryMonitorTask = async (row) => {
+      if (!row?.canRetry) return
+      row.retrying = true
+      try {
+        let configId = row.configId
+        if (!configId) {
+          configId = await resolveRetryConfigId(row.farmCode, row.reportType)
+        }
+        if (!configId) {
+          ElMessage.error('未找到可重发的配置')
+          return
+        }
+        await manualReportApi({ config_id: configId })
+        ElMessage.success('手动重发已触发')
+        await refreshRealtimeMonitor()
+        await fetchLogs()
+      } catch (error) {
+        console.error('手动重发失败:', error)
+        ElMessage.error(error.response?.data?.error || '手动重发失败')
+      } finally {
+        row.retrying = false
+      }
+    }
+
+    const resolveManualToolConfig = async () => {
+      if (!manualToolForm.farm_id || !manualToolForm.report_type) {
+        ElMessage.warning('请先选择场站和文件类型')
+        return null
+      }
+      const resp = await getReportConfigs({ farm_id: manualToolForm.farm_id })
+      const list = Array.isArray(resp.data) ? resp.data : []
+      const target = list.find((item) => item.report_type === manualToolForm.report_type)
+      if (!target) {
+        ElMessage.error('当前场站未配置该上报类型，请先在上报配置管理中添加')
+        return null
+      }
+      const meta = getConfigMetaMap()[String(target.id)] || {}
+      return normalizeConfig(target, meta)
+    }
+
+    const buildTemplateFilename = (template, farmCode, reportType, reportDate) => {
+      const sourceDate = new Date(`${reportDate}T00:00:00`)
+      const yyyy = sourceDate.getFullYear()
+      const mm = String(sourceDate.getMonth() + 1).padStart(2, '0')
+      const dd = String(sourceDate.getDate()).padStart(2, '0')
+      const now = new Date()
+      const hhmm = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
+      const typeText = reportType === 'forecast_short' ? 'CQ' : 'DQ'
+      return (template || '${FARM_CODE}_${YYYYMMDD}_${HHmm}_${TYPE}.txt')
+        .replace(/\$\{FARM_CODE\}/g, farmCode || 'UNKNOWN')
+        .replace(/\$\{YYYYMMDD\}/g, `${yyyy}${mm}${dd}`)
+        .replace(/\$\{HHmm\}/g, hhmm)
+        .replace(/\$\{TYPE\}/g, typeText)
+    }
+
+    const payloadToCsv = (payload) => {
+      if (!Array.isArray(payload) || payload.length === 0) return ''
+      const headers = Object.keys(payload[0])
+      const lines = [headers.join(',')]
+      payload.forEach((row) => {
+        lines.push(headers.map((key) => JSON.stringify(row[key] ?? '')).join(','))
+      })
+      return lines.join('\n')
+    }
+
+    const generateManualFile = async () => {
+      manualToolLoading.value = true
+      try {
+        const config = await resolveManualToolConfig()
+        if (!config) return
+        const resp = await previewReportApi(config.id)
+        const allData = Array.isArray(resp.data?.payload?.data) ? resp.data.payload.data : []
+        const targetDate = manualToolForm.report_date
+        const filtered = allData.filter((item) => {
+          if (!item?.time) return true
+          return String(item.time).slice(0, 10) === targetDate
+        })
+        manualGeneratedPayload.value = filtered.length > 0 ? filtered : allData
+        const farmCode = resp.data?.config_info?.farm_code || windFarms.value.find((f) => f.id === manualToolForm.farm_id)?.farm_code || 'UNKNOWN'
+        manualGeneratedFilename.value = buildTemplateFilename(config.file_name_template, farmCode, manualToolForm.report_type, manualToolForm.report_date)
+        manualGeneratedText.value = payloadToCsv(manualGeneratedPayload.value)
+        manualTargetConfigId.value = config.id
+        ElMessage.success(`文件生成成功，共 ${manualGeneratedPayload.value.length} 条记录`)
+      } catch (error) {
+        console.error('生成手动文件失败:', error)
+        ElMessage.error(error.response?.data?.error || '生成手动文件失败')
+      } finally {
+        manualToolLoading.value = false
+      }
+    }
+
+    const openManualPreview = () => {
+      if (!manualGeneratedText.value) {
+        ElMessage.warning('请先生成文件')
+        return
+      }
+      manualPreviewVisible.value = true
+    }
+
+    const downloadManualFile = () => {
+      if (!manualGeneratedText.value) {
+        ElMessage.warning('请先生成文件')
+        return
+      }
+      const blob = new Blob([manualGeneratedText.value], { type: 'text/plain;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = manualGeneratedFilename.value || `manual_report_${Date.now()}.csv`
+      document.body.appendChild(anchor)
+      anchor.click()
+      document.body.removeChild(anchor)
+      URL.revokeObjectURL(url)
+    }
+
+    const forcePushManualFile = async () => {
+      if (!manualTargetConfigId.value || manualGeneratedPayload.value.length === 0) {
+        ElMessage.warning('请先生成文件')
+        return
+      }
+      manualPushing.value = true
+      try {
+        await manualReportApi({
+          config_id: manualTargetConfigId.value,
+          data: manualGeneratedPayload.value
+        })
+        ElMessage.success('已强制推送至目标服务器')
+        await refreshRealtimeMonitor()
+        await fetchLogs()
+      } catch (error) {
+        console.error('强制推送失败:', error)
+        ElMessage.error(error.response?.data?.error || '强制推送失败')
+      } finally {
+        manualPushing.value = false
+      }
+    }
     
     // 查看日志详情
     const viewLogDetail = (log) => {
@@ -2203,13 +2532,23 @@ export default {
       }
     }
     
+    let monitorTimer = null
+
     // 生命周期
     onMounted(async () => {
       await fetchFarms()
+      if (windFarms.value.length > 0) {
+        monitorFarmCode.value = windFarms.value[0].farm_code
+        manualToolForm.farm_id = windFarms.value[0].id
+      }
       await fetchConfigs()
       await fetchLogs()
       await fetchSchedulerStatus()
       await fetchStatistics()
+      await refreshRealtimeMonitor()
+      monitorTimer = setInterval(() => {
+        refreshRealtimeMonitor()
+      }, 60 * 1000)
       
       // 全局ResizeObserver错误处理 - 使用debounce和requestAnimationFrame
       const handleResizeObserverError = (e) => {
@@ -2238,6 +2577,10 @@ export default {
       if (tableUpdateTimer) {
         clearTimeout(tableUpdateTimer)
         tableUpdateTimer = null
+      }
+      if (monitorTimer) {
+        clearInterval(monitorTimer)
+        monitorTimer = null
       }
       
       // 恢复原始的console.error
@@ -2351,13 +2694,6 @@ export default {
       monthlyStats,
       statsConclusion,
       statsUpdatedAt,
-
-      // 场站对话框
-      farmDialogVisible,
-      farmDialogTitle,
-      farmForm,
-      farmRules,
-      farmSaving,
       
       // 配置对话框
       configDialogVisible,
@@ -2386,6 +2722,20 @@ export default {
       totalRows,
       allEditableData,
       isPaginated,
+
+      // 实时监控矩阵
+      monitorFarmCode,
+      monitorLoading,
+      realtimeMonitorRows,
+      shortTermStatus,
+
+      // 手动工具
+      manualToolForm,
+      manualToolLoading,
+      manualPushing,
+      manualGeneratedPayload,
+      manualGeneratedText,
+      manualPreviewVisible,
       
       // 方法
       fetchFarms,
@@ -2396,11 +2746,8 @@ export default {
       startScheduler,
       stopScheduler,
       refreshSchedulerStatus,
-      showAddFarmDialog,
-      editFarm,
-      saveFarm,
-      resetFarmForm,
-      viewFarmConfigs,
+      refreshRealtimeMonitor,
+      retryMonitorTask,
       showAddConfigDialog,
       editConfig,
       saveConfig,
@@ -2434,6 +2781,11 @@ export default {
       searchLogs,
       resetLogQuery,
       refreshLogs,
+      getLogInlineReason,
+      generateManualFile,
+      openManualPreview,
+      downloadManualFile,
+      forcePushManualFile,
       viewLogDetail,
       handleSizeChange,
       handleCurrentChange,
@@ -3182,6 +3534,45 @@ export default {
 .scheduler-info .info-value {
   color: #333;
   flex: 1;
+}
+
+.monitor-card .monitor-summary-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.short-term-status-text {
+  font-size: 13px;
+  color: #333;
+}
+
+.monitor-reason-text {
+  color: #606266;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.manual-tool-form {
+  margin-top: 2px;
+}
+
+.manual-tool-form :deep(.el-form-item) {
+  margin-bottom: 10px;
+}
+
+.log-reason-inline {
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.4;
+  color: #606266;
+}
+
+.log-reason-inline.is-error {
+  color: #f56c6c;
+  font-weight: 500;
 }
 
 /* 响应式调度器状态 */

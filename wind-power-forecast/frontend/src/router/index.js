@@ -5,6 +5,8 @@ const AutoPredict = () => import('../components/AutoPredict.vue')
 const PowerCompare = () => import('../components/PowerCompare.vue')
 const Login = () => import('../components/Login.vue')
 const UserManagement = () => import('../components/UserManagement.vue')
+const RoleManagement = () => import('../components/RoleManagement.vue')
+const AuditLog = () => import('../components/AuditLog.vue')
 const ReportManagement = () => import('../components/ReportManagement.vue')
 const WeatherDataFetcher = () => import('../components/WeatherDataFetcher.vue')
 const FarmManagement = () => import('../components/FarmManagement.vue')
@@ -68,6 +70,18 @@ const routes = [
         path: 'users',
         name: 'UserManagement',
         component: UserManagement,
+        meta: { requiredPermissions: ['manage_users'], keepAlive: true }
+      },
+      {
+        path: 'users/roles',
+        name: 'RoleManagement',
+        component: RoleManagement,
+        meta: { requiredPermissions: ['manage_roles'], keepAlive: true }
+      },
+      {
+        path: 'users/audit-logs',
+        name: 'AuditLog',
+        component: AuditLog,
         meta: { requiredPermissions: ['manage_users'], keepAlive: true }
       }
     ]

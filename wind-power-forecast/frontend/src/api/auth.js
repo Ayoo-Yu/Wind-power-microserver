@@ -86,3 +86,18 @@ export const getRoles = async () => {
   const response = await authGet('roles')
   return response.data
 }
+
+export const createRole = async (roleData) => {
+  const response = await authPost('roles', roleData)
+  return response.data
+}
+
+export const updateRole = async (roleId, roleData) => {
+  const response = await authPut(`roles/${roleId}`, roleData)
+  return response.data
+}
+
+export const deleteRole = async (roleId) => {
+  const response = await authDelete(`roles/${roleId}`)
+  return response.data
+}
