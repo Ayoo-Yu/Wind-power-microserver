@@ -3,10 +3,15 @@ const HomePage = () => import('../components/HomePage.vue')
 const AppLayout = () => import('../components/AppLayout.vue')
 const AutoPredict = () => import('../components/AutoPredict.vue')
 const PowerCompare = () => import('../components/PowerCompare.vue')
+const AccuracyReport = () => import('../components/AccuracyReport.vue')
 const Login = () => import('../components/Login.vue')
 const UserManagement = () => import('../components/UserManagement.vue')
 const RoleManagement = () => import('../components/RoleManagement.vue')
 const AuditLog = () => import('../components/AuditLog.vue')
+const AlarmCenter = () => import('../components/AlarmCenter.vue')
+const DataQualityManagement = () => import('../components/DataQualityManagement.vue')
+const ManualInterventionWorkspace = () => import('../components/ManualInterventionWorkspace.vue')
+const SystemSettings = () => import('../components/SystemSettings.vue')
 const ReportManagement = () => import('../components/ReportManagement.vue')
 const WeatherDataFetcher = () => import('../components/WeatherDataFetcher.vue')
 const FarmManagement = () => import('../components/FarmManagement.vue')
@@ -43,10 +48,22 @@ const routes = [
         meta: { requiredPermissions: ['auto_predictions'], keepAlive: true }
       },
       {
+        path: 'manual-workspace',
+        name: 'ManualInterventionWorkspace',
+        component: ManualInterventionWorkspace,
+        meta: { requiredPermissions: ['manual_intervention_workspace', 'auto_predictions'], keepAlive: true }
+      },
+      {
         path: 'powercompare',
         name: 'PowerCompare',
         component: PowerCompare,
         meta: { requiredPermissions: ['view_all_data'], keepAlive: true }
+      },
+      {
+        path: 'accuracy-report',
+        name: 'AccuracyReport',
+        component: AccuracyReport,
+        meta: { requiredPermissions: ['view_accuracy_report', 'view_all_data'], keepAlive: true }
       },
       {
         path: 'reportmanagement',
@@ -67,6 +84,18 @@ const routes = [
         meta: { requiredPermissions: ['manage_reports'], keepAlive: true }
       },
       {
+        path: 'alarm-center',
+        name: 'AlarmCenter',
+        component: AlarmCenter,
+        meta: { requiredPermissions: ['view_alarm_center', 'manage_reports'], keepAlive: true }
+      },
+      {
+        path: 'data-quality',
+        name: 'DataQualityManagement',
+        component: DataQualityManagement,
+        meta: { requiredPermissions: ['manage_data_quality', 'view_all_data'], keepAlive: true }
+      },
+      {
         path: 'users',
         name: 'UserManagement',
         component: UserManagement,
@@ -82,7 +111,13 @@ const routes = [
         path: 'users/audit-logs',
         name: 'AuditLog',
         component: AuditLog,
-        meta: { requiredPermissions: ['manage_users'], keepAlive: true }
+        meta: { requiredPermissions: ['view_audit_logs', 'manage_users'], keepAlive: true }
+      },
+      {
+        path: 'system-settings',
+        name: 'SystemSettings',
+        component: SystemSettings,
+        meta: { requiredPermissions: ['manage_system_settings', 'system_maintenance'], keepAlive: true }
       }
     ]
   }

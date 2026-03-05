@@ -24,7 +24,7 @@
               <i class="metric-pulse"></i>
               场站接入
             </span>
-            <strong class="metric-value">{{ animatedMetrics.stationCount }}</strong>
+            <strong class="metric-value metric-mask">{{ maskedMetrics.stationCount }}</strong>
             <i class="metric-line"></i>
           </li>
           <li>
@@ -34,8 +34,7 @@
               实时总功率
             </span>
             <strong class="metric-value">
-              {{ animatedMetrics.totalPower }}
-              <small class="metric-unit">MW</small>
+              {{ maskedMetrics.totalPower }}
             </strong>
             <i class="metric-line"></i>
           </li>
@@ -45,10 +44,17 @@
               <i class="metric-pulse"></i>
               今日预测准确率
             </span>
-            <strong class="metric-value">{{ animatedMetrics.accuracy }}%</strong>
+            <strong class="metric-value metric-mask">{{ maskedMetrics.accuracy }}</strong>
             <i class="metric-line"></i>
           </li>
         </ul>
+
+        <div class="announcement-ticker">
+          <span class="ticker-label">系统公告</span>
+          <div class="ticker-track">
+            <div class="ticker-content">{{ systemNotice }}</div>
+          </div>
+        </div>
       </div>
 
       <div class="wind-scene" />
@@ -60,9 +66,11 @@
           <img src="@/assets/Sanxia_logo_black.png" alt="logo" class="logo" />
           <div class="logo-copy">
             <h2>三峡能源</h2>
-            <span>用户登录</span>
+            <span>风电功率预测平台</span>
           </div>
         </div>
+
+        <div v-if="lockoutMessage" class="security-alert">{{ lockoutMessage }}</div>
 
         <el-form ref="loginForm" :model="formData" :rules="loginRules" class="login-form">
           <el-form-item prop="username">
@@ -78,8 +86,21 @@
               @keyup.enter="handleLogin"
             />
           </el-form-item>
+          <el-form-item prop="captchaInput">
+            <div class="captcha-row">
+              <el-input
+                v-model.trim="formData.captchaInput"
+                placeholder="请输入验证码结果"
+                :disabled="isLocked"
+                @keyup.enter="handleLogin"
+              />
+              <button type="button" class="captcha-challenge" @click="refreshCaptcha" title="点击刷新验证码">
+                {{ captchaText }}
+              </button>
+            </div>
+          </el-form-item>
           <el-form-item>
-            <el-button type="primary" class="login-button" :loading="loading" @click="handleLogin">登录</el-button>
+            <el-button type="primary" class="login-button" :loading="loading" :disabled="isLocked" @click="handleLogin">登录</el-button>
           </el-form-item>
         </el-form>
 
@@ -92,6 +113,7 @@
         </div>
 
         <div class="footer">© 2026 中国三峡集团 风电功率预测系统</div>
+        <div class="version">v1.2.4 (Build 20260305)</div>
       </div>
     </section>
 
@@ -119,7 +141,7 @@
 </template>
 
 <script>
-import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock, OfficeBuilding, Lightning, Aim } from '@element-plus/icons-vue'
@@ -129,27 +151,40 @@ import { isAuthReady, isAuthLoading } from '../store/authReady'
 export default {
   name: 'LoginView',
   setup() {
+    const LOCK_STORAGE_KEY = 'login_security_lock_v1'
+    const MAX_FAIL_COUNT = 5
+    const LOCK_DURATION_MS = 15 * 60 * 1000
+
     const router = useRouter()
     const loginForm = ref(null)
     const passwordForm = ref(null)
 
-    const formData = reactive({ username: '', password: '' })
+    const formData = reactive({ username: '', password: '', captchaInput: '' })
     const passwordData = reactive({ newPassword: '', confirmPassword: '' })
     const rememberMe = ref(true)
     const loading = ref(false)
     const changingPassword = ref(false)
     const showChangePasswordDialog = ref(false)
-    const animationFrameId = ref(0)
+    const nowTs = ref(Date.now())
+    const timerId = ref(0)
+    const systemNotice = ref('⚠️ 通知：今晚 00:00-01:00 系统进行主备切换演练，期间预测数据可能存在延迟。')
+    const captchaText = ref('')
+    const captchaAnswer = ref('')
+    const lockState = reactive({
+      failCount: 0,
+      lockedUntil: 0
+    })
 
-    const animatedMetrics = reactive({
-      stationCount: '0',
-      totalPower: '0',
-      accuracy: '0.0'
+    const maskedMetrics = reactive({
+      stationCount: '----',
+      totalPower: '----',
+      accuracy: '----'
     })
 
     const loginRules = {
       username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-      password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
+      password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
+      captchaInput: [{ required: true, message: '请输入验证码', trigger: 'blur' }]
     }
 
     const passwordRules = {
@@ -169,35 +204,85 @@ export default {
       ]
     }
 
-    const animateMetrics = () => {
-      const duration = 1400
-      const targets = {
-        stationCount: 24,
-        totalPower: 1286,
-        accuracy: 96.2
+    const storageRead = () => {
+      try {
+        const raw = localStorage.getItem(LOCK_STORAGE_KEY)
+        return raw ? JSON.parse(raw) : {}
+      } catch (error) {
+        return {}
       }
-      const startedAt = performance.now()
-
-      const frame = (now) => {
-        const progress = Math.min((now - startedAt) / duration, 1)
-        const eased = 1 - Math.pow(1 - progress, 3)
-
-        animatedMetrics.stationCount = Math.round(targets.stationCount * eased).toString()
-        animatedMetrics.totalPower = Math.round(targets.totalPower * eased).toLocaleString('en-US')
-        animatedMetrics.accuracy = (targets.accuracy * eased).toFixed(1)
-
-        if (progress < 1) {
-          animationFrameId.value = requestAnimationFrame(frame)
-        }
-      }
-
-      animationFrameId.value = requestAnimationFrame(frame)
     }
+
+    const storageWrite = (value) => {
+      localStorage.setItem(LOCK_STORAGE_KEY, JSON.stringify(value))
+    }
+
+    const normalizeUserKey = () => String(formData.username || '__anonymous__').trim().toLowerCase()
+
+    const loadLockState = () => {
+      const all = storageRead()
+      const current = all[normalizeUserKey()] || {}
+      lockState.failCount = Number(current.failCount || 0)
+      lockState.lockedUntil = Number(current.lockedUntil || 0)
+    }
+
+    const persistLockState = () => {
+      const all = storageRead()
+      all[normalizeUserKey()] = {
+        failCount: lockState.failCount,
+        lockedUntil: lockState.lockedUntil
+      }
+      storageWrite(all)
+    }
+
+    const clearLockState = () => {
+      lockState.failCount = 0
+      lockState.lockedUntil = 0
+      persistLockState()
+    }
+
+    const recordFailAndMaybeLock = () => {
+      lockState.failCount += 1
+      if (lockState.failCount >= MAX_FAIL_COUNT) {
+        lockState.lockedUntil = Date.now() + LOCK_DURATION_MS
+      }
+      persistLockState()
+    }
+
+    const refreshCaptcha = () => {
+      const left = Math.floor(Math.random() * 9) + 1
+      const right = Math.floor(Math.random() * 9) + 1
+      captchaText.value = `${left} + ${right} = ?`
+      captchaAnswer.value = String(left + right)
+      formData.captchaInput = ''
+    }
+
+    const isLocked = computed(() => lockState.lockedUntil > nowTs.value)
+
+    const lockoutMessage = computed(() => {
+      if (!isLocked.value) return ''
+      const remainSec = Math.max(0, Math.ceil((lockState.lockedUntil - nowTs.value) / 1000))
+      const mm = String(Math.floor(remainSec / 60)).padStart(2, '0')
+      const ss = String(remainSec % 60).padStart(2, '0')
+      return `密码连续输错 5 次，账号已锁定 15 分钟。剩余 ${mm}:${ss}`
+    })
 
     const handleLogin = async () => {
       if (!loginForm.value) return
+      loadLockState()
+
+      if (isLocked.value) {
+        ElMessage.error(lockoutMessage.value)
+        return
+      }
+
       await loginForm.value.validate(async (valid) => {
         if (!valid) return
+        if (String(formData.captchaInput).trim() !== captchaAnswer.value) {
+          ElMessage.error('验证码错误，请重新输入')
+          refreshCaptcha()
+          return
+        }
         loading.value = true
         try {
           localStorage.removeItem('user')
@@ -210,12 +295,15 @@ export default {
 
           if (userData.access_token) {
             localStorage.setItem('accessToken', userData.access_token)
+            clearLockState()
             ElMessage.success('登录成功')
             router.push('/')
           } else {
             ElMessage.error('登录异常：服务端未返回访问令牌')
           }
         } catch (error) {
+          recordFailAndMaybeLock()
+          refreshCaptcha()
           ElMessage.error(error.response?.data?.message || '登录失败，请检查用户名和密码')
           isAuthReady.value = false
           isAuthLoading.value = false
@@ -246,12 +334,20 @@ export default {
     }
 
     onMounted(() => {
-      animateMetrics()
+      refreshCaptcha()
+      loadLockState()
+      timerId.value = setInterval(() => {
+        nowTs.value = Date.now()
+      }, 1000)
+    })
+
+    watch(() => formData.username, () => {
+      loadLockState()
     })
 
     onBeforeUnmount(() => {
-      if (animationFrameId.value) {
-        cancelAnimationFrame(animationFrameId.value)
+      if (timerId.value) {
+        clearInterval(timerId.value)
       }
     })
 
@@ -263,12 +359,17 @@ export default {
       loading,
       changingPassword,
       showChangePasswordDialog,
+      isLocked,
+      lockoutMessage,
+      captchaText,
+      refreshCaptcha,
       handleLogin,
       handleChangePassword,
       formData,
       passwordData,
       rememberMe,
-      animatedMetrics,
+      maskedMetrics,
+      systemNotice,
       User,
       Lock,
       OfficeBuilding,
@@ -575,14 +676,24 @@ export default {
 }
 
 .logo-copy span {
-  font-size: 13px;
-  letter-spacing: 2px;
+  font-size: 12px;
+  letter-spacing: 1px;
   color: #a8c7df;
 }
 
+.security-alert {
+  margin: 4px 0 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 102, 102, 0.45);
+  background: rgba(120, 16, 16, 0.26);
+  color: #ff8787;
+  font-size: 12px;
+}
+
 .login-form :deep(.el-input__wrapper) {
-  background: rgba(0, 24, 48, 0.6) !important;
-  border: 1px solid rgba(107, 188, 230, 0.35);
+  background: rgba(7, 26, 42, 0.72) !important;
+  border: 1px solid rgba(107, 188, 230, 0.3);
   box-shadow: none !important;
   border-radius: 8px;
 }
@@ -601,8 +712,30 @@ export default {
 }
 
 .login-form :deep(.el-input__wrapper.is-focus) {
-  border-color: rgba(32, 229, 255, 0.88) !important;
-  box-shadow: 0 0 0 1px rgba(32, 229, 255, 0.38), 0 0 18px rgba(18, 215, 255, 0.28) !important;
+  border-color: rgba(64, 235, 255, 0.92) !important;
+  box-shadow: 0 0 0 1px rgba(47, 220, 255, 0.42), 0 0 22px rgba(18, 215, 255, 0.38) !important;
+}
+
+.captcha-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 128px;
+  gap: 8px;
+}
+
+.captcha-challenge {
+  border: 1px solid rgba(99, 176, 216, 0.36);
+  background: rgba(9, 32, 50, 0.8);
+  color: #d7ebf9;
+  border-radius: 8px;
+  font-family: Consolas, Menlo, Monaco, monospace;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.captcha-challenge:hover {
+  border-color: rgba(64, 235, 255, 0.92);
+  box-shadow: 0 0 12px rgba(18, 215, 255, 0.25);
 }
 
 .login-button {
@@ -655,6 +788,60 @@ export default {
   text-align: center;
 }
 
+.version {
+  margin-top: 4px;
+  font-size: 11px;
+  color: rgba(156, 178, 194, 0.8);
+  text-align: right;
+}
+
+.metric-mask {
+  position: relative;
+  color: rgba(197, 220, 236, 0.85);
+  letter-spacing: 2px;
+}
+
+.metric-mask::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, transparent, rgba(18, 215, 255, 0.24), transparent);
+  animation: shimmer 1.8s linear infinite;
+}
+
+.announcement-ticker {
+  width: 344px;
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: 66px 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.ticker-label {
+  color: #fbbf24;
+  font-size: 12px;
+}
+
+.ticker-track {
+  overflow: hidden;
+  border: 1px solid rgba(132, 191, 231, 0.28);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  height: 30px;
+  display: flex;
+  align-items: center;
+}
+
+.ticker-content {
+  white-space: nowrap;
+  color: #cce4f7;
+  font-size: 12px;
+  padding-left: 100%;
+  animation: tickerMove 14s linear infinite;
+}
+
 @keyframes drift {
   from {
     transform: translateX(0);
@@ -699,6 +886,24 @@ export default {
   50% {
     opacity: 1;
     transform: scale(1.15);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes tickerMove {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
   }
 }
 

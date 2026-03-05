@@ -12,7 +12,8 @@ export const PERMISSION_TREE = [
     label: '预测与调整',
     children: [
       { id: 'auto_predictions', label: '自动预测页面' },
-      { id: 'modify_prediction_curve', label: '修改预测曲线' }
+      { id: 'modify_prediction_curve', label: '修改预测曲线' },
+      { id: 'manual_intervention_workspace', label: '人工修正工作台' }
     ]
   },
   {
@@ -21,7 +22,16 @@ export const PERMISSION_TREE = [
     children: [
       { id: 'manual_report', label: '手动上报' },
       { id: 'manage_reports', label: '上报管理' },
-      { id: 'export_reports', label: '导出报表' }
+      { id: 'export_reports', label: '导出报表' },
+      { id: 'view_accuracy_report', label: '准确率考核报表' }
+    ]
+  },
+  {
+    id: 'menu_ops_quality',
+    label: '运维与质量',
+    children: [
+      { id: 'view_alarm_center', label: '统一告警中心' },
+      { id: 'manage_data_quality', label: '数据质量与限电标记' }
     ]
   },
   {
@@ -30,7 +40,8 @@ export const PERMISSION_TREE = [
     children: [
       { id: 'manage_weather_data', label: '气象数据管理' },
       { id: 'manage_tasks', label: '任务管理' },
-      { id: 'system_maintenance', label: '系统维护' }
+      { id: 'system_maintenance', label: '系统维护' },
+      { id: 'manage_system_settings', label: '系统基础配置' }
     ]
   },
   {
@@ -62,8 +73,12 @@ export const ROLE_PRESETS = [
       'view_all_data',
       'auto_predictions',
       'modify_prediction_curve',
+      'manual_intervention_workspace',
       'manual_report',
-      'manage_reports'
+      'manage_reports',
+      'view_accuracy_report',
+      'view_alarm_center',
+      'manage_data_quality'
     ]
   },
   {

@@ -20,42 +20,68 @@
       <el-menu :default-active="activeMenu" class="el-menu-vertical" :collapse="isCollapsed" @select="handleSelect">
         <el-menu-item index="/">
           <el-icon><HomeFilled /></el-icon>
-          <template #title>首页</template>
+          <template #title>首页大屏</template>
         </el-menu-item>
 
-        <el-menu-item index="/autopredict" v-if="hasPermission('auto_predictions')">
-          <el-icon><Timer /></el-icon>
-          <template #title>自动预测</template>
-        </el-menu-item>
-
-        <el-menu-item index="/powercompare" v-if="hasPermission('view_all_data')">
-          <el-icon><Histogram /></el-icon>
-          <template #title>功率对比</template>
-        </el-menu-item>
-
-        <el-menu-item index="/reportmanagement" v-if="hasPermission('manage_reports')">
-          <el-icon><Upload /></el-icon>
-          <template #title>上报管理</template>
-        </el-menu-item>
-
-        <el-menu-item index="/weatherdatafetcher" v-if="hasPermission('manage_weather_data')">
-          <el-icon><Cloudy /></el-icon>
-          <template #title>气象数据抓取</template>
-        </el-menu-item>
-
-        <el-menu-item index="/farmmanagement" v-if="hasPermission('manage_reports')">
-          <el-icon><OfficeBuilding /></el-icon>
-          <template #title>场站管理</template>
-        </el-menu-item>
-
-        <el-sub-menu index="/users" v-if="hasPermission('manage_users') || hasPermission('manage_roles')">
+        <el-sub-menu index="/group-predict" v-if="hasPermission('auto_predictions') || hasPermission('manual_intervention_workspace')">
           <template #title>
-            <el-icon><User /></el-icon>
-            <span>用户管理</span>
+            <el-icon><Timer /></el-icon>
+            <span>预测与控制</span>
           </template>
+          <el-menu-item index="/autopredict" v-if="hasPermission('auto_predictions')">状态监控</el-menu-item>
+          <el-menu-item index="/manual-workspace" v-if="hasPermission('manual_intervention_workspace') || hasPermission('auto_predictions')">
+            人工修正工作台
+          </el-menu-item>
+        </el-sub-menu>
+
+        <el-sub-menu index="/group-analysis" v-if="hasPermission('view_all_data') || hasPermission('view_accuracy_report')">
+          <template #title>
+            <el-icon><DataAnalysis /></el-icon>
+            <span>分析与报表</span>
+          </template>
+          <el-menu-item index="/powercompare" v-if="hasPermission('view_all_data')">功率可视化对比</el-menu-item>
+          <el-menu-item index="/accuracy-report" v-if="hasPermission('view_accuracy_report') || hasPermission('view_all_data')">
+            准确率/合格率报表
+          </el-menu-item>
+        </el-sub-menu>
+
+        <el-sub-menu index="/group-exchange" v-if="hasPermission('manage_weather_data') || hasPermission('manage_reports')">
+          <template #title>
+            <el-icon><Upload /></el-icon>
+            <span>数据交互</span>
+          </template>
+          <el-menu-item index="/weatherdatafetcher" v-if="hasPermission('manage_weather_data')">气象数据拉取</el-menu-item>
+          <el-menu-item index="/reportmanagement" v-if="hasPermission('manage_reports')">上报配置与调度</el-menu-item>
+        </el-sub-menu>
+
+        <el-sub-menu index="/group-ops" v-if="hasPermission('view_alarm_center') || hasPermission('manage_data_quality') || hasPermission('manage_reports')">
+          <template #title>
+            <el-icon><WarnTriangleFilled /></el-icon>
+            <span>运维与质量</span>
+          </template>
+          <el-menu-item index="/alarm-center" v-if="hasPermission('view_alarm_center') || hasPermission('manage_reports')">统一告警中心</el-menu-item>
+          <el-menu-item index="/data-quality" v-if="hasPermission('manage_data_quality') || hasPermission('view_all_data')">
+            数据质量与限电标记
+          </el-menu-item>
+        </el-sub-menu>
+
+        <el-sub-menu
+          index="/group-admin"
+          v-if="hasPermission('manage_reports') || hasPermission('manage_users') || hasPermission('manage_roles') || hasPermission('manage_system_settings')"
+        >
+          <template #title>
+            <el-icon><Setting /></el-icon>
+            <span>系统管理</span>
+          </template>
+          <el-menu-item index="/farmmanagement" v-if="hasPermission('manage_reports')">场站管理</el-menu-item>
           <el-menu-item index="/users" v-if="hasPermission('manage_users')">用户列表</el-menu-item>
-          <el-menu-item index="/users/roles" v-if="hasPermission('manage_roles')">角色管理</el-menu-item>
-          <el-menu-item index="/users/audit-logs" v-if="hasPermission('manage_users')">操作日志</el-menu-item>
+          <el-menu-item index="/users/roles" v-if="hasPermission('manage_roles')">用户与权限</el-menu-item>
+          <el-menu-item index="/system-settings" v-if="hasPermission('manage_system_settings') || hasPermission('system_maintenance')">
+            系统基础配置
+          </el-menu-item>
+          <el-menu-item index="/users/audit-logs" v-if="hasPermission('manage_users') || hasPermission('view_audit_logs')">
+            操作日志审计
+          </el-menu-item>
         </el-sub-menu>
       </el-menu>
     </el-aside>
@@ -128,6 +154,9 @@ import {
   Histogram,
   Cloudy,
   OfficeBuilding,
+  DataAnalysis,
+  WarnTriangleFilled,
+  Setting,
   Bell
 } from '@element-plus/icons-vue'
 import FarmSelector from './FarmSelector.vue'
@@ -146,6 +175,9 @@ export default {
     Histogram,
     Cloudy,
     OfficeBuilding,
+    DataAnalysis,
+    WarnTriangleFilled,
+    Setting,
     Bell,
     FarmSelector
   },
@@ -280,7 +312,7 @@ export default {
     }
 
     const goAlerts = () => {
-      router.push('/reportmanagement')
+      router.push('/alarm-center')
     }
 
     const handleLogout = () => {
