@@ -11,6 +11,7 @@ from models import (
     TheoreticalPowerData, AvailablePowerData
 )
 from sqlalchemy import desc, and_, or_, func, distinct
+from routes.power_compare import _calc_basic_metrics
 
 # 添加定时调度器
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -23,6 +24,82 @@ report_scheduler = BackgroundScheduler(daemon=True)
 scheduler_lock = Lock()
 
 report_management_bp = Blueprint('report_management', __name__)
+
+
+def _month_bounds(month_str=None):
+    if month_str:
+        year, month = map(int, month_str.split('-'))
+        month_start = datetime(year, month, 1)
+    else:
+        now = datetime.utcnow()
+        month_start = datetime(now.year, now.month, 1)
+
+    if month_start.month == 12:
+        month_end = datetime(month_start.year + 1, 1, 1)
+    else:
+        month_end = datetime(month_start.year, month_start.month + 1, 1)
+    return month_start, month_end
+
+
+def _safe_percent(value):
+    if value is None:
+        return None
+    return round(float(value), 2)
+
+
+def _safe_accuracy_from_rmse(rmse, capacity):
+    if rmse is None or not capacity:
+        return None
+    try:
+        cap = float(capacity)
+    except (TypeError, ValueError):
+        return None
+    if cap <= 0:
+        return None
+    return round(max(0.0, 100.0 * (1.0 - (float(rmse) / cap))), 2)
+
+
+def _safe_qualified_from_rmse(rmse, capacity):
+    if rmse is None or not capacity:
+        return None
+    try:
+        cap = float(capacity)
+    except (TypeError, ValueError):
+        return None
+    if cap <= 0:
+        return None
+    return 100.0 if (float(rmse) / cap) <= 0.2 else 0.0
+
+
+def _collect_series_map(session, model, power_field, farm_code, start_dt, end_dt):
+    rows = session.query(model.timestamp, power_field).filter(
+        model.farm_code == farm_code,
+        model.timestamp >= start_dt,
+        model.timestamp < end_dt
+    ).order_by(model.timestamp).all()
+    result = {}
+    for timestamp, value in rows:
+        if value is None:
+            continue
+        result[timestamp.isoformat()] = float(value)
+    return result
+
+
+def _calculate_excluded_hours(session, farm_code, month_start, month_end):
+    markers = session.query(DataQualityMarker).filter(
+        DataQualityMarker.farm_code == farm_code,
+        DataQualityMarker.exclude_from_score == True,
+        DataQualityMarker.start_time < month_end,
+        DataQualityMarker.end_time > month_start
+    ).all()
+
+    total_seconds = 0.0
+    for marker in markers:
+        overlap_start = max(marker.start_time, month_start)
+        overlap_end = min(marker.end_time, month_end)
+        if overlap_end > overlap_start:
+            total_seconds += (overlap_end - overlap_start).total_seconds()
+    return round(total_seconds / 3600.0, 2)
 
 @report_management_bp.route('/test', methods=['GET'])
 def test_route():
@@ -1716,6 +1793,119 @@ def get_report_statistics():
     except Exception as e:
         logging.error(f"获取上报统计数据失败: {e}", exc_info=True)
         return jsonify({"error": "获取统计数据失败"}), 500
+
+@report_management_bp.route('/accuracy-statistics', methods=['GET'])
+def get_accuracy_statistics():
+    try:
+        farm_code = request.args.get('farm_code')
+        month_str = request.args.get('month')
+        month_start, month_end = _month_bounds(month_str)
+
+        with db_session() as session:
+            farm_query = session.query(WindFarm).filter(WindFarm.deleted_at == None, WindFarm.is_active == True)
+            if farm_code:
+                farm_query = farm_query.filter(WindFarm.farm_code == farm_code)
+            farms = farm_query.order_by(WindFarm.farm_name.asc()).all()
+
+            items = []
+            summary_short_accuracy = []
+            summary_short_qualified = []
+            summary_supershort_accuracy = []
+            summary_supershort_qualified = []
+            summary_accuracy = []
+            summary_qualified = []
+            total_excluded_hours = 0.0
+
+            for farm in farms:
+                actual_map = _collect_series_map(session, ActualPower, ActualPower.wp_true, farm.farm_code, month_start, month_end)
+                short_map = _collect_series_map(session, ShortlPower, ShortlPower.wp_pred, farm.farm_code, month_start, month_end)
+                supershort_map = _collect_series_map(session, SupershortlPower, SupershortlPower.wp_pred2, farm.farm_code, month_start, month_end)
+
+                short_keys = sorted(set(actual_map.keys()) & set(short_map.keys()))
+                supershort_keys = sorted(set(actual_map.keys()) & set(supershort_map.keys()))
+
+                short_metrics = _calc_basic_metrics(
+                    [actual_map[key] for key in short_keys],
+                    [short_map[key] for key in short_keys]
+                )
+                supershort_metrics = _calc_basic_metrics(
+                    [actual_map[key] for key in supershort_keys],
+                    [supershort_map[key] for key in supershort_keys]
+                )
+
+                short_accuracy = _safe_accuracy_from_rmse(short_metrics.get('rmse'), farm.capacity)
+                short_qualified = _safe_qualified_from_rmse(short_metrics.get('rmse'), farm.capacity)
+                supershort_accuracy = _safe_accuracy_from_rmse(supershort_metrics.get('rmse'), farm.capacity)
+                supershort_qualified = _safe_qualified_from_rmse(supershort_metrics.get('rmse'), farm.capacity)
+
+                available_accuracy = [value for value in [short_accuracy, supershort_accuracy] if value is not None]
+                available_qualified = [value for value in [short_qualified, supershort_qualified] if value is not None]
+                overall_accuracy = round(sum(available_accuracy) / len(available_accuracy), 2) if available_accuracy else None
+                overall_qualified = round(sum(available_qualified) / len(available_qualified), 2) if available_qualified else None
+
+                excluded_hours = _calculate_excluded_hours(session, farm.farm_code, month_start, month_end)
+                total_excluded_hours += excluded_hours
+
+                notes = []
+                if excluded_hours > 0:
+                    notes.append(f"免考时段 {excluded_hours:.2f} 小时")
+                if short_metrics.get('points', 0) == 0:
+                    notes.append('短期预测无可比对点')
+                if supershort_metrics.get('points', 0) == 0:
+                    notes.append('超短期预测无可比对点')
+
+                items.append({
+                    'farm_code': farm.farm_code,
+                    'farm_name': farm.farm_name,
+                    'month': month_start.strftime('%Y-%m'),
+                    'accuracy_rate': overall_accuracy,
+                    'qualified_rate': overall_qualified,
+                    'short_accuracy_rate': short_accuracy,
+                    'short_qualified_rate': _safe_percent(short_qualified),
+                    'supershort_accuracy_rate': supershort_accuracy,
+                    'supershort_qualified_rate': _safe_percent(supershort_qualified),
+                    'short_points': int(short_metrics.get('points') or 0),
+                    'supershort_points': int(supershort_metrics.get('points') or 0),
+                    'short_rmse': round(float(short_metrics['rmse']), 4) if short_metrics.get('rmse') is not None else None,
+                    'supershort_rmse': round(float(supershort_metrics['rmse']), 4) if supershort_metrics.get('rmse') is not None else None,
+                    'excluded_hours': excluded_hours,
+                    'notes': '；'.join(notes)
+                })
+
+                if short_accuracy is not None:
+                    summary_short_accuracy.append(short_accuracy)
+                if short_qualified is not None:
+                    summary_short_qualified.append(short_qualified)
+                if supershort_accuracy is not None:
+                    summary_supershort_accuracy.append(supershort_accuracy)
+                if supershort_qualified is not None:
+                    summary_supershort_qualified.append(supershort_qualified)
+                if overall_accuracy is not None:
+                    summary_accuracy.append(overall_accuracy)
+                if overall_qualified is not None:
+                    summary_qualified.append(overall_qualified)
+
+            def avg(values):
+                return round(sum(values) / len(values), 2) if values else None
+
+            return jsonify({
+                'month': month_start.strftime('%Y-%m'),
+                'generated_at': datetime.utcnow().isoformat(),
+                'summary': {
+                    'farm_count': len(items),
+                    'avg_accuracy_rate': avg(summary_accuracy),
+                    'avg_qualified_rate': avg(summary_qualified),
+                    'avg_short_accuracy_rate': avg(summary_short_accuracy),
+                    'avg_short_qualified_rate': avg(summary_short_qualified),
+                    'avg_supershort_accuracy_rate': avg(summary_supershort_accuracy),
+                    'avg_supershort_qualified_rate': avg(summary_supershort_qualified),
+                    'total_excluded_hours': round(total_excluded_hours, 2)
+                },
+                'items': items
+            })
+    except Exception as e:
+        logging.error(f"é‘¾å³°å½‡å‡†ç¡®çŽ‡/åˆæ ¼çŽ‡ç»Ÿè®¡æ¾¶è¾«è§¦: {e}", exc_info=True)
+        return jsonify({'error': 'é‘¾å³°å½‡å‡†ç¡®çŽ‡/åˆæ ¼çŽ‡ç»Ÿè®¡æ¾¶è¾«è§¦'}), 500
 
 def _parse_marker_datetime(value):
     if not value:

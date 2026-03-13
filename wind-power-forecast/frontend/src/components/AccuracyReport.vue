@@ -3,15 +3,15 @@
     <div class="page-header">
       <div>
         <h2>准确率/合格率报表</h2>
-        <p>当前优先接入已落地的上报质量统计，展示完整率、及时率和各类型日报质量明细。</p>
+        <p>按月份汇总各场站短期与超短期预测的准确率、合格率，并叠加免考标记统计。</p>
       </div>
-      <el-tag type="info" effect="dark">数据源：report/statistics</el-tag>
+      <el-tag type="success" effect="dark">数据源：report/accuracy-statistics</el-tag>
     </div>
 
     <div class="summary-grid">
       <el-card v-for="item in summaryCards" :key="item.key" class="summary-card">
         <div class="summary-label">{{ item.label }}</div>
-        <div class="summary-value">{{ formatPercent(item.value) }}</div>
+        <div class="summary-value">{{ item.formatter ? item.formatter(item.value) : formatPercent(item.value) }}</div>
         <div class="summary-tip">{{ item.tip }}</div>
       </el-card>
     </div>
@@ -47,37 +47,70 @@
         class="result-alert"
       />
 
-      <el-table v-loading="loading" :data="tableRows" border stripe empty-text="暂无质量统计数据">
+      <el-table v-loading="loading" :data="tableRows" border stripe empty-text="暂无准确率统计数据">
         <el-table-column prop="farmName" label="场站" min-width="180" />
-        <el-table-column prop="date" label="日期" width="120" />
-        <el-table-column label="日完整率" width="120">
+        <el-table-column prop="month" label="月份" width="120" />
+        <el-table-column label="综合准确率" width="130">
           <template #default="{ row }">
-            <el-tag :type="row.completenessRate >= 90 ? 'success' : 'danger'">
-              {{ formatPercent(row.completenessRate) }}
+            <el-tag :type="resolveScoreTag(row.accuracyRate)">
+              {{ formatPercent(row.accuracyRate) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="日及时率" width="120">
+        <el-table-column label="综合合格率" width="130">
           <template #default="{ row }">
-            <el-tag :type="row.timelinessRate >= 90 ? 'success' : 'warning'">
-              {{ formatPercent(row.timelinessRate) }}
+            <el-tag :type="resolveScoreTag(row.qualifiedRate)">
+              {{ formatPercent(row.qualifiedRate) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="类型明细" min-width="320">
+        <el-table-column label="短期预测" min-width="240">
           <template #default="{ row }">
             <div class="type-list">
-              <div
-                v-for="item in row.typeEntries"
-                :key="`${row.date}-${row.farmCode}-${item.type}`"
-                class="type-item"
-              >
-                <span class="type-name">{{ getReportTypeName(item.type) }}</span>
-                <span class="type-metric">完整率 {{ formatPercent(item.completeness_rate) }}</span>
-                <span class="type-metric">及时率 {{ formatPercent(item.timeliness_rate) }}</span>
+              <div class="type-item">
+                <span class="type-name">准确率</span>
+                <span class="type-metric">{{ formatPercent(row.shortAccuracyRate) }}</span>
               </div>
-              <span v-if="row.typeEntries.length === 0" class="type-empty">无类型明细</span>
+              <div class="type-item">
+                <span class="type-name">合格率</span>
+                <span class="type-metric">{{ formatPercent(row.shortQualifiedRate) }}</span>
+              </div>
+              <div class="type-item">
+                <span class="type-name">可比对点</span>
+                <span class="type-metric">{{ row.shortPoints }}</span>
+              </div>
+              <div class="type-item">
+                <span class="type-name">RMSE</span>
+                <span class="type-metric">{{ formatNumber(row.shortRmse) }}</span>
+              </div>
             </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="超短期预测" min-width="240">
+          <template #default="{ row }">
+            <div class="type-list">
+              <div class="type-item">
+                <span class="type-name">准确率</span>
+                <span class="type-metric">{{ formatPercent(row.supershortAccuracyRate) }}</span>
+              </div>
+              <div class="type-item">
+                <span class="type-name">合格率</span>
+                <span class="type-metric">{{ formatPercent(row.supershortQualifiedRate) }}</span>
+              </div>
+              <div class="type-item">
+                <span class="type-name">可比对点</span>
+                <span class="type-metric">{{ row.supershortPoints }}</span>
+              </div>
+              <div class="type-item">
+                <span class="type-name">RMSE</span>
+                <span class="type-metric">{{ formatNumber(row.supershortRmse) }}</span>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="免考时长(小时)" width="140">
+          <template #default="{ row }">
+            {{ formatNumber(row.excludedHours) }}
           </template>
         </el-table-column>
         <el-table-column prop="notes" label="备注" min-width="220" show-overflow-tooltip />
@@ -89,20 +122,7 @@
 <script>
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getReportFarms, getReportStatistics } from '../api/reportApi'
-
-const REPORT_TYPE_LABELS = {
-  actual: '实际功率',
-  forecast_short: '短期预测',
-  forecast_long: '超短期预测',
-  wind_speed: '风速报文',
-  turbine_power: '机组功率',
-  weather: '气象报文',
-  installed_capacity: '装机容量',
-  available_capacity: '可用容量',
-  theoretical_power: '理论功率',
-  available_power: '可发功率'
-}
+import { getAccuracyStatistics, getReportFarms } from '../api/reportApi'
 
 function normalizeFarmItem(item) {
   const farmCode = item?.farm_code || item?.code || item?.value || item?.id
@@ -137,9 +157,17 @@ export default {
     const farms = ref([])
     const loading = ref(false)
     const errorMessage = ref('')
+    const summary = ref({
+      farm_count: 0,
+      avg_accuracy_rate: null,
+      avg_qualified_rate: null,
+      avg_short_accuracy_rate: null,
+      avg_short_qualified_rate: null,
+      avg_supershort_accuracy_rate: null,
+      avg_supershort_qualified_rate: null,
+      total_excluded_hours: 0
+    })
     const statistics = ref([])
-    const todayStats = ref({ completeness_rate: null, timeliness_rate: null })
-    const monthlyStats = ref({ completeness_rate: null, timeliness_rate: null })
 
     const formatPercent = (value) => {
       if (value === null || value === undefined || value === '') return '--'
@@ -148,53 +176,68 @@ export default {
       return `${numeric.toFixed(2)}%`
     }
 
-    const getReportTypeName = (type) => REPORT_TYPE_LABELS[type] || type || '--'
+    const formatNumber = (value) => {
+      if (value === null || value === undefined || value === '') return '--'
+      const numeric = Number(value)
+      if (Number.isNaN(numeric)) return '--'
+      return numeric.toFixed(2)
+    }
+
+    const resolveScoreTag = (value) => {
+      if (value === null || value === undefined || Number.isNaN(Number(value))) return 'info'
+      const numeric = Number(value)
+      if (numeric >= 95) return 'success'
+      if (numeric >= 90) return 'warning'
+      return 'danger'
+    }
 
     const summaryCards = computed(() => [
       {
-        key: 'today-completeness',
-        label: '今日完整率',
-        value: todayStats.value.completeness_rate,
-        tip: '来自 report/statistics.today_stats.completeness_rate'
+        key: 'avg-accuracy',
+        label: '平均综合准确率',
+        value: summary.value.avg_accuracy_rate,
+        tip: '短期与超短期准确率的场站均值'
       },
       {
-        key: 'today-timeliness',
-        label: '今日及时率',
-        value: todayStats.value.timeliness_rate,
-        tip: '来自 report/statistics.today_stats.timeliness_rate'
+        key: 'avg-qualified',
+        label: '平均综合合格率',
+        value: summary.value.avg_qualified_rate,
+        tip: '短期与超短期合格率的场站均值'
       },
       {
-        key: 'month-completeness',
-        label: '本月完整率',
-        value: monthlyStats.value.completeness_rate,
-        tip: '来自 report/statistics.monthly_summary.completeness_rate'
+        key: 'farm-count',
+        label: '参与场站数',
+        value: summary.value.farm_count,
+        tip: '本月纳入统计的场站数量',
+        formatter: (value) => `${value ?? 0}`
       },
       {
-        key: 'month-timeliness',
-        label: '本月及时率',
-        value: monthlyStats.value.timeliness_rate,
-        tip: '来自 report/statistics.monthly_summary.timeliness_rate'
+        key: 'excluded-hours',
+        label: '免考时长',
+        value: summary.value.total_excluded_hours,
+        tip: '由质量标记累计的免考小时数',
+        formatter: (value) => `${formatNumber(value)} h`
       }
     ])
 
     const tableRows = computed(() => {
-      return (statistics.value || []).map((item) => {
-        const typeEntries = Object.entries(item?.types || {}).map(([type, metrics]) => ({
-          type,
-          completeness_rate: Number(metrics?.completeness_rate || 0),
-          timeliness_rate: Number(metrics?.timeliness_rate || 0)
-        }))
-
-        return {
-          farmCode: item?.farm_code || '',
-          farmName: item?.farm_name || item?.farm_code || '--',
-          date: item?.date || '--',
-          completenessRate: Number(item?.overall_completeness_rate || 0),
-          timelinessRate: Number(item?.overall_timeliness_rate || 0),
-          typeEntries,
-          notes: item?.notes || ''
-        }
-      })
+      return (statistics.value || []).map((item) => ({
+        farmCode: item?.farm_code || '',
+        farmName: item?.farm_name || item?.farm_code || '--',
+        month: item?.month || month.value,
+        accuracyRate: item?.accuracy_rate,
+        qualifiedRate: item?.qualified_rate,
+        shortAccuracyRate: item?.short_accuracy_rate,
+        shortQualifiedRate: item?.short_qualified_rate,
+        supershortAccuracyRate: item?.supershort_accuracy_rate,
+        supershortQualifiedRate: item?.supershort_qualified_rate,
+        shortPoints: Number(item?.short_points || 0),
+        supershortPoints: Number(item?.supershort_points || 0),
+        shortRmse: item?.short_rmse,
+        supershortRmse: item?.supershort_rmse,
+        excludedHours: item?.excluded_hours,
+        notes: item?.notes || ''
+      }))
     })
 
     const loadFarms = async () => {
@@ -203,9 +246,9 @@ export default {
         const items = Array.isArray(response.data) ? response.data : []
         farms.value = items.map(normalizeFarmItem).filter(Boolean)
       } catch (error) {
-        console.error('加载上报场站失败:', error)
+        console.error('加载报表场站失败:', error)
         farms.value = []
-        ElMessage.error(error.response?.data?.error || '加载上报场站失败')
+        ElMessage.error(error.response?.data?.error || '加载报表场站失败')
       }
     }
 
@@ -218,17 +261,29 @@ export default {
           params.farm_code = station.value
         }
 
-        const response = await getReportStatistics(params)
+        const response = await getAccuracyStatistics(params)
         const payload = response.data || {}
-        todayStats.value = payload.today_stats || { completeness_rate: null, timeliness_rate: null }
-        monthlyStats.value = payload.monthly_summary || { completeness_rate: null, timeliness_rate: null }
-        statistics.value = Array.isArray(payload.daily_stats) ? payload.daily_stats : []
+        summary.value = payload.summary || {
+          farm_count: 0,
+          avg_accuracy_rate: null,
+          avg_qualified_rate: null,
+          total_excluded_hours: 0
+        }
+        statistics.value = Array.isArray(payload.items) ? payload.items : []
       } catch (error) {
-        console.error('加载质量统计失败:', error)
+        console.error('加载准确率统计失败:', error)
         statistics.value = []
-        todayStats.value = { completeness_rate: null, timeliness_rate: null }
-        monthlyStats.value = { completeness_rate: null, timeliness_rate: null }
-        errorMessage.value = error.response?.data?.error || '加载质量统计失败，页面已回退为空表。'
+        summary.value = {
+          farm_count: 0,
+          avg_accuracy_rate: null,
+          avg_qualified_rate: null,
+          avg_short_accuracy_rate: null,
+          avg_short_qualified_rate: null,
+          avg_supershort_accuracy_rate: null,
+          avg_supershort_qualified_rate: null,
+          total_excluded_hours: 0
+        }
+        errorMessage.value = error.response?.data?.error || '加载准确率/合格率统计失败'
         ElMessage.error(errorMessage.value)
       } finally {
         loading.value = false
@@ -237,25 +292,49 @@ export default {
 
     const exportReport = () => {
       if (tableRows.value.length === 0) {
-        ElMessage.warning('当前没有可导出的报表数据')
+        ElMessage.warning('当前没有可导出的统计数据')
         return
       }
 
-      const header = ['场站', '日期', '日完整率', '日及时率', '类型明细', '备注']
+      const header = [
+        '场站',
+        '月份',
+        '综合准确率',
+        '综合合格率',
+        '短期准确率',
+        '短期合格率',
+        '超短期准确率',
+        '超短期合格率',
+        '短期可比对点',
+        '超短期可比对点',
+        '短期RMSE',
+        '超短期RMSE',
+        '免考时长(小时)',
+        '备注'
+      ]
       const rows = tableRows.value.map((item) => [
         item.farmName,
-        item.date,
-        formatPercent(item.completenessRate),
-        formatPercent(item.timelinessRate),
-        item.typeEntries.map((entry) => `${getReportTypeName(entry.type)}: ${formatPercent(entry.completeness_rate)}/${formatPercent(entry.timeliness_rate)}`).join(' | '),
+        item.month,
+        formatPercent(item.accuracyRate),
+        formatPercent(item.qualifiedRate),
+        formatPercent(item.shortAccuracyRate),
+        formatPercent(item.shortQualifiedRate),
+        formatPercent(item.supershortAccuracyRate),
+        formatPercent(item.supershortQualifiedRate),
+        item.shortPoints,
+        item.supershortPoints,
+        formatNumber(item.shortRmse),
+        formatNumber(item.supershortRmse),
+        formatNumber(item.excludedHours),
         item.notes
       ])
+
       const csv = [header, ...rows]
         .map((line) => line.map((cell) => JSON.stringify(cell ?? '')).join(','))
         .join('\n')
 
-      downloadTextFile(csv, `report-quality-${month.value}-${station.value || 'all'}.csv`)
-      ElMessage.success('报表已导出到本地文件')
+      downloadTextFile(csv, `accuracy-report-${month.value}-${station.value || 'all'}.csv`)
+      ElMessage.success('报表已导出')
     }
 
     onMounted(async () => {
@@ -272,7 +351,8 @@ export default {
       summaryCards,
       tableRows,
       formatPercent,
-      getReportTypeName,
+      formatNumber,
+      resolveScoreTag,
       loadStatistics,
       exportReport
     }
@@ -358,7 +438,7 @@ export default {
 
 .type-item {
   display: flex;
-  flex-wrap: wrap;
+  justify-content: space-between;
   gap: 10px;
   color: var(--text-primary);
   font-size: 13px;
@@ -368,8 +448,7 @@ export default {
   font-weight: 600;
 }
 
-.type-metric,
-.type-empty {
+.type-metric {
   color: var(--text-secondary);
 }
 

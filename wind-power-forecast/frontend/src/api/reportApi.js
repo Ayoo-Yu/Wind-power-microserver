@@ -117,6 +117,13 @@ export function getReportStatistics(params = {}) {
   )
 }
 
+export function getAccuracyStatistics(params = {}) {
+  return withLegacyFallback(
+    () => axiosInstance.get('/api/v1/report/accuracy-statistics', { params }),
+    () => axiosInstance.get('/api/report/accuracy-statistics', { params })
+  )
+}
+
 export function getQualityMarkers(params = {}) {
   return withLegacyFallback(
     () => axiosInstance.get('/api/v1/report/quality-markers', { params }),
