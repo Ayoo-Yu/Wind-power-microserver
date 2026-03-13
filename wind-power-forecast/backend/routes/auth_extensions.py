@@ -5,12 +5,21 @@ import logging
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from sqlalchemy import asc, desc
+from sqlalchemy.exc import ProgrammingError
 
 from db_session import db_session
 from models import OperationAuditLog, User, UserProfileMeta
 
 
 auth_extensions_bp = Blueprint('auth_extensions', __name__)
+
+
+def _ensure_extension_tables(session):
+    bind = session.get_bind()
+    if bind is None:
+        return
+    UserProfileMeta.__table__.create(bind=bind, checkfirst=True)
+    OperationAuditLog.__table__.create(bind=bind, checkfirst=True)
 
 
 def _get_permissions(user):
@@ -86,6 +95,7 @@ def _safe_parse_datetime(value):
 def get_users_meta():
     try:
         with db_session() as session:
+            _ensure_extension_tables(session)
             current_user = _get_current_user(session)
             if not current_user:
                 return jsonify({'message': '用户不存在'}), 404
@@ -104,6 +114,7 @@ def get_users_meta():
 def get_current_user_meta():
     try:
         with db_session() as session:
+            _ensure_extension_tables(session)
             current_user = _get_current_user(session)
             if not current_user:
                 return jsonify({'message': '用户不存在'}), 404
@@ -129,6 +140,7 @@ def upsert_user_meta(user_id):
     try:
         data = request.get_json() or {}
         with db_session() as session:
+            _ensure_extension_tables(session)
             current_user = _get_current_user(session)
             if not current_user:
                 return jsonify({'message': '用户不存在'}), 404
@@ -162,6 +174,7 @@ def upsert_user_meta(user_id):
 def delete_user_meta(user_id):
     try:
         with db_session() as session:
+            _ensure_extension_tables(session)
             current_user = _get_current_user(session)
             if not current_user:
                 return jsonify({'message': '用户不存在'}), 404
@@ -183,6 +196,7 @@ def delete_user_meta(user_id):
 def list_operation_audit_logs():
     try:
         with db_session() as session:
+            _ensure_extension_tables(session)
             current_user = _get_current_user(session)
             if not current_user:
                 return jsonify({'message': '用户不存在'}), 404
@@ -241,6 +255,7 @@ def create_operation_audit_log():
     try:
         data = request.get_json() or {}
         with db_session() as session:
+            _ensure_extension_tables(session)
             current_user = _get_current_user(session)
             if not current_user:
                 return jsonify({'message': '用户不存在'}), 404
