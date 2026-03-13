@@ -44,6 +44,34 @@ export function getSystemLogs() {
   )
 }
 
+export function getAlarms(params = {}) {
+  return withLegacyFallback(
+    () => axiosInstance.get('/api/v1/system/alarms', { params }),
+    () => axiosInstance.get('/api/system/alarms', { params })
+  )
+}
+
+export function getAlarmNotifications() {
+  return withLegacyFallback(
+    () => axiosInstance.get('/api/v1/system/alarms/notifications'),
+    () => axiosInstance.get('/api/system/alarms/notifications')
+  )
+}
+
+export function ackAlarm(alarmId) {
+  return withLegacyFallback(
+    () => axiosInstance.post(`/api/v1/system/alarms/${encodeURIComponent(String(alarmId))}/ack`),
+    () => axiosInstance.post(`/api/system/alarms/${encodeURIComponent(String(alarmId))}/ack`)
+  )
+}
+
+export function closeAlarm(alarmId) {
+  return withLegacyFallback(
+    () => axiosInstance.post(`/api/v1/system/alarms/${encodeURIComponent(String(alarmId))}/close`),
+    () => axiosInstance.post(`/api/system/alarms/${encodeURIComponent(String(alarmId))}/close`)
+  )
+}
+
 export function getSystemSettings() {
   return withLegacyFallback(
     () => axiosInstance.get('/api/v1/system/settings'),
