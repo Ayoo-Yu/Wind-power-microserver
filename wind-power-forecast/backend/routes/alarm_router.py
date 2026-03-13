@@ -13,6 +13,18 @@ from models import AlarmNotificationPolicy, AlarmRecord, AlarmRule, User
 alarm_bp = Blueprint('alarm', __name__)
 
 
+def _ensure_alarm_tables(session):
+    bind = session.get_bind()
+    if bind is None:
+        return
+    for table in (
+        AlarmRecord.__table__,
+        AlarmRule.__table__,
+        AlarmNotificationPolicy.__table__,
+    ):
+        table.create(bind=bind, checkfirst=True)
+
+
 def _normalize_level(value):
     text = str(value or '').lower()
     if text in ('danger', 'critical', 'error'):
@@ -128,6 +140,7 @@ def _read_system_log_snapshot():
 
 
 def _seed_alarms_from_logs(session):
+    _ensure_alarm_tables(session)
     if session.query(AlarmRecord).count() > 0:
         return
 
@@ -150,6 +163,7 @@ def _seed_alarms_from_logs(session):
 
 
 def _seed_default_configs(session):
+    _ensure_alarm_tables(session)
     if session.query(AlarmRule).count() == 0:
         session.add(AlarmRule(
             rule_name='系统错误告警',
@@ -196,6 +210,7 @@ def list_alarms():
         status = request.args.get('status')
         level = request.args.get('level')
         with db_session() as session:
+            _ensure_alarm_tables(session)
             _seed_alarms_from_logs(session)
             _seed_default_configs(session)
             query = session.query(AlarmRecord)
@@ -215,6 +230,7 @@ def list_alarms():
 def list_alarm_notifications():
     try:
         with db_session() as session:
+            _ensure_alarm_tables(session)
             _seed_alarms_from_logs(session)
             _seed_default_configs(session)
             rows = session.query(AlarmRecord).order_by(AlarmRecord.occurred_at.desc(), AlarmRecord.id.desc()).limit(50).all()
@@ -247,6 +263,7 @@ def list_alarm_notifications():
 def list_alarm_rules():
     try:
         with db_session() as session:
+            _ensure_alarm_tables(session)
             _seed_default_configs(session)
             rows = session.query(AlarmRule).order_by(AlarmRule.updated_at.desc(), AlarmRule.id.desc()).all()
             return jsonify([_serialize_alarm_rule(item) for item in rows])
@@ -261,6 +278,7 @@ def create_alarm_rule():
     try:
         data = request.get_json() or {}
         with db_session() as session:
+            _ensure_alarm_tables(session)
             row = AlarmRule(
                 rule_name=data.get('rule_name') or f'规则-{int(datetime.utcnow().timestamp())}',
                 module=data.get('module') or 'system',
@@ -286,6 +304,7 @@ def update_alarm_rule(rule_id):
     try:
         data = request.get_json() or {}
         with db_session() as session:
+            _ensure_alarm_tables(session)
             row = session.query(AlarmRule).filter(AlarmRule.id == rule_id).first()
             if not row:
                 return jsonify({'error': 'alarm rule not found'}), 404
@@ -315,6 +334,7 @@ def update_alarm_rule(rule_id):
 def delete_alarm_rule(rule_id):
     try:
         with db_session() as session:
+            _ensure_alarm_tables(session)
             row = session.query(AlarmRule).filter(AlarmRule.id == rule_id).first()
             if not row:
                 return jsonify({'error': 'alarm rule not found'}), 404
@@ -331,6 +351,7 @@ def delete_alarm_rule(rule_id):
 def list_alarm_policies():
     try:
         with db_session() as session:
+            _ensure_alarm_tables(session)
             _seed_default_configs(session)
             rows = session.query(AlarmNotificationPolicy).order_by(AlarmNotificationPolicy.updated_at.desc(), AlarmNotificationPolicy.id.desc()).all()
             return jsonify([_serialize_alarm_policy(item) for item in rows])
@@ -345,6 +366,7 @@ def create_alarm_policy():
     try:
         data = request.get_json() or {}
         with db_session() as session:
+            _ensure_alarm_tables(session)
             row = AlarmNotificationPolicy(
                 policy_name=data.get('policy_name') or f'策略-{int(datetime.utcnow().timestamp())}',
                 channel=data.get('channel') or 'sound',
@@ -368,6 +390,7 @@ def update_alarm_policy(policy_id):
     try:
         data = request.get_json() or {}
         with db_session() as session:
+            _ensure_alarm_tables(session)
             row = session.query(AlarmNotificationPolicy).filter(AlarmNotificationPolicy.id == policy_id).first()
             if not row:
                 return jsonify({'error': 'alarm policy not found'}), 404
@@ -393,6 +416,7 @@ def update_alarm_policy(policy_id):
 def delete_alarm_policy(policy_id):
     try:
         with db_session() as session:
+            _ensure_alarm_tables(session)
             row = session.query(AlarmNotificationPolicy).filter(AlarmNotificationPolicy.id == policy_id).first()
             if not row:
                 return jsonify({'error': 'alarm policy not found'}), 404
@@ -409,6 +433,7 @@ def delete_alarm_policy(policy_id):
 def ack_alarm(alarm_id):
     try:
         with db_session() as session:
+            _ensure_alarm_tables(session)
             current_user = _get_current_user(session)
             row = session.query(AlarmRecord).filter(AlarmRecord.id == alarm_id).first()
             if not row:
@@ -429,6 +454,7 @@ def ack_alarm(alarm_id):
 def close_alarm(alarm_id):
     try:
         with db_session() as session:
+            _ensure_alarm_tables(session)
             current_user = _get_current_user(session)
             row = session.query(AlarmRecord).filter(AlarmRecord.id == alarm_id).first()
             if not row:
