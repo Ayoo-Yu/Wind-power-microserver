@@ -92,6 +92,7 @@ from routes.example_route import example_bp
 from routes.feature_upload import feature_upload_bp
 from routes.physical_simulation_router import physical_simulation_bp
 from routes.system_info_router import system_info_bp
+from routes.system_settings_router import system_settings_bp
 from routes.report_management_router import report_management_bp
 from routes.weather_fetch_router import weather_fetch_bp
 from routes.operational_data_upload import operational_data_upload_bp
@@ -113,6 +114,7 @@ app.register_blueprint(example_bp, url_prefix='/api/example')
 app.register_blueprint(feature_upload_bp)
 app.register_blueprint(physical_simulation_bp)
 app.register_blueprint(system_info_bp, url_prefix='/system')
+app.register_blueprint(system_settings_bp, url_prefix='/system')
 app.register_blueprint(report_management_bp, url_prefix='/report')
 app.register_blueprint(weather_fetch_bp, url_prefix='/weather-fetch')
 app.register_blueprint(operational_data_upload_bp, url_prefix='/operational')

@@ -3,9 +3,9 @@
     <div class="page-header">
       <div>
         <h2>系统基础配置</h2>
-        <p>当前仓库中未发现专门的配置保存接口，本页先提供本地持久化与回显能力，避免配置完全停留在一次性输入态。</p>
+        <p>系统参数、字典与节假日配置已切换到后端存储，支持统一保存与恢复默认。</p>
       </div>
-      <el-tag type="warning" effect="dark">存储方式：localStorage 过渡方案</el-tag>
+      <el-tag type="success" effect="dark">后端配置中心已接入</el-tag>
     </div>
 
     <el-alert
@@ -13,25 +13,40 @@
       type="info"
       show-icon
       class="top-alert"
-      title="代码中未发现系统基础配置后端接口，本页保存仅写入浏览器本地存储。"
+      title="当前页面保存的是系统共享配置，刷新页面或切换账号后会回显同一份后端配置。"
+    />
+
+    <el-alert
+      v-if="errorMessage"
+      :closable="false"
+      type="warning"
+      show-icon
+      class="top-alert"
+      :title="errorMessage"
     />
 
     <el-row :gutter="12">
       <el-col :span="12">
         <el-card class="card-shell">
-          <template #header>节假日与免考说明配置</template>
+          <template #header>节假日与免考核日期</template>
           <el-date-picker v-model="holidayDate" type="date" value-format="YYYY-MM-DD" />
           <el-input
             v-model.trim="holidayNote"
-            placeholder="输入节假日说明或免考备注"
+            placeholder="填写节假日备注，例如：国庆节"
             style="margin-top: 8px"
           />
           <div class="actions">
             <el-button type="primary" @click="addHoliday">新增</el-button>
           </div>
-          <el-table :data="holidays" size="small" style="margin-top: 10px" empty-text="暂无节假日配置">
+          <el-table
+            v-loading="loading"
+            :data="holidays"
+            size="small"
+            style="margin-top: 10px"
+            empty-text="暂无节假日配置"
+          >
             <el-table-column prop="date" label="日期" />
-            <el-table-column prop="note" label="说明" />
+            <el-table-column prop="note" label="备注" />
             <el-table-column label="操作" width="90">
               <template #default="{ $index }">
                 <el-button link type="danger" @click="removeHoliday($index)">删除</el-button>
@@ -46,10 +61,10 @@
           <template #header>字典配置</template>
           <el-form label-width="100px">
             <el-form-item label="机型列表">
-              <el-input v-model="dict.turbineModels" placeholder="使用逗号分隔机型" />
+              <el-input v-model="dict.turbineModels" placeholder="多个机型使用英文逗号分隔" />
             </el-form-item>
-            <el-form-item label="厂商列表">
-              <el-input v-model="dict.vendors" placeholder="使用逗号分隔厂商" />
+            <el-form-item label="厂家列表">
+              <el-input v-model="dict.vendors" placeholder="多个厂家使用英文逗号分隔" />
             </el-form-item>
           </el-form>
         </el-card>
@@ -59,7 +74,7 @@
     <el-card class="card-shell retention-card">
       <template #header>保留策略</template>
       <el-form inline>
-        <el-form-item label="预测数据保留(月)">
+        <el-form-item label="数据保留(月)">
           <el-input-number v-model="params.retentionMonths" :min="1" :max="36" />
         </el-form-item>
         <el-form-item label="日志保留(天)">
@@ -70,21 +85,53 @@
         </el-form-item>
       </el-form>
       <div class="actions">
-        <el-button type="primary" @click="saveSettings">保存配置</el-button>
-        <el-button @click="resetSettings">恢复默认</el-button>
+        <el-button type="primary" :loading="saving" @click="saveSettings">保存配置</el-button>
+        <el-button :loading="resetting" @click="resetSettings">恢复默认</el-button>
       </div>
-      <div class="footer-tip">最近保存：{{ savedAt || '尚未保存' }}</div>
+      <div class="footer-tip">
+        最近保存时间：{{ savedAt || '尚未保存' }}
+        <span v-if="updatedBy"> / 最近操作人：{{ updatedBy }}</span>
+      </div>
     </el-card>
   </div>
 </template>
 
 <script>
-import { reactive, ref } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getDefaultSystemSettings, readSystemSettings, saveSystemSettings } from '../utils/systemSettingsStore'
+import { getSystemSettings, saveSystemSettings as saveSystemSettingsApi, resetSystemSettings } from '../api/systemApi'
 
-function buildSavedAt() {
-  return new Date().toLocaleString('zh-CN', { hour12: false })
+function buildSavedAt(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  return date.toLocaleString('zh-CN', { hour12: false })
+}
+
+function buildDefaultSettings() {
+  return {
+    holidays: [],
+    dict: {
+      turbineModels: '',
+      vendors: ''
+    },
+    params: {
+      retentionMonths: 12,
+      logRetentionDays: 180,
+      diskAlertPercent: 85
+    }
+  }
+}
+
+function getStoredUserName() {
+  try {
+    const raw = localStorage.getItem('user')
+    if (!raw) return '当前用户'
+    const parsed = JSON.parse(raw)
+    return parsed?.real_name || parsed?.username || parsed?.name || '当前用户'
+  } catch (error) {
+    return '当前用户'
+  }
 }
 
 export default {
@@ -92,25 +139,70 @@ export default {
   setup() {
     const holidayDate = ref('')
     const holidayNote = ref('')
+    const holidays = ref([])
     const savedAt = ref('')
+    const updatedBy = ref('')
+    const loading = ref(false)
+    const saving = ref(false)
+    const resetting = ref(false)
+    const errorMessage = ref('')
 
-    const current = readSystemSettings()
-    const holidays = ref(current.holidays)
-    const dict = reactive({ ...current.dict })
-    const params = reactive({ ...current.params })
+    const dict = reactive({
+      turbineModels: '',
+      vendors: ''
+    })
 
-    const persist = () => {
-      saveSystemSettings({
-        holidays: holidays.value,
-        dict,
-        params
-      })
-      savedAt.value = buildSavedAt()
+    const params = reactive({
+      retentionMonths: 12,
+      logRetentionDays: 180,
+      diskAlertPercent: 85
+    })
+
+    const applySettings = (payload = {}) => {
+      const next = {
+        ...buildDefaultSettings(),
+        ...(payload || {})
+      }
+      holidays.value = Array.isArray(next.holidays) ? next.holidays : []
+      dict.turbineModels = next.dict?.turbineModels || ''
+      dict.vendors = next.dict?.vendors || ''
+      params.retentionMonths = Number(next.params?.retentionMonths || 12)
+      params.logRetentionDays = Number(next.params?.logRetentionDays || 180)
+      params.diskAlertPercent = Number(next.params?.diskAlertPercent || 85)
+    }
+
+    const buildPayload = () => ({
+      holidays: holidays.value,
+      dict: {
+        turbineModels: dict.turbineModels,
+        vendors: dict.vendors
+      },
+      params: {
+        retentionMonths: params.retentionMonths,
+        logRetentionDays: params.logRetentionDays,
+        diskAlertPercent: params.diskAlertPercent
+      }
+    })
+
+    const loadSettings = async () => {
+      loading.value = true
+      errorMessage.value = ''
+      try {
+        const response = await getSystemSettings()
+        applySettings(response.data?.data)
+        savedAt.value = buildSavedAt(response.data?.updated_at)
+        updatedBy.value = response.data?.updated_by || ''
+      } catch (error) {
+        errorMessage.value = error.response?.data?.error || '获取系统基础配置失败'
+        ElMessage.error(errorMessage.value)
+      } finally {
+        loading.value = false
+      }
     }
 
     const addHoliday = () => {
       if (!holidayDate.value) {
-        ElMessage.warning('请选择节假日日期')
+        ElMessage.warning('请先选择节假日日期')
         return
       }
 
@@ -120,36 +212,60 @@ export default {
       })
       holidayDate.value = ''
       holidayNote.value = ''
-      persist()
-      ElMessage.success('节假日配置已保存到本地')
+      ElMessage.success('节假日已加入待保存列表')
     }
 
     const removeHoliday = (index) => {
       holidays.value.splice(index, 1)
-      persist()
-      ElMessage.success('节假日配置已删除')
+      ElMessage.success('节假日已移出待保存列表')
     }
 
-    const saveSettings = () => {
-      persist()
-      ElMessage.success('系统基础配置已保存到本地')
+    const saveSettings = async () => {
+      saving.value = true
+      try {
+        const response = await saveSystemSettingsApi({
+          data: buildPayload(),
+          updated_by: getStoredUserName()
+        })
+        applySettings(response.data?.data)
+        savedAt.value = buildSavedAt(response.data?.updated_at)
+        updatedBy.value = response.data?.updated_by || ''
+        ElMessage.success(response.data?.message || '系统基础配置保存成功')
+      } catch (error) {
+        ElMessage.error(error.response?.data?.error || '保存系统基础配置失败')
+      } finally {
+        saving.value = false
+      }
     }
 
     const resetSettings = async () => {
-      await ElMessageBox.confirm('将恢复默认配置并覆盖本地保存内容，是否继续？', '恢复默认', {
-        type: 'warning'
-      })
+      await ElMessageBox.confirm(
+        '恢复默认会覆盖当前后端保存的节假日、字典和保留策略，确认继续吗？',
+        '恢复默认',
+        { type: 'warning' }
+      )
 
-      const next = getDefaultSystemSettings()
-      holidays.value = next.holidays
-      dict.turbineModels = next.dict.turbineModels
-      dict.vendors = next.dict.vendors
-      params.retentionMonths = next.params.retentionMonths
-      params.logRetentionDays = next.params.logRetentionDays
-      params.diskAlertPercent = next.params.diskAlertPercent
-      persist()
-      ElMessage.success('已恢复默认配置')
+      resetting.value = true
+      try {
+        const response = await resetSystemSettings({
+          updated_by: getStoredUserName()
+        })
+        applySettings(response.data?.data)
+        savedAt.value = buildSavedAt(response.data?.updated_at)
+        updatedBy.value = response.data?.updated_by || ''
+        ElMessage.success(response.data?.message || '系统基础配置已恢复默认')
+      } catch (error) {
+        if (error !== 'cancel') {
+          ElMessage.error(error.response?.data?.error || '恢复系统基础配置失败')
+        }
+      } finally {
+        resetting.value = false
+      }
     }
+
+    onMounted(async () => {
+      await loadSettings()
+    })
 
     return {
       holidayDate,
@@ -158,6 +274,11 @@ export default {
       dict,
       params,
       savedAt,
+      updatedBy,
+      loading,
+      saving,
+      resetting,
+      errorMessage,
       addHoliday,
       removeHoliday,
       saveSettings,

@@ -7,6 +7,7 @@ from .dataset import Dataset
 from .power import ActualPower, SupershortlPower, ShortlPower, MidPower
 from .training import Model, TrainingRecord, EvaluationMetrics, PredictionRecord, AutoPredictionTask, DailyMetrics
 from .user import User, Role, LoginHistory
+from .system_settings import SystemSetting
 # 新增导入特征模型
 from .features import TrainPreSupershort
 # 物理仿真模型
@@ -33,6 +34,7 @@ __all__ = [
     'ActualPower', 'SupershortlPower', 'ShortlPower', 'MidPower',
     'Model', 'TrainingRecord', 'EvaluationMetrics', 'PredictionRecord', 'AutoPredictionTask', 'DailyMetrics',
     'User', 'Role', 'LoginHistory',
+    'SystemSetting',
     # 新增模型到 __all__
     'TrainPreShort', 'TrainPreMiddle', 'TrainPreSupershort',
     # 物理仿真模型

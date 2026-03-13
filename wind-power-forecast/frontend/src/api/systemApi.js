@@ -43,3 +43,24 @@ export function getSystemLogs() {
     () => axiosInstance.get('/api/system/logs')
   )
 }
+
+export function getSystemSettings() {
+  return withLegacyFallback(
+    () => axiosInstance.get('/api/v1/system/settings'),
+    () => axiosInstance.get('/api/system/settings')
+  )
+}
+
+export function saveSystemSettings(payload) {
+  return withLegacyFallback(
+    () => axiosInstance.put('/api/v1/system/settings', payload),
+    () => axiosInstance.put('/api/system/settings', payload)
+  )
+}
+
+export function resetSystemSettings(payload = {}) {
+  return withLegacyFallback(
+    () => axiosInstance.post('/api/v1/system/settings/reset', payload),
+    () => axiosInstance.post('/api/system/settings/reset', payload)
+  )
+}

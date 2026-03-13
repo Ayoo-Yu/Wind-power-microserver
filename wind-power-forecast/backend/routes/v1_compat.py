@@ -36,6 +36,11 @@ from routes.system_info_router import (
     get_runtime_info,
     get_system_logs
 )
+from routes.system_settings_router import (
+    get_system_settings,
+    save_system_settings,
+    reset_system_settings
+)
 from routes.weather_fetch_router import (
     get_connections as get_weather_connections,
     create_connection as create_weather_connection,
@@ -254,6 +259,21 @@ def get_system_runtime_v1():
 @v1_compat_bp.route("/system/logs", methods=["GET"])
 def get_system_logs_v1():
     return get_system_logs()
+
+
+@v1_compat_bp.route("/system/settings", methods=["GET"])
+def get_system_settings_v1():
+    return get_system_settings()
+
+
+@v1_compat_bp.route("/system/settings", methods=["PUT"])
+def save_system_settings_v1():
+    return save_system_settings()
+
+
+@v1_compat_bp.route("/system/settings/reset", methods=["POST"])
+def reset_system_settings_v1():
+    return reset_system_settings()
 
 
 @v1_compat_bp.route("/weather-fetch/connections", methods=["GET"])
