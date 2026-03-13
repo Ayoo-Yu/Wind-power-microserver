@@ -3,9 +3,9 @@
     <div class="header">
       <div>
         <h2>人工修正工作台</h2>
-        <p>基于现有上报配置加载真实预览数据，支持按比例、平移和限高方式修正后再调用手工上报接口提交。</p>
+        <p>支持加载真实预览数据、调整曲线、保存修正版本、回放历史版本，并最终执行手工上报。</p>
       </div>
-      <el-tag type="warning" effect="dark">数据源：report/configs + preview-report + manual-report</el-tag>
+      <el-tag type="warning" effect="dark">数据源：report/configs + preview-report + manual-intervention/versions + manual-report</el-tag>
     </div>
 
     <div class="layout">
@@ -22,7 +22,7 @@
             </el-select>
           </el-form-item>
           <el-form-item label="目标日期">
-            <el-date-picker v-model="targetDate" type="date" value-format="YYYY-MM-DD" />
+            <el-date-picker v-model="targetDate" type="date" value-format="YYYY-MM-DD" @change="handleDateChange" />
           </el-form-item>
           <el-form-item label="报文类型">
             <el-select v-model="reportType" @change="handleReportTypeChange">
@@ -46,13 +46,16 @@
           </el-form-item>
           <el-form-item label="修正工具">
             <el-select v-model="tool">
-              <el-option label="按比例调整(%)" value="scaleUp" />
+              <el-option label="整体上浮(%)" value="scaleUp" />
               <el-option label="整体平移(MW)" value="shift" />
-              <el-option label="限制上限(MW)" value="cap" />
+              <el-option label="设置封顶(MW)" value="cap" />
             </el-select>
           </el-form-item>
           <el-form-item label="修正值">
             <el-input-number v-model="toolValue" :min="-1000" :max="1000" />
+          </el-form-item>
+          <el-form-item label="版本名称">
+            <el-input v-model="versionName" placeholder="可选，默认自动生成" />
           </el-form-item>
         </el-form>
 
@@ -66,23 +69,48 @@
             <span class="meta-value">{{ originalRows.length }}</span>
           </div>
           <div class="meta-item">
-            <span class="meta-label">当前点数</span>
+            <span class="meta-label">工作台点数</span>
             <span class="meta-value">{{ points.length }}</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">历史版本</span>
+            <span class="meta-value">{{ versions.length }}</span>
           </div>
         </div>
 
         <div class="actions">
-          <el-button type="primary" :loading="loading" @click="loadPreviewData">加载数据</el-button>
+          <el-button type="primary" :loading="loading" @click="loadPreviewData">加载预览</el-button>
           <el-button :disabled="points.length === 0" @click="applyTool">应用修正</el-button>
-          <el-button :disabled="originalRows.length === 0" @click="resetSeries">恢复原始值</el-button>
+          <el-button :disabled="originalRows.length === 0" @click="resetSeries">恢复原始</el-button>
+          <el-button
+            type="warning"
+            :disabled="points.length === 0 || !selectedConfigId"
+            :loading="versionSaving"
+            @click="saveVersion"
+          >
+            保存版本
+          </el-button>
           <el-button
             type="success"
             :disabled="points.length === 0 || !selectedConfigId"
-            :loading="saving"
-            @click="saveVersion"
+            :loading="submitting"
+            @click="submitManualReport"
           >
-            保存并上报
+            提交上报
           </el-button>
+        </div>
+
+        <div class="version-panel">
+          <div class="panel-title">版本历史</div>
+          <el-table :data="versions" size="small" border empty-text="暂无版本">
+            <el-table-column prop="versionName" label="版本" min-width="140" show-overflow-tooltip />
+            <el-table-column prop="createdAt" label="创建时间" min-width="150" />
+            <el-table-column label="操作" width="120">
+              <template #default="{ row }">
+                <el-button type="primary" link @click="loadVersion(row.id)">应用</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
         </div>
       </el-card>
 
@@ -101,7 +129,7 @@
             <div>
               <div class="chart-title">修正曲线</div>
               <div class="chart-tip">
-                当前展示 {{ getReportTypeName(reportType) }} 的归一化序列。保存时会回写为后端要求的报文结构。
+                当前展示 {{ getReportTypeName(reportType) }} 的原始曲线与工作台曲线；加载历史版本后会覆盖工作台曲线。
               </div>
             </div>
             <el-tag v-if="previewMeta.loadedAt" type="info">{{ previewMeta.loadedAt }}</el-tag>
@@ -132,13 +160,13 @@
               stroke-dasharray="8 5"
             />
           </svg>
-          <el-empty v-else description="请先加载上报预览数据" />
+          <el-empty v-else description="请先加载预览数据" />
         </el-card>
 
         <el-card class="table-card">
           <div class="table-title">修正点明细</div>
-          <el-table :data="points" border stripe empty-text="暂无可编辑数据">
-            <el-table-column prop="label" label="时点/序号" min-width="140" />
+          <el-table :data="points" border stripe empty-text="暂无修正点">
+            <el-table-column prop="label" label="时刻/标签" min-width="140" />
             <el-table-column prop="sourceValue" label="原始值" width="120">
               <template #default="{ row }">{{ formatNumber(row.sourceValue) }}</template>
             </el-table-column>
@@ -165,13 +193,21 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getReportConfigs, getReportFarms, manualReport, previewReport } from '../api/reportApi'
+import {
+  applyManualInterventionVersion,
+  createManualInterventionVersion,
+  getManualInterventionVersions,
+  getReportConfigs,
+  getReportFarms,
+  manualReport,
+  previewReport
+} from '../api/reportApi'
 import { getStoredUser, hasAnyPermission } from '../utils/permission'
 
 const REPORT_TYPE_OPTIONS = [
-  { value: 'forecast_long', label: '超短期预测' },
+  { value: 'forecast_long', label: '长期预测' },
   { value: 'forecast_short', label: '短期预测' },
-  { value: 'actual', label: '实际功率' }
+  { value: 'actual', label: '实测功率' }
 ]
 
 const REPORT_TYPE_LABELS = REPORT_TYPE_OPTIONS.reduce((acc, item) => {
@@ -193,11 +229,18 @@ function formatDateDefault() {
 }
 
 function buildNowLabel() {
-  return `最近加载：${new Date().toLocaleString('zh-CN')}`
+  return `加载于 ${new Date().toLocaleString('zh-CN')}`
 }
 
 function safeArray(value) {
   return Array.isArray(value) ? value : []
+}
+
+function toDisplayTime(value) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  return date.toLocaleString('zh-CN', { hour12: false })
 }
 
 export default {
@@ -209,12 +252,15 @@ export default {
     const reportType = ref('forecast_long')
     const tool = ref('scaleUp')
     const toolValue = ref(10)
+    const versionName = ref('')
     const capValue = ref(null)
     const farms = ref([])
     const configs = ref([])
+    const versions = ref([])
     const selectedConfigId = ref(null)
     const loading = ref(false)
-    const saving = ref(false)
+    const versionSaving = ref(false)
+    const submitting = ref(false)
     const errorMessage = ref('')
     const originalRows = ref([])
     const points = ref([])
@@ -263,7 +309,9 @@ export default {
 
       if (type === 'forecast_short') {
         const row = rows[0] || {}
-        const keys = Object.keys(row).filter((key) => /^wp_pred\d+$/.test(key)).sort((a, b) => Number(a.replace('wp_pred', '')) - Number(b.replace('wp_pred', '')))
+        const keys = Object.keys(row)
+          .filter((key) => /^wp_pred\d+$/.test(key))
+          .sort((a, b) => Number(a.replace('wp_pred', '')) - Number(b.replace('wp_pred', '')))
         return keys.map((key) => ({
           key,
           label: key.replace('wp_pred', 'P'),
@@ -310,9 +358,18 @@ export default {
       })
     }
 
+    const fillWorkspaceFromPayload = (payloadRows, loadedLabel = buildNowLabel()) => {
+      originalRows.value = safeArray(payloadRows)
+      points.value = normalizePointSeries(reportType.value, payloadRows, targetDate.value)
+      previewMeta.value = {
+        loadedAt: loadedLabel,
+        sourceType: reportType.value
+      }
+    }
+
     const applyTool = () => {
       if (points.value.length === 0) {
-        ElMessage.warning('请先加载可修正的数据')
+        ElMessage.warning('请先加载可编辑的预览数据')
         return
       }
 
@@ -377,9 +434,27 @@ export default {
       }
     }
 
+    const loadVersions = async () => {
+      if (!station.value) {
+        versions.value = []
+        return
+      }
+      const response = await getManualInterventionVersions({
+        farm_code: station.value,
+        report_type: reportType.value,
+        target_date: targetDate.value
+      })
+      versions.value = safeArray(response.data).map((item) => ({
+        id: item.id,
+        versionName: item.version_name || `版本 ${item.id}`,
+        createdAt: toDisplayTime(item.created_at),
+        raw: item
+      }))
+    }
+
     const loadPreviewData = async () => {
       if (!selectedConfigId.value) {
-        ElMessage.warning('当前报文类型下没有可用上报配置')
+        ElMessage.warning('请先选择一条上报配置')
         return
       }
 
@@ -388,25 +463,20 @@ export default {
       try {
         const response = await previewReport(selectedConfigId.value)
         const payloadRows = safeArray(response.data?.payload?.data)
-        originalRows.value = payloadRows
-        points.value = normalizePointSeries(reportType.value, payloadRows, targetDate.value)
-        previewMeta.value = {
-          loadedAt: buildNowLabel(),
-          sourceType: response.data?.config_info?.report_type || reportType.value
-        }
+        fillWorkspaceFromPayload(payloadRows)
 
         if (points.value.length === 0) {
-          errorMessage.value = '当前日期没有可修正数据，请切换日期或配置。'
+          errorMessage.value = '当前日期没有可编辑的预览数据'
           ElMessage.warning(errorMessage.value)
         } else {
           ElMessage.success(`已加载 ${points.value.length} 个修正点`)
         }
       } catch (error) {
-        console.error('加载人工修正预览失败:', error)
+        console.error('加载人工修正预览数据失败:', error)
         originalRows.value = []
         points.value = []
         previewMeta.value = { loadedAt: '', sourceType: '' }
-        errorMessage.value = error.response?.data?.error || '加载人工修正预览失败'
+        errorMessage.value = error.response?.data?.error || '加载人工修正预览数据失败'
         ElMessage.error(errorMessage.value)
       } finally {
         loading.value = false
@@ -415,43 +485,103 @@ export default {
 
     const saveVersion = async () => {
       if (!canSaveManual()) {
-        ElMessage.warning('当前账号没有提交人工修正的权限')
+        ElMessage.warning('当前账号没有保存人工修正版本的权限')
         return
       }
       if (!selectedConfigId.value || points.value.length === 0) {
-        ElMessage.warning('请先加载并修正数据')
+        ElMessage.warning('当前没有可保存的修正数据')
         return
       }
 
-      saving.value = true
+      versionSaving.value = true
+      try {
+        const currentUser = getStoredUser() || {}
+        const response = await createManualInterventionVersion({
+          config_id: selectedConfigId.value,
+          farm_code: station.value,
+          report_type: reportType.value,
+          target_date: targetDate.value,
+          version_name: versionName.value || '',
+          tool_name: tool.value,
+          tool_value: toolValue.value,
+          created_by: currentUser.username || 'unknown',
+          data: denormalizePayload()
+        })
+        versionName.value = ''
+        await loadVersions()
+        ElMessage.success(response.data?.message || '版本已保存')
+      } catch (error) {
+        console.error('保存人工修正版本失败:', error)
+        ElMessage.error(error.response?.data?.error || '保存人工修正版本失败')
+      } finally {
+        versionSaving.value = false
+      }
+    }
+
+    const submitManualReport = async () => {
+      if (!canSaveManual()) {
+        ElMessage.warning('当前账号没有执行人工修正上报的权限')
+        return
+      }
+      if (!selectedConfigId.value || points.value.length === 0) {
+        ElMessage.warning('当前没有可上报的数据')
+        return
+      }
+
+      submitting.value = true
       try {
         const payload = {
           config_id: selectedConfigId.value,
           data: denormalizePayload()
         }
         await manualReport(payload)
-        ElMessage.success(`已提交 ${station.value} ${targetDate.value} 的人工修正结果`)
+        ElMessage.success(`已提交 ${station.value} ${targetDate.value} 的手工上报`)
       } catch (error) {
-        console.error('提交人工修正失败:', error)
-        ElMessage.error(error.response?.data?.error || '提交人工修正失败')
+        console.error('人工修正手工上报失败:', error)
+        ElMessage.error(error.response?.data?.error || '人工修正手工上报失败')
       } finally {
-        saving.value = false
+        submitting.value = false
+      }
+    }
+
+    const loadVersion = async (versionId) => {
+      try {
+        const currentUser = getStoredUser() || {}
+        const response = await applyManualInterventionVersion(versionId, {
+          applied_by: currentUser.username || 'unknown'
+        })
+        const version = response.data?.version
+        if (!version) {
+          ElMessage.warning('版本详情为空')
+          return
+        }
+        fillWorkspaceFromPayload(version.payload || [], `版本 ${version.version_name || version.id} 已应用`)
+        ElMessage.success(response.data?.message || '版本已应用')
+        await loadVersions()
+      } catch (error) {
+        console.error('加载人工修正版本失败:', error)
+        ElMessage.error(error.response?.data?.error || '加载人工修正版本失败')
       }
     }
 
     const handleStationChange = async () => {
       await loadConfigs()
+      await loadVersions()
       points.value = []
       originalRows.value = []
       errorMessage.value = ''
     }
 
-    const handleReportTypeChange = () => {
-      const fallback = availableConfigs.value[0]?.id || null
-      selectedConfigId.value = fallback
+    const handleReportTypeChange = async () => {
+      selectedConfigId.value = availableConfigs.value[0]?.id || null
       points.value = []
       originalRows.value = []
       errorMessage.value = ''
+      await loadVersions()
+    }
+
+    const handleDateChange = async () => {
+      await loadVersions()
     }
 
     onMounted(async () => {
@@ -467,6 +597,7 @@ export default {
           station.value = routeFarmCode
         }
         await loadConfigs()
+        await loadVersions()
         if (selectedConfigId.value) {
           await loadPreviewData()
         }
@@ -483,14 +614,17 @@ export default {
       reportType,
       tool,
       toolValue,
+      versionName,
       capValue,
       farms,
+      versions,
       reportTypeOptions,
       availableConfigs,
       selectedConfigId,
       currentConfig,
       loading,
-      saving,
+      versionSaving,
+      submitting,
       errorMessage,
       originalRows,
       points,
@@ -505,9 +639,12 @@ export default {
       applyTool,
       resetSeries,
       saveVersion,
+      submitManualReport,
+      loadVersion,
       loadPreviewData,
       handleStationChange,
-      handleReportTypeChange
+      handleReportTypeChange,
+      handleDateChange
     }
   }
 }
@@ -539,7 +676,7 @@ export default {
 
 .layout {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: 360px 1fr;
   gap: 12px;
 }
 
@@ -578,6 +715,16 @@ export default {
 .actions {
   display: grid;
   gap: 8px;
+}
+
+.version-panel {
+  margin-top: 14px;
+}
+
+.panel-title {
+  margin-bottom: 10px;
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .content {

@@ -10,6 +10,7 @@ from .user import User, Role, LoginHistory
 from .system_settings import SystemSetting
 from .auth_extensions import UserProfileMeta, OperationAuditLog
 from .alarm import AlarmRecord
+from .manual_intervention import ManualInterventionVersion
 # 新增导入特征模型
 from .features import TrainPreSupershort
 # 物理仿真模型
@@ -38,6 +39,7 @@ __all__ = [
     'User', 'Role', 'LoginHistory',
     'SystemSetting',
     'AlarmRecord',
+    'ManualInterventionVersion',
     'UserProfileMeta', 'OperationAuditLog',
     # 新增模型到 __all__
     'TrainPreShort', 'TrainPreMiddle', 'TrainPreSupershort',

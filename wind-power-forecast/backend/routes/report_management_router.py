@@ -7,7 +7,7 @@ import logging
 from db_session import db_session
 from models import (
     WindFarm, ReportConfig, ReportLog, ActualPower, SupershortlPower, ShortlPower, MidPower, ReportQualityStatistics, DataQualityMarker,
-    WindSpeedData, TurbinePowerData, WeatherData, InstalledCapacityData, AvailableCapacityData,
+    ManualInterventionVersion, WindSpeedData, TurbinePowerData, WeatherData, InstalledCapacityData, AvailableCapacityData,
     TheoreticalPowerData, AvailablePowerData
 )
 from sqlalchemy import desc, and_, or_, func, distinct
@@ -100,6 +100,29 @@ def _calculate_excluded_hours(session, farm_code, month_start, month_end):
         if overlap_end > overlap_start:
             total_seconds += (overlap_end - overlap_start).total_seconds()
     return round(total_seconds / 3600.0, 2)
+
+
+def _serialize_manual_intervention_version(item):
+    payload = []
+    try:
+        payload = json.loads(item.payload) if item.payload else []
+    except Exception:
+        payload = []
+    return {
+        'id': item.id,
+        'config_id': item.config_id,
+        'farm_code': item.farm_code,
+        'report_type': item.report_type,
+        'target_date': item.target_date,
+        'version_name': item.version_name,
+        'tool_name': item.tool_name,
+        'tool_value': item.tool_value,
+        'payload': payload,
+        'created_by': item.created_by,
+        'created_at': item.created_at.isoformat() if item.created_at else None,
+        'applied_at': item.applied_at.isoformat() if item.applied_at else None,
+        'applied_by': item.applied_by
+    }
 
 @report_management_bp.route('/test', methods=['GET'])
 def test_route():
@@ -586,6 +609,106 @@ def manual_report():
     except Exception as e:
         logging.error(f"手动上报失败: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+@report_management_bp.route('/manual-intervention/versions', methods=['GET'])
+def list_manual_intervention_versions():
+    try:
+        farm_code = request.args.get('farm_code')
+        report_type = request.args.get('report_type')
+        target_date = request.args.get('target_date')
+        with db_session() as db:
+            query = db.query(ManualInterventionVersion)
+            if farm_code:
+                query = query.filter(ManualInterventionVersion.farm_code == farm_code)
+            if report_type:
+                query = query.filter(ManualInterventionVersion.report_type == report_type)
+            if target_date:
+                query = query.filter(ManualInterventionVersion.target_date == target_date)
+            rows = query.order_by(ManualInterventionVersion.created_at.desc(), ManualInterventionVersion.id.desc()).limit(100).all()
+            return jsonify([_serialize_manual_intervention_version(item) for item in rows])
+    except Exception as e:
+        logging.error(f"获取人工修正版本列表失败: {str(e)}")
+        return jsonify({'error': '获取人工修正版本列表失败'}), 500
+
+
+@report_management_bp.route('/manual-intervention/versions', methods=['POST'])
+def create_manual_intervention_version():
+    try:
+        data = request.get_json() or {}
+        config_id = data.get('config_id')
+        payload = data.get('data')
+        farm_code = data.get('farm_code')
+        report_type = data.get('report_type')
+        if not config_id or not isinstance(payload, list):
+            return jsonify({'error': '缺少版本保存必要参数'}), 400
+
+        with db_session() as db:
+            if not farm_code or not report_type:
+                config = db.query(ReportConfig).filter(ReportConfig.id == config_id).first()
+                if not config:
+                    return jsonify({'error': '配置不存在'}), 404
+                farm = db.query(WindFarm).filter(WindFarm.id == config.farm_id).first()
+                if not farm:
+                    return jsonify({'error': '场站不存在'}), 404
+                farm_code = farm_code or farm.farm_code
+                report_type = report_type or config.report_type
+
+            row = ManualInterventionVersion(
+                config_id=config_id,
+                farm_code=farm_code,
+                report_type=report_type,
+                target_date=data.get('target_date'),
+                version_name=data.get('version_name') or f"{farm_code}-{report_type}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+                tool_name=data.get('tool_name'),
+                tool_value=str(data.get('tool_value')) if data.get('tool_value') is not None else None,
+                payload=json.dumps(payload, ensure_ascii=False),
+                created_by=data.get('created_by')
+            )
+            db.add(row)
+            db.commit()
+            db.refresh(row)
+            return jsonify({
+                'message': '人工修正版本已保存',
+                'version': _serialize_manual_intervention_version(row)
+            })
+    except Exception as e:
+        logging.error(f"保存人工修正版本失败: {str(e)}")
+        return jsonify({'error': '保存人工修正版本失败'}), 500
+
+
+@report_management_bp.route('/manual-intervention/versions/<int:version_id>', methods=['GET'])
+def get_manual_intervention_version(version_id):
+    try:
+        with db_session() as db:
+            row = db.query(ManualInterventionVersion).filter(ManualInterventionVersion.id == version_id).first()
+            if not row:
+                return jsonify({'error': '人工修正版本不存在'}), 404
+            return jsonify(_serialize_manual_intervention_version(row))
+    except Exception as e:
+        logging.error(f"获取人工修正版本详情失败: {str(e)}")
+        return jsonify({'error': '获取人工修正版本详情失败'}), 500
+
+
+@report_management_bp.route('/manual-intervention/versions/<int:version_id>/apply', methods=['POST'])
+def apply_manual_intervention_version(version_id):
+    try:
+        data = request.get_json() or {}
+        with db_session() as db:
+            row = db.query(ManualInterventionVersion).filter(ManualInterventionVersion.id == version_id).first()
+            if not row:
+                return jsonify({'error': '人工修正版本不存在'}), 404
+            row.applied_at = datetime.utcnow()
+            row.applied_by = data.get('applied_by')
+            db.commit()
+            db.refresh(row)
+            return jsonify({
+                'message': '人工修正版本已应用到工作台',
+                'version': _serialize_manual_intervention_version(row)
+            })
+    except Exception as e:
+        logging.error(f"应用人工修正版本失败: {str(e)}")
+        return jsonify({'error': '应用人工修正版本失败'}), 500
+
 
 def execute_report(db: Session, config: ReportConfig):
     """执行具体的上报逻辑"""

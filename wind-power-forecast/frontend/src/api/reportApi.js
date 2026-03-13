@@ -110,6 +110,36 @@ export function manualReport(payload) {
   )
 }
 
+export function getManualInterventionVersions(params = {}) {
+  return withLegacyFallback(
+    () => axiosInstance.get('/api/v1/report/manual-intervention/versions', { params }),
+    () => axiosInstance.get('/api/report/manual-intervention/versions', { params })
+  )
+}
+
+export function createManualInterventionVersion(payload) {
+  return withLegacyFallback(
+    () => axiosInstance.post('/api/v1/report/manual-intervention/versions', payload),
+    () => axiosInstance.post('/api/report/manual-intervention/versions', payload)
+  )
+}
+
+export function getManualInterventionVersion(versionId) {
+  const safeId = encodeURIComponent(String(versionId))
+  return withLegacyFallback(
+    () => axiosInstance.get(`/api/v1/report/manual-intervention/versions/${safeId}`),
+    () => axiosInstance.get(`/api/report/manual-intervention/versions/${safeId}`)
+  )
+}
+
+export function applyManualInterventionVersion(versionId, payload = {}) {
+  const safeId = encodeURIComponent(String(versionId))
+  return withLegacyFallback(
+    () => axiosInstance.post(`/api/v1/report/manual-intervention/versions/${safeId}/apply`, payload),
+    () => axiosInstance.post(`/api/report/manual-intervention/versions/${safeId}/apply`, payload)
+  )
+}
+
 export function getReportStatistics(params = {}) {
   return withLegacyFallback(
     () => axiosInstance.get('/api/v1/report/statistics', { params }),

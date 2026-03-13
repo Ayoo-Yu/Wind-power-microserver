@@ -13,6 +13,10 @@ from routes.report_management_router import (
     get_report_logs,
     preview_report,
     manual_report,
+    list_manual_intervention_versions,
+    create_manual_intervention_version,
+    get_manual_intervention_version,
+    apply_manual_intervention_version,
     get_report_statistics,
     get_quality_markers,
     create_quality_marker,
@@ -169,6 +173,26 @@ def preview_report_v1():
 @v1_compat_bp.route("/report/manual-report", methods=["POST"])
 def manual_report_v1():
     return manual_report()
+
+
+@v1_compat_bp.route("/report/manual-intervention/versions", methods=["GET"])
+def list_manual_intervention_versions_v1():
+    return list_manual_intervention_versions()
+
+
+@v1_compat_bp.route("/report/manual-intervention/versions", methods=["POST"])
+def create_manual_intervention_version_v1():
+    return create_manual_intervention_version()
+
+
+@v1_compat_bp.route("/report/manual-intervention/versions/<int:version_id>", methods=["GET"])
+def get_manual_intervention_version_v1(version_id):
+    return get_manual_intervention_version(version_id)
+
+
+@v1_compat_bp.route("/report/manual-intervention/versions/<int:version_id>/apply", methods=["POST"])
+def apply_manual_intervention_version_v1(version_id):
+    return apply_manual_intervention_version(version_id)
 
 
 @v1_compat_bp.route("/report/statistics", methods=["GET"])
