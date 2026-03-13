@@ -6,8 +6,8 @@ import json
 import logging
 from db_session import db_session
 from models import (
-    WindFarm, ReportConfig, ReportLog, ActualPower, SupershortlPower, ShortlPower, MidPower, ReportQualityStatistics,
-    WindSpeedData, TurbinePowerData, WeatherData, InstalledCapacityData, AvailableCapacityData, 
+    WindFarm, ReportConfig, ReportLog, ActualPower, SupershortlPower, ShortlPower, MidPower, ReportQualityStatistics, DataQualityMarker,
+    WindSpeedData, TurbinePowerData, WeatherData, InstalledCapacityData, AvailableCapacityData,
     TheoreticalPowerData, AvailablePowerData
 )
 from sqlalchemy import desc, and_, or_, func, distinct
@@ -1716,6 +1716,166 @@ def get_report_statistics():
     except Exception as e:
         logging.error(f"获取上报统计数据失败: {e}", exc_info=True)
         return jsonify({"error": "获取统计数据失败"}), 500
+
+def _parse_marker_datetime(value):
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+
+    normalized = str(value).strip().replace('T', ' ')
+    for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M'):
+        try:
+            return datetime.strptime(normalized, fmt)
+        except ValueError:
+            continue
+    try:
+        return datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+
+
+def _serialize_quality_marker(session, marker):
+    return {
+        'id': marker.id,
+        'farm_code': marker.farm_code,
+        'farm_name': get_farm_name(session, marker.farm_code),
+        'start_time': marker.start_time.isoformat() if marker.start_time else None,
+        'end_time': marker.end_time.isoformat() if marker.end_time else None,
+        'marker_type': marker.marker_type,
+        'reason': marker.reason,
+        'exclude_from_score': bool(marker.exclude_from_score),
+        'created_by': marker.created_by,
+        'created_at': marker.created_at.isoformat() if marker.created_at else None,
+        'updated_at': marker.updated_at.isoformat() if marker.updated_at else None
+    }
+
+
+@report_management_bp.route('/quality-markers', methods=['GET'])
+def get_quality_markers():
+    try:
+        farm_code = request.args.get('farm_code')
+        month_str = request.args.get('month')
+
+        with db_session() as session:
+            query = session.query(DataQualityMarker)
+
+            if farm_code:
+                query = query.filter(DataQualityMarker.farm_code == farm_code)
+
+            if month_str:
+                year, month = map(int, month_str.split('-'))
+                month_start = datetime(year, month, 1)
+                month_end = datetime(year + (1 if month == 12 else 0), 1 if month == 12 else month + 1, 1)
+                query = query.filter(
+                    DataQualityMarker.start_time < month_end,
+                    DataQualityMarker.end_time >= month_start
+                )
+
+            markers = query.order_by(desc(DataQualityMarker.start_time), desc(DataQualityMarker.id)).all()
+            return jsonify([_serialize_quality_marker(session, marker) for marker in markers])
+    except Exception as e:
+        logging.error(f"获取数据质量标记失败: {e}", exc_info=True)
+        return jsonify({'error': '获取数据质量标记失败'}), 500
+
+
+@report_management_bp.route('/quality-markers', methods=['POST'])
+def create_quality_marker():
+    try:
+        data = request.get_json() or {}
+        farm_code = data.get('farm_code')
+        start_time = _parse_marker_datetime(data.get('start_time'))
+        end_time = _parse_marker_datetime(data.get('end_time'))
+        marker_type = data.get('marker_type')
+
+        if not farm_code or not start_time or not end_time or not marker_type:
+            return jsonify({'error': '缺少必要字段'}), 400
+        if end_time < start_time:
+            return jsonify({'error': '结束时间不能早于开始时间'}), 400
+
+        with db_session() as session:
+            marker = DataQualityMarker(
+                farm_code=farm_code,
+                start_time=start_time,
+                end_time=end_time,
+                marker_type=marker_type,
+                reason=data.get('reason'),
+                exclude_from_score=bool(data.get('exclude_from_score', True)),
+                created_by=data.get('created_by')
+            )
+            session.add(marker)
+            session.commit()
+            session.refresh(marker)
+
+            return jsonify({
+                'message': '数据质量标记创建成功',
+                'marker': _serialize_quality_marker(session, marker)
+            })
+    except Exception as e:
+        logging.error(f"创建数据质量标记失败: {e}", exc_info=True)
+        return jsonify({'error': '创建数据质量标记失败'}), 500
+
+
+@report_management_bp.route('/quality-markers/<int:marker_id>', methods=['PUT'])
+def update_quality_marker(marker_id):
+    try:
+        data = request.get_json() or {}
+
+        with db_session() as session:
+            marker = session.query(DataQualityMarker).filter(DataQualityMarker.id == marker_id).first()
+            if not marker:
+                return jsonify({'error': '数据质量标记不存在'}), 404
+
+            if 'farm_code' in data and data.get('farm_code'):
+                marker.farm_code = data['farm_code']
+            if 'start_time' in data:
+                start_time = _parse_marker_datetime(data.get('start_time'))
+                if not start_time:
+                    return jsonify({'error': '开始时间格式不正确'}), 400
+                marker.start_time = start_time
+            if 'end_time' in data:
+                end_time = _parse_marker_datetime(data.get('end_time'))
+                if not end_time:
+                    return jsonify({'error': '结束时间格式不正确'}), 400
+                marker.end_time = end_time
+            if marker.end_time < marker.start_time:
+                return jsonify({'error': '结束时间不能早于开始时间'}), 400
+            if 'marker_type' in data and data.get('marker_type'):
+                marker.marker_type = data['marker_type']
+            if 'reason' in data:
+                marker.reason = data.get('reason')
+            if 'exclude_from_score' in data:
+                marker.exclude_from_score = bool(data.get('exclude_from_score'))
+            if 'created_by' in data:
+                marker.created_by = data.get('created_by')
+
+            session.commit()
+            session.refresh(marker)
+
+            return jsonify({
+                'message': '数据质量标记更新成功',
+                'marker': _serialize_quality_marker(session, marker)
+            })
+    except Exception as e:
+        logging.error(f"更新数据质量标记失败: {e}", exc_info=True)
+        return jsonify({'error': '更新数据质量标记失败'}), 500
+
+
+@report_management_bp.route('/quality-markers/<int:marker_id>', methods=['DELETE'])
+def delete_quality_marker(marker_id):
+    try:
+        with db_session() as session:
+            marker = session.query(DataQualityMarker).filter(DataQualityMarker.id == marker_id).first()
+            if not marker:
+                return jsonify({'error': '数据质量标记不存在'}), 404
+
+            session.delete(marker)
+            session.commit()
+            return jsonify({'message': '数据质量标记删除成功'})
+    except Exception as e:
+        logging.error(f"删除数据质量标记失败: {e}", exc_info=True)
+        return jsonify({'error': '删除数据质量标记失败'}), 500
+
 
 def get_farm_name(session, farm_code: str):
     """根据场站编码获取场站名称"""

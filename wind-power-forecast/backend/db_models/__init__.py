@@ -12,7 +12,7 @@ from .features import TrainPreSupershort
 # 物理仿真模型
 from .physical_simulation import Condition, Turbine, Reading
 # 上报管理模型
-from .report_config import WindFarm, ReportConfig, ReportLog, ReportQualityStatistics
+from .report_config import WindFarm, ReportConfig, ReportLog, ReportQualityStatistics, DataQualityMarker
 # 运行数据模型
 from .operational_data import (
     WindSpeedData, TurbinePowerData, WeatherData, 
@@ -38,7 +38,7 @@ __all__ = [
     # 物理仿真模型
     'Condition', 'Turbine', 'Reading',
     # 上报管理模型
-    'WindFarm', 'ReportConfig', 'ReportLog', 'ReportQualityStatistics',
+    'WindFarm', 'ReportConfig', 'ReportLog', 'ReportQualityStatistics', 'DataQualityMarker',
     # 运行数据模型
     'WindSpeedData', 'TurbinePowerData', 'WeatherData',
     'InstalledCapacityData', 'AvailableCapacityData', 

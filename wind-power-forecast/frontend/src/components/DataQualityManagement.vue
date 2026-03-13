@@ -3,9 +3,9 @@
     <div class="page-header">
       <div>
         <h2>数据质量与限电标记</h2>
-        <p>质量卡片接入上报质量统计，质量标记先以本地可追溯方式沉淀，等待后端标记接口补齐。</p>
+        <p>基于真实统计接口展示各场站完整率与及时率，并将人工标记持久化到后端。</p>
       </div>
-      <el-tag type="warning" effect="dark">标记存储：localStorage 过渡方案</el-tag>
+      <el-tag type="success" effect="dark">质量标记已切换为后端存储</el-tag>
     </div>
 
     <el-card class="card-shell">
@@ -26,7 +26,9 @@
             :value="item.value"
           />
         </el-select>
-        <el-button type="primary" :loading="loading" @click="loadQualityStats">查询质量</el-button>
+        <el-button type="primary" :loading="loadingStats || loadingMarkers" @click="reloadAll">
+          刷新数据
+        </el-button>
       </div>
 
       <el-alert
@@ -42,47 +44,76 @@
         <div v-for="item in completenessCards" :key="item.station" class="quality-card">
           <div class="title">{{ item.station }}</div>
           <div class="meta">
-            月完整率 {{ formatPercent(item.completeness) }} / 月及时率 {{ formatPercent(item.timeliness) }}
+            平均完整率 {{ formatPercent(item.completeness) }} / 平均及时率 {{ formatPercent(item.timeliness) }}
           </div>
           <div class="bars">
-            <el-progress :percentage="item.completeness" :stroke-width="8" :status="item.completeness < 90 ? 'exception' : 'success'" />
-            <el-progress :percentage="item.timeliness" :stroke-width="8" :status="item.timeliness < 90 ? 'exception' : 'success'" />
+            <el-progress
+              :percentage="item.completeness"
+              :stroke-width="8"
+              :status="item.completeness < 90 ? 'exception' : 'success'"
+            />
+            <el-progress
+              :percentage="item.timeliness"
+              :stroke-width="8"
+              :status="item.timeliness < 90 ? 'exception' : 'success'"
+            />
           </div>
-          <div class="meta-tip">数据源：report/statistics.daily_stats 聚合</div>
+          <div class="meta-tip">统计来源：report/statistics.daily_stats</div>
         </div>
       </div>
 
       <div class="table-header">
-        <h3>异常/限电标记清单</h3>
+        <h3>限电 / 异常标记</h3>
         <el-button type="primary" @click="openDialog">新增标记</el-button>
       </div>
 
-      <el-table :data="filteredMarkers" border stripe empty-text="暂无质量标记">
-        <el-table-column prop="station" label="场站" min-width="140" />
-        <el-table-column prop="start" label="开始时间" min-width="170" />
-        <el-table-column prop="end" label="结束时间" min-width="170" />
-        <el-table-column prop="type" label="标记类型" min-width="140" />
-        <el-table-column prop="reason" label="原因" min-width="280" show-overflow-tooltip />
-        <el-table-column prop="excludeFromScore" label="是否免考" width="110">
+      <el-table
+        v-loading="loadingMarkers"
+        :data="markers"
+        border
+        stripe
+        empty-text="暂无质量标记"
+      >
+        <el-table-column prop="farm_name" label="场站" min-width="140" />
+        <el-table-column prop="start_time_display" label="开始时间" min-width="170" />
+        <el-table-column prop="end_time_display" label="结束时间" min-width="170" />
+        <el-table-column prop="marker_type" label="标记类型" min-width="140" />
+        <el-table-column prop="reason" label="原因说明" min-width="260" show-overflow-tooltip />
+        <el-table-column prop="exclude_from_score" label="免考核" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.excludeFromScore ? 'success' : 'info'" effect="plain">
-              {{ row.excludeFromScore ? '是' : '否' }}
+            <el-tag :type="row.exclude_from_score ? 'success' : 'info'" effect="plain">
+              {{ row.exclude_from_score ? '是' : '否' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="createdAt" label="记录时间" min-width="170" />
+        <el-table-column prop="created_by" label="创建人" min-width="120" />
+        <el-table-column prop="created_at_display" label="创建时间" min-width="170" />
+        <el-table-column label="操作" width="100" fixed="right">
+          <template #default="{ row }">
+            <el-popconfirm
+              title="确认删除这条标记吗？"
+              confirm-button-text="删除"
+              cancel-button-text="取消"
+              @confirm="handleDelete(row)"
+            >
+              <template #reference>
+                <el-button type="danger" link>删除</el-button>
+              </template>
+            </el-popconfirm>
+          </template>
+        </el-table-column>
       </el-table>
     </el-card>
 
-    <el-dialog v-model="showDialog" title="新增异常/限电标记" width="560px">
+    <el-dialog v-model="showDialog" title="新增限电 / 异常标记" width="560px">
       <el-form :model="form" label-width="110px">
         <el-form-item label="场站">
-          <el-select v-model="form.station" filterable placeholder="选择场站">
+          <el-select v-model="form.farmCode" filterable placeholder="请选择场站">
             <el-option
               v-for="item in farms"
               :key="item.value"
               :label="item.label"
-              :value="item.label"
+              :value="item.value"
             />
           </el-select>
         </el-form-item>
@@ -97,32 +128,37 @@
           />
         </el-form-item>
         <el-form-item label="标记类型">
-          <el-select v-model="form.type">
-            <el-option label="数据异常" value="数据异常" />
-            <el-option label="场站限电" value="场站限电" />
-            <el-option label="气象缺测" value="气象缺测" />
+          <el-select v-model="form.markerType">
+            <el-option label="数据缺失" value="数据缺失" />
+            <el-option label="限电停机" value="限电停机" />
+            <el-option label="设备维护" value="设备维护" />
           </el-select>
         </el-form-item>
-        <el-form-item label="原因">
-          <el-input v-model="form.reason" type="textarea" />
+        <el-form-item label="原因说明">
+          <el-input v-model="form.reason" type="textarea" :rows="3" />
         </el-form-item>
-        <el-form-item label="是否免考">
+        <el-form-item label="免考核">
           <el-switch v-model="form.excludeFromScore" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showDialog = false">取消</el-button>
-        <el-button type="primary" @click="submitMarker">保存</el-button>
+        <el-button type="primary" :loading="submitting" @click="submitMarker">提交</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getReportFarms, getReportStatistics } from '../api/reportApi'
-import { appendDataQualityMarker, listDataQualityMarkers } from '../utils/dataQualityStore'
+import {
+  createQualityMarker,
+  deleteQualityMarker,
+  getQualityMarkers,
+  getReportFarms,
+  getReportStatistics
+} from '../api/reportApi'
 
 function formatMonthDefault() {
   return new Date().toISOString().slice(0, 7)
@@ -137,21 +173,41 @@ function normalizeFarmItem(item) {
   }
 }
 
+function formatDateTime(value) {
+  if (!value) return '--'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  return date.toLocaleString('zh-CN', { hour12: false })
+}
+
+function getStoredUserName() {
+  try {
+    const raw = localStorage.getItem('user')
+    if (!raw) return '当前用户'
+    const parsed = JSON.parse(raw)
+    return parsed?.real_name || parsed?.username || parsed?.name || '当前用户'
+  } catch (error) {
+    return '当前用户'
+  }
+}
+
 export default {
   name: 'DataQualityManagement',
   setup() {
     const month = ref(formatMonthDefault())
     const selectedFarm = ref('all')
     const farms = ref([])
-    const loading = ref(false)
-    const errorMessage = ref('')
     const statistics = ref([])
     const markers = ref([])
+    const loadingStats = ref(false)
+    const loadingMarkers = ref(false)
+    const submitting = ref(false)
+    const errorMessage = ref('')
     const showDialog = ref(false)
     const form = reactive({
-      station: '',
+      farmCode: '',
       range: [],
-      type: '数据异常',
+      markerType: '数据缺失',
       reason: '',
       excludeFromScore: true
     })
@@ -187,17 +243,10 @@ export default {
       }))
     })
 
-    const filteredMarkers = computed(() => {
-      if (selectedFarm.value === 'all') return markers.value
-      const selected = farms.value.find((item) => item.value === selectedFarm.value)
-      const farmLabel = selected?.label || selectedFarm.value
-      return markers.value.filter((item) => item.station === farmLabel || item.farmCode === selectedFarm.value)
-    })
-
     const resetForm = () => {
-      form.station = ''
+      form.farmCode = selectedFarm.value !== 'all' ? selectedFarm.value : ''
       form.range = []
-      form.type = '数据异常'
+      form.markerType = '数据缺失'
       form.reason = ''
       form.excludeFromScore = true
     }
@@ -206,90 +255,133 @@ export default {
       try {
         const response = await getReportFarms()
         farms.value = (Array.isArray(response.data) ? response.data : []).map(normalizeFarmItem).filter(Boolean)
+        if (selectedFarm.value !== 'all' && !farms.value.some((item) => item.value === selectedFarm.value)) {
+          selectedFarm.value = 'all'
+        }
       } catch (error) {
-        console.error('加载场站失败:', error)
         farms.value = []
-        ElMessage.error(error.response?.data?.error || '加载场站失败')
+        ElMessage.error(error.response?.data?.error || '获取场站列表失败')
       }
     }
 
     const loadQualityStats = async () => {
-      loading.value = true
+      loadingStats.value = true
       errorMessage.value = ''
       try {
         const params = { month: month.value }
-        if (selectedFarm.value && selectedFarm.value !== 'all') {
+        if (selectedFarm.value !== 'all') {
           params.farm_code = selectedFarm.value
         }
         const response = await getReportStatistics(params)
         statistics.value = Array.isArray(response.data?.daily_stats) ? response.data.daily_stats : []
       } catch (error) {
-        console.error('加载质量统计失败:', error)
         statistics.value = []
-        errorMessage.value = error.response?.data?.error || '加载质量统计失败，质量卡片已回退为空。'
+        errorMessage.value = error.response?.data?.error || '获取质量统计失败'
         ElMessage.error(errorMessage.value)
       } finally {
-        loading.value = false
+        loadingStats.value = false
       }
     }
 
-    const loadMarkers = () => {
-      markers.value = listDataQualityMarkers()
+    const loadMarkers = async () => {
+      loadingMarkers.value = true
+      try {
+        const params = { month: month.value }
+        if (selectedFarm.value !== 'all') {
+          params.farm_code = selectedFarm.value
+        }
+        const response = await getQualityMarkers(params)
+        const rows = Array.isArray(response.data) ? response.data : []
+        markers.value = rows.map((item) => ({
+          ...item,
+          start_time_display: formatDateTime(item.start_time),
+          end_time_display: formatDateTime(item.end_time),
+          created_at_display: formatDateTime(item.created_at)
+        }))
+      } catch (error) {
+        markers.value = []
+        ElMessage.error(error.response?.data?.error || '获取质量标记失败')
+      } finally {
+        loadingMarkers.value = false
+      }
+    }
+
+    const reloadAll = async () => {
+      await Promise.all([loadQualityStats(), loadMarkers()])
     }
 
     const openDialog = () => {
-      if (farms.value.length > 0 && !form.station) {
-        form.station = farms.value[0].label
+      if (!form.farmCode) {
+        form.farmCode = selectedFarm.value !== 'all' ? selectedFarm.value : farms.value[0]?.value || ''
       }
       showDialog.value = true
     }
 
-    const submitMarker = () => {
-      if (!form.station || !Array.isArray(form.range) || form.range.length !== 2) {
-        ElMessage.warning('请补全场站和时间范围')
+    const submitMarker = async () => {
+      if (!form.farmCode || !Array.isArray(form.range) || form.range.length !== 2) {
+        ElMessage.warning('请完整填写场站和时间范围')
         return
       }
 
-      const linkedFarm = farms.value.find((item) => item.label === form.station)
-      const marker = {
-        id: `marker-${Date.now()}`,
-        station: form.station,
-        farmCode: linkedFarm?.value || '',
-        start: form.range[0],
-        end: form.range[1],
-        type: form.type,
-        reason: form.reason || '未填写原因',
-        excludeFromScore: form.excludeFromScore,
-        createdAt: new Date().toLocaleString('zh-CN', { hour12: false })
+      submitting.value = true
+      try {
+        await createQualityMarker({
+          farm_code: form.farmCode,
+          start_time: form.range[0],
+          end_time: form.range[1],
+          marker_type: form.markerType,
+          reason: form.reason,
+          exclude_from_score: form.excludeFromScore,
+          created_by: getStoredUserName()
+        })
+        showDialog.value = false
+        resetForm()
+        await loadMarkers()
+        ElMessage.success('质量标记已保存到后端')
+      } catch (error) {
+        ElMessage.error(error.response?.data?.error || '保存质量标记失败')
+      } finally {
+        submitting.value = false
       }
-
-      markers.value = appendDataQualityMarker(marker)
-      showDialog.value = false
-      resetForm()
-      ElMessage.success('质量标记已保存到本地，等待后端接口补齐后可迁移')
     }
 
+    const handleDelete = async (row) => {
+      try {
+        await deleteQualityMarker(row.id)
+        await loadMarkers()
+        ElMessage.success('质量标记已删除')
+      } catch (error) {
+        ElMessage.error(error.response?.data?.error || '删除质量标记失败')
+      }
+    }
+
+    watch([month, selectedFarm], () => {
+      reloadAll()
+    })
+
     onMounted(async () => {
-      loadMarkers()
       await loadFarms()
-      await loadQualityStats()
+      resetForm()
+      await reloadAll()
     })
 
     return {
       month,
       selectedFarm,
       farms,
-      loading,
+      markers,
+      form,
+      showDialog,
+      loadingStats,
+      loadingMarkers,
+      submitting,
       errorMessage,
       completenessCards,
-      markers,
-      filteredMarkers,
-      showDialog,
-      form,
       formatPercent,
-      loadQualityStats,
+      reloadAll,
       openDialog,
-      submitMarker
+      submitMarker,
+      handleDelete
     }
   }
 }

@@ -14,6 +14,10 @@ from routes.report_management_router import (
     preview_report,
     manual_report,
     get_report_statistics,
+    get_quality_markers,
+    create_quality_marker,
+    update_quality_marker,
+    delete_quality_marker,
     start_scheduler,
     stop_scheduler,
     get_scheduler_status
@@ -165,6 +169,26 @@ def manual_report_v1():
 @v1_compat_bp.route("/report/statistics", methods=["GET"])
 def get_report_statistics_v1():
     return get_report_statistics()
+
+
+@v1_compat_bp.route("/report/quality-markers", methods=["GET"])
+def get_quality_markers_v1():
+    return get_quality_markers()
+
+
+@v1_compat_bp.route("/report/quality-markers", methods=["POST"])
+def create_quality_marker_v1():
+    return create_quality_marker()
+
+
+@v1_compat_bp.route("/report/quality-markers/<int:marker_id>", methods=["PUT"])
+def update_quality_marker_v1(marker_id):
+    return update_quality_marker(marker_id)
+
+
+@v1_compat_bp.route("/report/quality-markers/<int:marker_id>", methods=["DELETE"])
+def delete_quality_marker_v1(marker_id):
+    return delete_quality_marker(marker_id)
 
 
 @v1_compat_bp.route("/report/scheduler/start", methods=["POST"])

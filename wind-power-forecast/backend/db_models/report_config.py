@@ -68,3 +68,18 @@ class ReportQualityStatistics(Base):
     notes = Column(Text, nullable=True)  # 备注信息
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now) 
+
+
+class DataQualityMarker(Base):
+    __tablename__ = "data_quality_markers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    farm_code = Column(String(50), nullable=False, index=True)
+    start_time = Column(DateTime, nullable=False, index=True)
+    end_time = Column(DateTime, nullable=False, index=True)
+    marker_type = Column(String(100), nullable=False)
+    reason = Column(Text, nullable=True)
+    exclude_from_score = Column(Boolean, nullable=False, default=True)
+    created_by = Column(String(100), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)

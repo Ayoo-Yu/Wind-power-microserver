@@ -116,3 +116,33 @@ export function getReportStatistics(params = {}) {
     () => axiosInstance.get('/api/report/statistics', { params })
   )
 }
+
+export function getQualityMarkers(params = {}) {
+  return withLegacyFallback(
+    () => axiosInstance.get('/api/v1/report/quality-markers', { params }),
+    () => axiosInstance.get('/api/report/quality-markers', { params })
+  )
+}
+
+export function createQualityMarker(payload) {
+  return withLegacyFallback(
+    () => axiosInstance.post('/api/v1/report/quality-markers', payload),
+    () => axiosInstance.post('/api/report/quality-markers', payload)
+  )
+}
+
+export function updateQualityMarker(markerId, payload) {
+  const safeId = encodeURIComponent(String(markerId))
+  return withLegacyFallback(
+    () => axiosInstance.put(`/api/v1/report/quality-markers/${safeId}`, payload),
+    () => axiosInstance.put(`/api/report/quality-markers/${safeId}`, payload)
+  )
+}
+
+export function deleteQualityMarker(markerId) {
+  const safeId = encodeURIComponent(String(markerId))
+  return withLegacyFallback(
+    () => axiosInstance.delete(`/api/v1/report/quality-markers/${safeId}`),
+    () => axiosInstance.delete(`/api/report/quality-markers/${safeId}`)
+  )
+}
