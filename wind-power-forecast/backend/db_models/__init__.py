@@ -12,6 +12,7 @@ from .auth_extensions import UserProfileMeta, OperationAuditLog
 from .alarm import AlarmRecord
 from .manual_intervention import ManualInterventionVersion
 from .farm_profile import FarmProfileConfig
+from .report_config_meta import ReportConfigMeta
 # 新增导入特征模型
 from .features import TrainPreSupershort
 # 物理仿真模型
@@ -42,6 +43,7 @@ __all__ = [
     'AlarmRecord',
     'ManualInterventionVersion',
     'FarmProfileConfig',
+    'ReportConfigMeta',
     'UserProfileMeta', 'OperationAuditLog',
     # 新增模型到 __all__
     'TrainPreShort', 'TrainPreMiddle', 'TrainPreSupershort',

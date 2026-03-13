@@ -1345,17 +1345,12 @@ export default {
     const CONFIG_META_STORAGE_KEY = 'report_config_meta_v2'
 
     const getConfigMetaMap = () => {
-      try {
-        const raw = localStorage.getItem(CONFIG_META_STORAGE_KEY)
-        const parsed = raw ? JSON.parse(raw) : {}
-        return parsed && typeof parsed === 'object' ? parsed : {}
-      } catch {
-        return {}
-      }
+      void CONFIG_META_STORAGE_KEY
+      return {}
     }
 
     const saveConfigMetaMap = (metaMap) => {
-      localStorage.setItem(CONFIG_META_STORAGE_KEY, JSON.stringify(metaMap || {}))
+      return metaMap
     }
 
     const normalizeConfig = (config, storedMeta = {}) => ({
@@ -1391,8 +1386,7 @@ export default {
         }
         
         const response = await getReportConfigs(params)
-        const metaMap = getConfigMetaMap()
-        reportConfigs.value = response.data.map(config => normalizeConfig(config, metaMap[String(config.id)]))
+        reportConfigs.value = response.data.map(config => normalizeConfig(config, {}))
       } catch (error) {
         console.error('获取上报配置列表失败:', error)
         ElMessage.error('获取上报配置列表失败')

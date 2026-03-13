@@ -10,6 +10,7 @@ from models import (
     ManualInterventionVersion, WindSpeedData, TurbinePowerData, WeatherData, InstalledCapacityData, AvailableCapacityData,
     TheoreticalPowerData, AvailablePowerData
 )
+from db_models.report_config_meta import ReportConfigMeta
 from sqlalchemy import desc, and_, or_, func, distinct
 from routes.power_compare import _calc_basic_metrics
 
@@ -24,6 +25,14 @@ report_scheduler = BackgroundScheduler(daemon=True)
 scheduler_lock = Lock()
 
 report_management_bp = Blueprint('report_management', __name__)
+
+CONFIG_META_FIELDS = {
+    'protocol_type',
+    'server_username',
+    'server_password',
+    'remote_directory',
+    'file_name_template',
+}
 
 
 def _month_bounds(month_str=None):
@@ -124,6 +133,32 @@ def _serialize_manual_intervention_version(item):
         'applied_by': item.applied_by
     }
 
+
+def _read_report_config_meta(meta):
+    if not meta or not getattr(meta, 'payload', None):
+        return {}
+    try:
+        payload = json.loads(meta.payload)
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _extract_report_config_meta(data):
+    return {key: data.get(key) for key in CONFIG_META_FIELDS if key in data}
+
+
+def _upsert_report_config_meta(db, config_id, payload):
+    if not config_id:
+        return
+    meta = db.query(ReportConfigMeta).filter(ReportConfigMeta.config_id == config_id).first()
+    serialized_payload = json.dumps(payload or {}, ensure_ascii=False)
+    if meta:
+        meta.payload = serialized_payload
+        meta.updated_at = datetime.now()
+        return
+    db.add(ReportConfigMeta(config_id=config_id, payload=serialized_payload))
+
 @report_management_bp.route('/test', methods=['GET'])
 def test_route():
     """测试路由"""
@@ -223,7 +258,10 @@ def get_report_configs():
                 query = query.filter(ReportConfig.farm_id == farm_id)
             
             configs = query.all()
-            
+            config_ids = [config.id for config, _, _ in configs if config and config.id]
+            meta_rows = db.query(ReportConfigMeta).filter(ReportConfigMeta.config_id.in_(config_ids)).all() if config_ids else []
+            meta_map = {meta.config_id: _read_report_config_meta(meta) for meta in meta_rows}
+
             configs_data = []
             for config, farm_name, farm_code in configs:
                 configs_data.append({
@@ -241,7 +279,8 @@ def get_report_configs():
                     'report_format': config.report_format,
                     'timeout_seconds': config.timeout_seconds,
                     'retry_count': config.retry_count,
-                    'created_at': config.created_at.isoformat() if config.created_at else None
+                    'created_at': config.created_at.isoformat() if config.created_at else None,
+                    **meta_map.get(config.id, {})
                 })
             
             return jsonify(configs_data)
@@ -271,6 +310,8 @@ def create_report_config():
             
             db.add(config)
             db.commit()
+            _upsert_report_config_meta(db, config.id, _extract_report_config_meta(data))
+            db.commit()
             
             return jsonify({
                 'message': '上报配置创建成功',
@@ -297,6 +338,7 @@ def update_report_config(config_id):
                     setattr(config, key, value)
             
             config.updated_at = datetime.now()
+            _upsert_report_config_meta(db, config.id, _extract_report_config_meta(data))
             db.commit()
             
             return jsonify({'message': '上报配置更新成功'})
@@ -313,6 +355,9 @@ def delete_report_config(config_id):
             if not config:
                 return jsonify({'error': '配置不存在'}), 404
             
+            meta = db.query(ReportConfigMeta).filter(ReportConfigMeta.config_id == config.id).first()
+            if meta:
+                db.delete(meta)
             db.delete(config)
             db.commit()
             
