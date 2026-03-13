@@ -18,6 +18,7 @@ from routes.report_management_router import (
     get_manual_intervention_version,
     apply_manual_intervention_version,
     get_report_statistics,
+    get_accuracy_statistics,
     get_quality_markers,
     create_quality_marker,
     update_quality_marker,
@@ -198,6 +199,11 @@ def apply_manual_intervention_version_v1(version_id):
 @v1_compat_bp.route("/report/statistics", methods=["GET"])
 def get_report_statistics_v1():
     return get_report_statistics()
+
+
+@v1_compat_bp.route("/report/accuracy-statistics", methods=["GET"])
+def get_accuracy_statistics_v1():
+    return get_accuracy_statistics()
 
 
 @v1_compat_bp.route("/report/quality-markers", methods=["GET"])

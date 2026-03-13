@@ -320,6 +320,19 @@ export default {
       this.scatterChart = null
       this.fleetBarChart = null
     },
+    ensureChartInstance(chartKey, refKey) {
+      const currentEl = this.$refs[refKey]
+      const currentChart = this[chartKey]
+      if (!currentEl) return null
+      if (currentChart && currentChart.getDom() !== currentEl) {
+        currentChart.dispose()
+        this[chartKey] = null
+      }
+      if (!this[chartKey]) {
+        this[chartKey] = echarts.init(currentEl)
+      }
+      return this[chartKey]
+    },
     normalizeTypeName(str) {
       return String(str || '').replace(/[\s_]/g, '').toLowerCase()
     },
@@ -548,7 +561,8 @@ export default {
     renderMainChart() {
       const state = this.singleSeriesState
       if (!state || !this.$refs.mainChartEl) return
-      if (!this.mainChart) this.mainChart = echarts.init(this.$refs.mainChartEl)
+      this.mainChart = this.ensureChartInstance('mainChart', 'mainChartEl')
+      if (!this.mainChart) return
       const series = this.getMainSeriesFromState()
 
       this.mainChart.setOption({
@@ -591,7 +605,8 @@ export default {
     renderErrorChart() {
       const state = this.singleSeriesState
       if (!state || !this.$refs.errorChartEl) return
-      if (!this.errorChart) this.errorChart = echarts.init(this.$refs.errorChartEl)
+      this.errorChart = this.ensureChartInstance('errorChart', 'errorChartEl')
+      if (!this.errorChart) return
       const toErr = (arr) => arr.map((v, i) => (Number.isFinite(v) && Number.isFinite(state.actualValues[i]) ? Number(v) - Number(state.actualValues[i]) : null))
       const shortErr = toErr(state.shortValues)
       const superErr = toErr(state.superValues)
@@ -617,7 +632,8 @@ export default {
     renderScatterChart() {
       const state = this.singleSeriesState
       if (!state || !this.$refs.scatterChartEl) return
-      if (!this.scatterChart) this.scatterChart = echarts.init(this.$refs.scatterChartEl)
+      this.scatterChart = this.ensureChartInstance('scatterChart', 'scatterChartEl')
+      if (!this.scatterChart) return
       const points = []
       state.sortedActual.forEach((_, i) => {
         const ws = Number.isFinite(state.shortWindValues[i]) ? state.shortWindValues[i] : state.midWindValues[i]
@@ -679,7 +695,8 @@ export default {
     },
     renderFleetBarChart() {
       if (!this.$refs.fleetBarChartEl) return
-      if (!this.fleetBarChart) this.fleetBarChart = echarts.init(this.$refs.fleetBarChartEl)
+      this.fleetBarChart = this.ensureChartInstance('fleetBarChart', 'fleetBarChartEl')
+      if (!this.fleetBarChart) return
       this.fleetBarChart.setOption({
         backgroundColor: 'transparent',
         grid: { left: 54, right: 24, top: 36, bottom: 84 },
@@ -754,11 +771,26 @@ export default {
   },
   watch: {
     analysisTab() {
+      this.destroyAllCharts()
       this.syncRouteQuery()
       this.fetchComparisonData()
     },
     singleViewTab() {
       this.syncRouteQuery()
+      if (this.singleViewTab === 'curve' && this.scatterChart) {
+        this.scatterChart.dispose()
+        this.scatterChart = null
+      }
+      if (this.singleViewTab === 'scatter') {
+        if (this.mainChart) {
+          this.mainChart.dispose()
+          this.mainChart = null
+        }
+        if (this.errorChart) {
+          this.errorChart.dispose()
+          this.errorChart = null
+        }
+      }
       this.$nextTick(() => this.renderSingleCharts())
     },
     singleFarmCode(newCode) {
