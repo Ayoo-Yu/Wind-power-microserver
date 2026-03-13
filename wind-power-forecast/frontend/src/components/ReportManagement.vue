@@ -975,6 +975,7 @@ import {
   manualReport as manualReportApi,
   getReportStatistics
 } from '../api/reportApi'
+import { getStoredUser, hasPermission } from '../utils/permission'
 
 export default {
   name: 'ReportManagement',
@@ -1001,6 +1002,14 @@ export default {
     const logsLoading = ref(false)
     
     const selectedFarmId = ref(null)
+    const currentUser = computed(() => getStoredUser() || {})
+    const canManageReports = computed(() => hasPermission(currentUser.value, 'manage_reports'))
+
+    const ensureReportManagePermission = () => {
+      if (canManageReports.value) return true
+      ElMessage.warning('当前账号没有执行上报配置与调度操作的权限')
+      return false
+    }
     
     // 调度器状态
     const schedulerStatus = ref({
@@ -1405,6 +1414,7 @@ export default {
     
     // 启动调度器
     const startScheduler = async () => {
+      if (!ensureReportManagePermission()) return
       schedulerLoading.value = true
       try {
         const response = await startReportScheduler()
@@ -1420,6 +1430,7 @@ export default {
     
     // 停止调度器
     const stopScheduler = async () => {
+      if (!ensureReportManagePermission()) return
       schedulerLoading.value = true
       try {
         const response = await stopReportScheduler()
@@ -1478,6 +1489,7 @@ export default {
     
     // 显示添加配置对话框
     const showAddConfigDialog = () => {
+      if (!ensureReportManagePermission()) return
       resetConfigForm()
       if (selectedFarmId.value) {
         configForm.farm_id = selectedFarmId.value
@@ -1509,6 +1521,7 @@ export default {
     
     // 保存配置
     const saveConfig = async () => {
+      if (!ensureReportManagePermission()) return
       configSaving.value = true
       try {
         // 准备保存的数据
@@ -1595,6 +1608,10 @@ export default {
     
     // 切换配置启用状态
     const toggleConfig = async (config) => {
+      if (!ensureReportManagePermission()) {
+        config.is_enabled = !config.is_enabled
+        return
+      }
       try {
         await updateReportConfig(config.id, {
           is_enabled: config.is_enabled
@@ -1609,6 +1626,7 @@ export default {
     
     // 删除配置
     const deleteConfig = async (config) => {
+      if (!ensureReportManagePermission()) return
       try {
         await ElMessageBox.confirm('确定要删除这个上报配置吗？', '确认删除', {
           type: 'warning'
@@ -2259,6 +2277,7 @@ export default {
     }
 
     const retryMonitorTask = async (row) => {
+      if (!ensureReportManagePermission()) return
       if (!row?.canRetry) return
       row.retrying = true
       try {
@@ -2324,6 +2343,7 @@ export default {
     }
 
     const generateManualFile = async () => {
+      if (!ensureReportManagePermission()) return
       manualToolLoading.value = true
       try {
         const config = await resolveManualToolConfig()
@@ -2374,6 +2394,7 @@ export default {
     }
 
     const forcePushManualFile = async () => {
+      if (!ensureReportManagePermission()) return
       if (!manualTargetConfigId.value || manualGeneratedPayload.value.length === 0) {
         ElMessage.warning('请先生成文件')
         return

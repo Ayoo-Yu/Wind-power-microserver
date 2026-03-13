@@ -1,4 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { getStoredUser, hasAnyPermission } from '../utils/permission'
 const HomePage = () => import('../components/HomePage.vue')
 const AppLayout = () => import('../components/AppLayout.vue')
 const AutoPredict = () => import('../components/AutoPredict.vue')
@@ -129,12 +131,17 @@ const router = createRouter({
 })
 
 router.beforeEach((to, from, next) => {
-  const userInfo = localStorage.getItem('user')
+  const user = getStoredUser()
+  const userInfo = !!user
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
+  const requiredPermissions = to.matched.flatMap(record => record.meta?.requiredPermissions || [])
 
   if (requiresAuth && !userInfo) {
     next({ name: 'Login' })
   } else if (userInfo && to.name === 'Login') {
+    next({ name: 'HomePage' })
+  } else if (userInfo && !hasAnyPermission(user, requiredPermissions)) {
+    ElMessage.warning('当前账号没有访问该页面的权限')
     next({ name: 'HomePage' })
   } else {
     next()

@@ -67,7 +67,7 @@
 
         <el-sub-menu
           index="/group-admin"
-          v-if="hasPermission('manage_reports') || hasPermission('manage_users') || hasPermission('manage_roles') || hasPermission('manage_system_settings')"
+          v-if="hasPermission('manage_reports') || hasPermission('manage_users') || hasPermission('manage_roles') || hasPermission('manage_system_settings') || hasPermission('system_maintenance') || hasPermission('view_audit_logs')"
         >
           <template #title>
             <el-icon><Setting /></el-icon>
@@ -97,7 +97,7 @@
         </div>
 
         <div class="header-right">
-          <el-badge :value="alertCount" :max="99" class="alert-badge">
+          <el-badge v-if="canViewAlerts" :value="alertCount" :max="99" class="alert-badge">
             <el-button class="alert-btn" text @click="goAlerts">
               <el-icon><Bell /></el-icon>
             </el-button>
@@ -212,6 +212,7 @@ export default {
         .filter(r => r.meta?.keepAlive && typeof r.name === 'string')
         .map(r => r.name)
     )
+    const canViewAlerts = computed(() => hasPermission('view_alarm_center') || hasPermission('manage_reports'))
 
     const userInitial = computed(() => {
       const userStr = localStorage.getItem('user')
@@ -312,6 +313,10 @@ export default {
     }
 
     const goAlerts = () => {
+      if (!canViewAlerts.value) {
+        ElMessage.warning('当前账号没有访问告警中心的权限')
+        return
+      }
       router.push('/alarm-center')
     }
 
@@ -355,6 +360,7 @@ export default {
       uiText,
       systemTime,
       goAlerts,
+      canViewAlerts,
       handleCommand,
       handleFarmChanged,
       hasPermission,

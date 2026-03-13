@@ -23,6 +23,7 @@
           <template #default="{ row }">
             <el-switch
               :model-value="row.status"
+              :disabled="!canManagePredictions"
               :loading="isControlBusy(row.name)"
               @change="(val) => handleSwitchToggle(row.name, val)"
             />
@@ -64,9 +65,9 @@
         </el-checkbox-group>
         <el-button size="small" plain class="minor-action-btn" @click="selectAllVisibleMatrixRows">全选当前表格</el-button>
         <el-button size="small" plain class="minor-action-btn" @click="clearMatrixSelection">清空勾选</el-button>
-        <el-button type="primary" plain size="small" :loading="matrixControlLoading" @click="handleControlMatrix('start')">批量启用</el-button>
-        <el-button type="warning" plain size="small" :loading="matrixControlLoading" @click="handleControlMatrix('stop')">批量停止</el-button>
-        <el-button type="danger" plain size="small" :loading="matrixControlLoading" @click="handleControlMatrix('delete')">批量删除</el-button>
+        <el-button type="primary" plain size="small" :loading="matrixControlLoading" :disabled="!canManagePredictions" @click="handleControlMatrix('start')">批量启用</el-button>
+        <el-button type="warning" plain size="small" :loading="matrixControlLoading" :disabled="!canManagePredictions" @click="handleControlMatrix('stop')">批量停止</el-button>
+        <el-button type="danger" plain size="small" :loading="matrixControlLoading" :disabled="!canManagePredictions" @click="handleControlMatrix('delete')">批量删除</el-button>
       </div>
       <el-table
         ref="matrixTableRef"
@@ -129,6 +130,7 @@
               <div class="card-actions">
                 <el-switch
                   :model-value="globalPredictStatus[item.name]"
+                  :disabled="!canManagePredictions"
                   :loading="isGlobalControlBusy(item.name)"
                   @change="(val) => handleGlobalSwitchToggle(item.name, val)"
                 />
@@ -348,11 +350,14 @@ import { MoreFilled, DataAnalysis, Clock, AlarmClock, Grid, Timer } from '@eleme
 import { useRouter } from 'vue-router'
 import farmService from '../utils/farmService'
 import { getAutoPredictStatus, getAutoPredictStatusAll, getAutoPredictOverview, controlAutoPredict, controlAutoPredictMatrix, getAutoPredictLogs } from '../api/autopredictApi'
+import { getStoredUser, hasPermission } from '../utils/permission'
 import StatusDot from './common/StatusDot.vue'
 import SparklineMini from './common/SparklineMini.vue'
 
 const isAnimatedBackground = inject('isAnimatedBackground')
 const router = useRouter()
+const currentUser = computed(() => getStoredUser())
+const canManagePredictions = computed(() => hasPermission(currentUser.value, 'auto_predictions'))
 
 const predictionTypeLabelMap = {
   supershort: '超短期',
@@ -705,6 +710,10 @@ const handleCardCommand = (command, item) => {
     return
   }
   if (command === 'delete') {
+    if (!canManagePredictions.value) {
+      ElMessage.warning('当前账号没有执行预测控制的权限')
+      return
+    }
     showConfirmDialog('deleteTask', '删除预测任务', `确定要删除 ${item.title} 吗？`, item.name)
   }
 }
@@ -898,6 +907,10 @@ const executeConfirmedAction = () => {
 }
 
 const handleControl = async (name, action) => {
+  if (!canManagePredictions.value) {
+    ElMessage.warning('当前账号没有执行预测控制的权限')
+    return
+  }
   if (isControlBusy(name)) {
     ElMessage.warning('操作正在处理中，请稍候')
     return
@@ -945,6 +958,10 @@ const isGlobalControlBusy = (predictionName) => {
 }
 
 const handleGlobalSwitchToggle = async (predictionType, enabled) => {
+  if (!canManagePredictions.value) {
+    ElMessage.warning('当前账号没有执行预测控制的权限')
+    return
+  }
   if (isGlobalControlBusy(predictionType)) {
     ElMessage.warning('全局操作正在处理中，请稍候')
     return
@@ -1003,6 +1020,10 @@ const handleGlobalSwitchToggle = async (predictionType, enabled) => {
 }
 
 const handleControlMatrix = async (action) => {
+  if (!canManagePredictions.value) {
+    ElMessage.warning('当前账号没有执行预测控制的权限')
+    return
+  }
   if (matrixControlLoading.value) {
     ElMessage.warning('矩阵批量操作正在处理中，请稍候')
     return

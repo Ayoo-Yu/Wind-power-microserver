@@ -171,6 +171,7 @@ import {
 } from '../api/auth'
 import farmService from '../utils/farmService'
 import { appendAuditLog } from '../utils/auditLogStore'
+import { getStoredUser, hasPermission } from '../utils/permission'
 import { getUserMeta, removeUserMeta, setUserMeta } from '../utils/userMetaStore'
 
 const EMPTY_USER_FORM = () => ({
@@ -211,13 +212,8 @@ export default {
       confirmPassword: ''
     })
 
-    const currentUser = computed(() => JSON.parse(localStorage.getItem('user') || '{}'))
-    const canManageUsers = computed(() => {
-      const permissions = Array.isArray(currentUser.value?.permissions)
-        ? currentUser.value.permissions
-        : currentUser.value?.permissions?.permissions || []
-      return permissions.includes('manage_users') || permissions.includes('admin')
-    })
+    const currentUser = computed(() => getStoredUser() || {})
+    const canManageUsers = computed(() => hasPermission(currentUser.value, 'manage_users'))
 
     const rules = {
       username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],

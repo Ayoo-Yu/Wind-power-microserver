@@ -81,6 +81,7 @@ import { Delete, Edit, MagicStick, Plus, Refresh } from '@element-plus/icons-vue
 import { createRole, deleteRole, getRoles, updateRole } from '../api/auth'
 import { ALL_PERMISSION_KEYS, PERMISSION_TREE, ROLE_PRESETS } from '../constants/permissions'
 import { appendAuditLog } from '../utils/auditLogStore'
+import { getStoredUser, hasPermission } from '../utils/permission'
 
 export default {
   name: 'RoleManagement',
@@ -100,13 +101,8 @@ export default {
       permissions: []
     })
 
-    const currentUser = computed(() => JSON.parse(localStorage.getItem('user') || '{}'))
-    const canManageRoles = computed(() => {
-      const permissions = Array.isArray(currentUser.value?.permissions)
-        ? currentUser.value.permissions
-        : currentUser.value?.permissions?.permissions || []
-      return permissions.includes('manage_roles') || permissions.includes('admin')
-    })
+    const currentUser = computed(() => getStoredUser() || {})
+    const canManageRoles = computed(() => hasPermission(currentUser.value, 'manage_roles'))
 
     const permissionTree = PERMISSION_TREE
     const permissionLabelMap = ALL_PERMISSION_KEYS.reduce((acc, key) => {
