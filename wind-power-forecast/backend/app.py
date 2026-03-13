@@ -226,6 +226,34 @@ def initialize():
         if engine is not None:
             try:
                 Base.metadata.create_all(bind=engine)
+                from db_models import (
+                    AlarmNotificationPolicy,
+                    AlarmRecord,
+                    AlarmRule,
+                    DataQualityMarker,
+                    FarmProfileConfig,
+                    ManualInterventionVersion,
+                    OperationAuditLog,
+                    ReportConfigMeta,
+                    SystemSetting,
+                    UserProfileMeta
+                )
+
+                runtime_tables = [
+                    AlarmRecord.__table__,
+                    AlarmRule.__table__,
+                    AlarmNotificationPolicy.__table__,
+                    DataQualityMarker.__table__,
+                    UserProfileMeta.__table__,
+                    OperationAuditLog.__table__,
+                    SystemSetting.__table__,
+                    ManualInterventionVersion.__table__,
+                    FarmProfileConfig.__table__,
+                    ReportConfigMeta.__table__
+                ]
+
+                for table in runtime_tables:
+                    table.create(bind=engine, checkfirst=True)
                 print("数据库表初始化成功")
                 try:
                     from init_users import init_users_and_roles

@@ -1970,7 +1970,11 @@ def get_accuracy_statistics():
         month_start, month_end = _month_bounds(month_str)
 
         with db_session() as session:
-            farm_query = session.query(WindFarm).filter(WindFarm.deleted_at == None, WindFarm.is_active == True)
+            farm_query = session.query(WindFarm)
+            if hasattr(WindFarm, 'deleted_at'):
+                farm_query = farm_query.filter(WindFarm.deleted_at == None)
+            if hasattr(WindFarm, 'is_active'):
+                farm_query = farm_query.filter(WindFarm.is_active == True)
             if farm_code:
                 farm_query = farm_query.filter(WindFarm.farm_code == farm_code)
             farms = farm_query.order_by(WindFarm.farm_name.asc()).all()

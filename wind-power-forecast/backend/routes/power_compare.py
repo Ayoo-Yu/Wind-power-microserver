@@ -300,8 +300,8 @@ def get_fleet_metrics():
 
     with db_session() as db:
         active_farms = db.query(WindFarm).filter(
-            WindFarm.deleted_at == None,
-            WindFarm.is_active == True
+            *([WindFarm.deleted_at == None] if hasattr(WindFarm, 'deleted_at') else []),
+            *([WindFarm.is_active == True] if hasattr(WindFarm, 'is_active') else [])
         ).all()
         active_map = {farm.farm_code: farm for farm in active_farms}
 
@@ -407,8 +407,8 @@ def get_fleet_series():
 
     with db_session() as db:
         active_farms = db.query(WindFarm).filter(
-            WindFarm.deleted_at == None,
-            WindFarm.is_active == True
+            *([WindFarm.deleted_at == None] if hasattr(WindFarm, 'deleted_at') else []),
+            *([WindFarm.is_active == True] if hasattr(WindFarm, 'is_active') else [])
         ).all()
         active_map = {farm.farm_code: farm for farm in active_farms}
 
