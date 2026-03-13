@@ -174,7 +174,7 @@ export default {
       loading.value = true
       errorMessage.value = ''
       try {
-        const localLogs = listAuditLogs().map(item => ({
+        const localLogs = (await listAuditLogs()).map(item => ({
           ...item,
           operationTime: toDisplayTime(item.operationTime),
           rawTime: item.operationTime,

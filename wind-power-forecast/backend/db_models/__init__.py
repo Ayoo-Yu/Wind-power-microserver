@@ -8,6 +8,7 @@ from .power import ActualPower, SupershortlPower, ShortlPower, MidPower
 from .training import Model, TrainingRecord, EvaluationMetrics, PredictionRecord, AutoPredictionTask, DailyMetrics
 from .user import User, Role, LoginHistory
 from .system_settings import SystemSetting
+from .auth_extensions import UserProfileMeta, OperationAuditLog
 # 新增导入特征模型
 from .features import TrainPreSupershort
 # 物理仿真模型
@@ -35,6 +36,7 @@ __all__ = [
     'Model', 'TrainingRecord', 'EvaluationMetrics', 'PredictionRecord', 'AutoPredictionTask', 'DailyMetrics',
     'User', 'Role', 'LoginHistory',
     'SystemSetting',
+    'UserProfileMeta', 'OperationAuditLog',
     # 新增模型到 __all__
     'TrainPreShort', 'TrainPreMiddle', 'TrainPreSupershort',
     # 物理仿真模型

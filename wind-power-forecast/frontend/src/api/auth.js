@@ -36,6 +36,11 @@ const authDelete = (path) => withLegacyFallback(
   () => axios.delete(`/api/auth/${path}`)
 )
 
+const authGetWithParams = (path, params = {}) => withLegacyFallback(
+  () => axios.get(`/api/v1/auth/${path}`, { params }),
+  () => axios.get(`/api/auth/${path}`, { params })
+)
+
 export const login = async (username, password) => {
   const response = await authPost('login', { username, password })
   return response.data
@@ -43,7 +48,27 @@ export const login = async (username, password) => {
 
 export const getCurrentUser = async () => {
   const response = await authGet('me')
-  return response.data
+  const rolePermissions = Array.isArray(response.data?.role?.permissions)
+    ? response.data.role.permissions
+    : Array.isArray(response.data?.role?.permissions?.permissions)
+      ? response.data.role.permissions.permissions
+      : []
+  try {
+    const metaResponse = await authGet('me/profile-meta')
+    return {
+      ...response.data,
+      permissions: rolePermissions,
+      phone: metaResponse.data?.phone || '',
+      stations: Array.isArray(metaResponse.data?.stations) ? metaResponse.data.stations : ['__ALL__']
+    }
+  } catch (error) {
+    return {
+      ...response.data,
+      permissions: rolePermissions,
+      phone: '',
+      stations: ['__ALL__']
+    }
+  }
 }
 
 export const changePassword = async (username, currentPassword, newPassword) => {
@@ -99,5 +124,30 @@ export const updateRole = async (roleId, roleData) => {
 
 export const deleteRole = async (roleId) => {
   const response = await authDelete(`roles/${roleId}`)
+  return response.data
+}
+
+export const getUsersMeta = async () => {
+  const response = await authGet('users-meta')
+  return response.data
+}
+
+export const updateUserMeta = async (userId, payload) => {
+  const response = await authPut(`users/${userId}/meta`, payload)
+  return response.data
+}
+
+export const deleteUserMeta = async (userId) => {
+  const response = await authDelete(`users/${userId}/meta`)
+  return response.data
+}
+
+export const getAuditLogs = async (params = {}) => {
+  const response = await authGetWithParams('audit-logs', params)
+  return response.data
+}
+
+export const createAuditLog = async (payload) => {
+  const response = await authPost('audit-logs', payload)
   return response.data
 }

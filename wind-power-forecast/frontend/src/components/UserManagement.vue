@@ -164,15 +164,17 @@ import { Delete, Edit, Key, Lock, Plus, Refresh, Search } from '@element-plus/ic
 import {
   createUser,
   deleteUser,
+  deleteUserMeta,
   getRoles,
   getUsers,
+  getUsersMeta,
   resetUserPassword,
+  updateUserMeta,
   updateUser
 } from '../api/auth'
 import farmService from '../utils/farmService'
 import { appendAuditLog } from '../utils/auditLogStore'
 import { getStoredUser, hasPermission } from '../utils/permission'
-import { getUserMeta, removeUserMeta, setUserMeta } from '../utils/userMetaStore'
 
 const EMPTY_USER_FORM = () => ({
   id: null,
@@ -281,25 +283,35 @@ export default {
       }
     }
 
-    const hydrateUserWithMeta = (user) => {
-      const meta = getUserMeta(user.username)
+    const hydrateUserWithMeta = (user, metaMap = new Map()) => {
+      const meta = metaMap.get(user.username) || {}
       return {
         ...user,
-        phone: meta.phone || '',
-        stations: Array.isArray(meta.stations) && meta.stations.length > 0 ? meta.stations : ['__ALL__']
+        phone: user.phone || meta.phone || '',
+        stations: Array.isArray(user.stations) && user.stations.length > 0
+          ? user.stations
+          : Array.isArray(meta.stations) && meta.stations.length > 0
+            ? meta.stations
+            : ['__ALL__']
       }
     }
 
     const fetchData = async () => {
       loading.value = true
       try {
-        const [userData, roleData, farms] = await Promise.all([
+        const [userData, roleData, farms, userMetaRows] = await Promise.all([
           getUsers(),
           getRoles(),
-          farmService.loadAvailableFarms(true)
+          farmService.loadAvailableFarms(true),
+          getUsersMeta()
         ])
         const normalizedUsers = Array.isArray(userData) ? userData : userData?.users || []
-        users.value = normalizedUsers.map(hydrateUserWithMeta)
+        const userMetaMap = new Map(
+          (Array.isArray(userMetaRows) ? userMetaRows : [])
+            .filter(item => item?.username)
+            .map(item => [item.username, item])
+        )
+        users.value = normalizedUsers.map(item => hydrateUserWithMeta(item, userMetaMap))
         roles.value = Array.isArray(roleData) ? roleData : []
         farmOptions.value = Array.isArray(farms) ? farms : []
       } catch (error) {
@@ -338,6 +350,7 @@ export default {
         if (!valid) return
         submitting.value = true
         try {
+          let targetUserId = currentUserId.value
           if (isEdit.value) {
             await updateUser(currentUserId.value, {
               full_name: userForm.full_name,
@@ -352,7 +365,7 @@ export default {
               result: '成功'
             })
           } else {
-            await createUser({
+            const created = await createUser({
               username: userForm.username,
               password: userForm.password,
               full_name: userForm.full_name,
@@ -360,6 +373,7 @@ export default {
               role_id: userForm.role_id,
               is_active: userForm.is_active
             })
+            targetUserId = created?.user_id || null
             appendAuditLog({
               module: '用户管理',
               operationType: '新增',
@@ -368,10 +382,12 @@ export default {
             })
           }
 
-          setUserMeta(userForm.username, {
-            phone: userForm.phone,
-            stations: userForm.stations
-          })
+          if (targetUserId) {
+            await updateUserMeta(targetUserId, {
+              phone: userForm.phone,
+              stations: userForm.stations
+            })
+          }
 
           ElMessage.success(isEdit.value ? '用户更新成功' : '用户创建成功')
           showUserDialog.value = false
@@ -460,7 +476,7 @@ export default {
       try {
         await ElMessageBox.confirm(`确认删除用户 [${row.username}] 吗？`, '警告', { type: 'warning' })
         await deleteUser(row.id)
-        removeUserMeta(row.username)
+        await deleteUserMeta(row.id)
         appendAuditLog({
           module: '用户管理',
           operationType: '删除',

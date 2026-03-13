@@ -145,7 +145,7 @@ import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock, OfficeBuilding, Lightning, Aim } from '@element-plus/icons-vue'
-import { login, changePassword } from '../api/auth'
+import { login, changePassword, getCurrentUser } from '../api/auth'
 import { isAuthReady, isAuthLoading } from '../store/authReady'
 
 export default {
@@ -291,10 +291,11 @@ export default {
           isAuthLoading.value = true
 
           const userData = await login(formData.username, formData.password)
-          localStorage.setItem('user', JSON.stringify(userData.user))
 
           if (userData.access_token) {
             localStorage.setItem('accessToken', userData.access_token)
+            const currentUser = await getCurrentUser()
+            localStorage.setItem('user', JSON.stringify(currentUser))
             clearLockState()
             ElMessage.success('登录成功')
             router.push('/')

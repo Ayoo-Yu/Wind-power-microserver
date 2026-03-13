@@ -1,6 +1,5 @@
 ﻿// src/utils/farmService.js
 import { getAutoPredictFarms, getReportFarms, getFarms } from '../api/farmApi'
-import { getUserMeta } from './userMetaStore'
 /**
  * 场站管理服务
  * 提供场站选择、状态管理和数据隔离功能
@@ -54,9 +53,7 @@ class FarmService {
   getCurrentUserScopeCodes() {
     try {
       const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
-      if (!currentUser?.username) return null
-      const meta = getUserMeta(currentUser.username)
-      const stations = Array.isArray(meta?.stations) ? meta.stations : []
+      const stations = Array.isArray(currentUser?.stations) ? currentUser.stations : []
       if (stations.includes('__ALL__')) return null
       return stations.length > 0 ? stations : null
     } catch (error) {

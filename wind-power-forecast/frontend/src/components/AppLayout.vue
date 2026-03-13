@@ -259,8 +259,9 @@ export default {
       }
 
       try {
-        currentUser.value = JSON.parse(userStr)
-        await getCurrentUser()
+        const latestUser = await getCurrentUser()
+        localStorage.setItem('user', JSON.stringify(latestUser))
+        currentUser.value = latestUser
         isAuthReady.value = true
       } catch (error) {
         localStorage.removeItem('accessToken')

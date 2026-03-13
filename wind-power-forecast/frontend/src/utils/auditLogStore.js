@@ -1,35 +1,29 @@
-const STORAGE_KEY = 'audit_logs_v1'
+import { createAuditLog, getAuditLogs } from '../api/auth'
 
-const readLogs = () => {
+export const listAuditLogs = async () => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    const parsed = raw ? JSON.parse(raw) : []
-    return Array.isArray(parsed) ? parsed : []
+    const data = await getAuditLogs()
+    return Array.isArray(data) ? data : []
   } catch (error) {
+    console.warn('加载后端审计日志失败', error)
     return []
   }
 }
 
-const writeLogs = (logs) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.isArray(logs) ? logs : []))
-}
-
-export const listAuditLogs = () => readLogs()
-
-export const appendAuditLog = (payload = {}) => {
-  const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
-  const logs = readLogs()
-  const next = {
-    id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    operationTime: new Date().toISOString(),
-    operator: payload.operator || currentUser.username || 'unknown',
-    ipAddress: payload.ipAddress || '-',
-    module: payload.module || '系统',
-    operationType: payload.operationType || '操作',
-    details: payload.details || '',
-    result: payload.result || '成功'
+export const appendAuditLog = async (payload = {}) => {
+  try {
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
+    const response = await createAuditLog({
+      operator: payload.operator || currentUser.username || 'unknown',
+      ipAddress: payload.ipAddress || '-',
+      module: payload.module || '系统',
+      operationType: payload.operationType || '操作',
+      details: payload.details || '',
+      result: payload.result || '成功'
+    })
+    return response?.log || response
+  } catch (error) {
+    console.warn('写入后端审计日志失败', error)
+    return null
   }
-  logs.unshift(next)
-  writeLogs(logs.slice(0, 5000))
-  return next
 }
