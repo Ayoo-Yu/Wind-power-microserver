@@ -9,7 +9,7 @@ from .training import Model, TrainingRecord, EvaluationMetrics, PredictionRecord
 from .user import User, Role, LoginHistory
 from .system_settings import SystemSetting
 from .auth_extensions import UserProfileMeta, OperationAuditLog
-from .alarm import AlarmRecord
+from .alarm import AlarmRecord, AlarmRule, AlarmNotificationPolicy
 from .manual_intervention import ManualInterventionVersion
 from .farm_profile import FarmProfileConfig
 from .report_config_meta import ReportConfigMeta
@@ -40,7 +40,7 @@ __all__ = [
     'Model', 'TrainingRecord', 'EvaluationMetrics', 'PredictionRecord', 'AutoPredictionTask', 'DailyMetrics',
     'User', 'Role', 'LoginHistory',
     'SystemSetting',
-    'AlarmRecord',
+    'AlarmRecord', 'AlarmRule', 'AlarmNotificationPolicy',
     'ManualInterventionVersion',
     'FarmProfileConfig',
     'ReportConfigMeta',

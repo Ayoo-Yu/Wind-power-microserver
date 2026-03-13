@@ -207,6 +207,7 @@ export default {
     await this.loadFleetCompareFarms()
     this.singleFarmCode = farmService.getCurrentFarm() || this.fleetCompareFarms[0]?.code || ''
     this.fleetCompareFarmCodes = this.fleetCompareFarms.map(v => v.code)
+    this.applyRouteQuery()
     farmService.addListener(this.handleFarmChanged)
     this.fetchComparisonData()
     window.addEventListener('resize', this.resizeCharts)
@@ -222,6 +223,54 @@ export default {
         this.singleFarmCode = code
         this.fetchComparisonData()
       }
+    },
+    applyRouteQuery() {
+      const query = this.$route?.query || {}
+      const mode = typeof query.mode === 'string' ? query.mode : ''
+      const farmCode = typeof query.farm_code === 'string' ? query.farm_code : ''
+      const farmCodes = typeof query.farm_codes === 'string' ? query.farm_codes.split(',').map(v => v.trim()).filter(Boolean) : []
+      const start = typeof query.start === 'string' ? query.start : ''
+      const end = typeof query.end === 'string' ? query.end : ''
+      const predictionType = typeof query.prediction_type === 'string' ? query.prediction_type.toLowerCase() : ''
+      const view = typeof query.view === 'string' ? query.view : ''
+
+      if (mode === 'fleet' || mode === 'single') this.analysisTab = mode
+      if (farmCode && this.fleetCompareFarms.some(v => v.code === farmCode)) this.singleFarmCode = farmCode
+      if (farmCodes.length) {
+        this.fleetCompareFarmCodes = farmCodes.filter(code => this.fleetCompareFarms.some(v => v.code === code))
+      }
+      if (start && end) this.timeRange = [start, end]
+      if (view === 'curve' || view === 'scatter') this.singleViewTab = view
+
+      if (predictionType.includes('super')) {
+        this.selectedTypes = ['实测值', '超短期预测']
+      } else if (predictionType.includes('short')) {
+        this.selectedTypes = ['实测值', '短期预测']
+      }
+    },
+    syncRouteQuery() {
+      const query = {
+        mode: this.analysisTab,
+        start: this.timeRange?.[0] || undefined,
+        end: this.timeRange?.[1] || undefined
+      }
+
+      if (this.analysisTab === 'single') {
+        query.farm_code = this.singleFarmCode || undefined
+        query.view = this.singleViewTab
+        query.farm_codes = undefined
+      } else {
+        query.farm_code = undefined
+        query.farm_codes = this.fleetCompareFarmCodes?.length ? this.fleetCompareFarmCodes.join(',') : undefined
+        query.view = undefined
+      }
+
+      this.$router.replace({
+        query: {
+          ...this.$route.query,
+          ...query
+        }
+      })
     },
     async loadFleetCompareFarms() {
       const farms = await farmService.loadAvailableFarms(true)
@@ -259,6 +308,7 @@ export default {
       if (period === '1w') start.setDate(end.getDate() - 6)
       const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
       this.timeRange = [`${fmt(start)} 00:00:00`, `${fmt(end)} 23:59:59`]
+      this.syncRouteQuery()
       this.fetchComparisonData()
     },
     destroyAllCharts() {
@@ -336,6 +386,7 @@ export default {
         this.$message.warning('请先选择完整时间范围')
         return
       }
+      this.syncRouteQuery()
       this.loading = true
       try {
         if (this.analysisTab === 'single') {
@@ -698,13 +749,22 @@ export default {
   },
   watch: {
     analysisTab() {
+      this.syncRouteQuery()
       this.fetchComparisonData()
     },
     singleViewTab() {
+      this.syncRouteQuery()
       this.$nextTick(() => this.renderSingleCharts())
     },
     singleFarmCode(newCode) {
       if (this.analysisTab === 'single' && newCode) farmService.setCurrentFarm(newCode)
+      this.syncRouteQuery()
+    },
+    fleetCompareFarmCodes() {
+      this.syncRouteQuery()
+    },
+    timeRange() {
+      this.syncRouteQuery()
     },
     selectedTypes() {
       if (this.analysisTab === 'single' && this.singleSeriesState) this.$nextTick(() => this.renderSingleCharts())

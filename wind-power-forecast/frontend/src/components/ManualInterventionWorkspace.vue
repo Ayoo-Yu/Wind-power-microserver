@@ -3,16 +3,18 @@
     <div class="header">
       <div>
         <h2>人工修正工作台</h2>
-        <p>支持加载真实预览数据、调整曲线、保存修正版本、回放历史版本，并最终执行手工上报。</p>
+        <p>基于上报配置预览数据进行人工修正、版本保存、版本比对和手工上报。</p>
       </div>
-      <el-tag type="warning" effect="dark">数据源：report/configs + preview-report + manual-intervention/versions + manual-report</el-tag>
+      <el-tag type="warning" effect="dark">
+        数据源：report/configs + preview-report + manual-intervention/versions + manual-report
+      </el-tag>
     </div>
 
     <div class="layout">
       <el-card class="side">
         <el-form label-width="96px">
           <el-form-item label="场站">
-            <el-select v-model="station" filterable placeholder="选择场站" @change="handleStationChange">
+            <el-select v-model="station" filterable placeholder="请选择场站" @change="handleStationChange">
               <el-option
                 v-for="item in farms"
                 :key="item.value"
@@ -34,8 +36,8 @@
               />
             </el-select>
           </el-form-item>
-          <el-form-item label="上报配置">
-            <el-select v-model="selectedConfigId" filterable placeholder="选择配置">
+          <el-form-item label="配置">
+            <el-select v-model="selectedConfigId" filterable placeholder="请选择配置">
               <el-option
                 v-for="item in availableConfigs"
                 :key="item.id"
@@ -46,15 +48,15 @@
           </el-form-item>
           <el-form-item label="修正工具">
             <el-select v-model="tool">
-              <el-option label="整体上浮(%)" value="scaleUp" />
+              <el-option label="整体放大(%)" value="scaleUp" />
               <el-option label="整体平移(MW)" value="shift" />
-              <el-option label="设置封顶(MW)" value="cap" />
+              <el-option label="上限截断(MW)" value="cap" />
             </el-select>
           </el-form-item>
           <el-form-item label="修正值">
             <el-input-number v-model="toolValue" :min="-1000" :max="1000" />
           </el-form-item>
-          <el-form-item label="版本名称">
+          <el-form-item label="版本名">
             <el-input v-model="versionName" placeholder="可选，默认自动生成" />
           </el-form-item>
         </el-form>
@@ -69,7 +71,7 @@
             <span class="meta-value">{{ originalRows.length }}</span>
           </div>
           <div class="meta-item">
-            <span class="meta-label">工作台点数</span>
+            <span class="meta-label">工作区点数</span>
             <span class="meta-value">{{ points.length }}</span>
           </div>
           <div class="meta-item">
@@ -80,8 +82,8 @@
 
         <div class="actions">
           <el-button type="primary" :loading="loading" @click="loadPreviewData">加载预览</el-button>
-          <el-button :disabled="points.length === 0" @click="applyTool">应用修正</el-button>
-          <el-button :disabled="originalRows.length === 0" @click="resetSeries">恢复原始</el-button>
+          <el-button :disabled="points.length === 0" @click="applyTool">应用工具</el-button>
+          <el-button :disabled="originalRows.length === 0" @click="resetSeries">重置到原始值</el-button>
           <el-button
             type="warning"
             :disabled="points.length === 0 || !selectedConfigId"
@@ -101,13 +103,14 @@
         </div>
 
         <div class="version-panel">
-          <div class="panel-title">版本历史</div>
+          <div class="panel-title">版本列表</div>
           <el-table :data="versions" size="small" border empty-text="暂无版本">
             <el-table-column prop="versionName" label="版本" min-width="140" show-overflow-tooltip />
             <el-table-column prop="createdAt" label="创建时间" min-width="150" />
-            <el-table-column label="操作" width="120">
+            <el-table-column label="操作" width="200">
               <template #default="{ row }">
-                <el-button type="primary" link @click="loadVersion(row.id)">应用</el-button>
+                <el-button type="primary" link @click="compareVersion(row.id)">Compare</el-button>
+                <el-button type="warning" link @click="rollbackToVersion(row.id)">Rollback</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -129,7 +132,7 @@
             <div>
               <div class="chart-title">修正曲线</div>
               <div class="chart-tip">
-                当前展示 {{ getReportTypeName(reportType) }} 的原始曲线与工作台曲线；加载历史版本后会覆盖工作台曲线。
+                虚线为原始值，实线为当前工作区值；上方卡片可直接看到版本数量和当前配置。
               </div>
             </div>
             <el-tag v-if="previewMeta.loadedAt" type="info">{{ previewMeta.loadedAt }}</el-tag>
@@ -166,11 +169,11 @@
         <el-card class="table-card">
           <div class="table-title">修正点明细</div>
           <el-table :data="points" border stripe empty-text="暂无修正点">
-            <el-table-column prop="label" label="时刻/标签" min-width="140" />
+            <el-table-column prop="label" label="点位" min-width="140" />
             <el-table-column prop="sourceValue" label="原始值" width="120">
               <template #default="{ row }">{{ formatNumber(row.sourceValue) }}</template>
             </el-table-column>
-            <el-table-column label="修正值" width="180">
+            <el-table-column label="修正后值" width="180">
               <template #default="{ row, $index }">
                 <el-input-number
                   :model-value="row.value"
@@ -181,7 +184,45 @@
                 />
               </template>
             </el-table-column>
-            <el-table-column prop="time" label="原始时间" min-width="180" show-overflow-tooltip />
+            <el-table-column prop="time" label="时间" min-width="180" show-overflow-tooltip />
+          </el-table>
+        </el-card>
+
+        <el-card v-if="comparedVersion" class="table-card">
+          <div class="table-title">Version Compare</div>
+          <div class="compare-summary">
+            <div class="meta-item">
+              <span class="meta-label">Compared Version</span>
+              <span class="meta-value">{{ comparedVersion.versionName }}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">Changed Points</span>
+              <span class="meta-value">{{ compareSummary.changedCount }}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">Max Delta</span>
+              <span class="meta-value">{{ formatNumber(compareSummary.maxDelta) }}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">Avg Delta</span>
+              <span class="meta-value">{{ formatNumber(compareSummary.avgDelta) }}</span>
+            </div>
+          </div>
+          <el-table :data="compareRows" border stripe size="small" empty-text="No diff">
+            <el-table-column prop="label" label="Point" min-width="120" />
+            <el-table-column prop="currentValue" label="Current" width="120">
+              <template #default="{ row }">{{ formatNumber(row.currentValue) }}</template>
+            </el-table-column>
+            <el-table-column prop="versionValue" label="Version" width="120">
+              <template #default="{ row }">{{ formatNumber(row.versionValue) }}</template>
+            </el-table-column>
+            <el-table-column prop="delta" label="Delta" width="120">
+              <template #default="{ row }">
+                <span :class="{ 'delta-positive': row.delta > 0, 'delta-negative': row.delta < 0 }">
+                  {{ formatNumber(row.delta) }}
+                </span>
+              </template>
+            </el-table-column>
           </el-table>
         </el-card>
       </div>
@@ -196,6 +237,7 @@ import { ElMessage } from 'element-plus'
 import {
   applyManualInterventionVersion,
   createManualInterventionVersion,
+  getManualInterventionVersion,
   getManualInterventionVersions,
   getReportConfigs,
   getReportFarms,
@@ -205,9 +247,9 @@ import {
 import { getStoredUser, hasAnyPermission } from '../utils/permission'
 
 const REPORT_TYPE_OPTIONS = [
-  { value: 'forecast_long', label: '长期预测' },
+  { value: 'forecast_long', label: '中期预测' },
   { value: 'forecast_short', label: '短期预测' },
-  { value: 'actual', label: '实测功率' }
+  { value: 'actual', label: '实测数据' }
 ]
 
 const REPORT_TYPE_LABELS = REPORT_TYPE_OPTIONS.reduce((acc, item) => {
@@ -229,7 +271,7 @@ function formatDateDefault() {
 }
 
 function buildNowLabel() {
-  return `加载于 ${new Date().toLocaleString('zh-CN')}`
+  return `加载时间：${new Date().toLocaleString('zh-CN')}`
 }
 
 function safeArray(value) {
@@ -265,17 +307,29 @@ export default {
     const originalRows = ref([])
     const points = ref([])
     const previewMeta = ref({ loadedAt: '', sourceType: '' })
+    const comparedVersion = ref(null)
+    const compareRows = ref([])
 
     const reportTypeOptions = REPORT_TYPE_OPTIONS
 
     const getReportTypeName = (type) => REPORT_TYPE_LABELS[type] || type || '--'
 
-    const availableConfigs = computed(() => {
-      return configs.value.filter((item) => item.report_type === reportType.value)
-    })
+    const availableConfigs = computed(() => configs.value.filter((item) => item.report_type === reportType.value))
 
     const currentConfig = computed(() => {
       return availableConfigs.value.find((item) => String(item.id) === String(selectedConfigId.value)) || null
+    })
+
+    const compareSummary = computed(() => {
+      if (!compareRows.value.length) {
+        return { changedCount: 0, maxDelta: 0, avgDelta: 0 }
+      }
+      const deltas = compareRows.value.map((item) => Math.abs(Number(item.delta || 0)))
+      return {
+        changedCount: compareRows.value.length,
+        maxDelta: Math.max(...deltas, 0),
+        avgDelta: deltas.reduce((sum, value) => sum + value, 0) / compareRows.value.length
+      }
     })
 
     const maxY = computed(() => {
@@ -367,9 +421,14 @@ export default {
       }
     }
 
+    const clearCompareState = () => {
+      comparedVersion.value = null
+      compareRows.value = []
+    }
+
     const applyTool = () => {
       if (points.value.length === 0) {
-        ElMessage.warning('请先加载可编辑的预览数据')
+        ElMessage.warning('请先加载预览数据')
         return
       }
 
@@ -391,11 +450,13 @@ export default {
           value: Number(Math.min(item.value, capValue.value).toFixed(2))
         }))
       }
+      clearCompareState()
     }
 
     const resetSeries = () => {
       capValue.value = null
       points.value = normalizePointSeries(reportType.value, originalRows.value, targetDate.value)
+      clearCompareState()
     }
 
     const updatePointValue = (index, value) => {
@@ -404,6 +465,7 @@ export default {
         value: Number(value || 0)
       }
       points.value = [...points.value]
+      clearCompareState()
     }
 
     const loadFarms = async () => {
@@ -454,29 +516,30 @@ export default {
 
     const loadPreviewData = async () => {
       if (!selectedConfigId.value) {
-        ElMessage.warning('请先选择一条上报配置')
+        ElMessage.warning('请先选择配置')
         return
       }
 
       loading.value = true
       errorMessage.value = ''
+      clearCompareState()
       try {
         const response = await previewReport(selectedConfigId.value)
         const payloadRows = safeArray(response.data?.payload?.data)
         fillWorkspaceFromPayload(payloadRows)
 
         if (points.value.length === 0) {
-          errorMessage.value = '当前日期没有可编辑的预览数据'
+          errorMessage.value = '当前配置没有返回可编辑数据'
           ElMessage.warning(errorMessage.value)
         } else {
           ElMessage.success(`已加载 ${points.value.length} 个修正点`)
         }
       } catch (error) {
-        console.error('加载人工修正预览数据失败:', error)
+        console.error('load manual preview failed:', error)
         originalRows.value = []
         points.value = []
         previewMeta.value = { loadedAt: '', sourceType: '' }
-        errorMessage.value = error.response?.data?.error || '加载人工修正预览数据失败'
+        errorMessage.value = error.response?.data?.error || '加载预览数据失败'
         ElMessage.error(errorMessage.value)
       } finally {
         loading.value = false
@@ -489,7 +552,7 @@ export default {
         return
       }
       if (!selectedConfigId.value || points.value.length === 0) {
-        ElMessage.warning('当前没有可保存的修正数据')
+        ElMessage.warning('请先准备好修正数据')
         return
       }
 
@@ -509,10 +572,10 @@ export default {
         })
         versionName.value = ''
         await loadVersions()
-        ElMessage.success(response.data?.message || '版本已保存')
+        ElMessage.success(response.data?.message || '版本保存成功')
       } catch (error) {
-        console.error('保存人工修正版本失败:', error)
-        ElMessage.error(error.response?.data?.error || '保存人工修正版本失败')
+        console.error('save manual version failed:', error)
+        ElMessage.error(error.response?.data?.error || '版本保存失败')
       } finally {
         versionSaving.value = false
       }
@@ -520,11 +583,11 @@ export default {
 
     const submitManualReport = async () => {
       if (!canSaveManual()) {
-        ElMessage.warning('当前账号没有执行人工修正上报的权限')
+        ElMessage.warning('当前账号没有人工上报权限')
         return
       }
       if (!selectedConfigId.value || points.value.length === 0) {
-        ElMessage.warning('当前没有可上报的数据')
+        ElMessage.warning('请先准备好修正数据')
         return
       }
 
@@ -535,10 +598,10 @@ export default {
           data: denormalizePayload()
         }
         await manualReport(payload)
-        ElMessage.success(`已提交 ${station.value} ${targetDate.value} 的手工上报`)
+        ElMessage.success(`已提交 ${station.value} ${targetDate.value} 的人工上报`)
       } catch (error) {
-        console.error('人工修正手工上报失败:', error)
-        ElMessage.error(error.response?.data?.error || '人工修正手工上报失败')
+        console.error('submit manual report failed:', error)
+        ElMessage.error(error.response?.data?.error || '人工上报失败')
       } finally {
         submitting.value = false
       }
@@ -552,16 +615,60 @@ export default {
         })
         const version = response.data?.version
         if (!version) {
-          ElMessage.warning('版本详情为空')
+          ElMessage.warning('版本不存在')
           return
         }
         fillWorkspaceFromPayload(version.payload || [], `版本 ${version.version_name || version.id} 已应用`)
-        ElMessage.success(response.data?.message || '版本已应用')
+        clearCompareState()
+        ElMessage.success(response.data?.message || '版本应用成功')
         await loadVersions()
       } catch (error) {
-        console.error('加载人工修正版本失败:', error)
-        ElMessage.error(error.response?.data?.error || '加载人工修正版本失败')
+        console.error('apply manual version failed:', error)
+        ElMessage.error(error.response?.data?.error || '版本应用失败')
       }
+    }
+
+    const compareVersion = async (versionId) => {
+      if (!points.value.length) {
+        ElMessage.warning('请先加载当前工作区数据')
+        return
+      }
+      try {
+        const response = await getManualInterventionVersion(versionId)
+        const version = response.data || response.data?.data
+        const payloadRows = safeArray(version?.payload || [])
+        const versionPoints = normalizePointSeries(reportType.value, payloadRows, targetDate.value)
+        const currentMap = new Map(points.value.map((item) => [item.key, item]))
+        compareRows.value = versionPoints
+          .map((item) => {
+            const current = currentMap.get(item.key)
+            if (!current) return null
+            const delta = Number((Number(current.value || 0) - Number(item.value || 0)).toFixed(2))
+            if (Math.abs(delta) < 0.01) return null
+            return {
+              key: item.key,
+              label: item.label,
+              currentValue: Number(current.value || 0),
+              versionValue: Number(item.value || 0),
+              delta
+            }
+          })
+          .filter(Boolean)
+        comparedVersion.value = {
+          id: version?.id || versionId,
+          versionName: version?.version_name || `Version ${versionId}`
+        }
+        if (!compareRows.value.length) {
+          ElMessage.info('当前工作区与所选版本一致')
+        }
+      } catch (error) {
+        console.error('compare manual version failed:', error)
+        ElMessage.error(error.response?.data?.error || '版本比对失败')
+      }
+    }
+
+    const rollbackToVersion = async (versionId) => {
+      await loadVersion(versionId)
     }
 
     const handleStationChange = async () => {
@@ -570,6 +677,7 @@ export default {
       points.value = []
       originalRows.value = []
       errorMessage.value = ''
+      clearCompareState()
     }
 
     const handleReportTypeChange = async () => {
@@ -577,10 +685,12 @@ export default {
       points.value = []
       originalRows.value = []
       errorMessage.value = ''
+      clearCompareState()
       await loadVersions()
     }
 
     const handleDateChange = async () => {
+      clearCompareState()
       await loadVersions()
     }
 
@@ -602,7 +712,7 @@ export default {
           await loadPreviewData()
         }
       } catch (error) {
-        console.error('初始化人工修正工作台失败:', error)
+        console.error('init manual workspace failed:', error)
         errorMessage.value = error.response?.data?.error || '初始化人工修正工作台失败'
         ElMessage.error(errorMessage.value)
       }
@@ -629,6 +739,9 @@ export default {
       originalRows,
       points,
       previewMeta,
+      comparedVersion,
+      compareRows,
+      compareSummary,
       linePoints,
       baselinePoints,
       toY,
@@ -641,6 +754,8 @@ export default {
       saveVersion,
       submitManualReport,
       loadVersion,
+      compareVersion,
+      rollbackToVersion,
       loadPreviewData,
       handleStationChange,
       handleReportTypeChange,
@@ -732,6 +847,13 @@ export default {
   gap: 12px;
 }
 
+.compare-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
 .content-alert {
   margin-bottom: 0;
 }
@@ -759,22 +881,24 @@ export default {
 
 .chart {
   width: 100%;
-  height: 420px;
-  border-radius: 10px;
-  background: rgba(8, 32, 48, 0.55);
-  border: 1px solid rgba(130, 178, 212, 0.2);
+  height: 360px;
 }
 
-@media (max-width: 1100px) {
+.delta-positive {
+  color: #fca5a5;
+}
+
+.delta-negative {
+  color: #86efac;
+}
+
+@media (max-width: 1200px) {
   .layout {
     grid-template-columns: 1fr;
   }
-}
 
-@media (max-width: 720px) {
-  .header,
-  .chart-header {
-    flex-direction: column;
+  .compare-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>

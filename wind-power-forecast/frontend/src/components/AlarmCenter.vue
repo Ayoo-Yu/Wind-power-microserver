@@ -3,15 +3,15 @@
     <div class="page-header">
       <div>
         <h2>统一告警中心</h2>
-        <p>当前页面已接入后端告警实体、确认/关闭操作和通知记录，并继续订阅 WebSocket 实时消息。</p>
+        <p>当前页面已补齐告警记录、通知记录、告警规则和通知策略四类配置能力。</p>
       </div>
       <el-tag :type="connectionTagType" effect="dark">{{ connectionLabel }}</el-tag>
     </div>
 
     <el-card class="card-shell">
       <div class="toolbar">
-        <el-switch v-model="enableSound" active-text="严重告警播放提示音" />
-        <el-switch v-model="enableSms" active-text="显示短信通知记录" />
+        <el-switch v-model="enableSound" active-text="声音通知预览" />
+        <el-switch v-model="enableSms" active-text="短信记录展示" />
         <el-select v-model="statusFilter" placeholder="告警状态" class="toolbar-select">
           <el-option label="全部状态" value="all" />
           <el-option label="待处理" value="open" />
@@ -40,7 +40,7 @@
           <div class="value">{{ warningCount }}</div>
         </div>
         <div class="stat info">
-          <div class="label">通知</div>
+          <div class="label">提示</div>
           <div class="value">{{ infoCount }}</div>
         </div>
         <div class="stat neutral">
@@ -64,35 +64,21 @@
         </el-table-column>
         <el-table-column prop="module" label="模块" min-width="130" />
         <el-table-column prop="message" label="告警内容" min-width="320" show-overflow-tooltip />
-        <el-table-column label="通知策略" min-width="220">
+        <el-table-column label="通知动作" min-width="220">
           <template #default="{ row }">
             <span>{{ notificationText(row) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
-            <el-button
-              type="primary"
-              link
-              :disabled="row.status !== 'open'"
-              @click="handleAck(row)"
-            >
-              确认
-            </el-button>
-            <el-button
-              type="danger"
-              link
-              :disabled="row.status === 'closed'"
-              @click="handleClose(row)"
-            >
-              关闭
-            </el-button>
+            <el-button type="primary" link :disabled="row.status !== 'open'" @click="handleAck(row)">确认</el-button>
+            <el-button type="danger" link :disabled="row.status === 'closed'" @click="handleClose(row)">关闭</el-button>
           </template>
         </el-table-column>
       </el-table>
 
       <div class="notification-panel">
-        <div class="panel-title">最近通知记录</div>
+        <div class="panel-title">通知记录</div>
         <el-table :data="visibleNotifications" border size="small" empty-text="暂无通知记录">
           <el-table-column prop="occurredAt" label="时间" min-width="160" />
           <el-table-column prop="channel" label="渠道" width="100" />
@@ -101,13 +87,139 @@
         </el-table>
       </div>
     </el-card>
+
+    <div class="config-grid">
+      <el-card class="card-shell">
+        <template #header>
+          <div class="config-header">
+            <span>告警规则</span>
+            <el-button type="primary" size="small" @click="openRuleDialog()">新增规则</el-button>
+          </div>
+        </template>
+        <el-table :data="rules" size="small" border empty-text="暂无规则">
+          <el-table-column prop="rule_name" label="规则名称" min-width="140" />
+          <el-table-column prop="module" label="模块" min-width="100" />
+          <el-table-column prop="keyword" label="关键字" min-width="120" />
+          <el-table-column label="级别" width="90">
+            <template #default="{ row }">
+              <el-tag :type="levelTagType(row.level)">{{ levelLabel(row.level) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="启用" width="80">
+            <template #default="{ row }">
+              <el-switch :model-value="row.is_enabled" @change="toggleRule(row, $event)" />
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="130">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openRuleDialog(row)">编辑</el-button>
+              <el-button link type="danger" @click="handleDeleteRule(row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+
+      <el-card class="card-shell">
+        <template #header>
+          <div class="config-header">
+            <span>通知策略</span>
+            <el-button type="primary" size="small" @click="openPolicyDialog()">新增策略</el-button>
+          </div>
+        </template>
+        <el-table :data="policies" size="small" border empty-text="暂无策略">
+          <el-table-column prop="policy_name" label="策略名称" min-width="140" />
+          <el-table-column prop="channel" label="渠道" width="90" />
+          <el-table-column prop="target" label="目标" min-width="140" />
+          <el-table-column prop="cooldown_minutes" label="冷却(分钟)" width="110" />
+          <el-table-column label="启用" width="80">
+            <template #default="{ row }">
+              <el-switch :model-value="row.is_enabled" @change="togglePolicy(row, $event)" />
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="130">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openPolicyDialog(row)">编辑</el-button>
+              <el-button link type="danger" @click="handleDeletePolicy(row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+    </div>
+
+    <el-dialog v-model="ruleDialogVisible" :title="ruleForm.id ? '编辑告警规则' : '新增告警规则'" width="560px">
+      <el-form :model="ruleForm" label-width="100px">
+        <el-form-item label="规则名称"><el-input v-model="ruleForm.rule_name" /></el-form-item>
+        <el-form-item label="模块"><el-input v-model="ruleForm.module" /></el-form-item>
+        <el-form-item label="关键字"><el-input v-model="ruleForm.keyword" /></el-form-item>
+        <el-form-item label="场站编码"><el-input v-model="ruleForm.farm_code" /></el-form-item>
+        <el-form-item label="级别">
+          <el-select v-model="ruleForm.level">
+            <el-option label="严重" value="danger" />
+            <el-option label="预警" value="warning" />
+            <el-option label="提示" value="info" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="通知">
+          <el-checkbox v-model="ruleForm.notify_sound">声音</el-checkbox>
+          <el-checkbox v-model="ruleForm.notify_sms">短信</el-checkbox>
+          <el-checkbox v-model="ruleForm.is_enabled">启用</el-checkbox>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="ruleDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="ruleSaving" @click="saveRule">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="policyDialogVisible" :title="policyForm.id ? '编辑通知策略' : '新增通知策略'" width="560px">
+      <el-form :model="policyForm" label-width="100px">
+        <el-form-item label="策略名称"><el-input v-model="policyForm.policy_name" /></el-form-item>
+        <el-form-item label="渠道">
+          <el-select v-model="policyForm.channel">
+            <el-option label="声音" value="sound" />
+            <el-option label="短信" value="sms" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="目标"><el-input v-model="policyForm.target" /></el-form-item>
+        <el-form-item label="最低级别">
+          <el-select v-model="policyForm.min_level">
+            <el-option label="严重" value="danger" />
+            <el-option label="预警" value="warning" />
+            <el-option label="提示" value="info" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="冷却分钟">
+          <el-input-number v-model="policyForm.cooldown_minutes" :min="0" />
+        </el-form-item>
+        <el-form-item label="启用">
+          <el-switch v-model="policyForm.is_enabled" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="policyDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="policySaving" @click="savePolicy">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { ackAlarm, closeAlarm, getAlarmNotifications, getAlarms } from '../api/systemApi'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  ackAlarm,
+  closeAlarm,
+  createAlarmPolicy,
+  createAlarmRule,
+  deleteAlarmPolicy,
+  deleteAlarmRule,
+  getAlarmNotifications,
+  getAlarmPolicies,
+  getAlarmRules,
+  getAlarms,
+  updateAlarmPolicy,
+  updateAlarmRule
+} from '../api/systemApi'
 import websocketService from '../services/websocketService'
 import farmService from '../utils/farmService'
 
@@ -120,12 +232,8 @@ function toDisplayTime(value) {
 
 function inferLevel(text = '') {
   const content = String(text).toLowerCase()
-  if (content.includes('error') || content.includes('failed') || content.includes('exception') || content.includes('告警')) {
-    return 'danger'
-  }
-  if (content.includes('warn') || content.includes('warning') || content.includes('预警')) {
-    return 'warning'
-  }
+  if (content.includes('error') || content.includes('failed') || content.includes('exception')) return 'danger'
+  if (content.includes('warn') || content.includes('warning')) return 'warning'
   return 'info'
 }
 
@@ -135,7 +243,7 @@ function parseBackendAlarm(row, currentFarmCode) {
     id: row.id,
     time: toDisplayTime(row.occurred_at),
     rawTime: row.occurred_at || Date.now(),
-    station: row.farm_code || currentFarmCode || '系统级',
+    station: row.farm_code || currentFarmCode || 'SYSTEM',
     level: row.level || 'info',
     status: row.status || 'open',
     module: row.module || row.source || 'alarm-service',
@@ -143,8 +251,6 @@ function parseBackendAlarm(row, currentFarmCode) {
     source: row.source || 'alarm-service',
     notifySound: Boolean(row.notify_sound),
     notifySms: Boolean(row.notify_sms),
-    acknowledgedBy: row.acknowledged_by || '',
-    closedBy: row.closed_by || ''
   }
 }
 
@@ -155,14 +261,39 @@ function parseRealtimeAlert(payload, currentFarmCode) {
     id: `rt-${payload.id || timestamp}`,
     time: toDisplayTime(timestamp),
     rawTime: timestamp,
-    station: payload.farm_code || payload.station || currentFarmCode || '实时事件',
+    station: payload.farm_code || payload.station || currentFarmCode || 'STREAM',
     level: payload.level || inferLevel(payload.message || payload.details),
     status: 'open',
     module: payload.module || payload.source || 'websocket',
     message: payload.message || payload.details || JSON.stringify(payload),
-    source: 'websocket',
     notifySound: payload.level === 'danger' || inferLevel(payload.message || payload.details) === 'danger',
-    notifySms: false
+    notifySms: false,
+  }
+}
+
+function createEmptyRule() {
+  return {
+    id: null,
+    rule_name: '',
+    module: 'system',
+    keyword: '',
+    farm_code: '',
+    level: 'warning',
+    is_enabled: true,
+    notify_sound: true,
+    notify_sms: false
+  }
+}
+
+function createEmptyPolicy() {
+  return {
+    id: null,
+    policy_name: '',
+    channel: 'sound',
+    target: '',
+    min_level: 'warning',
+    cooldown_minutes: 5,
+    is_enabled: true
   }
 }
 
@@ -176,52 +307,39 @@ export default {
     const errorMessage = ref('')
     const alerts = ref([])
     const notifications = ref([])
+    const rules = ref([])
+    const policies = ref([])
     const connected = ref(false)
+    const ruleDialogVisible = ref(false)
+    const policyDialogVisible = ref(false)
+    const ruleSaving = ref(false)
+    const policySaving = ref(false)
+    const ruleForm = reactive(createEmptyRule())
+    const policyForm = reactive(createEmptyPolicy())
 
-    const dangerCount = computed(() => alerts.value.filter(item => item.level === 'danger').length)
-    const warningCount = computed(() => alerts.value.filter(item => item.level === 'warning').length)
-    const infoCount = computed(() => alerts.value.filter(item => item.level === 'info').length)
-
-    const connectionLabel = computed(() => (connected.value ? '实时通道已连接' : '仅展示后端告警列表'))
+    const dangerCount = computed(() => alerts.value.filter((item) => item.level === 'danger').length)
+    const warningCount = computed(() => alerts.value.filter((item) => item.level === 'warning').length)
+    const infoCount = computed(() => alerts.value.filter((item) => item.level === 'info').length)
+    const connectionLabel = computed(() => (connected.value ? '实时连接已建立' : '实时连接未建立'))
     const connectionTagType = computed(() => (connected.value ? 'success' : 'info'))
-
     const visibleNotifications = computed(() => {
-      const rows = enableSms.value
-        ? notifications.value
-        : notifications.value.filter(item => item.channel !== 'sms')
+      const rows = enableSms.value ? notifications.value : notifications.value.filter((item) => item.channel !== 'sms')
       return rows.slice(0, 20)
     })
 
-    const levelLabel = (level) => {
-      if (level === 'danger') return '严重'
-      if (level === 'warning') return '预警'
-      return '通知'
-    }
-
-    const levelTagType = (level) => {
-      if (level === 'danger') return 'danger'
-      if (level === 'warning') return 'warning'
-      return 'info'
-    }
-
-    const statusLabel = (status) => {
-      if (status === 'acked') return '已确认'
-      if (status === 'closed') return '已关闭'
-      return '待处理'
-    }
-
-    const statusTagType = (status) => {
-      if (status === 'acked') return 'warning'
-      if (status === 'closed') return 'info'
-      return 'danger'
-    }
-
+    const levelLabel = (level) => (level === 'danger' ? '严重' : level === 'warning' ? '预警' : '提示')
+    const levelTagType = (level) => (level === 'danger' ? 'danger' : level === 'warning' ? 'warning' : 'info')
+    const statusLabel = (status) => (status === 'acked' ? '已确认' : status === 'closed' ? '已关闭' : '待处理')
+    const statusTagType = (status) => (status === 'acked' ? 'warning' : status === 'closed' ? 'info' : 'danger')
     const notificationText = (row) => {
       const items = []
-      if (row.notifySound) items.push('提示音')
+      if (row.notifySound) items.push('声音')
       if (row.notifySms) items.push('短信')
-      return items.length > 0 ? items.join(' + ') : '仅页面展示'
+      return items.length > 0 ? items.join(' + ') : '无'
     }
+
+    const resetRuleForm = () => Object.assign(ruleForm, createEmptyRule())
+    const resetPolicyForm = () => Object.assign(policyForm, createEmptyPolicy())
 
     const playBeep = () => {
       if (!enableSound.value || dangerCount.value === 0) return
@@ -239,19 +357,17 @@ export default {
         oscillator.start()
         oscillator.stop(ctx.currentTime + 0.2)
       } catch (error) {
-        console.warn('播放告警音失败', error)
+        console.warn('play beep failed', error)
       }
     }
 
     const mergeAlerts = (incoming = []) => {
       const dedupe = new Map()
       ;[...incoming, ...alerts.value].forEach((item) => {
-        if (!item) return
-        dedupe.set(String(item.id), item)
+        if (item) dedupe.set(String(item.id), item)
       })
-
       alerts.value = Array.from(dedupe.values())
-        .filter(item => statusFilter.value === 'all' || item.status === statusFilter.value)
+        .filter((item) => statusFilter.value === 'all' || item.status === statusFilter.value)
         .sort((a, b) => String(b.rawTime).localeCompare(String(a.rawTime)))
         .slice(0, 100)
     }
@@ -259,28 +375,32 @@ export default {
     const loadNotifications = async () => {
       const response = await getAlarmNotifications()
       const rows = Array.isArray(response.data) ? response.data : []
-      notifications.value = rows.map((item) => ({
-        ...item,
-        occurredAt: toDisplayTime(item.occurred_at)
-      }))
+      notifications.value = rows.map((item) => ({ ...item, occurredAt: toDisplayTime(item.occurred_at) }))
     }
 
     const loadAlarms = async () => {
+      const params = statusFilter.value === 'all' ? {} : { status: statusFilter.value }
+      const response = await getAlarms(params)
+      const currentFarmCode = farmService.getCurrentFarm()
+      const rows = Array.isArray(response.data) ? response.data : []
+      alerts.value = rows.map((row) => parseBackendAlarm(row, currentFarmCode)).filter(Boolean)
+    }
+
+    const loadConfigs = async () => {
+      const [rulesResp, policiesResp] = await Promise.all([getAlarmRules(), getAlarmPolicies()])
+      rules.value = Array.isArray(rulesResp.data) ? rulesResp.data : []
+      policies.value = Array.isArray(policiesResp.data) ? policiesResp.data : []
+    }
+
+    const refresh = async () => {
       loading.value = true
       errorMessage.value = ''
       try {
-        const params = statusFilter.value === 'all' ? {} : { status: statusFilter.value }
-        const response = await getAlarms(params)
-        const currentFarmCode = farmService.getCurrentFarm()
-        const rows = Array.isArray(response.data) ? response.data : []
-        alerts.value = rows.map((row) => parseBackendAlarm(row, currentFarmCode)).filter(Boolean)
-        await loadNotifications()
+        await Promise.all([loadAlarms(), loadNotifications(), loadConfigs()])
+        playBeep()
       } catch (error) {
-        console.error('加载告警列表失败:', error)
-        alerts.value = []
-        notifications.value = []
-        errorMessage.value = error.response?.data?.error || '加载告警列表失败'
-        ElMessage.error(errorMessage.value)
+        console.error('refresh alarms failed', error)
+        errorMessage.value = error.response?.data?.error || '刷新告警中心失败'
       } finally {
         loading.value = false
       }
@@ -290,23 +410,16 @@ export default {
       const alert = parseRealtimeAlert(payload, farmService.getCurrentFarm())
       if (!alert) return
       mergeAlerts([alert])
-      if (alert.level === 'danger') {
-        playBeep()
-      }
+      if (alert.level === 'danger') playBeep()
       try {
         await loadNotifications()
       } catch (error) {
-        console.warn('刷新通知记录失败', error)
+        console.warn('refresh notifications failed', error)
       }
     }
 
-    const handleConnected = () => {
-      connected.value = true
-    }
-
-    const handleDisconnected = () => {
-      connected.value = false
-    }
+    const handleConnected = () => { connected.value = true }
+    const handleDisconnected = () => { connected.value = false }
 
     const connectRealtime = async () => {
       try {
@@ -315,20 +428,15 @@ export default {
         connected.value = true
       } catch (error) {
         connected.value = false
-        console.warn('告警中心未建立实时连接，将继续展示后端告警列表', error)
+        console.warn('realtime connection failed', error)
       }
-    }
-
-    const refresh = async () => {
-      await loadAlarms()
-      playBeep()
     }
 
     const handleAck = async (row) => {
       try {
         await ackAlarm(row.id)
         ElMessage.success('告警已确认')
-        await loadAlarms()
+        await refresh()
       } catch (error) {
         ElMessage.error(error.response?.data?.error || '确认告警失败')
       }
@@ -338,21 +446,93 @@ export default {
       try {
         await closeAlarm(row.id)
         ElMessage.success('告警已关闭')
-        await loadAlarms()
+        await refresh()
       } catch (error) {
         ElMessage.error(error.response?.data?.error || '关闭告警失败')
       }
     }
 
-    onMounted(async () => {
-      await loadAlarms()
+    const openRuleDialog = (row = null) => {
+      resetRuleForm()
+      if (row) Object.assign(ruleForm, row)
+      ruleDialogVisible.value = true
+    }
 
+    const openPolicyDialog = (row = null) => {
+      resetPolicyForm()
+      if (row) Object.assign(policyForm, row)
+      policyDialogVisible.value = true
+    }
+
+    const saveRule = async () => {
+      ruleSaving.value = true
+      try {
+        const payload = { ...ruleForm }
+        if (payload.id) {
+          await updateAlarmRule(payload.id, payload)
+        } else {
+          await createAlarmRule(payload)
+        }
+        ruleDialogVisible.value = false
+        ElMessage.success('告警规则已保存')
+        await loadConfigs()
+      } catch (error) {
+        ElMessage.error(error.response?.data?.error || '保存告警规则失败')
+      } finally {
+        ruleSaving.value = false
+      }
+    }
+
+    const savePolicy = async () => {
+      policySaving.value = true
+      try {
+        const payload = { ...policyForm }
+        if (payload.id) {
+          await updateAlarmPolicy(payload.id, payload)
+        } else {
+          await createAlarmPolicy(payload)
+        }
+        policyDialogVisible.value = false
+        ElMessage.success('通知策略已保存')
+        await loadConfigs()
+      } catch (error) {
+        ElMessage.error(error.response?.data?.error || '保存通知策略失败')
+      } finally {
+        policySaving.value = false
+      }
+    }
+
+    const toggleRule = async (row, value) => {
+      await updateAlarmRule(row.id, { is_enabled: value })
+      row.is_enabled = value
+    }
+
+    const togglePolicy = async (row, value) => {
+      await updateAlarmPolicy(row.id, { is_enabled: value })
+      row.is_enabled = value
+    }
+
+    const handleDeleteRule = async (row) => {
+      await ElMessageBox.confirm(`确认删除规则 ${row.rule_name} 吗？`, '提示', { type: 'warning' })
+      await deleteAlarmRule(row.id)
+      ElMessage.success('告警规则已删除')
+      await loadConfigs()
+    }
+
+    const handleDeletePolicy = async (row) => {
+      await ElMessageBox.confirm(`确认删除策略 ${row.policy_name} 吗？`, '提示', { type: 'warning' })
+      await deleteAlarmPolicy(row.id)
+      ElMessage.success('通知策略已删除')
+      await loadConfigs()
+    }
+
+    onMounted(async () => {
+      await refresh()
       websocketService.on('connection:connected', handleConnected)
       websocketService.on('connection:reconnected', handleConnected)
       websocketService.on('connection:disconnected', handleDisconnected)
       websocketService.on('log:received', handleRealtimeAlert)
       websocketService.on('farm:alert:received', handleRealtimeAlert)
-
       await connectRealtime()
     })
 
@@ -371,10 +551,12 @@ export default {
       loading,
       errorMessage,
       alerts,
+      rules,
+      policies,
+      visibleNotifications,
       dangerCount,
       warningCount,
       infoCount,
-      visibleNotifications,
       connectionLabel,
       connectionTagType,
       levelLabel,
@@ -384,7 +566,21 @@ export default {
       notificationText,
       refresh,
       handleAck,
-      handleClose
+      handleClose,
+      ruleDialogVisible,
+      policyDialogVisible,
+      ruleForm,
+      policyForm,
+      ruleSaving,
+      policySaving,
+      openRuleDialog,
+      openPolicyDialog,
+      saveRule,
+      savePolicy,
+      toggleRule,
+      togglePolicy,
+      handleDeleteRule,
+      handleDeletePolicy,
     }
   }
 }
@@ -421,14 +617,14 @@ export default {
 
 .toolbar {
   display: flex;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 14px;
   flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+  align-items: center;
 }
 
 .toolbar-select {
-  width: 140px;
+  width: 180px;
 }
 
 .result-alert {
@@ -438,66 +634,64 @@ export default {
 .stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .stat {
-  border-radius: 10px;
-  padding: 12px;
-  border: 1px solid rgba(130, 178, 212, 0.2);
+  border-radius: 12px;
+  padding: 14px;
+  color: #fff;
 }
 
 .stat .label {
-  color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 13px;
+  opacity: 0.9;
 }
 
 .stat .value {
-  color: var(--text-primary);
-  font-size: 24px;
-  margin-top: 4px;
+  font-size: 30px;
   font-weight: 700;
+  margin-top: 4px;
 }
 
-.stat.danger {
-  background: rgba(160, 32, 32, 0.22);
-}
-
-.stat.warning {
-  background: rgba(165, 115, 30, 0.2);
-}
-
-.stat.info {
-  background: rgba(26, 83, 126, 0.22);
-}
-
-.stat.neutral {
-  background: rgba(51, 65, 85, 0.28);
-}
+.danger { background: linear-gradient(135deg, #a63e4e, #d85162); }
+.warning { background: linear-gradient(135deg, #9d6a1e, #d89d2b); }
+.info { background: linear-gradient(135deg, #235c81, #2c86b8); }
+.neutral { background: linear-gradient(135deg, #445469, #617691); }
 
 .notification-panel {
-  margin-top: 16px;
+  margin-top: 18px;
 }
 
 .panel-title {
-  margin-bottom: 10px;
-  color: var(--text-primary);
+  font-size: 14px;
   font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.config-grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.config-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 @media (max-width: 960px) {
-  .page-header {
+  .page-header,
+  .config-header {
     flex-direction: column;
+    align-items: flex-start;
   }
 
-  .stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 640px) {
-  .stats {
+  .stats,
+  .config-grid {
     grid-template-columns: 1fr;
   }
 }

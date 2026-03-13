@@ -58,6 +58,62 @@ export function getAlarmNotifications() {
   )
 }
 
+export function getAlarmRules() {
+  return withLegacyFallback(
+    () => axiosInstance.get('/api/v1/system/alarm-rules'),
+    () => axiosInstance.get('/api/system/alarm-rules')
+  )
+}
+
+export function createAlarmRule(payload) {
+  return withLegacyFallback(
+    () => axiosInstance.post('/api/v1/system/alarm-rules', payload),
+    () => axiosInstance.post('/api/system/alarm-rules', payload)
+  )
+}
+
+export function updateAlarmRule(ruleId, payload) {
+  return withLegacyFallback(
+    () => axiosInstance.put(`/api/v1/system/alarm-rules/${encodeURIComponent(String(ruleId))}`, payload),
+    () => axiosInstance.put(`/api/system/alarm-rules/${encodeURIComponent(String(ruleId))}`, payload)
+  )
+}
+
+export function deleteAlarmRule(ruleId) {
+  return withLegacyFallback(
+    () => axiosInstance.delete(`/api/v1/system/alarm-rules/${encodeURIComponent(String(ruleId))}`),
+    () => axiosInstance.delete(`/api/system/alarm-rules/${encodeURIComponent(String(ruleId))}`)
+  )
+}
+
+export function getAlarmPolicies() {
+  return withLegacyFallback(
+    () => axiosInstance.get('/api/v1/system/alarm-policies'),
+    () => axiosInstance.get('/api/system/alarm-policies')
+  )
+}
+
+export function createAlarmPolicy(payload) {
+  return withLegacyFallback(
+    () => axiosInstance.post('/api/v1/system/alarm-policies', payload),
+    () => axiosInstance.post('/api/system/alarm-policies', payload)
+  )
+}
+
+export function updateAlarmPolicy(policyId, payload) {
+  return withLegacyFallback(
+    () => axiosInstance.put(`/api/v1/system/alarm-policies/${encodeURIComponent(String(policyId))}`, payload),
+    () => axiosInstance.put(`/api/system/alarm-policies/${encodeURIComponent(String(policyId))}`, payload)
+  )
+}
+
+export function deleteAlarmPolicy(policyId) {
+  return withLegacyFallback(
+    () => axiosInstance.delete(`/api/v1/system/alarm-policies/${encodeURIComponent(String(policyId))}`),
+    () => axiosInstance.delete(`/api/system/alarm-policies/${encodeURIComponent(String(policyId))}`)
+  )
+}
+
 export function ackAlarm(alarmId) {
   return withLegacyFallback(
     () => axiosInstance.post(`/api/v1/system/alarms/${encodeURIComponent(String(alarmId))}/ack`),
