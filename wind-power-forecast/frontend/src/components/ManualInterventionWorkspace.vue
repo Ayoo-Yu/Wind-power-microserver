@@ -166,7 +166,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getReportConfigs, getReportFarms, manualReport, previewReport } from '../api/reportApi'
-import { hasAnyPermission } from '../utils/permission'
+import { getStoredUser, hasAnyPermission } from '../utils/permission'
 
 const REPORT_TYPE_OPTIONS = [
   { value: 'forecast_long', label: '超短期预测' },
@@ -251,7 +251,7 @@ export default {
       return numeric.toFixed(2)
     }
 
-    const canSaveManual = () => hasAnyPermission(['manual_intervention_workspace', 'manage_reports', 'auto_predictions'])
+    const canSaveManual = () => hasAnyPermission(getStoredUser(), ['manual_intervention_workspace', 'manage_reports', 'auto_predictions'])
 
     const buildConfigLabel = (config) => {
       const name = config?.config_name || config?.target_name || `配置${config?.id || ''}`
