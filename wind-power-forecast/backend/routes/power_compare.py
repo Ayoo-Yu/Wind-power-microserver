@@ -312,13 +312,7 @@ def get_fleet_metrics():
                     cleaned = code.strip()
                     if cleaned and cleaned not in selected_codes:
                         selected_codes.append(cleaned)
-            invalid_codes = [code for code in selected_codes if code not in active_map]
-            if invalid_codes:
-                return jsonify({
-                    "code": 1001,
-                    "message": f"invalid farm_codes: {', '.join(invalid_codes)}"
-                }), 400
-            target_codes = selected_codes
+            target_codes = [code for code in selected_codes if code in active_map]
         else:
             target_codes = list(active_map.keys())
 
@@ -419,13 +413,7 @@ def get_fleet_series():
                     cleaned = code.strip()
                     if cleaned and cleaned not in selected_codes:
                         selected_codes.append(cleaned)
-            invalid_codes = [code for code in selected_codes if code not in active_map]
-            if invalid_codes:
-                return jsonify({
-                    "code": 1001,
-                    "message": f"invalid farm_codes: {', '.join(invalid_codes)}"
-                }), 400
-            target_codes = selected_codes
+            target_codes = [code for code in selected_codes if code in active_map]
         else:
             target_codes = list(active_map.keys())
 

@@ -274,7 +274,9 @@ export default {
     },
     async loadFleetCompareFarms() {
       const farms = await farmService.loadAvailableFarms(true)
-      this.fleetCompareFarms = (Array.isArray(farms) ? farms : []).map(f => ({ code: f.code, name: f.name || f.code }))
+      this.fleetCompareFarms = (Array.isArray(farms) ? farms : [])
+        .filter(f => f && f.code && f.code !== 'DEFAULT_FARM')
+        .map(f => ({ code: f.code, name: f.name || f.code }))
     },
     formatPct(value) {
       if (!Number.isFinite(Number(value))) return '--'
@@ -633,7 +635,10 @@ export default {
       }, true)
     },
     async fetchFleetCompareData() {
-      const farmCodes = Array.isArray(this.fleetCompareFarmCodes) ? this.fleetCompareFarmCodes.filter(Boolean) : []
+      const validFarmCodeSet = new Set(this.fleetCompareFarms.map(item => item.code))
+      const farmCodes = Array.isArray(this.fleetCompareFarmCodes)
+        ? this.fleetCompareFarmCodes.filter(code => code && code !== 'DEFAULT_FARM' && validFarmCodeSet.has(code))
+        : []
       if (!farmCodes.length) {
         this.$message.warning('请至少选择一个场站')
         return
