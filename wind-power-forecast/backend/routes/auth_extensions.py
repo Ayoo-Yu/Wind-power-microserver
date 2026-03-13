@@ -4,6 +4,7 @@ import logging
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
+from sqlalchemy import asc, desc
 
 from db_session import db_session
 from models import OperationAuditLog, User, UserProfileMeta
@@ -71,6 +72,13 @@ def _serialize_audit_log(item):
         'result': item.result,
         'source': 'backend'
     }
+
+
+def _safe_parse_datetime(value):
+    text = (value or '').strip()
+    if not text:
+        return None
+    return datetime.fromisoformat(text)
 
 
 @auth_extensions_bp.route('/users-meta', methods=['GET'])
@@ -181,8 +189,47 @@ def list_operation_audit_logs():
             if not _has_any_permission(current_user, ['manage_users', 'view_audit_logs']):
                 return jsonify({'message': '缺少查看审计日志权限'}), 403
 
-            rows = session.query(OperationAuditLog).order_by(OperationAuditLog.operation_time.desc(), OperationAuditLog.id.desc()).limit(5000).all()
-            return jsonify([_serialize_audit_log(item) for item in rows])
+            page = request.args.get('page', 1, type=int) or 1
+            per_page = request.args.get('per_page', 20, type=int) or 20
+            per_page = max(1, min(per_page, 200))
+            operator = (request.args.get('operator') or '').strip()
+            module = (request.args.get('module') or '').strip()
+            result = (request.args.get('result') or '').strip()
+            start_time = (request.args.get('start_time') or '').strip()
+            end_time = (request.args.get('end_time') or '').strip()
+            sort_order = (request.args.get('sort_order') or 'desc').strip().lower()
+
+            query = session.query(OperationAuditLog)
+
+            if operator:
+                query = query.filter(OperationAuditLog.operator.ilike(f'%{operator}%'))
+            if module:
+                query = query.filter(OperationAuditLog.module == module)
+            if result:
+                query = query.filter(OperationAuditLog.result == result)
+            if start_time:
+                try:
+                    query = query.filter(OperationAuditLog.operation_time >= _safe_parse_datetime(start_time))
+                except ValueError:
+                    return jsonify({'message': 'start_time format invalid'}), 400
+            if end_time:
+                try:
+                    query = query.filter(OperationAuditLog.operation_time <= _safe_parse_datetime(end_time))
+                except ValueError:
+                    return jsonify({'message': 'end_time format invalid'}), 400
+
+            order_direction = asc if sort_order == 'asc' else desc
+            query = query.order_by(order_direction(OperationAuditLog.operation_time), order_direction(OperationAuditLog.id))
+
+            total = query.count()
+            rows = query.offset((page - 1) * per_page).limit(per_page).all()
+            return jsonify({
+                'logs': [_serialize_audit_log(item) for item in rows],
+                'total': total,
+                'page': page,
+                'per_page': per_page,
+                'pages': (total + per_page - 1) // per_page if total else 0
+            })
     except Exception as e:
         logging.error(f"获取操作审计日志失败: {e}", exc_info=True)
         return jsonify({'message': '获取操作审计日志失败'}), 500

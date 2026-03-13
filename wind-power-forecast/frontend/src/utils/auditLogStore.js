@@ -1,12 +1,14 @@
 import { createAuditLog, getAuditLogs } from '../api/auth'
 
-export const listAuditLogs = async () => {
+export const listAuditLogs = async (params = {}) => {
   try {
-    const data = await getAuditLogs()
-    return Array.isArray(data) ? data : []
+    const data = await getAuditLogs(params)
+    return data && typeof data === 'object'
+      ? data
+      : { logs: [], total: 0, page: 1, per_page: 20, pages: 0 }
   } catch (error) {
     console.warn('加载后端审计日志失败', error)
-    return []
+    return { logs: [], total: 0, page: 1, per_page: 20, pages: 0 }
   }
 }
 

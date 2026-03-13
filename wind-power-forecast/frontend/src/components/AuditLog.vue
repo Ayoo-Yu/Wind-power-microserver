@@ -3,9 +3,9 @@
     <div class="page-header">
       <div>
         <h2>操作日志审计</h2>
-        <p>统一汇总前端本地审计日志和后端系统日志，并提供来源区分、筛选、导出能力。</p>
+        <p>当前页面已切换为后端驱动的审计日志查询，筛选、排序和分页均由服务端完成。</p>
       </div>
-      <el-tag type="info" effect="dark">本地审计 + 系统日志</el-tag>
+      <el-tag type="info" effect="dark">数据源：auth/audit-logs</el-tag>
     </div>
 
     <el-card class="card-shell">
@@ -21,15 +21,19 @@
           class="filter-item"
         />
         <el-input v-model.trim="filters.operator" placeholder="操作人模糊搜索" clearable class="filter-item" />
-        <el-select v-model="filters.module" clearable placeholder="模块" class="filter-item">
-          <el-option v-for="item in moduleOptions" :key="item" :label="item" :value="item" />
+        <el-input v-model.trim="filters.module" placeholder="模块" clearable class="filter-item" />
+        <el-select v-model="filters.result" clearable placeholder="结果" class="filter-item">
+          <el-option label="成功" value="成功" />
+          <el-option label="警告" value="警告" />
+          <el-option label="失败" value="失败" />
         </el-select>
-        <el-select v-model="filters.source" clearable placeholder="来源" class="filter-item">
-          <el-option label="本地审计" value="local" />
-          <el-option label="系统日志" value="remote" />
+        <el-select v-model="filters.sortOrder" class="filter-item">
+          <el-option label="时间倒序" value="desc" />
+          <el-option label="时间正序" value="asc" />
         </el-select>
-        <el-button :icon="Refresh" :loading="loading" @click="fetchLogs">刷新</el-button>
-        <el-button :disabled="filteredLogs.length === 0" @click="exportLogs">导出 CSV</el-button>
+        <el-button :icon="Refresh" :loading="loading" @click="handleSearch">查询</el-button>
+        <el-button @click="handleReset">重置</el-button>
+        <el-button :disabled="logs.length === 0" @click="exportLogs">导出 CSV</el-button>
       </div>
 
       <el-alert
@@ -41,19 +45,12 @@
         class="result-alert"
       />
 
-      <el-table :data="filteredLogs" v-loading="loading" border stripe empty-text="暂无日志">
+      <el-table :data="logs" v-loading="loading" border stripe empty-text="暂无审计日志">
         <el-table-column prop="operationTime" label="操作时间" min-width="180" />
         <el-table-column prop="operator" label="操作人" min-width="120" />
         <el-table-column prop="ipAddress" label="IP 地址" min-width="130" />
-        <el-table-column prop="module" label="模块" min-width="120" />
-        <el-table-column prop="operationType" label="操作类型" min-width="120" />
-        <el-table-column label="来源" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.source === 'local' ? 'success' : 'info'" effect="plain">
-              {{ row.source === 'local' ? '本地审计' : '系统日志' }}
-            </el-tag>
-          </template>
-        </el-table-column>
+        <el-table-column prop="module" label="模块" min-width="140" />
+        <el-table-column prop="operationType" label="操作类型" min-width="140" />
         <el-table-column prop="details" label="详情" min-width="420" show-overflow-tooltip />
         <el-table-column label="结果" width="92">
           <template #default="{ row }">
@@ -63,15 +60,27 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <div class="pagination-wrap">
+        <el-pagination
+          background
+          layout="total, sizes, prev, pager, next"
+          :total="pagination.total"
+          :page-size="pagination.perPage"
+          :current-page="pagination.page"
+          :page-sizes="[10, 20, 50, 100]"
+          @current-change="handlePageChange"
+          @size-change="handleSizeChange"
+        />
+      </div>
     </el-card>
   </div>
 </template>
 
 <script>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { getSystemLogs } from '../api/systemApi'
 import { listAuditLogs } from '../utils/auditLogStore'
 
 function toDisplayTime(value) {
@@ -79,44 +88,6 @@ function toDisplayTime(value) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return String(value)
   return date.toLocaleString('zh-CN', { hour12: false })
-}
-
-function normalizeResult(row) {
-  const raw = row.result || row.level || ''
-  const lower = String(raw).toLowerCase()
-  if (lower.includes('error') || lower.includes('fail')) return '失败'
-  if (lower.includes('warn')) return '预警'
-  return '成功'
-}
-
-function parseSystemLogRow(row) {
-  if (!row) return null
-  if (typeof row === 'string') {
-    return {
-      operationTime: '-',
-      rawTime: '',
-      operator: 'system',
-      ipAddress: '-',
-      module: '系统',
-      operationType: '系统日志',
-      details: row,
-      result: '成功',
-      source: 'remote'
-    }
-  }
-
-  const timestamp = row.operationTime || row.timestamp || row.time || ''
-  return {
-    operationTime: toDisplayTime(timestamp),
-    rawTime: timestamp,
-    operator: row.operator || row.user || row.username || 'system',
-    ipAddress: row.ipAddress || row.ip || '-',
-    module: row.module || row.source || '系统',
-    operationType: row.operationType || row.action || '系统日志',
-    details: row.details || row.message || JSON.stringify(row),
-    result: normalizeResult(row),
-    source: 'remote'
-  }
 }
 
 function downloadTextFile(text, filename) {
@@ -141,80 +112,94 @@ export default {
       timeRange: [],
       operator: '',
       module: '',
-      source: ''
+      result: '',
+      sortOrder: 'desc'
+    })
+    const pagination = reactive({
+      page: 1,
+      perPage: 20,
+      total: 0,
+      pages: 0
     })
 
-    const moduleOptions = computed(() => {
-      return Array.from(new Set(logs.value.map(item => item.module).filter(Boolean)))
-    })
-
-    const filteredLogs = computed(() => {
-      return logs.value.filter((item) => {
-        if (filters.operator && !String(item.operator || '').toLowerCase().includes(filters.operator.toLowerCase())) {
-          return false
-        }
-        if (filters.module && item.module !== filters.module) {
-          return false
-        }
-        if (filters.source && item.source !== filters.source) {
-          return false
-        }
-        if (Array.isArray(filters.timeRange) && filters.timeRange.length === 2) {
-          const [start, end] = filters.timeRange.map(value => new Date(value).getTime())
-          const current = new Date(item.rawTime || item.operationTime).getTime()
-          if (!Number.isNaN(current) && (current < start || current > end)) {
-            return false
-          }
-        }
-        return true
-      })
-    })
+    const buildParams = () => {
+      const params = {
+        page: pagination.page,
+        per_page: pagination.perPage,
+        sort_order: filters.sortOrder
+      }
+      if (filters.operator) params.operator = filters.operator
+      if (filters.module) params.module = filters.module
+      if (filters.result) params.result = filters.result
+      if (Array.isArray(filters.timeRange) && filters.timeRange.length === 2) {
+        params.start_time = filters.timeRange[0]
+        params.end_time = filters.timeRange[1]
+      }
+      return params
+    }
 
     const fetchLogs = async () => {
       loading.value = true
       errorMessage.value = ''
       try {
-        const localLogs = (await listAuditLogs()).map(item => ({
+        const response = await listAuditLogs(buildParams())
+        const rows = Array.isArray(response?.logs) ? response.logs : []
+        logs.value = rows.map((item) => ({
           ...item,
-          operationTime: toDisplayTime(item.operationTime),
-          rawTime: item.operationTime,
-          result: item.result || '成功',
-          source: 'local'
+          operationTime: toDisplayTime(item.operationTime)
         }))
-
-        let remoteLogs = []
-        try {
-          const resp = await getSystemLogs()
-          const data = resp?.data
-          const rows = Array.isArray(data) ? data : Array.isArray(data?.logs) ? data.logs : []
-          remoteLogs = rows.map(parseSystemLogRow).filter(Boolean)
-        } catch (error) {
-          console.error('加载远端系统日志失败:', error)
-          errorMessage.value = error.response?.data?.error || '远端系统日志加载失败，页面已降级为仅展示本地审计日志。'
-        }
-
-        logs.value = [...localLogs, ...remoteLogs].sort((a, b) => {
-          return String(b.rawTime || '').localeCompare(String(a.rawTime || ''))
-        })
+        pagination.total = Number(response?.total || 0)
+        pagination.page = Number(response?.page || pagination.page)
+        pagination.perPage = Number(response?.per_page || pagination.perPage)
+        pagination.pages = Number(response?.pages || 0)
+      } catch (error) {
+        console.error('获取审计日志失败:', error)
+        errorMessage.value = error?.response?.data?.message || '获取审计日志失败'
       } finally {
         loading.value = false
       }
     }
 
+    const handleSearch = async () => {
+      pagination.page = 1
+      await fetchLogs()
+    }
+
+    const handleReset = async () => {
+      filters.timeRange = []
+      filters.operator = ''
+      filters.module = ''
+      filters.result = ''
+      filters.sortOrder = 'desc'
+      pagination.page = 1
+      pagination.perPage = 20
+      await fetchLogs()
+    }
+
+    const handlePageChange = async (page) => {
+      pagination.page = page
+      await fetchLogs()
+    }
+
+    const handleSizeChange = async (size) => {
+      pagination.perPage = size
+      pagination.page = 1
+      await fetchLogs()
+    }
+
     const exportLogs = () => {
-      if (filteredLogs.value.length === 0) {
-        ElMessage.warning('当前没有可导出的日志')
+      if (logs.value.length === 0) {
+        ElMessage.warning('当前页没有可导出的审计日志')
         return
       }
 
-      const header = ['操作时间', '操作人', 'IP 地址', '模块', '操作类型', '来源', '详情', '结果']
-      const rows = filteredLogs.value.map((item) => [
+      const header = ['操作时间', '操作人', 'IP 地址', '模块', '操作类型', '详情', '结果']
+      const rows = logs.value.map((item) => [
         item.operationTime,
         item.operator,
         item.ipAddress,
         item.module,
         item.operationType,
-        item.source === 'local' ? '本地审计' : '系统日志',
         item.details,
         item.result
       ])
@@ -222,8 +207,8 @@ export default {
         .map((line) => line.map((cell) => JSON.stringify(cell ?? '')).join(','))
         .join('\n')
 
-      downloadTextFile(csv, `audit-logs-${Date.now()}.csv`)
-      ElMessage.success('日志已导出到本地文件')
+      downloadTextFile(csv, `audit-logs-page-${pagination.page}-${Date.now()}.csv`)
+      ElMessage.success('当前页审计日志已导出')
     }
 
     onMounted(fetchLogs)
@@ -233,9 +218,12 @@ export default {
       errorMessage,
       logs,
       filters,
-      moduleOptions,
-      filteredLogs,
+      pagination,
       fetchLogs,
+      handleSearch,
+      handleReset,
+      handlePageChange,
+      handleSizeChange,
       exportLogs,
       Refresh
     }
@@ -287,9 +275,19 @@ export default {
   margin-bottom: 12px;
 }
 
+.pagination-wrap {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+
 @media (max-width: 960px) {
   .page-header {
     flex-direction: column;
+  }
+
+  .pagination-wrap {
+    justify-content: flex-start;
   }
 }
 </style>
