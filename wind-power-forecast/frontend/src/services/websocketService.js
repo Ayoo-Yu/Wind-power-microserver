@@ -1,4 +1,5 @@
 // src/services/websocketService.js
+import { onMounted, onUnmounted, ref } from 'vue'
 import { io } from 'socket.io-client'
 import farmService from '../utils/farmService'
 
@@ -429,7 +430,7 @@ export function useRealtimeData(options = {}) {
   }
 
   // 处理场站变化
-  const handleFarmChange = (farmCode) => {
+  const handleFarmChange = () => {
     if (connectionStatus.value.isConnected) {
       websocketService.subscribeToCurrentFarm()
     }
