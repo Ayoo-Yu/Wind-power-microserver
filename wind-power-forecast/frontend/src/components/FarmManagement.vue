@@ -321,7 +321,7 @@ import * as echarts from 'echarts'
 import { createFarm, deleteFarm, getFarms, updateFarm } from '@/api/farmApi'
 import StatusDot from './common/StatusDot.vue'
 
-const LOCAL_EXT_KEY = 'farm_management_ext_configs_v1'
+const LOCAL_EXT_KEY = 'farm_management_ext_configs_v2_backendized'
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -408,8 +408,7 @@ function buildLocationText() {
 }
 
 function normalizeFarm(raw = {}) {
-  const ext = getExtConfig(raw.farm_code)
-  const source = { ...raw, ...ext }
+  const source = { ...raw, ...getExtConfig(raw.farm_code) }
   const locationText = source.location || ''
   const locationParts = String(locationText).split('-')
 
@@ -430,10 +429,8 @@ function normalizeFarm(raw = {}) {
 
 function readExtConfigMap() {
   try {
-    const text = window.localStorage.getItem(LOCAL_EXT_KEY)
-    if (!text) return {}
-    const parsed = JSON.parse(text)
-    return parsed && typeof parsed === 'object' ? parsed : {}
+    void LOCAL_EXT_KEY
+    return {}
   } catch (error) {
     console.warn('读取场站扩展配置失败:', error)
     return {}
@@ -441,7 +438,7 @@ function readExtConfigMap() {
 }
 
 function writeExtConfigMap(data) {
-  window.localStorage.setItem(LOCAL_EXT_KEY, JSON.stringify(data))
+  return data
 }
 
 function getExtConfig(farmCode) {
@@ -452,21 +449,11 @@ function getExtConfig(farmCode) {
 
 function saveExtConfig(farmCode, config) {
   if (!farmCode) return
-  const configMap = readExtConfigMap()
-  configMap[farmCode] = {
-    ...configMap[farmCode],
-    ...config
-  }
-  writeExtConfigMap(configMap)
+  writeExtConfigMap(config)
 }
 
 function removeExtConfig(farmCode) {
-  if (!farmCode) return
-  const configMap = readExtConfigMap()
-  if (configMap[farmCode]) {
-    delete configMap[farmCode]
-    writeExtConfigMap(configMap)
-  }
+  return farmCode
 }
 
 function resetForm() {

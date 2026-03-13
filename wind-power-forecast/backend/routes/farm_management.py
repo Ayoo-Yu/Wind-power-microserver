@@ -1,7 +1,10 @@
+import json
+
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from db_session import db_session
 from db_models.report_config import WindFarm
+from db_models.farm_profile import FarmProfileConfig
 from datetime import datetime
 import logging
 
@@ -10,6 +13,30 @@ logger = logging.getLogger(__name__)
 
 # 创建场站管理蓝图
 farm_management_bp = Blueprint('farm_management', __name__)
+
+PROFILE_FIELDS = {
+    'commissioning_date',
+    'province',
+    'region',
+    'longitude',
+    'latitude',
+    'altitude',
+    'turbine_count',
+    'hub_height',
+    'met_tower_count',
+    'power_curve_file_name',
+    'power_curve_url',
+    'supershort_model',
+    'short_model',
+    'lower_power_limit',
+    'curtailment_threshold',
+    'point_act_power',
+    'point_wind_speed',
+    'point_avail_count',
+    'scada_status',
+    'nwp_status',
+    'current_actual_power',
+}
 
 
 def _apply_not_deleted_filter(query):
@@ -22,6 +49,46 @@ def _apply_not_deleted_filter(query):
         return query.filter(WindFarm.deleted_at == None)
     return query
 
+
+def _read_profile_payload(profile):
+    if not profile or not getattr(profile, 'payload', None):
+        return {}
+    try:
+        payload = json.loads(profile.payload)
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        logger.warning('failed to parse farm profile payload for %s', getattr(profile, 'farm_code', None))
+        return {}
+
+
+def _serialize_farm(farm, profile_payload=None):
+    return {
+        'farm_code': farm.farm_code,
+        'farm_name': farm.farm_name,
+        'capacity': float(farm.capacity) if farm.capacity else 0.0,
+        'location': farm.location,
+        'is_active': farm.is_active,
+        'created_at': farm.created_at.isoformat() if farm.created_at else None,
+        'updated_at': farm.updated_at.isoformat() if farm.updated_at else None,
+        **(profile_payload or {}),
+    }
+
+
+def _extract_profile_payload(data):
+    return {key: data.get(key) for key in PROFILE_FIELDS if key in data}
+
+
+def _upsert_farm_profile(session, farm_code, payload):
+    if not farm_code:
+        return
+    profile = session.query(FarmProfileConfig).filter(FarmProfileConfig.farm_code == farm_code).first()
+    serialized_payload = json.dumps(payload or {}, ensure_ascii=False)
+    if profile:
+        profile.payload = serialized_payload
+        profile.updated_at = datetime.utcnow()
+        return
+    session.add(FarmProfileConfig(farm_code=farm_code, payload=serialized_payload))
+
 @farm_management_bp.route('/api/farms', methods=['GET'])  # legacy path compatibility
 @farm_management_bp.route('/farms', methods=['GET'])
 @jwt_required()
@@ -30,16 +97,14 @@ def get_farms():
     try:
         with db_session() as session:
             farms = _apply_not_deleted_filter(session.query(WindFarm)).all()
+            farm_codes = [farm.farm_code for farm in farms if farm.farm_code]
+            profiles = session.query(FarmProfileConfig).filter(FarmProfileConfig.farm_code.in_(farm_codes)).all() if farm_codes else []
+            profile_map = {profile.farm_code: _read_profile_payload(profile) for profile in profiles}
 
-            return jsonify([{
-                'farm_code': farm.farm_code,
-                'farm_name': farm.farm_name,
-                'capacity': float(farm.capacity) if farm.capacity else 0.0,
-                'location': farm.location,
-                'is_active': farm.is_active,
-                'created_at': farm.created_at.isoformat() if farm.created_at else None,
-                'updated_at': farm.updated_at.isoformat() if farm.updated_at else None
-            } for farm in farms])
+            return jsonify([
+                _serialize_farm(farm, profile_map.get(farm.farm_code))
+                for farm in farms
+            ])
 
     except Exception as e:
         logger.error(f"获取风电场列表失败: {e}")
@@ -64,15 +129,8 @@ def get_farm_by_code(farm_code):
             if not farm:
                 return jsonify({'message': '风电场不存在'}), 404
 
-            return jsonify({
-                'farm_code': farm.farm_code,
-                'farm_name': farm.farm_name,
-                'capacity': float(farm.capacity) if farm.capacity else 0.0,
-                'location': farm.location,
-                'is_active': farm.is_active,
-                'created_at': farm.created_at.isoformat() if farm.created_at else None,
-                'updated_at': farm.updated_at.isoformat() if farm.updated_at else None
-            })
+            profile = session.query(FarmProfileConfig).filter(FarmProfileConfig.farm_code == normalized_code).first()
+            return jsonify(_serialize_farm(farm, _read_profile_payload(profile)))
     except Exception as e:
         logger.error(f"获取风电场详情失败: {e}")
         return jsonify({'message': '获取风电场详情失败'}), 500
@@ -83,7 +141,7 @@ def get_farm_by_code(farm_code):
 def create_farm():
     """创建新的风电场"""
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
         current_user_id = get_jwt_identity()
 
         # 验证必填字段
@@ -113,6 +171,7 @@ def create_farm():
             )
 
             session.add(farm)
+            _upsert_farm_profile(session, data['farm_code'], _extract_profile_payload(data))
             session.commit()
 
             return jsonify({
@@ -131,7 +190,7 @@ def create_farm():
 def update_farm(farm_code):
     """更新风电场信息"""
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
 
         with db_session() as session:
             farm_query = _apply_not_deleted_filter(
@@ -152,6 +211,7 @@ def update_farm(farm_code):
                         setattr(farm, field, data[field])
 
             farm.updated_at = datetime.utcnow()
+            _upsert_farm_profile(session, farm_code, _extract_profile_payload(data))
             session.commit()
 
             return jsonify({'message': '风电场信息更新成功'})
@@ -180,6 +240,9 @@ def delete_farm(farm_code):
                 farm.deleted_at = datetime.utcnow()
             else:
                 farm.is_active = False
+            profile = session.query(FarmProfileConfig).filter(FarmProfileConfig.farm_code == farm_code).first()
+            if profile:
+                session.delete(profile)
             session.commit()
 
             return jsonify({'message': '风电场删除成功'})
