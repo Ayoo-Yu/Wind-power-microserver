@@ -2076,8 +2076,8 @@ def get_accuracy_statistics():
                 'items': items
             })
     except Exception as e:
-        logging.error(f"é‘¾å³°å½‡å‡†ç¡®çŽ‡/åˆæ ¼çŽ‡ç»Ÿè®¡æ¾¶è¾«è§¦: {e}", exc_info=True)
-        return jsonify({'error': 'é‘¾å³°å½‡å‡†ç¡®çŽ‡/åˆæ ¼çŽ‡ç»Ÿè®¡æ¾¶è¾«è§¦'}), 500
+        logging.error(f"获取准确率/合格率统计失败: {e}", exc_info=True)
+        return jsonify({'error': '获取准确率/合格率统计失败'}), 500
 
 def _parse_marker_datetime(value):
     if not value:

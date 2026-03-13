@@ -109,8 +109,8 @@
             <el-table-column prop="createdAt" label="创建时间" min-width="150" />
             <el-table-column label="操作" width="200">
               <template #default="{ row }">
-                <el-button type="primary" link @click="compareVersion(row.id)">Compare</el-button>
-                <el-button type="warning" link @click="rollbackToVersion(row.id)">Rollback</el-button>
+                <el-button type="primary" link @click="compareVersion(row.id)">对比</el-button>
+                <el-button type="warning" link @click="rollbackToVersion(row.id)">回滚</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -189,34 +189,34 @@
         </el-card>
 
         <el-card v-if="comparedVersion" class="table-card">
-          <div class="table-title">Version Compare</div>
+          <div class="table-title">版本对比</div>
           <div class="compare-summary">
             <div class="meta-item">
-              <span class="meta-label">Compared Version</span>
+              <span class="meta-label">对比版本</span>
               <span class="meta-value">{{ comparedVersion.versionName }}</span>
             </div>
             <div class="meta-item">
-              <span class="meta-label">Changed Points</span>
+              <span class="meta-label">差异点数</span>
               <span class="meta-value">{{ compareSummary.changedCount }}</span>
             </div>
             <div class="meta-item">
-              <span class="meta-label">Max Delta</span>
+              <span class="meta-label">最大偏差</span>
               <span class="meta-value">{{ formatNumber(compareSummary.maxDelta) }}</span>
             </div>
             <div class="meta-item">
-              <span class="meta-label">Avg Delta</span>
+              <span class="meta-label">平均偏差</span>
               <span class="meta-value">{{ formatNumber(compareSummary.avgDelta) }}</span>
             </div>
           </div>
-          <el-table :data="compareRows" border stripe size="small" empty-text="No diff">
-            <el-table-column prop="label" label="Point" min-width="120" />
-            <el-table-column prop="currentValue" label="Current" width="120">
+          <el-table :data="compareRows" border stripe size="small" empty-text="无差异">
+            <el-table-column prop="label" label="点位" min-width="120" />
+            <el-table-column prop="currentValue" label="当前值" width="120">
               <template #default="{ row }">{{ formatNumber(row.currentValue) }}</template>
             </el-table-column>
-            <el-table-column prop="versionValue" label="Version" width="120">
+            <el-table-column prop="versionValue" label="版本值" width="120">
               <template #default="{ row }">{{ formatNumber(row.versionValue) }}</template>
             </el-table-column>
-            <el-table-column prop="delta" label="Delta" width="120">
+            <el-table-column prop="delta" label="偏差" width="120">
               <template #default="{ row }">
                 <span :class="{ 'delta-positive': row.delta > 0, 'delta-negative': row.delta < 0 }">
                   {{ formatNumber(row.delta) }}
@@ -656,7 +656,7 @@ export default {
           .filter(Boolean)
         comparedVersion.value = {
           id: version?.id || versionId,
-          versionName: version?.version_name || `Version ${versionId}`
+          versionName: version?.version_name || `版本 ${versionId}`
         }
         if (!compareRows.value.length) {
           ElMessage.info('当前工作区与所选版本一致')

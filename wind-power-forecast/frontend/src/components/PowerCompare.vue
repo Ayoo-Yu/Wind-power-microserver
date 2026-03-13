@@ -16,7 +16,7 @@
     </div>
 
     <el-card class="control-card">
-      <div class="group-title">Group 1: 数据范围定义</div>
+      <div class="group-title">步骤一：数据范围定义</div>
       <div class="control-row">
         <el-select v-if="analysisTab === 'single'" v-model="singleFarmCode" filterable class="farm-select" placeholder="选择场站">
           <el-option v-for="farm in fleetCompareFarms" :key="farm.code" :label="`${farm.name} (${farm.code})`" :value="farm.code" />
@@ -44,7 +44,7 @@
         <el-button type="primary" :loading="loading" class="query-btn" @click="fetchComparisonData">查询</el-button>
       </div>
 
-      <div class="group-title">Group 2: 图表展示控制</div>
+      <div class="group-title">步骤二：图表展示控制</div>
       <div class="control-row">
         <el-checkbox-group v-model="selectedTypes">
           <el-checkbox label="实测值" />
@@ -58,7 +58,7 @@
         <el-switch v-model="showCurtailmentTag" active-text="显示限电标识" />
       </div>
 
-      <div class="group-title">Group 3: 数据与报表导出</div>
+      <div class="group-title">步骤三：数据与报表导出</div>
       <el-dropdown @command="handleExportCommand">
         <el-button type="success">
           📥 导出报表
