@@ -95,6 +95,7 @@ def _collect_series_map(session, model, power_field, farm_code, start_dt, end_dt
 
 
 def _calculate_excluded_hours(session, farm_code, month_start, month_end):
+    _ensure_quality_marker_table(session)
     markers = session.query(DataQualityMarker).filter(
         DataQualityMarker.farm_code == farm_code,
         DataQualityMarker.exclude_from_score == True,
@@ -2097,6 +2098,13 @@ def _parse_marker_datetime(value):
         return None
 
 
+def _ensure_quality_marker_table(session):
+    bind = session.get_bind()
+    if bind is None:
+        return
+    DataQualityMarker.__table__.create(bind=bind, checkfirst=True)
+
+
 def _serialize_quality_marker(session, marker):
     return {
         'id': marker.id,
@@ -2120,6 +2128,7 @@ def get_quality_markers():
         month_str = request.args.get('month')
 
         with db_session() as session:
+            _ensure_quality_marker_table(session)
             query = session.query(DataQualityMarker)
 
             if farm_code:
@@ -2156,6 +2165,7 @@ def create_quality_marker():
             return jsonify({'error': '结束时间不能早于开始时间'}), 400
 
         with db_session() as session:
+            _ensure_quality_marker_table(session)
             marker = DataQualityMarker(
                 farm_code=farm_code,
                 start_time=start_time,
@@ -2184,6 +2194,7 @@ def update_quality_marker(marker_id):
         data = request.get_json() or {}
 
         with db_session() as session:
+            _ensure_quality_marker_table(session)
             marker = session.query(DataQualityMarker).filter(DataQualityMarker.id == marker_id).first()
             if not marker:
                 return jsonify({'error': '数据质量标记不存在'}), 404
@@ -2227,6 +2238,7 @@ def update_quality_marker(marker_id):
 def delete_quality_marker(marker_id):
     try:
         with db_session() as session:
+            _ensure_quality_marker_table(session)
             marker = session.query(DataQualityMarker).filter(DataQualityMarker.id == marker_id).first()
             if not marker:
                 return jsonify({'error': '数据质量标记不存在'}), 404

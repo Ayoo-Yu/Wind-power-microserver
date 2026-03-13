@@ -12,6 +12,13 @@ from models import SystemSetting
 system_settings_bp = Blueprint('system_settings', __name__)
 
 
+def _ensure_system_settings_table(session):
+    bind = session.get_bind()
+    if bind is None:
+        return
+    SystemSetting.__table__.create(bind=bind, checkfirst=True)
+
+
 DEFAULT_SYSTEM_SETTINGS = {
     'holidays': [
         {'date': '2026-10-01', 'note': '国庆节'}
@@ -57,6 +64,7 @@ def _serialize_system_settings(setting):
 def get_system_settings():
     try:
         with db_session() as session:
+            _ensure_system_settings_table(session)
             setting = session.query(SystemSetting).filter(SystemSetting.settings_key == 'default').first()
             return jsonify(_serialize_system_settings(setting))
     except Exception as e:
@@ -80,6 +88,7 @@ def save_system_settings():
         merged['params'] = {**merged['params'], **(payload.get('params') or {})}
 
         with db_session() as session:
+            _ensure_system_settings_table(session)
             setting = session.query(SystemSetting).filter(SystemSetting.settings_key == 'default').first()
             if not setting:
                 setting = SystemSetting(settings_key='default', payload=json.dumps(merged, ensure_ascii=False))
@@ -107,6 +116,7 @@ def reset_system_settings():
         updated_by = data.get('updated_by')
 
         with db_session() as session:
+            _ensure_system_settings_table(session)
             setting = session.query(SystemSetting).filter(SystemSetting.settings_key == 'default').first()
             default_payload = json.dumps(_build_default_system_settings(), ensure_ascii=False)
             if not setting:
