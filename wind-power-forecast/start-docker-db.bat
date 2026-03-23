@@ -1,9 +1,10 @@
 @echo off
 chcp 65001 > nul
+setlocal
 echo 正在启动金仓数据库和MinIO服务...
 
 REM 切换到项目目录
-cd /d D:\my-vue-project\wind-power-forecast
+cd /d "%~dp0"
 
 REM 启动数据库和MinIO服务
 docker-compose -f frontend-backend-compose.yaml up -d kingbase minio pgadmin

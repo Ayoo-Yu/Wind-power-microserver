@@ -8,7 +8,7 @@ from psycopg2 import sql
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from sqlalchemy.orm import Session
 from db_models import Base, Model
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 import time
 import os
 import subprocess
@@ -156,6 +156,82 @@ except Exception as e:
     print(f"警告: 迁移检查失败: {e}")
 
 # 初始化MinIO客户端（使用config中的配置），添加重试机制
+LEGACY_POWER_TABLES = {
+    "actual_power": "ix_actual_power_farm_code",
+    "supershortl_power": "ix_supershortl_power_farm_code",
+    "shortl_power": "ix_shortl_power_farm_code",
+    "mid_power": "ix_mid_power_farm_code",
+}
+
+DEFAULT_FARM_CODE = os.environ.get("DEFAULT_FARM_CODE", "DEFAULT_FARM")
+
+
+def upgrade_legacy_power_tables():
+    if engine is None:
+        return
+
+    inspector = inspect(engine)
+
+    with engine.begin() as connection:
+        for table_name, index_name in LEGACY_POWER_TABLES.items():
+            if not inspector.has_table(table_name):
+                continue
+
+            existing_columns = {
+                column["name"].lower() for column in inspector.get_columns(table_name)
+            }
+            existing_indexes = {
+                index["name"].lower() for index in inspector.get_indexes(table_name)
+            }
+
+            if "farm_code" not in existing_columns:
+                connection.execute(
+                    text(f'ALTER TABLE "{table_name}" ADD COLUMN farm_code VARCHAR(50)')
+                )
+                connection.execute(
+                    text(
+                        f'UPDATE "{table_name}" '
+                        'SET farm_code = :default_farm_code '
+                        'WHERE farm_code IS NULL'
+                    ),
+                    {"default_farm_code": DEFAULT_FARM_CODE},
+                )
+                connection.execute(
+                    text(
+                        f'ALTER TABLE "{table_name}" '
+                        'ALTER COLUMN farm_code SET NOT NULL'
+                    )
+                )
+                print(f"[OK] upgraded {table_name}.farm_code to current schema")
+
+            if index_name.lower() not in existing_indexes:
+                connection.execute(
+                    text(
+                        f'CREATE INDEX "{index_name}" '
+                        f'ON "{table_name}" (farm_code)'
+                    )
+                )
+                print(f"[OK] created index {index_name}")
+
+
+def check_migrations():
+    if engine is None:
+        print("warning: database engine unavailable, skip migration check")
+        return
+
+    try:
+        Base.metadata.create_all(engine)
+        print("[OK] ensured missing database tables exist")
+        upgrade_legacy_power_tables()
+    except Exception as e:
+        print(f"warning: migration check failed: {e}")
+
+
+try:
+    check_migrations()
+except Exception as e:
+    print(f"warning: migration check failed: {e}")
+
 def init_minio_client():
     max_retries = int(str(os.environ.get('MINIO_CONNECT_RETRIES', '5')).strip() or '5')
     retry_delay = int(str(os.environ.get('MINIO_CONNECT_RETRY_DELAY', '5')).strip() or '5')
