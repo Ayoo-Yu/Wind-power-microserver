@@ -10,8 +10,9 @@ const CONFIDENCE_SIGMA = 2
 const OUTLIER_SIGMA = 3
 const CUT_IN_SPEED = 3
 const CUT_OUT_SPEED = 25
-const CURTAILMENT_VARIANCE_THRESHOLD = 0.05
+const CURTAILMENT_STD_THRESHOLD = 0.05
 const MIN_CONSECUTIVE = 5
+const ISOLATION_WINDOW = 3
 
 export async function fetchPowerCurveData(startDate, endDate) {
   const farmCode = farmService.getCurrentFarm()
@@ -139,8 +140,9 @@ function classifyAnomalies(results, capacity) {
 
       if (consecutiveBelow >= MIN_CONSECUTIVE) {
         const variance = computeLocalVariance(results, i, consecutiveBelow)
+        const localStd = Math.sqrt(variance)
         const ratedWindSpeed = findRatedWindSpeed(results)
-        if (r.windSpeed > ratedWindSpeed && variance < CURTAILMENT_VARIANCE_THRESHOLD * capacity) {
+        if (r.windSpeed > ratedWindSpeed && localStd < CURTAILMENT_STD_THRESHOLD * capacity) {
           markConsecutive(results, i, consecutiveBelow, 'curtailment')
         } else {
           markConsecutive(results, i, consecutiveBelow, 'underperformance')
@@ -150,15 +152,11 @@ function classifyAnomalies(results, capacity) {
       }
     }
 
-    if (r.aboveUpper && r.sigmaMultiple > OUTLIER_SIGMA) {
+    if (r.sigmaMultiple > OUTLIER_SIGMA && isIsolated(results, i)) {
       r.type = 'outlier'
       continue
     }
-    if (r.belowLower && r.sigmaMultiple > OUTLIER_SIGMA) {
-      r.type = 'outlier'
-      continue
-    }
-    r.type = 'outlier'
+    r.type = 'normal'
   }
 }
 
@@ -212,6 +210,16 @@ function findRatedWindSpeed(results) {
   return getBinCenter(ratedBin)
 }
 
+function isIsolated(results, index) {
+  for (let d = 1; d <= ISOLATION_WINDOW; d++) {
+    const before = results[index - d]
+    const after = results[index + d]
+    if (before && before.type === 'candidate') return false
+    if (after && after.type === 'candidate') return false
+  }
+  return true
+}
+
 export function computeSummary(results) {
   const total = results.filter((r) => r.type !== 'unknown').length
   const outliers = results.filter((r) => r.type === 'outlier').length
@@ -231,8 +239,15 @@ export function computeSummary(results) {
   }
 }
 
+const ALERT_COOLDOWN_MS = 30 * 60 * 1000
+const lastAlertTime = new Map()
+
 export async function createAnomalyAlert(summary, farmCode) {
   if (!summary.alertTriggered) return false
+
+  const key = `${farmCode}_power_curve`
+  const lastTime = lastAlertTime.get(key) || 0
+  if (Date.now() - lastTime < ALERT_COOLDOWN_MS) return false
 
   try {
     await axiosInstance.post('/api/v1/alarms', {
@@ -243,9 +258,9 @@ export async function createAnomalyAlert(summary, farmCode) {
       message: `功率曲线异常率达 ${(summary.abnormalRate * 100).toFixed(1)}%，超过 15% 阈值。离群点: ${summary.outliers}, 限电: ${summary.curtailments}, 欠发: ${summary.underperformance}`,
       status: 'open',
     })
+    lastAlertTime.set(key, Date.now())
     return true
-  } catch (err) {
-    console.error('创建告警失败:', err)
+  } catch {
     return false
   }
 }

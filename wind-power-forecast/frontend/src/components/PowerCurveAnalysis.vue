@@ -104,10 +104,13 @@ export default {
       },
     ]
 
+    let resizeHandler = null
+
     function initChart() {
       if (chartContainer.value && !chart) {
         chart = echarts.init(chartContainer.value)
-        window.addEventListener('resize', () => chart?.resize())
+        resizeHandler = () => chart?.resize()
+        window.addEventListener('resize', resizeHandler)
       }
     }
 
@@ -131,7 +134,7 @@ export default {
         await nextTick()
         renderChart()
       } catch (err) {
-        console.error('加载功率曲线数据失败:', err)
+        ElMessage.error('加载功率曲线数据失败: ' + (err.message || '未知错误'))
       } finally {
         loading.value = false
       }
@@ -168,6 +171,25 @@ export default {
           symbol: 'none',
           silent: true,
           z: 1,
+        })
+      }
+
+      // 理论功率曲线参考线
+      const theoreticalPoints = allResults.value
+        .filter((r) => r.theoreticalPower != null && r.theoreticalPower > 0)
+        .map((r) => [r.windSpeed, r.theoreticalPower])
+      if (theoreticalPoints.length > 20) {
+        const sorted = theoreticalPoints.sort((a, b) => a[0] - b[0])
+        const step = Math.max(1, Math.floor(sorted.length / 100))
+        const sampled = sorted.filter((_, i) => i % step === 0)
+        series.push({
+          name: '理论功率曲线',
+          type: 'line',
+          data: sampled,
+          lineStyle: { color: '#9ca3af', width: 2, type: 'dashed' },
+          symbol: 'none',
+          silent: true,
+          z: 0,
         })
       }
 
@@ -287,6 +309,10 @@ export default {
     })
 
     onUnmounted(() => {
+      if (resizeHandler) {
+        window.removeEventListener('resize', resizeHandler)
+        resizeHandler = null
+      }
       if (chart) {
         chart.dispose()
         chart = null
