@@ -1,4 +1,5 @@
 from sqlalchemy import create_engine
+from sqlalchemy.engine import URL
 from sqlalchemy.orm import sessionmaker
 from minio import Minio
 from config import KINGBASE_CONFIG, MINIO_CONFIG
@@ -19,36 +20,35 @@ import json
 # 导入自定义金仓方言
 import kingbase_dialect
 
-# 导出数据库连接URL供其他模块使用
+# 使用 URL.create() 构建连接，密码不会出现在 URI 字面量中
 print("构建数据库连接URL...")
-print(f"DB_USER环境变量：{os.environ.get('DB_USER', '未设置')}")
-print(f"KINGBASE_CONFIG['user']值：{KINGBASE_CONFIG['user']}")
-print(f"DB_PASSWORD是否已设置：{'是' if os.environ.get('DB_PASSWORD') else '否'}")
-print(f"DB_HOST环境变量：{os.environ.get('DB_HOST', '未设置')}")
-print(f"DB_PORT环境变量：{os.environ.get('DB_PORT', '未设置')}")
-print(f"DB_NAME环境变量：{os.environ.get('DB_NAME', '未设置')}")
+print(f"DB_HOST: {KINGBASE_CONFIG['host']}, DB_PORT: {KINGBASE_CONFIG['port']}, DB_NAME: {KINGBASE_CONFIG['database']}")
 
-# 使用KINGBASE_CONFIG中的配置构建连接URL
-SQLALCHEMY_DATABASE_URI = f"postgresql+kingbase://{KINGBASE_CONFIG['user']}:{KINGBASE_CONFIG['password']}@{KINGBASE_CONFIG['host']}:{KINGBASE_CONFIG['port']}/{KINGBASE_CONFIG['database']}"
+DATABASE_URL = URL.create(
+    "postgresql+kingbase",
+    username=KINGBASE_CONFIG['user'],
+    password=KINGBASE_CONFIG['password'],
+    host=KINGBASE_CONFIG['host'],
+    port=int(KINGBASE_CONFIG['port']),
+    database=KINGBASE_CONFIG['database'],
+)
 
-print(f"最终连接URL：{SQLALCHEMY_DATABASE_URI}")
+# 兼容旧变量名
+SQLALCHEMY_DATABASE_URI = DATABASE_URL
+SQLALCHEMY_DATABASE_URL = DATABASE_URL
 
 # 保留旧变量名以保持兼容性
-SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URI
+SQLALCHEMY_DATABASE_URL = DATABASE_URL
 
 # 创建engine，添加重试机制
 def create_engine_with_retry():
     max_retries = 5
     retry_delay = 5  # 秒
-    
+
     print("DEBUG: 进入 create_engine_with_retry 函数...")
     for attempt in range(max_retries):
         try:
-            print(f"DEBUG: 尝试第 {attempt+1} 次创建引擎，使用 URI: {SQLALCHEMY_DATABASE_URI}")
-            # 确保SQLALCHEMY_DATABASE_URI使用的是我们硬编码的值
-            if 'postgres:' in SQLALCHEMY_DATABASE_URI:
-                print("警告! 检测到连接字符串中包含 'postgres:' 用户!")
-            
+            print(f"DEBUG: 尝试第 {attempt+1} 次创建引擎")
             # 更新连接池设置
             engine = create_engine(
                 SQLALCHEMY_DATABASE_URI,
@@ -127,9 +127,11 @@ def check_migrations():
     try:
         inspector = inspect(engine)
         
-        if not inspector.has_table("models"):
+        required_tables = ["models", "model_versions"]
+        missing = [t for t in required_tables if not inspector.has_table(t)]
+        if missing:
             Base.metadata.create_all(engine)
-            print("[OK] 已自动创建缺失的数据库表")
+            print(f"[OK] 已自动创建缺失的数据库表: {missing}")
     except Exception as e:
         print(f"警告: 迁移检查失败: {e}")
 
@@ -212,7 +214,7 @@ def get_db():
     if engine:
         cleanup_idle_connections(engine)
     
-    print(f"调试: 创建数据库会话，引擎连接URL为: {SQLALCHEMY_DATABASE_URI}")
+    print("调试: 创建数据库会话")
     db = SessionLocal()
     try:
         yield db
