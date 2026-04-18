@@ -15,8 +15,19 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from database_config import Base, get_db
 from db_session import db_session  # 导入上下文管理器
-from db_models import TaskHistory
+from db_models import TaskHistory, PredictionTask, PredictionRun
 from config import Config  # 导入Config类
+from sqlalchemy import text as _text, desc, func, case as db_case
+from datetime import datetime as _dt
+import re as _re
+
+_TIME_PATTERN = _re.compile(r'^([01]\d|2[0-3]):([0-5]\d)$')
+
+
+def _get_celery_tasks():
+    """Lazy import to avoid requiring celery when Flask starts without workers."""
+    from celery_app.tasks import train_model, run_prediction, run_supershort_predict
+    return train_model, run_prediction, run_supershort_predict
 
 # 全局状态字典，其他代码依赖这个变量
 prediction_status = {
@@ -722,32 +733,38 @@ def get_status_all():
     获取所有有效场站的预测任务状态总览。
     """
     try:
-        farms = get_active_farms()
-        processes = get_pm2_processes()
+        with db_session() as session:
+            tasks = session.query(PredictionTask).all()
 
-        items = []
-        for farm in farms:
-            farm_code = farm.get('farm_code')
-            farm_name = farm.get('farm_name') or farm_code
-            if not farm_code:
-                continue
+            farm_map = {}
+            for t in tasks:
+                if t.farm_code not in farm_map:
+                    farm_map[t.farm_code] = {
+                        "farm_code": t.farm_code,
+                        "farm_name": _get_farm_name(session, t.farm_code),
+                        "status": {},
+                    }
+                farm_map[t.farm_code]["status"][t.task_type] = {
+                    "enabled": t.enabled,
+                    "last_train_at": t.last_train_at.isoformat() if t.last_train_at else None,
+                    "last_predict_at": t.last_predict_at.isoformat() if t.last_predict_at else None,
+                    "last_train_status": t.last_train_status,
+                    "last_predict_status": t.last_predict_status,
+                    "last_error": t.last_error,
+                }
 
-            status = get_farm_prediction_status(farm_code, processes)
-            items.append({
-                'farm_code': farm_code,
-                'farm_name': farm_name,
-                'status': status
-            })
-
-        payload = {
-            'items': items,
-            'count': len(items)
-        }
-        return api_success(data=payload, message='获取多场站状态成功', legacy=payload)
+            items = list(farm_map.values())
+            return api_success(data={"items": items, "count": len(items)})
     except Exception as e:
-        error_msg = f"获取多场站状态失败: {str(e)}\n{traceback.format_exc()}"
-        print(error_msg)
-        return api_error('获取多场站状态失败', code=1500, status_code=500, details=error_msg)
+        return api_error(f"获取多场站状态失败: {str(e)}")
+
+
+def _get_farm_name(session, farm_code):
+    row = session.execute(
+        _text("SELECT farm_name FROM wind_farms WHERE farm_code = :code"),
+        {"code": farm_code},
+    ).fetchone()
+    return row[0] if row else farm_code
 
 @autopredict_bp.route('/overview', methods=['GET'])
 @autopredict_bp.route('/v1/autopredict/overview', methods=['GET'])
@@ -827,66 +844,43 @@ def control_all_prediction():
     data = request.get_json(silent=True) or {}
     action = data.get('action')
     prediction_type = data.get('type')
-    raw_farm_codes = data.get('farm_codes')
+    farm_codes = data.get('farm_codes')
 
-    if action not in ('start', 'stop', 'delete'):
-        return api_error('无效的批量操作类型', code=1001, status_code=400)
-    if prediction_type not in prediction_status:
+    if action not in ('start', 'stop'):
+        return api_error('无效的操作类型，仅支持 start/stop', code=1001, status_code=400)
+    if prediction_type not in ('short', 'medium', 'supershort'):
         return api_error('无效的预测类型', code=1001, status_code=400)
-
-    active_farm_codes = get_active_farm_codes()
-    if not active_farm_codes:
-        return api_error('未找到有效场站，无法执行批量操作', code=1004, status_code=400)
-
-    if raw_farm_codes is None:
-        target_farm_codes = active_farm_codes
-    elif not isinstance(raw_farm_codes, list):
+    if farm_codes and not isinstance(farm_codes, list):
         return api_error('farm_codes 必须是数组', code=1001, status_code=400)
-    else:
-        normalized_codes = []
-        for code in raw_farm_codes:
-            if isinstance(code, str):
-                canonical_code = canonicalize_farm_code(code, active_farm_codes)
-                if canonical_code and canonical_code not in normalized_codes:
-                    normalized_codes.append(canonical_code)
-        target_farm_codes = normalized_codes
+    if isinstance(farm_codes, list) and not all(isinstance(c, str) and c.strip() for c in farm_codes):
+        return api_error('farm_codes 包含无效值', code=1001, status_code=400)
 
-    if not target_farm_codes:
-        return api_error('缺少可执行的场站列表', code=1001, status_code=400)
+    try:
+        with db_session() as session:
+            query = session.query(PredictionTask).filter_by(task_type=prediction_type)
+            if farm_codes and isinstance(farm_codes, list):
+                valid_codes = [c.strip() for c in farm_codes]
+                query = query.filter(PredictionTask.farm_code.in_(valid_codes))
 
-    active_code_lookup = {code.lower(): code for code in active_farm_codes}
-    invalid_codes = [code for code in target_farm_codes if code.lower() not in active_code_lookup]
-    if invalid_codes:
-        return api_error(
-            f"无效的场站代码: {', '.join(invalid_codes)}",
-            code=1001,
-            status_code=400
+            tasks = query.all()
+            enabled = action == 'start'
+            items = []
+            for t in tasks:
+                t.enabled = enabled
+                t.updated_at = _dt.now()
+                items.append({
+                    "farm_code": t.farm_code,
+                    "type": prediction_type,
+                    "success": True,
+                    "message": f"{prediction_type} {'已启用' if enabled else '已停止'} (场站: {t.farm_code})"
+                })
+
+        return api_success(
+            data={"items": items, "summary": {"total": len(items), "success": len(items), "failed": 0}},
+            message=f"批量{action}完成: 成功 {len(items)}/{len(items)}",
         )
-
-    results, success_count, failed_count = _execute_batch_items(
-        action=action,
-        target_farm_codes=target_farm_codes,
-        target_types=[prediction_type]
-    )
-
-    summary = {
-        'total': len(target_farm_codes),
-        'success': success_count,
-        'failed': failed_count
-    }
-    payload = {
-        'action': action,
-        'type': prediction_type,
-        'summary': summary,
-        'items': results
-    }
-    http_status = 200 if failed_count == 0 else 207
-    return api_success(
-        data=payload,
-        message=f"批量{action}完成: 成功 {success_count}/{len(target_farm_codes)}",
-        status_code=http_status,
-        legacy=payload
-    )
+    except Exception as e:
+        return api_error(f"批量操作失败: {str(e)}")
 
 
 @autopredict_bp.route('/control_matrix', methods=['POST'])
@@ -983,114 +977,27 @@ def control_matrix_prediction():
 def start_prediction():
     data = request.get_json(silent=True) or {}
     prediction_type = data.get('type')
-    farm_code = resolve_farm_code(data.get('farm_code'))
+    farm_code = data.get('farm_code', 'DEFAULT_FARM')
 
-    if prediction_type not in prediction_status:
+    if prediction_type not in ('short', 'medium', 'supershort'):
         return api_error('无效的预测类型', code=1001, status_code=400)
 
-    # 验证场站代码
-    if not is_valid_farm_code(farm_code):
-        return api_error(f'无效的场站代码: {farm_code}', code=1001, status_code=400)
-
-    script_path = scripts[prediction_type]
-
-    # 检查脚本是否存在
-    if not os.path.exists(script_path):
-        error_msg = f'脚本文件不存在: {script_path}'
-        record_task_history(prediction_type, 'start', 'failed', error_msg)
-        return api_error(error_msg, code=1004, status_code=400)
-
-    process_name = build_process_name(farm_code, prediction_type)
-    acquired, action_key = try_acquire_action_lock(farm_code, prediction_type, 'start')
-    if not acquired:
-        return api_error(
-            f'任务操作冲突: {prediction_type} ({farm_code}) 正在执行启动操作',
-            code=1005,
-            status_code=409
-        )
-
     try:
-        # 检查同场站同类型任务是否已运行（允许不同场站并行）
-        if is_process_online(process_name):
-            with status_lock:  # 获取锁
-                prediction_status[prediction_type] = True
-            record_task_history(prediction_type, 'start', 'success', f'场站 {farm_code} 进程已在运行中: {process_name}')
-            legacy_data = {'status': True, 'farm_code': farm_code}
-            return api_success(
-                data=legacy_data,
-                message=f'{prediction_type} 预测任务已经在运行 (场站: {farm_code})',
-                legacy=legacy_data
-            )
+        with db_session() as session:
+            task = session.query(PredictionTask).filter_by(
+                farm_code=farm_code, task_type=prediction_type
+            ).first()
+            if not task:
+                return api_error(f'未找到任务配置: {farm_code} {prediction_type}', code=1004, status_code=404)
+            task.enabled = True
+            task.updated_at = _dt.now()
 
-        # 使用动态确定的Python解释器路径，并传递环境变量
-        success, result = safe_pm2_command([
-            'start', script_path,
-            '--name', process_name,
-            '--interpreter', python_interpreter,
-            '--merge-logs'  # 合并日志以便调试
-        ])
-
-        if success:
-            # 启动命令执行成功，但需要验证进程是否真的启动
-            verify_success, _ = safe_pm2_command(['list'])
-            if verify_success:
-                # 再次检查当前场站进程状态
-                if is_process_online(process_name):
-                    with status_lock:  # 获取锁
-                        prediction_status[prediction_type] = True
-                    record_task_history(prediction_type, 'start', 'success', f'场站 {farm_code} 进程启动成功: {process_name}')
-                    legacy_data = {
-                        'message': f'{prediction_type} 预测任务已启动 (场站: {farm_code})',
-                        'output': result.stdout if hasattr(result, 'stdout') else '',
-                        'farm_code': farm_code  # 返回场站信息
-                    }
-                    return api_success(
-                        data={
-                            'output': result.stdout if hasattr(result, 'stdout') else '',
-                            'farm_code': farm_code
-                        },
-                        message=f'{prediction_type} 预测任务已启动 (场站: {farm_code})',
-                        legacy=legacy_data
-                    )
-                else:
-                    # 命令成功但进程可能没有正常启动
-                    warning_msg = f'{prediction_type} 启动命令成功，但进程可能未正常运行 (场站: {farm_code})'
-                    record_task_history(prediction_type, 'start', 'warning', warning_msg)
-                    legacy_data = {
-                        'warning': warning_msg,
-                        'output': result.stdout if hasattr(result, 'stdout') else '',
-                        'farm_code': farm_code
-                    }
-                    return api_success(
-                        data={
-                            'warning': warning_msg,
-                            'output': result.stdout if hasattr(result, 'stdout') else '',
-                            'farm_code': farm_code
-                        },
-                        message=warning_msg,
-                        status_code=202,
-                        legacy=legacy_data
-                    )
-            else:
-                warning_msg = f'{prediction_type} 启动命令成功，但无法验证进程状态'
-                record_task_history(prediction_type, 'start', 'warning', warning_msg)
-                legacy_data = {
-                    'warning': warning_msg,
-                    'output': result.stdout if hasattr(result, 'stdout') else ''
-                }
-                return api_success(
-                    data=legacy_data,
-                    message=warning_msg,
-                    status_code=202,
-                    legacy=legacy_data
-                )
-        else:
-            # 启动命令执行失败
-            error_msg = f'启动任务失败: {result}'
-            record_task_history(prediction_type, 'start', 'failed', error_msg)
-            return api_error('启动任务失败', code=1500, status_code=500, details=str(result))
-    finally:
-        release_action_lock(action_key)
+        return api_success(
+            data={"farm_code": farm_code, "type": prediction_type, "enabled": True},
+            message=f'{prediction_type} 预测任务已启用 (场站: {farm_code})',
+        )
+    except Exception as e:
+        return api_error(f"启动失败: {str(e)}")
 
 # 停止预测任务
 @autopredict_bp.route('/stop', methods=['POST'])
@@ -1098,183 +1005,48 @@ def start_prediction():
 def stop_prediction():
     data = request.get_json(silent=True) or {}
     prediction_type = data.get('type')
-    raw_farm_code = data.get('farm_code')
-    if raw_farm_code and not is_valid_farm_code(raw_farm_code):
-        return api_error(f'无效的场站代码: {raw_farm_code}', code=1001, status_code=400)
-    farm_code = resolve_farm_code(raw_farm_code)
-    
-    if not prediction_type or prediction_type not in prediction_status:
+    farm_code = data.get('farm_code', 'DEFAULT_FARM')
+
+    if prediction_type not in ('short', 'medium', 'supershort'):
         return api_error('无效的预测类型', code=1001, status_code=400)
-    
-    acquired, action_key = try_acquire_action_lock(farm_code, prediction_type, 'stop')
-    if not acquired:
-        return api_error(
-            f'任务操作冲突: {prediction_type} ({farm_code}) 正在执行停止操作',
-            code=1005,
-            status_code=409
-        )
 
     try:
-        # 正常停止单个脚本
-        process_name = build_process_name(farm_code, prediction_type)
-        
-        success, result = safe_pm2_command(['stop', process_name])
-            
-        if success:
-            with status_lock:  # 获取锁
-                prediction_status[prediction_type] = False
-            # 更新全局状态
-            _update_prediction_status()
-            
-            message = f'{process_name} 已停止'
-            record_task_history(prediction_type, 'stop', 'success', message)
-            
-            legacy_data = {'farm_code': farm_code}
-            return api_success(
-                data=legacy_data,
-                message=f'{prediction_type}预测任务已停止 (场站: {farm_code})',
-                legacy=legacy_data
-            )
-        else:
-            error_msg = f'停止任务失败: {result}'
-            record_task_history(prediction_type, 'stop', 'failed', error_msg)
-            return api_error('停止预测任务失败', code=1500, status_code=500, details=str(result))
+        with db_session() as session:
+            task = session.query(PredictionTask).filter_by(
+                farm_code=farm_code, task_type=prediction_type
+            ).first()
+            if not task:
+                return api_error(f'未找到任务配置: {farm_code} {prediction_type}', code=1004, status_code=404)
+            task.enabled = False
+            task.updated_at = _dt.now()
+
+        return api_success(
+            data={"farm_code": farm_code, "type": prediction_type, "enabled": False},
+            message=f'{prediction_type} 预测任务已停止 (场站: {farm_code})',
+        )
     except Exception as e:
-        error_msg = f'停止预测任务异常: {str(e)}'
-        record_task_history(prediction_type, 'stop', 'failed', error_msg)
-        return api_error('停止预测任务失败', code=1500, status_code=500, details=str(e))
-    finally:
-        release_action_lock(action_key)
+        return api_error(f"停止失败: {str(e)}")
 # 设置定时重启任务
 @autopredict_bp.route('/schedule', methods=['POST'])
 @autopredict_bp.route('/v1/autopredict/schedule', methods=['POST'])
 def schedule_restart():
-    data = request.get_json(silent=True) or {}
-    prediction_type = data.get('type')
-    raw_farm_code = data.get('farm_code')
-    if raw_farm_code and not is_valid_farm_code(raw_farm_code):
-        return api_error(f'无效的场站代码: {raw_farm_code}', code=1001, status_code=400)
-    farm_code = resolve_farm_code(raw_farm_code)
-    schedule_time = data.get('time')  # 格式应为 HH:mm
-
-    if prediction_type not in prediction_status:
-        return api_error('无效的预测类型', code=1001, status_code=400)
-    if not schedule_time:
-        return api_error('缺少重启时间参数', code=1001, status_code=400)
-
-    try:
-        time_obj = datetime.datetime.strptime(schedule_time, '%H:%M')
-    except ValueError:
-        error_msg = '时间格式错误，要求 HH:mm'
-        record_task_history(prediction_type, 'schedule', 'failed', error_msg)
-        return api_error(error_msg, code=1001, status_code=400)
-
-    script_path = scripts[prediction_type]
-    process_name = build_process_name(farm_code, prediction_type)
-
-    stop_success, _ = safe_pm2_command(['stop', process_name])
-    if not stop_success:
-        print(f"警告: 无法停止现有进程 {process_name}, 将尝试继续设置定时任务")
-
-    cron_expression = f'0 {time_obj.minute} {time_obj.hour} * * *'
-    success, result = safe_pm2_command(['start', script_path, '--name', process_name, '--cron', cron_expression, '--interpreter', python_interpreter])
-
-    if success:
-        with status_lock:
-            prediction_status[prediction_type] = True
-        record_task_history(
-            prediction_type,
-            'schedule',
-            'success',
-            f'设置定时重启: {schedule_time}'
-        )
-        legacy_data = {'farm_code': farm_code}
-        return api_success(
-            data=legacy_data,
-            message=f'为 {prediction_type} 设置了每日 {schedule_time} 的定时重启 (场站: {farm_code})',
-            legacy=legacy_data
-        )
-    else:
-        error_msg = f'设置定时重启失败: {result}'
-        record_task_history(prediction_type, 'schedule', 'failed', error_msg)
-        return api_error('设置定时重启失败', code=1500, status_code=500, details=str(result))
+    return api_error('此端点已弃用，任务管理已迁移到 Celery', code=1010, status_code=410)
 # 从 PM2 中删除任务
 @autopredict_bp.route('/delete', methods=['POST'])
 @autopredict_bp.route('/v1/autopredict/delete', methods=['POST'])
 def delete_prediction():
-    data = request.get_json(silent=True) or {}
-    prediction_type = data.get('type')
-    raw_farm_code = data.get('farm_code')
-    if raw_farm_code and not is_valid_farm_code(raw_farm_code):
-        return api_error(f'无效的场站代码: {raw_farm_code}', code=1001, status_code=400)
-    farm_code = resolve_farm_code(raw_farm_code)
-    if not prediction_type or prediction_type not in prediction_status:
-        return api_error('无效的预测类型', code=1001, status_code=400)
-
-    acquired, action_key = try_acquire_action_lock(farm_code, prediction_type, 'delete')
-    if not acquired:
-        return api_error(
-            f'任务操作冲突: {prediction_type} ({farm_code}) 正在执行删除操作',
-            code=1005,
-            status_code=409
-        )
-
-    try:
-        process_name = build_process_name(farm_code, prediction_type)
-
-        success, result = safe_pm2_command(['delete', process_name])
-
-        if success:
-            with status_lock:
-                prediction_status[prediction_type] = False
-            _update_prediction_status()
-
-            message = f'{process_name} 已从PM2删除'
-            record_task_history(prediction_type, 'delete', 'success', message)
-
-            legacy_data = {'farm_code': farm_code}
-            return api_success(
-                data=legacy_data,
-                message=f'{prediction_type}预测任务已从PM2删除 (场站: {farm_code})',
-                legacy=legacy_data
-            )
-        else:
-            error_msg = f'删除任务失败: {result}'
-            record_task_history(prediction_type, 'delete', 'failed', error_msg)
-            return api_error('从PM2删除预测任务失败', code=1500, status_code=500, details=str(result))
-    except Exception as e:
-        error_msg = f'删除预测任务异常: {str(e)}'
-        record_task_history(prediction_type, 'delete', 'failed', error_msg)
-        return api_error('从PM2删除预测任务失败', code=1500, status_code=500, details=str(e))
-    finally:
-        release_action_lock(action_key)
+    return api_error('此端点已弃用，任务管理已迁移到 Celery', code=1010, status_code=410)
 # 保存当前 PM2 任务配置
 @autopredict_bp.route('/save', methods=['POST'])
 @autopredict_bp.route('/v1/autopredict/save', methods=['POST'])
 def save_pm2_config():
-    success, result = safe_pm2_command(['save'])
-    
-    if success:
-        record_task_history('all', 'save', 'success', '保存PM2配置')
-        return api_success(data={}, message='PM2 任务配置已保存')
-    else:
-        error_msg = f'保存配置失败: {result}'
-        record_task_history('all', 'save', 'failed', error_msg)
-        return api_error('保存配置失败', code=1500, status_code=500, details=str(result))
+    return api_error('此端点已弃用，任务管理已迁移到 Celery', code=1010, status_code=410)
 
 # 删除PM2保存的配置文件（新增）
 @autopredict_bp.route('/clearsave', methods=['POST'])
 @autopredict_bp.route('/v1/autopredict/clearsave', methods=['POST'])
 def clear_pm2_save():
-    success, result = safe_pm2_command(['cleardump'])
-    
-    if success:
-        record_task_history('all', 'clearsave', 'success', '删除PM2保存的配置')
-        return api_success(data={}, message='PM2 保存的配置已删除')
-    else:
-        error_msg = f'删除保存配置失败: {result}'
-        record_task_history('all', 'clearsave', 'failed', error_msg)
-        return api_error('删除保存配置失败', code=1500, status_code=500, details=str(result))
+    return api_error('此端点已弃用，任务管理已迁移到 Celery', code=1010, status_code=410)
 
 # 查询指定脚本的详细 PM2 信息
 @autopredict_bp.route('/script_info', methods=['GET'])
@@ -1558,43 +1330,7 @@ def get_logs():
 @autopredict_bp.route('/resurrect', methods=['POST'])
 @autopredict_bp.route('/v1/autopredict/resurrect', methods=['POST'])
 def resurrect():
-    success, result = safe_pm2_command(['resurrect'])
-    
-    if success:
-        # 更新状态字典，但不直接使用路由函数
-        try:
-            # 获取PM2状态并更新全局字典，但不返回响应
-            _update_prediction_status()
-            record_task_history('all', 'resurrect', 'success', '恢复PM2配置')
-            legacy_data = {"message": "成功恢复PM2配置"}
-            return api_success(
-                data=legacy_data,
-                message=legacy_data["message"],
-                legacy=legacy_data
-            )
-        except Exception as e:
-            error_msg = f"恢复配置后更新状态失败: {str(e)}\n{traceback.format_exc()}"
-            print(error_msg)
-            record_task_history('all', 'resurrect', 'warning', error_msg)
-            # 尽管更新状态失败，但resurrect命令已经成功执行，所以仍然返回成功
-            legacy_data = {
-                "message": "PM2配置已恢复，但更新状态失败",
-                "warning": "状态可能不准确，请刷新页面"
-            }
-            return api_success(
-                data=legacy_data,
-                message=legacy_data["message"],
-                legacy=legacy_data
-            )
-    else:
-        error_msg = f"恢复PM2配置失败: {result}"
-        record_task_history('all', 'resurrect', 'failed', error_msg)
-        return api_error(
-            "恢复PM2配置失败",
-            code=1500,
-            status_code=500,
-            details=error_msg
-        )
+    return api_error('此端点已弃用，任务管理已迁移到 Celery', code=1010, status_code=410)
 
 # 添加一个内部函数用于更新状态，但不返回HTTP响应
 def _update_prediction_status():
@@ -1876,5 +1612,191 @@ def get_task_status():
         return api_error('获取任务状态失败', code=1500, status_code=500, details=str(e))
 
 
+def _check_internal_auth():
+    """Verify internal API key for sensitive operations."""
+    api_key = request.headers.get('X-API-Key', '')
+    if api_key != Config.SECRET_KEY:
+        return api_error('未授权访问', code=1401, status_code=401)
+    return None
 
 
+@autopredict_bp.route('/trigger', methods=['POST'])
+@autopredict_bp.route('/v1/autopredict/trigger', methods=['POST'])
+def trigger_prediction():
+    auth_err = _check_internal_auth()
+    if auth_err:
+        return auth_err
+    data = request.get_json(silent=True) or {}
+    farm_code = data.get('farm_code', 'DEFAULT_FARM')
+    action = data.get('action', 'predict')
+    prediction_type = data.get('type', 'supershort')
+
+    if action not in ('train', 'predict'):
+        return api_error('action 仅支持 train/predict', code=1001, status_code=400)
+    if prediction_type not in ('short', 'medium', 'supershort'):
+        return api_error('type 仅支持 short/medium/supershort', code=1001, status_code=400)
+
+    try:
+        train_model, run_prediction, run_supershort_predict = _get_celery_tasks()
+    except ImportError:
+        return api_error('Celery 未安装，无法触发任务', code=1500, status_code=503)
+
+    if prediction_type == 'supershort' and action == 'predict':
+        result = run_supershort_predict.delay(farm_code)
+    elif action == 'train':
+        result = train_model.delay(farm_code, prediction_type)
+    else:
+        result = run_prediction.delay(farm_code, prediction_type)
+
+    return api_success(
+        data={"celery_task_id": result.id, "farm_code": farm_code, "type": prediction_type, "action": action},
+        message=f"已触发 {action} 任务 ({prediction_type}, 场站: {farm_code})",
+    )
+
+
+@autopredict_bp.route('/runs', methods=['GET'])
+@autopredict_bp.route('/v1/autopredict/runs', methods=['GET'])
+def get_runs():
+    farm_code = request.args.get('farm_code')
+    task_type = request.args.get('type')
+    limit = min(int(request.args.get('limit', 50)), 200)
+
+    try:
+        with db_session() as session:
+            query = session.query(PredictionRun).join(PredictionTask)
+            if farm_code:
+                query = query.filter(PredictionTask.farm_code == farm_code)
+            if task_type:
+                query = query.filter(PredictionTask.task_type == task_type)
+            runs = query.order_by(desc(PredictionRun.created_at)).limit(limit).all()
+
+            items = [{
+                "id": r.id,
+                "farm_code": r.task.farm_code if r.task else None,
+                "task_type": r.task.task_type if r.task else None,
+                "action": r.action,
+                "status": r.status,
+                "started_at": r.started_at.isoformat() if r.started_at else None,
+                "finished_at": r.finished_at.isoformat() if r.finished_at else None,
+                "duration_sec": r.duration_sec,
+                "error_message": r.error_message,
+            } for r in runs]
+
+            return api_success(data={"items": items, "count": len(items)})
+    except Exception as e:
+        return api_error(f"查询执行历史失败: {str(e)}")
+
+
+@autopredict_bp.route('/schedule_config', methods=['PUT'])
+@autopredict_bp.route('/v1/autopredict/schedule_config', methods=['PUT'])
+def update_schedule_config():
+    auth_err = _check_internal_auth()
+    if auth_err:
+        return auth_err
+    data = request.get_json(silent=True) or {}
+    farm_code = data.get('farm_code')
+    task_type = data.get('type')
+    train_schedule = data.get('train_schedule')
+    predict_schedule = data.get('predict_schedule')
+
+    if not farm_code or not task_type:
+        return api_error('farm_code 和 type 为必填项', code=1001, status_code=400)
+    if train_schedule and not _TIME_PATTERN.match(train_schedule):
+        return api_error('train_schedule 格式无效，要求 HH:MM (如 03:00)', code=1001, status_code=400)
+    if predict_schedule and not _TIME_PATTERN.match(predict_schedule):
+        return api_error('predict_schedule 格式无效，要求 HH:MM (如 08:00)', code=1001, status_code=400)
+
+    try:
+        with db_session() as session:
+            task = session.query(PredictionTask).filter_by(
+                farm_code=farm_code, task_type=task_type
+            ).first()
+            if not task:
+                return api_error(f'未找到任务: {farm_code} {task_type}', code=1004, status_code=404)
+            if train_schedule:
+                task.train_schedule = train_schedule
+            if predict_schedule:
+                task.predict_schedule = predict_schedule
+            task.updated_at = _dt.now()
+
+        return api_success(
+            data={"farm_code": farm_code, "type": task_type},
+            message="调度配置已更新",
+        )
+    except Exception as e:
+        return api_error(f"更新失败: {str(e)}")
+
+
+# --- 模型版本管理 API ---
+
+@autopredict_bp.route('/model_versions', methods=['GET'])
+def get_model_versions():
+    """查询模型版本列表。"""
+    from db_models import ModelVersion
+    farm_code = request.args.get('farm_code', '')
+    task_type = request.args.get('task_type', '')
+    active_only = request.args.get('active_only', 'true').lower() == 'true'
+
+    with db_session() as session:
+        query = session.query(ModelVersion)
+        if farm_code:
+            query = query.filter_by(farm_code=farm_code)
+        if task_type:
+            query = query.filter_by(task_type=task_type)
+        if active_only:
+            query = query.filter_by(is_active=True)
+        versions = query.order_by(ModelVersion.trained_at.desc()).limit(50).all()
+
+        result = []
+        for v in versions:
+            result.append({
+                'id': v.id,
+                'farm_code': v.farm_code,
+                'task_type': v.task_type,
+                'algorithm': v.algorithm,
+                'val_rmse': v.val_rmse,
+                'val_mae': v.val_mae,
+                'val_accuracy': v.val_accuracy,
+                'is_active': v.is_active,
+                'training_samples': v.training_samples,
+                'trained_at': v.trained_at.isoformat() if v.trained_at else None,
+            })
+    return jsonify({'code': 200, 'data': result})
+
+
+@autopredict_bp.route('/model_versions/<int:version_id>/deactivate', methods=['POST'])
+def deactivate_model_version(version_id):
+    """停用指定模型版本。"""
+    auth_err = _check_internal_auth()
+    if auth_err:
+        return auth_err
+
+    from model_registry import ModelRegistry
+    registry = ModelRegistry()
+    registry.deactivate(version_id)
+    return jsonify({'code': 200, 'message': f'模型版本 {version_id} 已停用'})
+
+
+@autopredict_bp.route('/model_versions/fusion_status', methods=['GET'])
+def get_fusion_status():
+    """获取融合状态概览（按场站和类型分组统计）。"""
+    from db_models import ModelVersion
+
+    with db_session() as session:
+        rows = session.query(
+            ModelVersion.farm_code,
+            ModelVersion.task_type,
+            func.count(ModelVersion.id).label('total'),
+            func.sum(db_case((ModelVersion.is_active == True, 1), else_=0)).label('active'),
+        ).group_by(ModelVersion.farm_code, ModelVersion.task_type).all()
+
+        result = []
+        for row in rows:
+            result.append({
+                'farm_code': row.farm_code,
+                'task_type': row.task_type,
+                'total_models': row.total,
+                'active_models': row.active,
+                'fusion_enabled': row.active > 1 if row.active else False,
+            })
+    return jsonify({'code': 200, 'data': result})
