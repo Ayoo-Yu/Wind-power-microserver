@@ -289,6 +289,20 @@ def train_model(data_file_path, model_folder_today):
                 )
                 print(f"  ✅ 已注册 {algo_type} 模型到 ModelRegistry")
                 logging.info(f"已注册 %s 模型到 ModelRegistry", algo_type)
+
+            # 注册分位数模型
+            quantile_model_dir = os.path.join(model_folder_today, 'best_models')
+            for q_key in ['q05', 'q95']:
+                q_path = os.path.join(quantile_model_dir, f'production_model_{q_key}.joblib')
+                if os.path.exists(q_path):
+                    registry.register(
+                        farm_code=farm_code,
+                        task_type="short",
+                        algorithm=f"{best_algo_type.lower()}_{q_key}",
+                        model_path=q_path,
+                        val_accuracy=None,
+                    )
+                    logging.info("已注册分位数模型 %s 到 ModelRegistry", q_key)
         except Exception as reg_e:
             print(f"  ⚠️ 模型注册失败（不影响训练结果）: {reg_e}")
             logging.warning(f"模型注册失败（不影响训练结果）: {reg_e}", exc_info=True)
