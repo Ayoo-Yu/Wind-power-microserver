@@ -426,14 +426,26 @@ def _register_models_to_registry(best_models_info, model_folder_today):
             logging.info(f"已注册 %s 模型到 ModelRegistry (%s)",
                          algo_type, task_type)
 
-        # Register quantile models
+        # Register quantile models — reuse the best point model's val_accuracy
+        # so that quantile models pass _should_activate() and get activated.
         _best_algo_for_q = None
         _best_score_for_q = float('-inf')
+        _best_val_accuracy_for_q = None
         for _at, _mi in best_models_info.items():
             if (_mi.get('model') is not None
                     and _mi.get('score', float('-inf')) > _best_score_for_q):
                 _best_score_for_q = _mi['score']
                 _best_algo_for_q = _at
+                # Compute val_accuracy the same way as point models above
+                _rmse_q = _mi.get('rmse', _mi.get('score'))
+                if _rmse_q is not None and _rmse_q < 0:
+                    import numpy as np
+                    _rmse_q = np.sqrt(-_rmse_q)
+                _best_val_accuracy_for_q = (
+                    1 - (_rmse_q / wfcapacity)
+                    if _rmse_q is not None and wfcapacity > 0
+                    else None
+                )
 
         quantile_model_dir = os.path.join(model_folder_today, 'best_models')
         for q_key in ['q05', 'q95']:
@@ -450,10 +462,14 @@ def _register_models_to_registry(best_models_info, model_folder_today):
                     task_type=task_type,
                     algorithm=algo_label,
                     model_path=q_path,
-                    val_accuracy=None,
+                    val_accuracy=(float(_best_val_accuracy_for_q)
+                                  if _best_val_accuracy_for_q is not None
+                                  else None),
                 )
-                logging.info("已注册分位数模型 %s 到 ModelRegistry (%s)",
-                             q_key, task_type)
+                logging.info("已注册分位数模型 %s 到 ModelRegistry (%s, "
+                             "val_accuracy=%.4f)",
+                             q_key, task_type,
+                             _best_val_accuracy_for_q or 0)
     except Exception as reg_e:
         print(f"  ⚠️ 模型注册失败（不影响训练结果）: {reg_e}")
         logging.warning(f"模型注册失败（不影响训练结果）: {reg_e}", exc_info=True)

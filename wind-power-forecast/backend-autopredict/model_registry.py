@@ -40,34 +40,52 @@ class ModelRegistry:
         s3_path: str | None = None,
         scaler_path: str | None = None,
     ) -> dict:
-        """注册新模型版本。如果验证指标优于阈值则自动激活。"""
+        """注册新模型版本。如果验证指标优于阈值则自动激活。
+
+        Uses SELECT ... FOR UPDATE (with_for_update) on active model rows
+        to prevent TOCTOU race conditions when multiple training processes
+        register models concurrently.
+        """
         is_active = self._should_activate(task_type, val_accuracy)
         now = datetime.now()
 
-        version = ModelVersion(
-            farm_code=farm_code,
-            task_type=task_type,
-            algorithm=algorithm,
-            hyperparams=hyperparams,
-            val_rmse=val_rmse,
-            val_mae=val_mae,
-            val_accuracy=val_accuracy,
-            is_active=is_active,
-            s3_path=s3_path,
-            local_path=model_path,
-            scaler_path=scaler_path,
-            feature_cols=feature_cols,
-            training_samples=training_samples,
-            trained_at=now,
-            activated_at=now if is_active else None,
-        )
-
         with db_session() as session:
-            # 检查是否比当前线上最差模型还差
+            # Lock check: count active models with row-level lock to
+            # prevent concurrent registration from seeing stale counts.
             if is_active:
-                is_active = self._is_better_than_worst(session, farm_code, task_type, val_accuracy)
-                version.is_active = is_active
-                version.activated_at = now if is_active else None
+                active_count = (
+                    session.query(ModelVersion)
+                    .filter_by(
+                        farm_code=farm_code,
+                        task_type=task_type,
+                        is_active=True,
+                    )
+                    .with_for_update()
+                    .count()
+                )
+                # If already at max capacity, only register if better than worst
+                if active_count >= 5:
+                    is_active = self._is_better_than_worst(
+                        session, farm_code, task_type, val_accuracy,
+                    )
+
+            version = ModelVersion(
+                farm_code=farm_code,
+                task_type=task_type,
+                algorithm=algorithm,
+                hyperparams=hyperparams,
+                val_rmse=val_rmse,
+                val_mae=val_mae,
+                val_accuracy=val_accuracy,
+                is_active=is_active,
+                s3_path=s3_path,
+                local_path=model_path,
+                scaler_path=scaler_path,
+                feature_cols=feature_cols,
+                training_samples=training_samples,
+                trained_at=now,
+                activated_at=now if is_active else None,
+            )
 
             session.add(version)
             session.flush()
@@ -133,12 +151,17 @@ class ModelRegistry:
     def _is_better_than_worst(
         self, session, farm_code: str, task_type: str, val_accuracy: float | None
     ) -> bool:
-        """检查是否比当前线上最差模型更好。如果线上无模型则返回 True。"""
+        """检查是否比当前线上最差模型更好。如果线上无模型则返回 True。
+
+        Acquires row-level locks (SELECT ... FOR UPDATE) on active models
+        to prevent concurrent registrations from both passing this check.
+        """
         if val_accuracy is None:
             return False
         worst = (
             session.query(ModelVersion)
             .filter_by(farm_code=farm_code, task_type=task_type, is_active=True)
+            .with_for_update()
             .order_by(ModelVersion.val_accuracy.asc())
             .first()
         )
@@ -147,10 +170,15 @@ class ModelRegistry:
         return val_accuracy >= worst.val_accuracy
 
     def _deactivate_old_versions(self, session, farm_code: str, task_type: str, keep: int = 5):
-        """保留最近 N 个 active 版本，停用更早的。"""
+        """保留最近 N 个 active 版本，停用更早的。
+
+        Acquires row-level locks (SELECT ... FOR UPDATE) to prevent
+        concurrent modifications while deactivating stale versions.
+        """
         active_versions = (
             session.query(ModelVersion)
             .filter_by(farm_code=farm_code, task_type=task_type, is_active=True)
+            .with_for_update()
             .order_by(ModelVersion.trained_at.desc())
             .all()
         )
