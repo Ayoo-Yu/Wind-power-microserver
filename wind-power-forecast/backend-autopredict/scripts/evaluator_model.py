@@ -10,7 +10,7 @@ import os
 import pathlib
 
 class ModelEvaluator:
-    def __init__(self, data_path, output_dir=None, wfcapacity=453.5):
+    def __init__(self, data_path, output_dir=None, wfcapacity=779.0):
         """
         初始化模型评估器
         
@@ -21,7 +21,7 @@ class ModelEvaluator:
         output_dir : str, optional
             结果保存目录，如果未提供，将自动创建
         wfcapacity : float, optional
-            风电场装机容量，默认为453.5 MW
+            风电场装机容量，默认为779.0 MW
         """
         # 读取数据
         self.data = pd.read_csv(data_path)
@@ -97,7 +97,31 @@ class ModelEvaluator:
             'PE': pe,
             'K': k_value
         }
-        
+
+    def compute_interval_metrics(self, actual, lower, upper):
+        """计算预测区间指标：覆盖率和区间宽度。
+
+        Args:
+            actual: 实际值数组
+            lower: 预测区间下限数组
+            upper: 预测区间上限数组
+
+        Returns:
+            dict: {'coverage_rate': float, 'interval_width': float}
+        """
+        if len(actual) == 0 or lower is None or upper is None:
+            return {'coverage_rate': None, 'interval_width': None}
+
+        actual = np.array(actual)
+        lower = np.array(lower)
+        upper = np.array(upper)
+
+        in_interval = np.sum((actual >= lower) & (actual <= upper))
+        coverage_rate = float(in_interval / len(actual))
+        avg_width = float(np.mean(upper - lower) / self.wfcapacity)
+
+        return {'coverage_rate': coverage_rate, 'interval_width': avg_width}
+
     def calculate_overall_metrics(self):
         """
         计算总体评估指标
@@ -466,7 +490,7 @@ def evaluate_model(
     save_csv=True,
     save_report=True,
     custom_save_dir=None,
-    wfcapacity=453.5,
+    wfcapacity=779.0,
     model_info=None,
 ):
     """
@@ -485,7 +509,7 @@ def evaluate_model(
     custom_save_dir : str, optional
         自定义的结果保存目录，如果不提供则使用默认目录结构
     wfcapacity : float, optional
-        风电场装机容量，默认为453.5 MW
+        风电场装机容量，默认为779.0 MW
     model_info : dict, optional
         模型相关信息，包括模型类型、训练参数等
     """
