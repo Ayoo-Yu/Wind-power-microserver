@@ -53,6 +53,9 @@
           <el-checkbox label="中期预测" />
           <el-checkbox label="短期风速预测" />
           <el-checkbox label="中期风速预测" />
+          <el-checkbox label="短期预测区间" />
+          <el-checkbox label="超短期预测区间" />
+          <el-checkbox label="中期预测区间" />
         </el-checkbox-group>
         <el-switch v-model="showCapacityLine" active-text="显示可用容量线" />
         <el-switch v-model="showCurtailmentTag" active-text="显示限电标识" />
@@ -154,11 +157,12 @@ export default {
       selectedTypes: ['实测值', '超短期预测', '短期预测', '中期预测', '短期风速预测', '中期风速预测'],
       showCapacityLine: true,
       showCurtailmentTag: true,
-      installedCapacity: 453.5,
+      installedCapacity: 779.0,
       mainChart: null,
       errorChart: null,
       scatterChart: null,
       fleetBarChart: null,
+      _disposed: false,
       exportData: { comparison: null, metrics: null },
       singleSeriesState: null,
       singleMetricsSummary: {
@@ -213,6 +217,7 @@ export default {
     window.addEventListener('resize', this.resizeCharts)
   },
   beforeUnmount() {
+    this._disposed = true
     farmService.removeListener(this.handleFarmChanged)
     window.removeEventListener('resize', this.resizeCharts)
     this.destroyAllCharts()
@@ -299,6 +304,7 @@ export default {
       return arrows[Math.round(normalized / 45) % 8]
     },
     resizeCharts() {
+      if (this._disposed) return
       [this.mainChart, this.errorChart, this.scatterChart, this.fleetBarChart].forEach((chart) => chart && chart.resize())
     },
     setQuickTimeRange(period) {
@@ -321,6 +327,7 @@ export default {
       this.fleetBarChart = null
     },
     ensureChartInstance(chartKey, refKey) {
+      if (this._disposed) return null
       const currentEl = this.$refs[refKey]
       const currentChart = this[chartKey]
       if (!currentEl) return null
@@ -435,6 +442,14 @@ export default {
       const curtailmentSeries = this.getSeries(apiData, ['限电', 'curtail'])
       const windDirectionSeries = this.getSeries(apiData, ['风向', 'winddirection'])
 
+      // 提取预测区间数据
+      const shortLowerSeries = this.getSeries(apiData, ['短期预测下限', 'short_lower'])
+      const shortUpperSeries = this.getSeries(apiData, ['短期预测上限', 'short_upper'])
+      const midLowerSeries = this.getSeries(apiData, ['中期预测下限', 'mid_lower'])
+      const midUpperSeries = this.getSeries(apiData, ['中期预测上限', 'mid_upper'])
+      const supershortLowerSeries = this.getSeries(apiData, ['超短期预测下限', 'supershort_lower'])
+      const supershortUpperSeries = this.getSeries(apiData, ['超短期预测上限', 'supershort_upper'])
+
       const sortedActual = [...actual].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
       const labels = sortedActual.map(v => {
         const d = new Date(v.timestamp)
@@ -454,6 +469,14 @@ export default {
 
       const capacityValues = capacityValuesRaw.some(Number.isFinite) ? capacityValuesRaw : labels.map(() => this.installedCapacity)
       const curtailmentValues = this.alignedSeries(sortedActual, curtailmentSeries, 'value')
+
+      // 对齐预测区间数据
+      const shortLowerValues = this.alignedSeries(sortedActual, shortLowerSeries)
+      const shortUpperValues = this.alignedSeries(sortedActual, shortUpperSeries)
+      const midLowerValues = this.alignedSeries(sortedActual, midLowerSeries)
+      const midUpperValues = this.alignedSeries(sortedActual, midUpperSeries)
+      const supershortLowerValues = this.alignedSeries(sortedActual, supershortLowerSeries)
+      const supershortUpperValues = this.alignedSeries(sortedActual, supershortUpperSeries)
 
       const shortDaily = this.calcDailyStats(sortedActual, short, 0.6)
       const superDaily = this.calcDailyStats(sortedActual, supershort, 0.65)
@@ -482,7 +505,13 @@ export default {
         windDirectionValues,
         capacityValues,
         curtailmentValues,
-        sortedActual
+        sortedActual,
+        shortLowerValues,
+        shortUpperValues,
+        midLowerValues,
+        midUpperValues,
+        supershortLowerValues,
+        supershortUpperValues
       }
       this.exportData.comparison = {
         labels,
@@ -538,6 +567,108 @@ export default {
       if (this.selectedTypes.includes('中期风速预测')) pushWind('中期风速', s.midWindValues, '#c084fc')
       if (this.showCapacityLine) pushPower('可用容量', s.capacityValues, '#f59e0b')
 
+      // 短期预测区间色带
+      if (this.selectedTypes.includes('短期预测区间') && s.shortLowerValues && s.shortUpperValues && s.shortLowerValues.some(v => v != null)) {
+        series.push({
+          name: '短期预测区间',
+          type: 'line',
+          smooth: false,
+          showSymbol: false,
+          yAxisIndex: YAXIS_POWER,
+          data: s.shortUpperValues,
+          lineStyle: { opacity: 0 },
+          areaStyle: { color: 'rgba(96, 165, 250, 0.15)' },
+          stack: 'short-interval',
+          z: 1,
+          connectNulls: true
+        })
+        series.push({
+          name: '短期预测区间_下',
+          type: 'line',
+          smooth: false,
+          showSymbol: false,
+          yAxisIndex: YAXIS_POWER,
+          data: s.shortLowerValues.map((v, i) => {
+            const upper = s.shortUpperValues[i]
+            if (v == null || upper == null) return null
+            return upper - v
+          }),
+          lineStyle: { opacity: 0 },
+          areaStyle: { color: 'rgba(96, 165, 250, 0.15)' },
+          stack: 'short-interval',
+          z: 1,
+          connectNulls: true
+        })
+      }
+
+      // 超短期预测区间色带
+      if (this.selectedTypes.includes('超短期预测区间') && s.supershortLowerValues && s.supershortUpperValues && s.supershortLowerValues.some(v => v != null)) {
+        series.push({
+          name: '超短期预测区间',
+          type: 'line',
+          smooth: false,
+          showSymbol: false,
+          yAxisIndex: YAXIS_POWER,
+          data: s.supershortUpperValues,
+          lineStyle: { opacity: 0 },
+          areaStyle: { color: 'rgba(34, 211, 238, 0.15)' },
+          stack: 'supershort-interval',
+          z: 1,
+          connectNulls: true
+        })
+        series.push({
+          name: '超短期预测区间_下',
+          type: 'line',
+          smooth: false,
+          showSymbol: false,
+          yAxisIndex: YAXIS_POWER,
+          data: s.supershortLowerValues.map((v, i) => {
+            const upper = s.supershortUpperValues[i]
+            if (v == null || upper == null) return null
+            return upper - v
+          }),
+          lineStyle: { opacity: 0 },
+          areaStyle: { color: 'rgba(34, 211, 238, 0.15)' },
+          stack: 'supershort-interval',
+          z: 1,
+          connectNulls: true
+        })
+      }
+
+      // 中期预测区间色带
+      if (this.selectedTypes.includes('中期预测区间') && s.midLowerValues && s.midUpperValues && s.midLowerValues.some(v => v != null)) {
+        series.push({
+          name: '中期预测区间',
+          type: 'line',
+          smooth: false,
+          showSymbol: false,
+          yAxisIndex: YAXIS_POWER,
+          data: s.midUpperValues,
+          lineStyle: { opacity: 0 },
+          areaStyle: { color: 'rgba(74, 222, 128, 0.15)' },
+          stack: 'mid-interval',
+          z: 1,
+          connectNulls: true
+        })
+        series.push({
+          name: '中期预测区间_下',
+          type: 'line',
+          smooth: false,
+          showSymbol: false,
+          yAxisIndex: YAXIS_POWER,
+          data: s.midLowerValues.map((v, i) => {
+            const upper = s.midUpperValues[i]
+            if (v == null || upper == null) return null
+            return upper - v
+          }),
+          lineStyle: { opacity: 0 },
+          areaStyle: { color: 'rgba(74, 222, 128, 0.15)' },
+          stack: 'mid-interval',
+          z: 1,
+          connectNulls: true
+        })
+      }
+
       const markAreas = this.buildCurtailmentMarkAreas(s.labels, s.curtailmentValues)
       if (markAreas.length && series.length) {
         series[0].markArea = {
@@ -550,7 +681,7 @@ export default {
       return series
     },
     renderSingleCharts() {
-      if (!this.singleSeriesState) return
+      if (this._disposed || !this.singleSeriesState) return
       if (this.singleViewTab === 'curve') {
         this.renderMainChart()
         this.renderErrorChart()
@@ -559,6 +690,7 @@ export default {
       }
     },
     renderMainChart() {
+      if (this._disposed) return
       const state = this.singleSeriesState
       if (!state || !this.$refs.mainChartEl) return
       this.mainChart = this.ensureChartInstance('mainChart', 'mainChartEl')
@@ -603,6 +735,7 @@ export default {
       }, true)
     },
     renderErrorChart() {
+      if (this._disposed) return
       const state = this.singleSeriesState
       if (!state || !this.$refs.errorChartEl) return
       this.errorChart = this.ensureChartInstance('errorChart', 'errorChartEl')
@@ -630,6 +763,7 @@ export default {
       }, true)
     },
     renderScatterChart() {
+      if (this._disposed) return
       const state = this.singleSeriesState
       if (!state || !this.$refs.scatterChartEl) return
       this.scatterChart = this.ensureChartInstance('scatterChart', 'scatterChartEl')
@@ -694,6 +828,7 @@ export default {
       this.$nextTick(() => this.renderFleetBarChart())
     },
     renderFleetBarChart() {
+      if (this._disposed) return
       if (!this.$refs.fleetBarChartEl) return
       this.fleetBarChart = this.ensureChartInstance('fleetBarChart', 'fleetBarChartEl')
       if (!this.fleetBarChart) return
@@ -817,7 +952,7 @@ export default {
 </script>
 
 <style scoped>
-.power-compare-container { min-height: 100vh; padding: 18px 22px 28px; color: #fff; }
+.power-compare-container { min-height: auto; padding: 18px 22px 28px; color: var(--text-primary); }
 .page-title { margin: 0 0 14px; color: #f2f7ff; font-size: 28px; font-weight: 700; }
 .analysis-tabs { margin-bottom: 12px; }
 .single-view-tabs { margin: 8px 0 12px; }
