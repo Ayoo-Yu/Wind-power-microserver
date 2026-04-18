@@ -69,6 +69,15 @@ def batch_create_supershortl_power():
                         # 如果预测值不存在或为 NaN，设置为 0 或其他默认值
                         record[pred_col] = 0.0
 
+                # 处理预测区间列
+                for i in range(2, 18):
+                    lower_key = f'wp_pred{i}_lower'
+                    upper_key = f'wp_pred{i}_upper'
+                    if lower_key in row and row[lower_key] and str(row[lower_key]).strip():
+                        record[lower_key] = float(row[lower_key])
+                    if upper_key in row and row[upper_key] and str(row[upper_key]).strip():
+                        record[upper_key] = float(row[upper_key])
+
                 records.append(record)
             except (ValueError, TypeError) as e:
                 current_app.logger.error(f"数据格式错误: {row} - {str(e)}")
@@ -145,13 +154,16 @@ def batch_create_shortl_power():
             try:
                 # 使用pandas处理时间戳
                 timestamp = pd.to_datetime(row['Timestamp'])
-                records.append({
+                record_data = {
                     "timestamp": timestamp,
                     "wp_pred": float(row['Predicted Power']),
                     "pre_at": current_date,  # 使用当前日期
                     "pre_num": index + 1,    # 使用行索引+1作为序号
                     "farm_code": farm_code   # 新增场站字段
-                })
+                }
+                record_data["wp_pred_lower"] = float(row['Lower 90']) if 'Lower 90' in row and row['Lower 90'] and str(row['Lower 90']).strip() else None
+                record_data["wp_pred_upper"] = float(row['Upper 90']) if 'Upper 90' in row and row['Upper 90'] and str(row['Upper 90']).strip() else None
+                records.append(record_data)
             except (ValueError, TypeError) as e:
                 current_app.logger.error(f"数据格式错误: {row} - {str(e)}")
 
@@ -174,6 +186,8 @@ def batch_create_shortl_power():
                         ShortlPower.farm_code == farm_code  # 添加场站过滤
                     ).update({
                         "wp_pred": record['wp_pred'],
+                        "wp_pred_lower": record.get("wp_pred_lower"),
+                        "wp_pred_upper": record.get("wp_pred_upper"),
                         "pre_at": record['pre_at'],
                         "pre_num": record['pre_num']
                     })
@@ -190,11 +204,11 @@ def batch_create_shortl_power():
                 "errors": 0,
                 "farm_code": farm_code
             }), 201
-            
+
     except Exception as e:
         current_app.logger.error(f"文件处理失败: {str(e)}")
-        return jsonify({"error": f"文件处理失败: {str(e)}"}), 500 
-    
+        return jsonify({"error": f"文件处理失败: {str(e)}"}), 500
+
 @prediction2database_bp.route('/batch_mid_power', methods=['POST'])
 def batch_create_mid_power():
     """批量插入中期预测数据（支持多场站）"""
@@ -229,13 +243,16 @@ def batch_create_mid_power():
             try:
                 # 使用pandas处理时间戳
                 timestamp = pd.to_datetime(row['Timestamp'])
-                records.append({
+                record_data = {
                     "timestamp": timestamp,
                     "wp_pred": float(row['Predicted Power']),
                     "pre_at": current_date,  # 使用修改后的current_date
                     "pre_num": index + 1,    # 使用行索引+1作为序号
                     "farm_code": farm_code   # 新增场站字段
-                })
+                }
+                record_data["wp_pred_lower"] = float(row['Lower 90']) if 'Lower 90' in row and row['Lower 90'] and str(row['Lower 90']).strip() else None
+                record_data["wp_pred_upper"] = float(row['Upper 90']) if 'Upper 90' in row and row['Upper 90'] and str(row['Upper 90']).strip() else None
+                records.append(record_data)
             except (ValueError, TypeError) as e:
                 current_app.logger.error(f"数据格式错误: {row} - {str(e)}")
 
@@ -258,6 +275,8 @@ def batch_create_mid_power():
                         MidPower.farm_code == farm_code  # 添加场站过滤
                     ).update({
                         "wp_pred": record['wp_pred'],
+                        "wp_pred_lower": record.get("wp_pred_lower"),
+                        "wp_pred_upper": record.get("wp_pred_upper"),
                         "pre_at": record['pre_at'],
                         "pre_num": record['pre_num']
                     })
