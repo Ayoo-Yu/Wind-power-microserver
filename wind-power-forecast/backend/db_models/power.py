@@ -35,7 +35,39 @@ class SupershortlPower(Base):
     wp_pred15 = Column(Float, nullable=False)
     wp_pred16 = Column(Float, nullable=False)
     wp_pred17 = Column(Float, nullable=False)
-
+    # 预测区间列（shift 2~17）
+    wp_pred2_lower = Column(Float, nullable=True)
+    wp_pred2_upper = Column(Float, nullable=True)
+    wp_pred3_lower = Column(Float, nullable=True)
+    wp_pred3_upper = Column(Float, nullable=True)
+    wp_pred4_lower = Column(Float, nullable=True)
+    wp_pred4_upper = Column(Float, nullable=True)
+    wp_pred5_lower = Column(Float, nullable=True)
+    wp_pred5_upper = Column(Float, nullable=True)
+    wp_pred6_lower = Column(Float, nullable=True)
+    wp_pred6_upper = Column(Float, nullable=True)
+    wp_pred7_lower = Column(Float, nullable=True)
+    wp_pred7_upper = Column(Float, nullable=True)
+    wp_pred8_lower = Column(Float, nullable=True)
+    wp_pred8_upper = Column(Float, nullable=True)
+    wp_pred9_lower = Column(Float, nullable=True)
+    wp_pred9_upper = Column(Float, nullable=True)
+    wp_pred10_lower = Column(Float, nullable=True)
+    wp_pred10_upper = Column(Float, nullable=True)
+    wp_pred11_lower = Column(Float, nullable=True)
+    wp_pred11_upper = Column(Float, nullable=True)
+    wp_pred12_lower = Column(Float, nullable=True)
+    wp_pred12_upper = Column(Float, nullable=True)
+    wp_pred13_lower = Column(Float, nullable=True)
+    wp_pred13_upper = Column(Float, nullable=True)
+    wp_pred14_lower = Column(Float, nullable=True)
+    wp_pred14_upper = Column(Float, nullable=True)
+    wp_pred15_lower = Column(Float, nullable=True)
+    wp_pred15_upper = Column(Float, nullable=True)
+    wp_pred16_lower = Column(Float, nullable=True)
+    wp_pred16_upper = Column(Float, nullable=True)
+    wp_pred17_lower = Column(Float, nullable=True)
+    wp_pred17_upper = Column(Float, nullable=True)
 
 
 class ShortlPower(Base):
@@ -46,6 +78,8 @@ class ShortlPower(Base):
     timestamp = Column(DateTime, nullable=False, index=True)
     farm_code = Column(String(50), nullable=False, index=True)  # 场站编码
     wp_pred = Column(Float, nullable=False)
+    wp_pred_lower = Column(Float, nullable=True)   # 90% 预测区间下限
+    wp_pred_upper = Column(Float, nullable=True)   # 90% 预测区间上限
     created_at = Column(DateTime, default=datetime.now())
     pre_at = Column(DateTime, nullable=False)
     pre_num = Column(Integer, nullable=False)
@@ -58,6 +92,8 @@ class MidPower(Base):
     timestamp = Column(DateTime, nullable=False, index=True)
     farm_code = Column(String(50), nullable=False, index=True)  # 场站编码
     wp_pred = Column(Float, nullable=False)
+    wp_pred_lower = Column(Float, nullable=True)   # 90% 预测区间下限
+    wp_pred_upper = Column(Float, nullable=True)   # 90% 预测区间上限
     created_at = Column(DateTime, default=datetime.now())
     pre_at = Column(DateTime, nullable=False)
     pre_num = Column(Integer, nullable=False)
