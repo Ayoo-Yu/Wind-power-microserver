@@ -39,7 +39,7 @@ class ModelRegistry:
         training_samples: int | None = None,
         s3_path: str | None = None,
         scaler_path: str | None = None,
-    ) -> ModelVersion:
+    ) -> dict:
         """注册新模型版本。如果验证指标优于阈值则自动激活。"""
         is_active = self._should_activate(task_type, val_accuracy)
         now = datetime.now()
@@ -80,7 +80,7 @@ class ModelRegistry:
             "Registered model version %d: %s/%s/%s accuracy=%.4f active=%s",
             version_id, farm_code, task_type, algorithm, val_accuracy or 0, is_active,
         )
-        return version
+        return {"id": version_id, "is_active": is_active}
 
     def get_active_models(self, farm_code: str, task_type: str, limit: int = 5):
         """获取指定场站+类型的 active 模型列表，按 trained_at 降序。"""
@@ -168,7 +168,14 @@ class ModelRegistry:
 
         inv_rmses = []
         for m in models:
-            rmse = m.val_rmse if hasattr(m, "val_rmse") and m.val_rmse else 0.0
+            # Support both ORM objects (attribute) and dicts (key)
+            rmse = None
+            if isinstance(m, dict):
+                rmse = m.get("val_rmse")
+            elif hasattr(m, "val_rmse"):
+                rmse = m.val_rmse
+            if not rmse:
+                rmse = 0.0
             if rmse <= 0:
                 inv_rmses.append(1e6)
             else:

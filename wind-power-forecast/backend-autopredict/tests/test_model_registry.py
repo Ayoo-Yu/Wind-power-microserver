@@ -78,6 +78,27 @@ class TestComputeWeights:
         assert len(weights) == 1
         assert abs(weights[0] - 1.0) < 1e-9
 
+    def test_dict_input_with_val_rmse(self):
+        """_compute_weights should work with dict objects from get_active_models."""
+        registry = ModelRegistry()
+        models = [
+            {"val_rmse": 10.0},
+            {"val_rmse": 5.0},
+        ]
+        weights = registry._compute_weights(models)
+        assert len(weights) == 2
+        assert abs(sum(weights) - 1.0) < 1e-9
+        # model with lower RMSE should get higher weight
+        assert weights[1] > weights[0]
+
+    def test_dict_input_without_val_rmse(self):
+        """Dict without val_rmse key gets treated as zero RMSE."""
+        registry = ModelRegistry()
+        models = [{"algorithm": "xgboost"}]
+        weights = registry._compute_weights(models)
+        assert len(weights) == 1
+        assert abs(weights[0] - 1.0) < 1e-9
+
 
 class TestActivationThreshold:
     """测试激活阈值判断"""
