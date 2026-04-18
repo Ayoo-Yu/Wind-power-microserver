@@ -28,6 +28,8 @@ class WindPowerPredictor:
         self.target_col_name = f'power_diff_{self.n_shift}'
         self.feature_power_t_minus_N_col_name = f'power_actual_at_t_minus_{self.n_shift}'
         self._is_fitted = False
+        self.features = None
+        self.targets = None
 
     def _prepare_features_common(self, data):
         features_original_copy = data.copy()
@@ -209,10 +211,35 @@ class WindPowerPredictor:
              # print(f"X_train NaN sum:\n{X_train.isnull().sum()}")
              return False
         
+        self.features = X_train_scaled
+        self.targets = y_train
         self.model.fit(X_train_scaled, y_train)
         self._is_fitted = True # 标记为已拟合
         print(f"--- 模型训练完成 (Shift={self.n_shift}) ---")
         return True
+
+    def train_quantile(self, data, alpha=0.5):
+        """训练分位数回归模型。"""
+        import xgboost as xgb
+
+        if self.features is None or self.scaler is None:
+            self.train(data)
+
+        X = self.scaler.transform(self.features)
+        y = self.targets
+
+        self.q_model = xgb.XGBRegressor(
+            n_estimators=100,
+            learning_rate=0.1,
+            max_depth=6,
+            min_child_weight=1,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            objective='reg:quantileerror',
+            quantile_alpha=alpha,
+        )
+        self.q_model.fit(X, y)
+        self.quantile_alpha = alpha
 
     def predict(self, test_data):
         if not self._is_fitted:
@@ -307,6 +334,12 @@ class WindPowerPredictor:
             config_path = os.path.join(directory, 'predictor_config.joblib')
 
             self.model.save_model(model_path)
+
+            # 保存分位数模型
+            if hasattr(self, 'q_model') and self.q_model is not None:
+                q_model_path = os.path.join(directory, f'model_q{int(self.quantile_alpha * 100):02d}.json')
+                self.q_model.save_model(q_model_path)
+
             joblib.dump(self.scaler, scaler_path)
             joblib.dump(self.numeric_features, features_path)
             
@@ -337,8 +370,19 @@ class WindPowerPredictor:
                 self._is_fitted = False
                 return False
 
-            self.model = xgb.XGBRegressor() 
+            self.model = xgb.XGBRegressor()
             self.model.load_model(model_path)
+
+            # 加载分位数模型
+            for q_alpha in [0.05, 0.95]:
+                q_path = os.path.join(directory, f'model_q{int(q_alpha * 100):02d}.json')
+                if os.path.exists(q_path):
+                    if not hasattr(self, 'q_models'):
+                        self.q_models = {}
+                    q_m = xgb.XGBRegressor()
+                    q_m.load_model(q_path)
+                    self.q_models[q_alpha] = q_m
+
             self.scaler = joblib.load(scaler_path)
             self.numeric_features = joblib.load(features_path) 
             if not self.numeric_features: # 如果加载的特征列表为空
