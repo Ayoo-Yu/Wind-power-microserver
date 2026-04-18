@@ -8,7 +8,7 @@ from .base import Base
 class ModelVersion(Base):
     __tablename__ = "model_versions"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     farm_code = Column(String(50), nullable=False)
     task_type = Column(String(20), nullable=False)  # supershort / short / medium
     algorithm = Column(String(50), nullable=False)   # xgboost / lightgbm_gbdt / lightgbm_dart / lightgbm_goss
@@ -28,5 +28,6 @@ class ModelVersion(Base):
 
     __table_args__ = (
         Index("idx_mv_farm_type", "farm_code", "task_type"),
-        Index("idx_mv_active", "farm_code", "task_type", "is_active"),
+        Index("idx_mv_active", "farm_code", "task_type", "is_active",
+              postgresql_where=(is_active == True)),
     )
