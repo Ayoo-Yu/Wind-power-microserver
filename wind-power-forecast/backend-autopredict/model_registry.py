@@ -2,11 +2,7 @@
 import os
 import sys
 import logging
-import json
 from datetime import datetime
-
-import joblib
-import numpy as np
 
 # 确保 backend-autopredict 根目录在 sys.path 中
 _BACKEND_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -118,9 +114,14 @@ class ModelRegistry:
         """停用一个模型版本。"""
         with db_session() as session:
             version = session.query(ModelVersion).get(model_id)
-            if version and version.is_active:
-                version.is_active = False
-                version.deactivated_at = datetime.now()
+            if not version:
+                logger.warning("Model version %d not found for deactivation", model_id)
+                return
+            if not version.is_active:
+                logger.info("Model version %d already inactive", model_id)
+                return
+            version.is_active = False
+            version.deactivated_at = datetime.now()
 
     def _should_activate(self, task_type: str, val_accuracy: float | None) -> bool:
         """判断模型是否达到激活阈值。"""
