@@ -43,6 +43,7 @@
           <el-menu-item index="/accuracy-report" v-if="hasPermission('view_accuracy_report') || hasPermission('view_all_data')">
             准确率/合格率报表
           </el-menu-item>
+          <el-menu-item index="/power-curve" v-if="hasPermission('view_all_data')">功率曲线分析</el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="/group-exchange" v-if="hasPermission('manage_weather_data') || hasPermission('manage_reports')">
@@ -404,11 +405,11 @@ export default {
 }
 
 .sidebar {
-  background: linear-gradient(180deg, #081a2a 0%, #071626 100%);
-  border-right: 1px solid rgba(129, 179, 214, 0.24);
+  background: var(--gradient-sidebar);
+  border-right: 1px solid rgba(18, 215, 255, 0.12);
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 1000;
-  box-shadow: 4px 0 14px rgba(0, 0, 0, 0.22);
+  box-shadow: 4px 0 18px rgba(0, 0, 0, 0.3), 1px 0 0 rgba(18, 215, 255, 0.08);
 }
 
 .brand {
@@ -418,11 +419,12 @@ export default {
   justify-content: center;
   padding: 16px;
   cursor: pointer;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(18, 215, 255, 0.1);
 }
 
 .brand-logo {
   height: 40px;
+  filter: drop-shadow(0 0 8px rgba(18, 215, 255, 0.2));
 }
 
 .collapse-icon {
@@ -457,15 +459,20 @@ export default {
 }
 
 .el-menu-item.is-active {
-  background: linear-gradient(90deg, rgba(18, 215, 255, 0.24), rgba(18, 215, 255, 0.04));
+  background: linear-gradient(90deg, rgba(18, 215, 255, 0.2), rgba(18, 215, 255, 0.03));
   color: #9beaff;
-  border-left: 3px solid #12d7ff;
-  box-shadow: inset 0 0 0 1px rgba(18, 215, 255, 0.2);
+  border-left: 3px solid var(--accent);
+  box-shadow: inset 0 0 0 1px rgba(18, 215, 255, 0.15), inset 4px 0 12px rgba(18, 215, 255, 0.06);
 }
 
 .el-menu-item:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
+  background: rgba(18, 215, 255, 0.06);
+  color: #c0e8ff;
+}
+
+:deep(.el-sub-menu__title:hover) {
+  background: rgba(18, 215, 255, 0.06);
+  color: #c0e8ff;
 }
 
 .el-menu-item .el-icon {
@@ -473,9 +480,10 @@ export default {
 }
 
 .header {
-  background: var(--card-dark);
-  backdrop-filter: blur(20px);
-  border-bottom: 1px solid var(--border-color);
+  background: rgba(16, 38, 58, 0.85);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-bottom: 1px solid rgba(18, 215, 255, 0.1);
   z-index: 999;
   display: flex;
   align-items: center;
@@ -513,9 +521,14 @@ export default {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  border: 1px solid rgba(146, 186, 220, 0.35);
+  border: 1px solid rgba(18, 215, 255, 0.25);
   background: rgba(10, 25, 38, 0.6);
   color: var(--text-primary);
+  transition: all var(--transition-normal);
+}
+.alert-btn:hover {
+  border-color: rgba(18, 215, 255, 0.5);
+  box-shadow: 0 0 10px rgba(18, 215, 255, 0.2);
 }
 
 .system-time-chip {
@@ -567,7 +580,7 @@ export default {
 .auth-loading-overlay {
   position: fixed;
   inset: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(6, 18, 31, 0.8);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -575,10 +588,11 @@ export default {
 }
 
 .auth-loading-container {
-  background-color: #fff;
+  background: rgba(15, 42, 64, 0.95);
+  border: 1px solid rgba(18, 215, 255, 0.2);
   padding: 30px;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-radius: 12px;
+  box-shadow: 0 0 30px rgba(6, 18, 31, 0.5);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -587,12 +601,12 @@ export default {
 .auth-loading-text {
   margin-top: 15px;
   font-size: 16px;
-  color: #333;
+  color: var(--text-secondary);
 }
 
 .loading-icon {
   font-size: 32px;
-  color: #409eff;
+  color: var(--accent);
   animation: rotating 2s linear infinite;
 }
 

@@ -17,6 +17,7 @@ const SystemSettings = () => import('../components/SystemSettings.vue')
 const ReportManagement = () => import('../components/ReportManagement.vue')
 const WeatherDataFetcher = () => import('../components/WeatherDataFetcher.vue')
 const FarmManagement = () => import('../components/FarmManagement.vue')
+const PowerCurveAnalysis = () => import('../components/PowerCurveAnalysis.vue')
 
 const routes = [
   {
@@ -84,6 +85,12 @@ const routes = [
         name: 'FarmManagement',
         component: FarmManagement,
         meta: { requiredPermissions: ['manage_reports'], keepAlive: true }
+      },
+      {
+        path: 'power-curve',
+        name: 'PowerCurveAnalysis',
+        component: PowerCurveAnalysis,
+        meta: { requiredPermissions: ['view_all_data'], keepAlive: true }
       },
       {
         path: 'alarm-center',
