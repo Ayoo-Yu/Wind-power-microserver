@@ -113,6 +113,23 @@ def add_new_param_version(version, gbdt_params, dart_params, goss_params):
     print(f"成功添加新参数版本: {version}")
     return True
 
+def get_quantile_params(version=None):
+    """为每个算法变体生成 5% 和 95% 分位数参数。"""
+    import copy
+    base_params_list = get_unified_params(version)
+    result = {}
+    for quantile_key, alpha_val in [('q05', 0.05), ('q95', 0.95)]:
+        q_params = []
+        for params in base_params_list:
+            p = copy.deepcopy(params)
+            p['objective'] = 'quantile'
+            p['alpha'] = alpha_val
+            if 'metric' in p:
+                p['metric'] = 'quantile'
+            q_params.append(p)
+        result[quantile_key] = q_params
+    return result
+
 def save_param_versions_to_file():
     """
     将当前参数版本保存到文件
@@ -120,7 +137,7 @@ def save_param_versions_to_file():
     import os
     import json
     from datetime import datetime
-    
+
     # 获取当前文件路径
     current_file = os.path.abspath(__file__)
     

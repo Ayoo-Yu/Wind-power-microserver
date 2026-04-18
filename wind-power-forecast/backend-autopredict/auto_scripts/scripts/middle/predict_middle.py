@@ -649,7 +649,23 @@ def predict(input_file, models_dir, output_file, window_size=16, lags=4, model_t
         # 使用加载的模型和标准化器
         model = model_to_load
         scaler = scaler_to_load
-        
+
+        # --- 加载分位数模型 ---
+        model_q05 = None
+        model_q95 = None
+        try:
+            q05_path = os.path.join(models_dir, 'best_models', 'production_model_q05.joblib')
+            q95_path = os.path.join(models_dir, 'best_models', 'production_model_q95.joblib')
+            if os.path.exists(q05_path):
+                model_q05 = joblib.load(q05_path)
+                logging.info("已加载 5%% 分位数模型: %s", q05_path)
+            if os.path.exists(q95_path):
+                model_q95 = joblib.load(q95_path)
+                logging.info("已加载 95%% 分位数模型: %s", q95_path)
+        except Exception as qe:
+            logging.warning("分位数模型加载失败（不影响点预测）: %s", qe)
+        # --- 分位数加载结束 ---
+
         # 2. 加载新数据
         print_separator("加载并预处理数据")
         logger.info(f"从 {input_file} 加载新数据...")
@@ -832,7 +848,28 @@ def predict(input_file, models_dir, output_file, window_size=16, lags=4, model_t
         logger.info(f"即将为模型 {determined_model_type} 开始预测。")
         predictions = model.predict(X_new_flat_selected)
         logger.info(f"生成了 {len(predictions)} 个预测值。")
-        
+
+        # --- 分位数预测 ---
+        predictions_lower = None
+        predictions_upper = None
+        if model_q05 is not None and model_q95 is not None:
+            try:
+                wfcapacity = float(os.environ.get('WF_CAPACITY', '779.0'))
+                predictions_lower = np.asarray(model_q05.predict(X_new_flat_selected))
+                predictions_upper = np.asarray(model_q95.predict(X_new_flat_selected))
+                # 强制排序：lower <= pred <= upper
+                predictions_lower = np.minimum(predictions_lower, predictions)
+                predictions_upper = np.maximum(predictions_upper, predictions)
+                # 限制在 [0, capacity]
+                predictions_lower = np.clip(predictions_lower, 0, wfcapacity)
+                predictions_upper = np.clip(predictions_upper, 0, wfcapacity)
+                logging.info("已生成 90%% 预测区间")
+            except Exception as qe:
+                logging.warning("分位数预测失败（不影响点预测）: %s", qe)
+                predictions_lower = None
+                predictions_upper = None
+        # --- 分位数预测结束 ---
+
         # 8. 格式化并保存输出
         print_separator("保存预测结果")
         logger.info("格式化并保存预测结果...")
@@ -845,10 +882,14 @@ def predict(input_file, models_dir, output_file, window_size=16, lags=4, model_t
             logger.error("作为备用方案，将只保存没有时间戳的预测。")
             predictions_df = pd.DataFrame({'Predicted_Power': predictions})
         else:
-            predictions_df = pd.DataFrame({
+            result_data = {
                 'Timestamp': prediction_timestamps,
                 'Predicted_Power': predictions
-            })
+            }
+            if predictions_lower is not None and predictions_upper is not None:
+                result_data['Lower_90'] = predictions_lower
+                result_data['Upper_90'] = predictions_upper
+            predictions_df = pd.DataFrame(result_data)
             # 按时间戳排序以确保顺序正确
             predictions_df = predictions_df.sort_values(by='Timestamp')
         
@@ -914,6 +955,9 @@ def predict(input_file, models_dir, output_file, window_size=16, lags=4, model_t
             if 'Predicted_Power' in predictions_for_upload.columns:
                  predictions_for_upload.rename(columns={'Predicted_Power': 'Predicted Power'}, inplace=True)
                  logger.info("已将 'Predicted_Power' 列重命名为 'Predicted Power'")
+                 if 'Lower_90' in predictions_for_upload.columns and 'Upper_90' in predictions_for_upload.columns:
+                     predictions_for_upload['Lower 90'] = predictions_for_upload['Lower_90']
+                     predictions_for_upload['Upper 90'] = predictions_for_upload['Upper_90']
             else:
                  logger.warning("在预测结果文件中未找到 'Predicted_Power' 列，请检查文件内容和目标API要求。")
                  # Decide whether to proceed or not based on whether the column is critical
