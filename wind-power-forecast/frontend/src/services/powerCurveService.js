@@ -1,4 +1,5 @@
 import { getPowerCompareData } from '../api/powerCompareApi'
+import { getFarms } from '../api/farmApi'
 import farmService from '../utils/farmService'
 import axiosInstance from '../api/axios'
 
@@ -11,19 +12,48 @@ const CUT_OUT_SPEED = 25
 const CURTAILMENT_STD_THRESHOLD = 0.05
 const MIN_CONSECUTIVE = 5
 const ISOLATION_WINDOW = 3
+const DEFAULT_CAPACITY = 779.0
+
+const farmCapacityCache = new Map()
+
+/**
+ * Fetch the installed capacity (in kW) for a given farm code.
+ * Uses a simple in-memory cache to avoid repeated API calls.
+ */
+async function fetchFarmCapacity(farmCode) {
+  if (farmCapacityCache.has(farmCode)) {
+    return farmCapacityCache.get(farmCode)
+  }
+  try {
+    const farms = await getFarms()
+    const farm = (farms || []).find(
+      (f) => f.farm_code === farmCode
+    )
+    const capacity = farm && Number(farm.capacity) > 0
+      ? Number(farm.capacity)
+      : DEFAULT_CAPACITY
+    farmCapacityCache.set(farmCode, capacity)
+    return capacity
+  } catch {
+    return DEFAULT_CAPACITY
+  }
+}
 
 export async function fetchPowerCurveData(startDate, endDate) {
   const farmCode = farmService.getCurrentFarm()
-  const response = await getPowerCompareData({
-    start: startDate,
-    end: endDate,
-    types: ['实测值', '理论功率'],
-    farm_code: farmCode,
-  })
+  const [response] = await Promise.all([
+    getPowerCompareData({
+      start: startDate,
+      end: endDate,
+      types: ['实测值', '理论功率'],
+      farm_code: farmCode,
+    }),
+    fetchFarmCapacity(farmCode),
+  ])
   return response.data || response
 }
 
-export function extractWindPowerPairs(rawData, capacity = 779.0) {
+export function extractWindPowerPairs(rawData) {
   const points = []
   if (!rawData || !Array.isArray(rawData)) return points
 
@@ -85,13 +115,13 @@ export function computeBinStatistics(points) {
   return statistics.sort((a, b) => a.binIndex - b.binIndex)
 }
 
-export function detectAnomalies(points, binStats, capacity = 779.0) {
+export function detectAnomalies(points, binStats, capacity = DEFAULT_CAPACITY) {
   const binLookup = new Map()
   for (const stat of binStats) {
     binLookup.set(stat.binIndex, stat)
   }
 
-  const results = points.map((p) => {
+  const candidates = points.map((p) => {
     const binIdx = getBinIndex(p.windSpeed)
     const stat = binLookup.get(binIdx)
 
@@ -119,40 +149,48 @@ export function detectAnomalies(points, binStats, capacity = 779.0) {
     }
   })
 
-  classifyAnomalies(results, capacity)
-  return results
+  return classifyAnomalies(candidates, capacity)
 }
 
+/**
+ * Classify anomaly candidates into specific types.
+ * Returns a new array — does NOT mutate the input.
+ */
 function classifyAnomalies(results, capacity) {
-  for (let i = 0; i < results.length; i++) {
-    const r = results[i]
+  // Work on a mutable copy so the original stays untouched
+  const classified = results.map((r) => ({ ...r }))
+
+  for (let i = 0; i < classified.length; i++) {
+    const r = classified[i]
     if (r.type !== 'candidate') continue
 
     if (r.belowLower) {
-      const consecutiveBelow = countConsecutive(results, i, (item) =>
+      const consecutiveBelow = countConsecutive(classified, i, (item) =>
         item.type === 'candidate' && item.belowLower
       )
 
       if (consecutiveBelow >= MIN_CONSECUTIVE) {
-        const variance = computeLocalVariance(results, i, consecutiveBelow)
+        const variance = computeLocalVariance(classified, i, consecutiveBelow)
         const localStd = Math.sqrt(variance)
-        const ratedWindSpeed = findRatedWindSpeed(results)
-        if (r.windSpeed > ratedWindSpeed && localStd < CURTAILMENT_STD_THRESHOLD * capacity) {
-          markConsecutive(results, i, consecutiveBelow, 'curtailment')
-        } else {
-          markConsecutive(results, i, consecutiveBelow, 'underperformance')
-        }
+        const ratedWindSpeed = findRatedWindSpeed(classified)
+        const resolvedType =
+          r.windSpeed > ratedWindSpeed && localStd < CURTAILMENT_STD_THRESHOLD * capacity
+            ? 'curtailment'
+            : 'underperformance'
+        markConsecutive(classified, i, consecutiveBelow, resolvedType)
         i += consecutiveBelow - 1
         continue
       }
     }
 
-    if (r.sigmaMultiple > OUTLIER_SIGMA && isIsolated(results, i)) {
+    if (r.sigmaMultiple > OUTLIER_SIGMA && isIsolated(classified, i)) {
       r.type = 'outlier'
       continue
     }
     r.type = 'normal'
   }
+
+  return classified
 }
 
 function countConsecutive(results, startIndex, predicate) {

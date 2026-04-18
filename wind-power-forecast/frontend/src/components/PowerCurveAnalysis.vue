@@ -63,6 +63,7 @@ import {
   createAnomalyAlert,
 } from '../services/powerCurveService'
 import farmService from '../utils/farmService'
+import { getFarms } from '../api/farmApi'
 import axiosInstance from '../api/axios'
 
 export default {
@@ -78,12 +79,27 @@ export default {
     const allResults = ref([])
     const binStats = ref([])
     const summary = ref(null)
+    const farmCapacity = ref(779.0)
 
     const hasAnomalies = computed(() => {
       return summary.value && summary.value.abnormalCount > 0
     })
 
-    watch(() => farmService.getCurrentFarm(), () => {
+    async function resolveCapacity() {
+      const farmCode = farmService.getCurrentFarm()
+      try {
+        const farms = await getFarms()
+        const farm = (farms || []).find((f) => f.farm_code === farmCode)
+        if (farm && Number(farm.capacity) > 0) {
+          farmCapacity.value = Number(farm.capacity)
+        }
+      } catch {
+        // keep default 779.0
+      }
+    }
+
+    watch(() => farmService.getCurrentFarm(), async () => {
+      await resolveCapacity()
       if (dateRange.value && dateRange.value.length === 2) {
         loadData()
       }
@@ -127,7 +143,7 @@ export default {
         const rawData = await fetchPowerCurveData(dateRange.value[0], dateRange.value[1])
         const points = extractWindPowerPairs(rawData)
         const stats = computeBinStatistics(points)
-        const results = detectAnomalies(points, stats)
+        const results = detectAnomalies(points, stats, farmCapacity.value)
 
         allResults.value = results
         binStats.value = stats
@@ -302,11 +318,12 @@ export default {
       }
     }
 
-    onMounted(() => {
+    onMounted(async () => {
       const end = new Date()
       const start = new Date()
       start.setTime(start.getTime() - 7 * 24 * 3600 * 1000)
       dateRange.value = [start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)]
+      await resolveCapacity()
       nextTick(() => {
         initChart()
         loadData()
