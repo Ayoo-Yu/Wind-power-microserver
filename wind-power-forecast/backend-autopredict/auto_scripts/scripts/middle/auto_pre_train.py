@@ -41,6 +41,9 @@ from data_processor_middle import (
     filter_data_by_date,
     update_training_csv_from_db
 )
+
+# DB预测输入加载开关
+DB_PREDICTION_ENABLED = os.environ.get('DB_PREDICTION_ENABLED', 'false').lower() == 'true'
 from models_middle import get_lightgbm_params, get_unified_params
 from train_middle import train_and_evaluate, train_multiple_datasets, calculate_model_weights, save_predictions
 from utils_middle import visualize_results
@@ -248,6 +251,48 @@ def train_model(data_file_path, model_folder_today):
                 months_desc = f"{model_info['months']}个月" if model_info['months'] else "全部数据"
                 print(f"  - 最佳{algo_type}模型: 使用{months_desc}数据, 评分={model_info['score']:.4f}")
                 logging.info(f"  - 最佳{algo_type}模型: 使用{months_desc}数据, 评分={model_info['score']:.4f}")
+
+        # --- 注册模型到 ModelRegistry ---
+        try:
+            from model_registry import ModelRegistry
+            farm_code = os.environ.get('FARM_CODE', 'DEFAULT_FARM')
+            registry = ModelRegistry()
+
+            wfcapacity = float(os.environ.get('WF_CAPACITY', '779.0'))
+
+            for algo_type, model_info_dict in best_models_info.items():
+                if model_info_dict.get('model') is None:
+                    continue
+
+                model_path = os.path.join(model_folder_today, 'best_models', f'{algo_type}.joblib')
+                if not os.path.exists(model_path):
+                    best_dir = os.path.join(model_folder_today, 'best_models')
+                    os.makedirs(best_dir, exist_ok=True)
+                    model_path = os.path.join(best_dir, f'{algo_type}.joblib')
+                    joblib.dump(model_info_dict['model'], model_path)
+
+                rmse = model_info_dict.get('rmse', model_info_dict.get('score'))
+                if rmse is not None and rmse < 0:
+                    import numpy as np
+                    rmse = np.sqrt(-rmse)
+                val_accuracy = 1 - (rmse / wfcapacity) if rmse is not None and wfcapacity > 0 else None
+
+                registry.register(
+                    farm_code=farm_code,
+                    task_type="medium",
+                    algorithm=f"lightgbm_{algo_type.lower()}",
+                    model_path=model_path,
+                    hyperparams=model_info_dict.get('params'),
+                    val_rmse=float(rmse) if rmse is not None else None,
+                    val_accuracy=float(val_accuracy) if val_accuracy is not None else None,
+                    training_samples=model_info_dict.get('training_samples'),
+                )
+                print(f"  ✅ 已注册 {algo_type} 模型到 ModelRegistry (medium)")
+                logging.info(f"已注册 %s 模型到 ModelRegistry (medium)", algo_type)
+        except Exception as reg_e:
+            print(f"  ⚠️ 模型注册失败（不影响训练结果）: {reg_e}")
+            logging.warning(f"模型注册失败（不影响训练结果）: {reg_e}", exc_info=True)
+        # --- 注册结束 ---
         
         # 新增：选择全局最优模型
         print_section("选择全局最优模型")
@@ -451,6 +496,42 @@ def monitor_training(today_date):
             logging.info(f"❌ 模型文件未找到在 {model_folder_today}，模型不可用。")
         break # Exit loop after attempting training
 
+
+def _try_load_from_db(farm_code, target_dt):
+    """尝试从 ecmwf_meteorological_data 表加载中期预测输入数据
+
+    Args:
+        farm_code: 风场编码
+        target_dt: 目标日期 (datetime)
+
+    Returns:
+        DataFrame 或 None（查询失败时）
+    """
+    try:
+        from db_session import db_session
+        from services.ecmwf_ingest_service import query_prediction_data
+
+        start_time = target_dt - timedelta(hours=4)
+        end_time = target_dt + timedelta(hours=72)  # 中期72小时
+
+        with db_session() as session:
+            df = query_prediction_data(
+                db=session,
+                farm_code=farm_code,
+                start_time=start_time,
+                end_time=end_time,
+                data_type='DQ',
+            )
+
+        if df is not None and not df.empty:
+            logging.info(f"DB查询成功(middle): {len(df)} rows for {target_dt.strftime('%Y%m%d')}")
+            return df
+        return None
+    except Exception as e:
+        logging.warning(f"DB预测输入加载失败(middle): {e}")
+        return None
+
+
 def monitor_prediction(today_date):
     """
     监控预测过程，确保预测任务完成
@@ -518,10 +599,25 @@ def monitor_prediction(today_date):
         # 检查是否有 *明天* 的预测输入文件
         csv_file = os.path.join(PREC_SV_FOLDER, f"predict_input_{tomorrow_date_str}.csv")
         if not os.path.exists(csv_file):
-            print(f"明天的预测输入文件 ({tomorrow_date_str}) 不存在，等待 {wait_interval} 秒后重试: {csv_file}")
-            logging.info(f"明天的预测输入文件 ({tomorrow_date_str}) 不存在，等待 {wait_interval} 秒后重试: {csv_file}")
-            time.sleep(wait_interval)
-            continue
+            # 尝试从数据库加载预测输入
+            if DB_PREDICTION_ENABLED:
+                farm_code = os.environ.get('FARM_CODE', 'DEFAULT_FARM')
+                db_df = _try_load_from_db(farm_code, tomorrow_dt)
+                if db_df is not None and not db_df.empty:
+                    os.makedirs(PREC_SV_FOLDER, exist_ok=True)
+                    db_df.to_csv(csv_file, index=False)
+                    print(f"✅ 从数据库加载中期预测输入成功，已保存到: {csv_file}")
+                    logging.info(f"从数据库加载中期预测输入成功，已保存到: {csv_file}")
+                else:
+                    print(f"数据库中也无数据，等待 {wait_interval} 秒后重试")
+                    logging.info(f"数据库中也无数据，等待 {wait_interval} 秒后重试")
+                    time.sleep(wait_interval)
+                    continue
+            else:
+                print(f"明天的预测输入文件 ({tomorrow_date_str}) 不存在，等待 {wait_interval} 秒后重试: {csv_file}")
+                logging.info(f"明天的预测输入文件 ({tomorrow_date_str}) 不存在，等待 {wait_interval} 秒后重试: {csv_file}")
+                time.sleep(wait_interval)
+                continue
         
         # 执行预测
         print(f"✅ 发现明天的预测文件：{csv_file}，使用今天的模型执行预测...")
