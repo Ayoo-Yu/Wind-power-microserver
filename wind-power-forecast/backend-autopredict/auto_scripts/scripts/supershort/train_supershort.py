@@ -171,6 +171,33 @@ def main():
     logging.info(f"\n{'='*10} 训练过程完成 {'='*10}")
     logging.info(f"总共成功训练并保存了 {successful_trains} 个模型。")
 
+    # --- 注册模型到 ModelRegistry ---
+    try:
+        from model_registry import ModelRegistry
+        farm_code = os.environ.get('FARM_CODE', 'DEFAULT_FARM')
+        registry = ModelRegistry()
+
+        for n in range(MIN_SHIFT, MAX_SHIFT + 1):
+            model_dir = os.path.join(MODEL_OUTPUT_DIR, f'shift_{n}')
+            model_path = os.path.join(model_dir, 'model.joblib')
+            scaler_path = os.path.join(model_dir, 'scaler.joblib')
+
+            if not os.path.exists(model_path):
+                continue
+
+            registry.register(
+                farm_code=farm_code,
+                task_type="supershort",
+                algorithm="xgboost",
+                model_path=model_path,
+                scaler_path=scaler_path if os.path.exists(scaler_path) else None,
+                val_accuracy=None,
+            )
+        logging.info("已注册超短期模型到 ModelRegistry")
+    except Exception as reg_e:
+        logging.warning(f"超短期模型注册失败（不影响训练结果）: {reg_e}", exc_info=True)
+    # --- 注册结束 ---
+
     # 确保所有模型都已成功训练
     expected_model_count = MAX_SHIFT - MIN_SHIFT + 1
     if successful_trains < expected_model_count:
