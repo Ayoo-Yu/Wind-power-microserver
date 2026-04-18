@@ -174,7 +174,7 @@ class ModelRegistry:
                 rmse = m.get("val_rmse")
             elif hasattr(m, "val_rmse"):
                 rmse = m.val_rmse
-            if not rmse:
+            if rmse is None:
                 rmse = 0.0
             if rmse <= 0:
                 inv_rmses.append(1e6)

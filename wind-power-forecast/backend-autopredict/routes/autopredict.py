@@ -8,6 +8,7 @@ import sys
 import shutil
 import traceback
 import uuid
+import hmac
 import threading
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, create_engine, text
@@ -292,7 +293,8 @@ def safe_pm2_command(cmd_args, timeout=30, capture_output=True):
         print(error_msg)
         return False, error_msg
     except Exception as e:
-        error_msg = f"命令执行异常: {str(e)}\n{traceback.format_exc()}"
+        error_msg = f"命令执行异常: {str(e)}"
+        current_app.logger.error(error_msg, exc_info=True)
         print(error_msg)
         return False, error_msg
 
@@ -353,7 +355,7 @@ def _get_running_farm_code(prediction_type):
                     farm_code = proc_name.split('_')[0]
                     if is_valid_farm_code(farm_code):
                         return farm_code
-    except:
+    except Exception:
         pass
 
     return None
@@ -721,7 +723,8 @@ def get_status():
         current_status['farm_code'] = farm_code
         return api_success(data=current_status, message="ok", legacy=current_status)
     except Exception as e:
-        error_msg = f"获取状态时出错: {str(e)}\n{traceback.format_exc()}"
+        error_msg = f"获取状态时出错: {str(e)}"
+        current_app.logger.error(error_msg, exc_info=True)
         print(error_msg)
         return api_error('获取状态时出错', code=1500, status_code=500, details=error_msg)
 
@@ -795,7 +798,8 @@ def get_fleet_overview():
         }
         return api_success(data=payload, message='获取多场站总览成功', legacy=payload)
     except Exception as e:
-        error_msg = f"获取多场站总览失败: {str(e)}\n{traceback.format_exc()}"
+        error_msg = f"获取多场站总览失败: {str(e)}"
+        current_app.logger.error(error_msg, exc_info=True)
         print(error_msg)
         return api_error('获取多场站总览失败', code=1500, status_code=500, details=error_msg)
 
@@ -1127,7 +1131,8 @@ def get_script_info():
         return api_success(data=legacy_data, message='查询进程详情成功', legacy=legacy_data)
         
     except Exception as e:
-        error_msg = f"获取脚本详情出错: {str(e)}\n{traceback.format_exc()}"
+        error_msg = f"获取脚本详情出错: {str(e)}"
+        current_app.logger.error(error_msg, exc_info=True)
         print(error_msg)
         record_task_history(prediction_type, 'script_info', 'failed', error_msg)
         return api_error('查询脚本详情失败', code=1500, status_code=500, details=error_msg)
@@ -1356,7 +1361,8 @@ def _update_prediction_status():
         
         return True
     except Exception as e:
-        error_msg = f"更新状态时出错: {str(e)}\n{traceback.format_exc()}"
+        error_msg = f"更新状态时出错: {str(e)}"
+        current_app.logger.error(error_msg, exc_info=True)
         print(error_msg)
         return False
 
@@ -1410,7 +1416,8 @@ def get_task_history():
             )
         
     except Exception as e:
-        error_msg = f"获取任务历史记录出错: {str(e)}\n{traceback.format_exc()}"
+        error_msg = f"获取任务历史记录出错: {str(e)}"
+        current_app.logger.error(error_msg, exc_info=True)
         print(error_msg)
         return api_error(
             '获取任务历史记录失败',
@@ -1540,39 +1547,6 @@ def get_task_status():
                 predict_online = query_pm2_state(scripts[prediction_type])
                 if predict_online and status['predictionCount'] < 96:
                     status['prediction'] = True # Mark as 'running'
-        elif prediction_type == 'supershort':
-            # 超短超期预测需要检查预测日志
-            predict_log_dir = log_dirs[prediction_type]['predict']
-            
-            # 查找指定日期的所有日志文件 (用于获取最新时间)
-            date_logs = glob.glob(os.path.join(predict_log_dir, f"{date_str}*.log"))
-
-            # 通过检查auto_predict目录下的flag文件来计算预测完成次数和状态
-            predict_flag_dir = os.path.join(log_dirs[prediction_type]['base'], 'auto_predict')
-            predict_done_flags = []
-            if os.path.exists(predict_flag_dir):
-                # 查找指定日期的所有预测完成标志文件
-                predict_done_flags = glob.glob(os.path.join(predict_flag_dir, f"predict_{date_str}*.flag"))
-                status['predictionCount'] = len(predict_done_flags)
-            else:
-                status['predictionCount'] = 0 # Default to 0 if flag dir doesn't exist
-
-            # 超短超期预测每15分钟一次，一天应该有96次
-            status['prediction'] = status['predictionCount'] >= 96
-
-            if status['predictionCount'] > 0:
-                # If any prediction was done, get the time of the latest flag
-                latest_flag = max(predict_done_flags, key=os.path.getmtime)
-                status['predictionTime'] = datetime.datetime.fromtimestamp(os.path.getmtime(latest_flag)).strftime('%Y-%m-%d %H:%M:%S')
-            elif date_logs: # Fallback to log time if no flags but logs exist
-                latest_log = max(date_logs, key=os.path.getmtime)
-                status['predictionTime'] = datetime.datetime.fromtimestamp(os.path.getmtime(latest_log)).strftime('%Y-%m-%d %H:%M:%S')
-                
-            # 只有当天才检查PM2进程状态，并用来判断是否 "运行中"
-            if is_today:
-                predict_online = query_pm2_state(scripts[prediction_type])
-                if predict_online and status['predictionCount'] < 96:
-                    status['prediction'] = True # Mark as 'running'
         else: # short and medium
             # 短期和中期预测查找完成标志文件
             # predict_flag_dir = os.path.join(log_dirs[prediction_type]['base'], 'predictions') # 旧逻辑：错误的目录假设
@@ -1615,7 +1589,7 @@ def get_task_status():
 def _check_internal_auth():
     """Verify internal API key for sensitive operations."""
     api_key = request.headers.get('X-API-Key', '')
-    if api_key != Config.SECRET_KEY:
+    if not hmac.compare_digest(api_key, Config.SECRET_KEY or ''):
         return api_error('未授权访问', code=1401, status_code=401)
     return None
 

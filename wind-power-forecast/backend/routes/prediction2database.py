@@ -118,7 +118,7 @@ def batch_create_supershortl_power():
 
     except Exception as e:
         current_app.logger.error(f"文件处理失败: {str(e)}")
-        return jsonify({"error": f"文件处理失败: {str(e)}"}), 500 
+        return jsonify({"error": "文件处理失败，请检查文件格式"}), 500 
     
 @prediction2database_bp.route('/batch_shortl_power', methods=['POST'])
 def batch_create_shortl_power():
@@ -207,7 +207,7 @@ def batch_create_shortl_power():
 
     except Exception as e:
         current_app.logger.error(f"文件处理失败: {str(e)}")
-        return jsonify({"error": f"文件处理失败: {str(e)}"}), 500
+        return jsonify({"error": "文件处理失败，请检查文件格式"}), 500
 
 @prediction2database_bp.route('/batch_mid_power', methods=['POST'])
 def batch_create_mid_power():
@@ -296,4 +296,4 @@ def batch_create_mid_power():
             
     except Exception as e:
         current_app.logger.error(f"文件处理失败: {str(e)}")
-        return jsonify({"error": f"文件处理失败: {str(e)}"}), 500 
+        return jsonify({"error": "文件处理失败，请检查文件格式"}), 500 

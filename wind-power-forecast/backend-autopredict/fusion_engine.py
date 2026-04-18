@@ -108,6 +108,9 @@ class FusionEngine:
                 bucket = MINIO_CONFIG["buckets"].get("models", "wind-models")
                 data = client.get_object(bucket, s3_path)
                 import io
+                if not s3_path.endswith(('.joblib', '.pkl', '.model')):
+                    logger.error("Invalid model file extension: %s", s3_path)
+                    return None
                 return joblib.load(io.BytesIO(data.read()))
             except Exception as e:
                 logger.error("Failed to load model from S3 %s: %s", s3_path, e)

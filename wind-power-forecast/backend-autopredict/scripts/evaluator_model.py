@@ -10,7 +10,9 @@ import os
 import pathlib
 
 class ModelEvaluator:
-    def __init__(self, data_path, output_dir=None, wfcapacity=779.0):
+    def __init__(self, data_path, output_dir=None, wfcapacity=None):
+        if wfcapacity is None:
+            wfcapacity = float(os.environ.get('WF_CAPACITY', 779.0))
         """
         初始化模型评估器
         

@@ -51,7 +51,7 @@
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue'
+import { ref, watch, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
 import {
@@ -81,6 +81,12 @@ export default {
 
     const hasAnomalies = computed(() => {
       return summary.value && summary.value.abnormalCount > 0
+    })
+
+    watch(() => farmService.getCurrentFarm(), () => {
+      if (dateRange.value && dateRange.value.length === 2) {
+        loadData()
+      }
     })
 
     const dateShortcuts = [
@@ -275,11 +281,10 @@ export default {
           byType[label].push(a)
         }
 
-        for (const [label, points] of Object.entries(byType)) {
+        const requests = Object.entries(byType).map(([label, points]) => {
           const timestamps = points.map((p) => p.timestamp).filter(Boolean).sort()
-          if (timestamps.length === 0) continue
-
-          await axiosInstance.post('/api/v1/report/quality-markers', {
+          if (timestamps.length === 0) return Promise.resolve()
+          return axiosInstance.post('/api/v1/report/quality-markers', {
             farm_code: farmService.getCurrentFarm(),
             start_time: timestamps[0],
             end_time: timestamps[timestamps.length - 1],
@@ -287,10 +292,10 @@ export default {
             reason: `自动检测: ${label} (${points.length} 个点)`,
             exclude_from_score: true,
           })
-        }
+        })
+        await Promise.all(requests)
         ElMessage.success(`已标记 ${anomalies.length} 个异常点到质量系统`)
       } catch (err) {
-        console.error('标记异常失败:', err)
         ElMessage.error('标记失败: ' + (err.message || '未知错误'))
       } finally {
         marking.value = false

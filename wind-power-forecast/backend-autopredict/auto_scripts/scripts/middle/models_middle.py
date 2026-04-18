@@ -125,7 +125,7 @@ def get_quantile_params(version=None):
             p['objective'] = 'quantile'
             p['alpha'] = alpha_val
             if 'metric' in p:
-                p['metric'] = 'quantile'
+                p['metric'] = 'mae'
             q_params.append(p)
         result[quantile_key] = q_params
     return result

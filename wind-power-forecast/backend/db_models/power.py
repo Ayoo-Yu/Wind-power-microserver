@@ -10,7 +10,7 @@ class ActualPower(Base):
     timestamp = Column(DateTime, nullable=False, index=True)
     farm_code = Column(String(50), nullable=False, index=True)  # 场站编码
     wp_true = Column(Float, nullable=True)
-    created_at = Column(DateTime, default=datetime.now())
+    created_at = Column(DateTime, default=datetime.now)
 
 class SupershortlPower(Base):
     """超短期预测功率数据模型"""
@@ -80,7 +80,7 @@ class ShortlPower(Base):
     wp_pred = Column(Float, nullable=False)
     wp_pred_lower = Column(Float, nullable=True)   # 90% 预测区间下限
     wp_pred_upper = Column(Float, nullable=True)   # 90% 预测区间上限
-    created_at = Column(DateTime, default=datetime.now())
+    created_at = Column(DateTime, default=datetime.now)
     pre_at = Column(DateTime, nullable=False)
     pre_num = Column(Integer, nullable=False)
 
@@ -94,6 +94,6 @@ class MidPower(Base):
     wp_pred = Column(Float, nullable=False)
     wp_pred_lower = Column(Float, nullable=True)   # 90% 预测区间下限
     wp_pred_upper = Column(Float, nullable=True)   # 90% 预测区间上限
-    created_at = Column(DateTime, default=datetime.now())
+    created_at = Column(DateTime, default=datetime.now)
     pre_at = Column(DateTime, nullable=False)
     pre_num = Column(Integer, nullable=False)

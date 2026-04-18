@@ -3,8 +3,6 @@ import farmService from '../utils/farmService'
 import axiosInstance from '../api/axios'
 
 const BIN_WIDTH = 0.5
-const MIN_WIND = 0
-const MAX_WIND = 25
 const MIN_SAMPLES = 5
 const CONFIDENCE_SIGMA = 2
 const OUTLIER_SIGMA = 3
@@ -98,9 +96,6 @@ export function detectAnomalies(points, binStats, capacity = 779.0) {
     const stat = binLookup.get(binIdx)
 
     if (p.windSpeed < CUT_IN_SPEED || p.windSpeed > CUT_OUT_SPEED) {
-      return { ...p, type: 'normal', binStat: stat }
-    }
-    if (p.power === 0 && p.windSpeed < CUT_IN_SPEED) {
       return { ...p, type: 'normal', binStat: stat }
     }
     if (!stat) {
@@ -221,10 +216,19 @@ function isIsolated(results, index) {
 }
 
 export function computeSummary(results) {
-  const total = results.filter((r) => r.type !== 'unknown').length
-  const outliers = results.filter((r) => r.type === 'outlier').length
-  const curtailments = results.filter((r) => r.type === 'curtailment').length
-  const underperformance = results.filter((r) => r.type === 'underperformance').length
+  let total = 0
+  let outliers = 0
+  let curtailments = 0
+  let underperformance = 0
+
+  for (const r of results) {
+    if (r.type === 'unknown') continue
+    total++
+    if (r.type === 'outlier') outliers++
+    else if (r.type === 'curtailment') curtailments++
+    else if (r.type === 'underperformance') underperformance++
+  }
+
   const abnormalCount = outliers + curtailments + underperformance
   const abnormalRate = total > 0 ? abnormalCount / total : 0
 
