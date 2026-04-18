@@ -1,4 +1,4 @@
-﻿import json
+import json
 import subprocess
 import datetime
 import glob
@@ -10,6 +10,7 @@ import traceback
 import uuid
 import hmac
 import threading
+import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
@@ -22,6 +23,43 @@ from sqlalchemy import text as _text, desc, func, case as db_case
 from datetime import datetime as _dt
 import re as _re
 
+# ---------------------------------------------------------------------------
+# Sub-module imports (extracted helpers)
+# ---------------------------------------------------------------------------
+from routes._pm2_utils import (  # noqa: F401  — re-exported for external consumers
+    prediction_status,
+    status_lock,
+    python_interpreter,
+    pm2_cmd,
+    safe_pm2_command,
+    update_pm2_status_periodically,
+    _get_running_farm_code,
+    get_pm2_processes,
+    is_process_online,
+    query_pm2_state,
+)
+from routes._farm_helpers import (  # noqa: F401
+    DEFAULT_FARM_CODE,
+    active_farm_codes_cache,
+    active_farms_cache,
+    normalize_farm_code,
+    canonicalize_farm_code,
+    get_active_farm_codes,
+    get_active_farms,
+    is_valid_farm_code,
+    resolve_farm_code,
+)
+from routes._prediction_helpers import (  # noqa: F401
+    action_lock,
+    inflight_actions,
+    build_action_key,
+    try_acquire_action_lock,
+    release_action_lock,
+    record_task_history,
+)
+
+logger = logging.getLogger(__name__)
+
 _TIME_PATTERN = _re.compile(r'^([01]\d|2[0-3]):([0-5]\d)$')
 
 
@@ -29,40 +67,6 @@ def _get_celery_tasks():
     """Lazy import to avoid requiring celery when Flask starts without workers."""
     from celery_app.tasks import train_model, run_prediction, run_supershort_predict
     return train_model, run_prediction, run_supershort_predict
-
-# 全局状态字典，其他代码依赖这个变量
-prediction_status = {
-    'short': False,
-    'medium': False,
-    'supershort': False
-}
-# 添加线程锁以确保线程安全
-status_lock = threading.Lock()
-action_lock = threading.Lock()
-inflight_actions = set()
-
-DEFAULT_FARM_CODE = "DEFAULT_FARM"
-active_farm_codes_cache = []
-active_farms_cache = []
-
-
-def normalize_farm_code(farm_code):
-    if farm_code is None:
-        return None
-    if not isinstance(farm_code, str):
-        farm_code = str(farm_code)
-    cleaned = farm_code.strip()
-    return cleaned or None
-
-
-def canonicalize_farm_code(farm_code, active_farm_codes=None):
-    normalized_code = normalize_farm_code(farm_code)
-    if not normalized_code:
-        return None
-
-    reference_codes = active_farm_codes if active_farm_codes is not None else get_active_farm_codes()
-    lookup = {code.lower(): code for code in reference_codes}
-    return lookup.get(normalized_code.lower(), normalized_code)
 
 # 获取当前文件所在目录
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -85,9 +89,9 @@ scripts = {
 # 检查脚本是否存在
 for name, path in scripts.items():
     if path and os.path.exists(path):
-        print(f"[OK] 脚本存在: {name} -> {path}")
+        logger.info("脚本存在: %s -> %s", name, path)
     else:
-        print(f"[MISSING] 脚本不存在: {name} -> {path}")
+        logger.info("脚本不存在: %s -> %s", name, path)
         # 尝试查找可能的位置
         possible_locations = [
             os.path.join(base_dir, 'auto_scripts', 'scripts', name, f'scheduler_{name}.py'),
@@ -96,7 +100,7 @@ for name, path in scripts.items():
         ]
         for loc in possible_locations:
             if os.path.exists(loc):
-                print(f"[OK] 找到替代脚本: {loc}")
+                logger.info("找到替代脚本: %s", loc)
                 scripts[name] = loc
                 break
 
@@ -108,423 +112,6 @@ for type_dirs in log_dirs.values():
     for dir_path in type_dirs.values():
         os.makedirs(dir_path, exist_ok=True)
 
-# 根据操作系统动态确定 Python 解释器路径
-def get_python_interpreter():
-    """
-    根据当前操作系统环境动态确定Python解释器路径
-    
-    Returns:
-        str: 适合当前平台的Python解释器路径
-    """
-    if sys.platform.startswith('linux'):
-        # 假设在 Linux/Docker 环境中，使用固定的 Conda 环境路径
-        interpreter = '/opt/conda/envs/wind-power-env/bin/python'
-        print(f"检测到 Linux/Docker 环境，使用Python解释器: {interpreter}")
-        return interpreter
-    elif sys.platform.startswith('win'):
-        # 在 Windows 开发环境中，优先使用当前Python解释器
-        interpreter = sys.executable
-        print(f"检测到 Windows 环境，使用当前Python解释器: {interpreter}")
-        return interpreter
-    elif sys.platform.startswith('darwin'):
-        # macOS环境，与Windows类似
-        interpreter = sys.executable
-        print(f"检测到 macOS 环境，使用当前Python解释器: {interpreter}")
-        return interpreter
-    else:
-        # 其他未知操作系统，使用系统默认Python
-        print(f"未知的操作系统平台 '{sys.platform}'，使用系统默认'python'")
-        return 'python'
-
-# 初始化时获取Python解释器路径
-python_interpreter = get_python_interpreter()
-print(f"初始化完成，将使用Python解释器: {python_interpreter}")
-
-# 改进PM2路径检测
-def find_pm2_path():
-    # 使用shutil.which查找可执行文件路径
-    pm2_path = shutil.which('pm2')
-    if pm2_path:
-        print(f"找到PM2路径: {pm2_path}")
-        return pm2_path
-    
-    # 尝试从环境变量获取
-    pm2_path = os.environ.get('PM2_PATH')
-    if pm2_path and os.path.exists(pm2_path) and os.access(pm2_path, os.X_OK):
-        print(f"从环境变量获取PM2路径: {pm2_path}")
-        return pm2_path
-    
-    # 尝试常见的安装位置
-    common_paths = [
-        '/usr/local/bin/pm2',
-        '/usr/bin/pm2',
-        '/opt/node/bin/pm2',
-        '/opt/nodejs/bin/pm2',
-        '/opt/conda/bin/pm2',
-        '/usr/local/nodejs/bin/pm2',
-        os.path.expanduser('~/.nvm/versions/node/*/bin/pm2'),
-        os.path.expanduser('~/node_modules/.bin/pm2')
-    ]
-    
-    for path_pattern in common_paths:
-        # 处理可能包含通配符的路径
-        if '*' in path_pattern:
-            import glob
-            matching_paths = glob.glob(path_pattern)
-            for path in matching_paths:
-                if os.path.isfile(path) and os.access(path, os.X_OK):
-                    print(f"在扩展路径中找到PM2: {path}")
-                    return path
-        elif os.path.isfile(path_pattern) and os.access(path_pattern, os.X_OK):
-            print(f"在常见位置找到PM2: {path_pattern}")
-            return path_pattern
-    
-    # 如果在Windows上运行
-    if sys.platform.startswith('win'):
-        # 尝试使用npm路径
-        npm_path = shutil.which('npm')
-        if npm_path:
-            npm_dir = os.path.dirname(npm_path)
-            pm2_win_path = os.path.join(npm_dir, 'pm2.cmd')
-            if os.path.exists(pm2_win_path):
-                print(f"在Windows上找到PM2: {pm2_win_path}")
-                return pm2_win_path
-    
-    # 最后的回退选项
-    print(f"未找到PM2可执行文件，使用默认命令: pm2")
-    return 'pm2'
-
-# 使用改进的函数获取PM2路径
-pm2_cmd = find_pm2_path()
-
-# 安全的PM2命令执行函数
-def safe_pm2_command(cmd_args, timeout=30, capture_output=True):
-    """
-    安全地执行PM2命令，添加超时和错误处理
-    
-    Args:
-        cmd_args: PM2命令参数列表
-        timeout: 命令执行超时时间（秒）
-        capture_output: 是否捕获输出
-        
-    Returns:
-        tuple: (成功与否, 结果对象或错误消息)
-    """
-    full_cmd = [pm2_cmd] + cmd_args
-    try:
-        print(f"执行命令: {' '.join(full_cmd)}")
-        
-        # Special handling for 'pm2 logs' encoding
-        is_logs_command = 'logs' in cmd_args and cmd_args[0].lower() == 'logs' # More specific check
-
-        if capture_output:
-            if is_logs_command:
-                # Get raw bytes for logs to handle encoding manually
-                # print(f"DEBUG: Executing logs command, getting raw bytes: {' '.join(full_cmd)}")
-                proc = subprocess.run(
-                    full_cmd,
-                    capture_output=True,
-                    timeout=timeout,
-                    check=False # Check manually after decoding
-                )
-                # Attempt to decode stdout and stderr
-                stdout_decoded, stderr_decoded = "", ""
-                if proc.stdout:
-                    try:
-                        stdout_decoded = proc.stdout.decode('utf-8')
-                    except UnicodeDecodeError:
-                        try:
-                            # print("DEBUG: UTF-8 decode failed for stdout, trying GBK...")
-                            stdout_decoded = proc.stdout.decode('gbk') 
-                        except UnicodeDecodeError:
-                            # print("DEBUG: GBK decode failed for stdout, trying latin-1...")
-                            stdout_decoded = proc.stdout.decode('latin-1', errors='replace')
-                if proc.stderr:
-                    try:
-                        stderr_decoded = proc.stderr.decode('utf-8')
-                    except UnicodeDecodeError:
-                        try:
-                            # print("DEBUG: UTF-8 decode failed for stderr, trying GBK...")
-                            stderr_decoded = proc.stderr.decode('gbk')
-                        except UnicodeDecodeError:
-                            # print("DEBUG: GBK decode failed for stderr, trying latin-1...")
-                            stderr_decoded = proc.stderr.decode('latin-1', errors='replace')
-                
-                # Mimic subprocess.CompletedProcess structure for consistent handling
-                class DecodedProcessResult:
-                    def __init__(self, stdout_text, stderr_text, return_code):
-                        self.stdout = stdout_text
-                        self.stderr = stderr_text
-                        self.returncode = return_code
-                
-                decoded_result = DecodedProcessResult(stdout_decoded, stderr_decoded, proc.returncode)
-                
-                if proc.returncode != 0:
-                    # print(f"DEBUG: Logs command failed with exit code {proc.returncode}. stderr: {stderr_decoded}")
-                    # Re-raise a CalledProcessError-like exception or return a failure indicator
-                    # For simplicity with current structure, we return False and the decoded result (which contains stderr)
-                    return False, decoded_result # Error message will be constructed by caller based on this
-
-                return True, decoded_result
-            else: # Original behavior for other commands
-                result = subprocess.run(
-                    full_cmd,
-                    capture_output=True,
-                    text=True,
-                    encoding='utf-8',
-                    errors='replace',
-                    timeout=timeout,
-                    check=True
-                )
-                return True, result
-        else: # Not capturing output
-            result = subprocess.run(
-                full_cmd,
-                timeout=timeout,
-                check=True
-            )
-            return True, result
-    except subprocess.TimeoutExpired as e:
-        error_msg = f"命令执行超时 ({timeout}秒): {' '.join(full_cmd)}"
-        print(error_msg)
-        return False, error_msg
-    except subprocess.CalledProcessError as e:
-        error_msg = f"命令执行失败: {e}\n输出: {e.stdout if hasattr(e, 'stdout') else '无'}\n错误: {e.stderr if hasattr(e, 'stderr') else '无'}"
-        print(error_msg)
-        return False, error_msg
-    except Exception as e:
-        error_msg = f"命令执行异常: {str(e)}"
-        current_app.logger.error(error_msg, exc_info=True)
-        print(error_msg)
-        return False, error_msg
-
-# 添加周期性更新PM2状态的函数
-def update_pm2_status_periodically():
-    """周期性查询PM2并更新全局状态字典"""
-    print(f"[{datetime.datetime.now()}] 后台任务：正在更新PM2状态...")
-    local_status = {}  # 先操作局部变量
-
-    processes = get_pm2_processes()
-    
-    # 根据找到的进程计算状态
-    for key in scripts.keys():
-        script_name = get_script_name(key)
-        is_online = any(
-            proc.get('pm2_env', {}).get('name', '').endswith(f"_{script_name}")
-            and proc.get('pm2_env', {}).get('status', '') == "online"
-            for proc in processes
-        )
-        local_status[key] = is_online
-    
-    # 安全地更新全局字典
-    with status_lock:  # 获取锁
-        global prediction_status
-        prediction_status.update(local_status)  # 更新全局状态
-    
-    print(f"[{datetime.datetime.now()}] 后台任务：PM2状态已更新: {prediction_status}")
-
-# 初始化后台调度器
-scheduler = BackgroundScheduler(daemon=True)  # daemon=True确保主程序退出时调度器也退出
-# 每10秒运行一次更新函数 (可根据需要调整)
-scheduler.add_job(update_pm2_status_periodically, 'interval', seconds=10, id='pm2_status_updater')
-# 确保应用退出时关闭调度器
-import atexit
-atexit.register(lambda: scheduler.shutdown())
-
-def _get_running_farm_code(prediction_type):
-    """获取正在运行的预测任务的场站代码"""
-    script_path = scripts[prediction_type]
-    success, result = safe_pm2_command(['jlist'])
-
-    if not success:
-        return None
-
-    try:
-        processes = json.loads(result.stdout) if result.stdout else []
-        script_basename = os.path.basename(script_path)
-
-        for proc in processes:
-            pm2_env = proc.get('pm2_env', {})
-            proc_name = pm2_env.get('name', '')
-            status = pm2_env.get('status', '')
-
-            # 从进程名称中提取场站代码
-            if status == "online" and script_basename in proc_name:
-                # 进程名称格式: farm_type_scriptname
-                if '_' in proc_name:
-                    farm_code = proc_name.split('_')[0]
-                    if is_valid_farm_code(farm_code):
-                        return farm_code
-    except Exception:
-        pass
-
-    return None
-
-
-def get_active_farm_codes():
-    """
-    从 wind_farms 表读取有效场站编码。
-    回退策略：
-    1) 查询失败时优先返回最近一次成功缓存；
-    2) 若无缓存则返回 DEFAULT_FARM_CODE。
-    """
-    global active_farm_codes_cache
-    try:
-        with db_session() as db:
-            has_deleted_at = db.execute(
-                text(
-                    """
-                    SELECT COUNT(1)
-                    FROM information_schema.columns
-                    WHERE table_name = 'wind_farms'
-                      AND column_name = 'deleted_at'
-                    """
-                )
-            ).scalar()
-
-            if has_deleted_at:
-                query_sql = """
-                    SELECT farm_code
-                    FROM wind_farms
-                    WHERE COALESCE(is_active, TRUE) = TRUE
-                      AND deleted_at IS NULL
-                    ORDER BY farm_code
-                """
-            else:
-                query_sql = """
-                    SELECT farm_code
-                    FROM wind_farms
-                    WHERE COALESCE(is_active, TRUE) = TRUE
-                    ORDER BY farm_code
-                """
-
-            rows = db.execute(text(query_sql)).fetchall()
-
-        farm_codes = []
-        seen_codes = set()
-        for row in rows:
-            if not row:
-                continue
-            code = normalize_farm_code(row[0])
-            if not code:
-                continue
-            key = code.lower()
-            if key in seen_codes:
-                continue
-            seen_codes.add(key)
-            farm_codes.append(code)
-        if farm_codes:
-            active_farm_codes_cache = farm_codes
-            return farm_codes
-
-        if active_farm_codes_cache:
-            return active_farm_codes_cache
-        return farm_codes
-    except Exception as e:
-        if active_farm_codes_cache:
-            print(f"警告: 读取场站列表失败，使用缓存场站: {e}")
-            return active_farm_codes_cache
-        print(f"警告: 读取场站列表失败，使用默认场站: {e}")
-        return [DEFAULT_FARM_CODE]
-
-
-def get_active_farms():
-    """
-    从 wind_farms 表读取有效场站（编码+名称）。
-    回退策略：
-    1) 查询失败时优先返回最近一次成功缓存；
-    2) 若无缓存则返回 DEFAULT_FARM。
-    """
-    global active_farms_cache
-    try:
-        with db_session() as db:
-            has_deleted_at = db.execute(
-                text(
-                    """
-                    SELECT COUNT(1)
-                    FROM information_schema.columns
-                    WHERE table_name = 'wind_farms'
-                      AND column_name = 'deleted_at'
-                    """
-                )
-            ).scalar()
-
-            if has_deleted_at:
-                query_sql = """
-                    SELECT farm_code, farm_name
-                    FROM wind_farms
-                    WHERE COALESCE(is_active, TRUE) = TRUE
-                      AND deleted_at IS NULL
-                    ORDER BY farm_code
-                """
-            else:
-                query_sql = """
-                    SELECT farm_code, farm_name
-                    FROM wind_farms
-                    WHERE COALESCE(is_active, TRUE) = TRUE
-                    ORDER BY farm_code
-                """
-
-            rows = db.execute(text(query_sql)).fetchall()
-
-        farms = []
-        seen_codes = set()
-        for row in rows:
-            if not row:
-                continue
-            code = normalize_farm_code(row[0])
-            if not code:
-                continue
-            key = code.lower()
-            if key in seen_codes:
-                continue
-            seen_codes.add(key)
-            farm_name = row[1].strip() if isinstance(row[1], str) and row[1].strip() else code
-            farms.append({
-                'farm_code': code,
-                'farm_name': farm_name
-            })
-        if farms:
-            active_farms_cache = farms
-            return farms
-
-        if active_farms_cache:
-            return active_farms_cache
-        return [{'farm_code': DEFAULT_FARM_CODE, 'farm_name': DEFAULT_FARM_CODE}]
-    except Exception as e:
-        if active_farms_cache:
-            print(f"警告: 读取场站详情失败，使用缓存场站: {e}")
-            return active_farms_cache
-        print(f"警告: 读取场站详情失败，使用默认场站: {e}")
-        return [{'farm_code': DEFAULT_FARM_CODE, 'farm_name': DEFAULT_FARM_CODE}]
-
-
-def is_valid_farm_code(farm_code):
-    normalized_code = normalize_farm_code(farm_code)
-    if not normalized_code:
-        return False
-    active_code_lookup = {code.lower(): code for code in get_active_farm_codes()}
-    return normalized_code.lower() in active_code_lookup
-
-
-def resolve_farm_code(raw_farm_code):
-    """
-    解析请求中的 farm_code：
-    - 为空时使用 DEFAULT_FARM_CODE（若存在），否则使用首个有效场站
-    - 非空时原样返回
-    """
-    active_farms = get_active_farm_codes()
-    normalized_code = normalize_farm_code(raw_farm_code)
-
-    if normalized_code:
-        return canonicalize_farm_code(normalized_code, active_farms)
-
-    active_code_lookup = {code.lower(): code for code in active_farms}
-    default_code = active_code_lookup.get(DEFAULT_FARM_CODE.lower())
-    if default_code:
-        return default_code
-    return active_farms[0] if active_farms else DEFAULT_FARM_CODE
-
 
 def get_script_name(prediction_type):
     script_path = scripts[prediction_type]
@@ -533,29 +120,6 @@ def get_script_name(prediction_type):
 
 def build_process_name(farm_code, prediction_type):
     return f"{farm_code}_{get_script_name(prediction_type)}"
-
-
-def get_pm2_processes():
-    success, result = safe_pm2_command(['jlist'])
-    if not success:
-        return []
-    try:
-        output = result.stdout.strip() if hasattr(result, 'stdout') and result.stdout else ''
-        if not output:
-            return []
-        processes = json.loads(output)
-        return processes if isinstance(processes, list) else []
-    except Exception:
-        return []
-
-
-def is_process_online(process_name, processes=None):
-    proc_list = processes if processes is not None else get_pm2_processes()
-    for proc in proc_list:
-        pm2_env = proc.get('pm2_env', {})
-        if pm2_env.get('name', '') == process_name and pm2_env.get('status', '') == 'online':
-            return True
-    return False
 
 
 def get_farm_prediction_status(farm_code, processes=None):
@@ -592,92 +156,13 @@ def api_error(message, code=1500, status_code=400, details=None, legacy=None):
     return jsonify(payload), status_code
 
 
-def build_action_key(farm_code, prediction_type, action):
-    return f"{farm_code}:{prediction_type}:{action}"
-
-
-def try_acquire_action_lock(farm_code, prediction_type, action):
-    key = build_action_key(farm_code, prediction_type, action)
-    with action_lock:
-        if key in inflight_actions:
-            return False, key
-        inflight_actions.add(key)
-        return True, key
-
-
-def release_action_lock(action_key):
-    with action_lock:
-        inflight_actions.discard(action_key)
-
-def query_pm2_state(script_path):
-    """
-    查询 pm2 中指定脚本的运行状态，
-    只有当进程的 pm_exec_path 包含指定脚本且状态为 "online" 时才返回 True
-    """
-    success, result = safe_pm2_command(['jlist'])
-    if not success:
-        print(f"查询PM2状态失败: {result}")
-        return False
-        
-    try:
-        output = result.stdout
-        if not output or output.strip() == '[]':
-            print("PM2列表为空或未返回有效数据")
-            return False
-            
-        processes = json.loads(output)
-        script_basename = os.path.basename(script_path)
-        
-        for proc in processes:
-            pm2_env = proc.get('pm2_env', {})
-            exec_path = pm2_env.get('pm_exec_path', '')
-            proc_name = pm2_env.get('name', '')
-            status = pm2_env.get('status', '')
-            
-            # 检查脚本路径或进程名是否匹配
-            path_match = script_path in exec_path
-            name_match = script_basename == proc_name
-            
-            if (path_match or name_match) and status == "online":
-                print(f"找到匹配的运行中进程: {proc_name}")
-                return True
-                
-        return False
-    except Exception as e:
-        print(f"解析PM2状态时出错: {e}")
-        return False
-
-# 记录操作历史的辅助函数
-def record_task_history(task_type, action, status, details=None, user=None):
-    """记录任务操作历史
-    
-    Args:
-        task_type: 任务类型 (supershort, short, medium)
-        action: 操作类型 (start, stop, delete, schedule, etc.)
-        status: 操作状态 (success, failed)
-        details: 操作详情，可选
-        user: 操作用户，可选
-        
-    Returns:
-        UUID: 任务历史ID
-    """
-    task_id = str(uuid.uuid4())
-    try:
-        with db_session() as db:
-            task_history = TaskHistory(
-                task_id=task_id,
-                task_type=task_type,
-                action=action,
-                status=status,
-                details=details,
-                user=user
-            )
-            db.add(task_history)
-            db.commit()
-            return task_id
-    except Exception as e:
-        print(f"记录任务历史出错: {e}")
-        return None
+# 初始化后台调度器
+scheduler = BackgroundScheduler(daemon=True)  # daemon=True确保主程序退出时调度器也退出
+# 每10秒运行一次更新函数 (可根据需要调整)
+scheduler.add_job(update_pm2_status_periodically, 'interval', seconds=10, id='pm2_status_updater')
+# 确保应用退出时关闭调度器
+import atexit
+atexit.register(lambda: scheduler.shutdown())
 
 # 新建蓝图，所有接口的 URL 前缀为 /api
 autopredict_bp = Blueprint('autopredict', __name__)
@@ -687,7 +172,7 @@ autopredict_bp = Blueprint('autopredict', __name__)
 update_pm2_status_periodically()
 # 启动调度器
 scheduler.start()
-print(f"[{datetime.datetime.now()}] PM2状态监控后台任务已启动")
+logger.info("[%s] PM2状态监控后台任务已启动", datetime.datetime.now())
 
 
 @autopredict_bp.route('/farms', methods=['GET'])
@@ -725,7 +210,7 @@ def get_status():
     except Exception as e:
         error_msg = f"获取状态时出错: {str(e)}"
         current_app.logger.error(error_msg, exc_info=True)
-        print(error_msg)
+        logger.error(error_msg)
         return api_error('获取状态时出错', code=1500, status_code=500, details=error_msg)
 
 
@@ -800,7 +285,7 @@ def get_fleet_overview():
     except Exception as e:
         error_msg = f"获取多场站总览失败: {str(e)}"
         current_app.logger.error(error_msg, exc_info=True)
-        print(error_msg)
+        logger.error(error_msg)
         return api_error('获取多场站总览失败', code=1500, status_code=500, details=error_msg)
 
 
@@ -1067,24 +552,24 @@ def get_script_info():
     try:
         # 获取进程名称（去掉.py后缀）
         process_name = build_process_name(farm_code, prediction_type)
-        print(f"正在查询进程: {process_name}")  # 调试日志
-        
+        logger.debug("正在查询进程: %s", process_name)
+
         # 先检查进程是否存在
         list_success, list_result = safe_pm2_command(['list'])
-        
+
         if not list_success:
             error_msg = '无法获取PM2进程列表'
             record_task_history(prediction_type, 'script_info', 'failed', error_msg)
             return api_error(error_msg, code=1500, status_code=500, details=str(list_result))
-            
+
         list_output = list_result.stdout if hasattr(list_result, 'stdout') else ''
-        print(f"PM2 进程列表: {list_output}")  # 输出所有进程列表
-        
+        logger.debug("PM2 进程列表: %s", list_output)
+
         # 检查是否在进程列表中找到对应进程
         if process_name not in list_output:
             # 尝试使用describe命令无论如何获取信息
             describe_success, describe_result = safe_pm2_command(['describe', process_name], timeout=10)
-            
+
             if describe_success:
                 # 即使进程名不在列表中，describe命令可能仍然返回信息
                 record_task_history(prediction_type, 'script_info', 'warning', '进程未在PM2列表中找到，但describe命令返回了信息')
@@ -1107,33 +592,33 @@ def get_script_info():
                     status_code=404,
                     details={'pm2_list': list_output, 'describe_error': str(describe_result)}
                 )
-            
+
         # 使用进程名称查询详情
         describe_success, describe_result = safe_pm2_command(['describe', process_name])
-        
+
         if not describe_success:
             error_msg = '查询进程详情失败'
             record_task_history(prediction_type, 'script_info', 'failed', error_msg)
             return api_error(error_msg, code=1500, status_code=500, details=str(describe_result))
-            
+
         describe_output = describe_result.stdout if hasattr(describe_result, 'stdout') else ''
-        
+
         if not describe_output.strip():
             error_msg = '进程信息为空'
             record_task_history(prediction_type, 'script_info', 'failed', error_msg)
             return api_error(error_msg, code=1004, status_code=404, details={'process_name': process_name})
-            
+
         record_task_history(prediction_type, 'script_info', 'success', '查询进程详情成功')
         legacy_data = {
             'info': describe_output,
             'process_name': process_name
         }
         return api_success(data=legacy_data, message='查询进程详情成功', legacy=legacy_data)
-        
+
     except Exception as e:
         error_msg = f"获取脚本详情出错: {str(e)}"
         current_app.logger.error(error_msg, exc_info=True)
-        print(error_msg)
+        logger.error(error_msg)
         record_task_history(prediction_type, 'script_info', 'failed', error_msg)
         return api_error('查询脚本详情失败', code=1500, status_code=500, details=error_msg)
 
@@ -1145,18 +630,18 @@ def get_logs():
     log_type = request.args.get('logType', 'train') # train, main, predict, param
     date_str = request.args.get('date', datetime.datetime.now().strftime('%Y%m%d'))
     lines = request.args.get('lines', 500, type=int)
-    
+
     if not prediction_type or prediction_type not in prediction_status:
         return api_error('无效的预测类型', code=1001, status_code=400)
-    
+
     try:
         # 如果是通过PM2查询主日志
         if log_type == 'main':
             script_path = scripts[prediction_type]
             process_name = os.path.splitext(os.path.basename(script_path))[0]  # 去掉.py后缀
-            
+
             success, result = safe_pm2_command(['logs', '--nostream', '--lines', str(lines), process_name])
-            
+
             if success:
                 record_task_history(prediction_type, 'logs', 'success', f'获取主日志 ({lines} 行)')
                 log_text = result.stdout if hasattr(result, 'stdout') else '没有日志输出'
@@ -1195,110 +680,20 @@ def get_logs():
             log_dir = log_dirs[prediction_type].get(log_type)
             if not log_dir:
                 return api_error(f'无效的日志类型: {log_type}', code=1001, status_code=400)
-            
+
             # 查找日志文件
             log_files = []
             if prediction_type == 'supershort':
                 if log_type == 'train':
-                    # 超短期训练日志文件名格式: YYYYMMDD_train_supershort.log
-                    # date_str 来自前端，已经是 YYYYMMDD 格式
                     log_files = glob.glob(os.path.join(log_dir, f"{date_str}_train_supershort.log"))
                 elif log_type == 'predict':
-                    # 超短期预测日志文件名格式: YYYYMMDD_predict_supershort.log
-                    # Logs are in an 'auto_predict' subdirectory
                     log_files = glob.glob(os.path.join(log_dir, f"{date_str}_predict_supershort.log"))
-                # 'main' type for supershort is handled by PM2 logs section above
             elif log_type == 'train': # For short and medium
-                # 训练日志格式可能是 YYYYMMDD.log 或包含日期的其他格式 (维持旧逻辑)
                 log_files = glob.glob(os.path.join(log_dir, f"{date_str}*.log"))
-                # For short/medium, also consider the _train_done.flag logic if needed for disambiguation
-                # The existing logic for train_flag_path for short/medium seems okay to keep as is.
                 train_flag_path = os.path.join(log_dir, f"{date_str}_train_done.flag")
             elif log_type == 'predict':
-                # 预测日志格式
                 log_files = glob.glob(os.path.join(log_dir, f"{date_str}*.log"))
-            # elif log_type == 'param':
-            #     # 参数优化日志 - 根据param_opt_day计算正确的周期
-            #     try:
-            #         # 获取参数优化执行日（0-6 表示周一到周日）
-            #         param_opt_day = request.args.get('param_opt_day', None)
-            #         if param_opt_day is not None:
-            #             param_opt_day = int(param_opt_day)
-            #         else:
-            #             # 默认参数优化日
-            #             param_opt_day_map = {
-            #                 'short': 4,        # 周五
-            #                 'medium': 3,       # 周四
-            #                 'supershort': 6    # 周日
-            #             }
-            #             param_opt_day = param_opt_day_map.get(prediction_type, 5)
-                    
-            #         # 解析所选日期
-            #         selected_date = datetime.datetime.strptime(date_str, '%Y%m%d')
-            #         # 计算所选日期在其所在周的星期几（0-6表示周一到周日）
-            #         selected_weekday = selected_date.weekday()
-                    
-            #         # 计算参数优化周期的开始日期
-            #         days_diff = 0
-            #         if selected_weekday >= param_opt_day:
-            #             # 计算到本周参数优化日的天数差
-            #             days_diff = selected_weekday - param_opt_day
-            #         else:
-            #             # 计算到上周参数优化日的天数差
-            #             days_diff = selected_weekday + 7 - param_opt_day
-                    
-            #         # 找到对应的参数优化日期
-            #         param_opt_date = selected_date - datetime.timedelta(days=days_diff)
-            #         param_opt_date_str = param_opt_date.strftime('%Y%m%d')
-                    
-            #         # 查找参数优化完成标志文件
-            #         param_flag_path = os.path.join(log_dir, f"{param_opt_date_str}_param_opt_done.flag")
-                    
-            #         # 如果找不到精确日期的标志文件，尝试查找当周的标志文件（兼容现有逻辑）
-            #         if not os.path.exists(param_flag_path):
-            #             # 计算该参数优化日所在周的周一
-            #             param_opt_monday = param_opt_date - datetime.timedelta(days=param_opt_date.weekday())
-            #             monday_str = param_opt_monday.strftime('%Y%m%d')
-            #             param_flag_path = os.path.join(log_dir, f"{monday_str}_param_opt_done.flag")
-                    
-            #         if os.path.exists(param_flag_path):
-            #             # 存在标志文件，先尝试查找精确日期的日志
-            #             date_logs = glob.glob(os.path.join(log_dir, f"{param_opt_date_str}*.log"))
-            #             if date_logs:
-            #                 # 找到了精确日期的日志
-            #                 log_files = date_logs
-            #             else:
-            #                 # 尝试查找该周的参数优化日志
-            #                 monday = param_opt_date - datetime.timedelta(days=param_opt_date.weekday())
-            #                 monday_str = monday.strftime('%Y%m%d')
-            #                 week_logs = glob.glob(os.path.join(log_dir, f"{monday_str}*.log"))
-            #                 if week_logs:
-            #                     log_files = week_logs
-            #                 else:
-            #                     # 尝试查找该月的所有参数优化日志
-            #                     year_month = param_opt_date_str[:6]  # 提取年月
-            #                     month_logs = glob.glob(os.path.join(log_dir, f"{year_month}*.log"))
-            #                     if month_logs:
-            #                         # 找到最接近参数优化日期的日志
-            #                         closest_log = None
-            #                         min_diff = float('inf')
-            #                         for log in month_logs:
-            #                             log_date_str = os.path.basename(log).split('.')[0][:8]
-            #                             try:
-            #                                 log_date = datetime.datetime.strptime(log_date_str, '%Y%m%d')
-            #                                 diff = abs((param_opt_date - log_date).days)
-            #                                 if diff < min_diff:
-            #                                     min_diff = diff
-            #                                     closest_log = log
-            #                             except ValueError:
-            #                                 continue
-            #                         if closest_log:
-            #                             log_files = [closest_log]
-                # except ValueError:
-                #     # 日期格式错误，返回错误信息
-                #     record_task_history(prediction_type, 'logs', 'failed', f'日期格式无效: {date_str}')
-                #     return jsonify({'error': f'日期格式无效: {date_str}'}), 400
-            
+
             if not log_files:
                 record_task_history(prediction_type, 'logs', 'failed', f'未找到{date_str}的{log_type}类型日志文件')
                 log_text = f'未找到{date_str}的{log_type}日志文件'
@@ -1307,7 +702,7 @@ def get_logs():
                     message='日志文件不存在',
                     legacy={'logs': log_text}
                 )
-            
+
             # 读取最新的日志文件
             latest_log = max(log_files, key=os.path.getmtime)
             try:
@@ -1315,11 +710,11 @@ def get_logs():
                     # 如果文件太大，只读取最后N行
                     all_lines = f.readlines()
                     log_content = ''.join(all_lines[-lines:]) if len(all_lines) > lines else ''.join(all_lines)
-                
+
                 # 添加日志文件信息到内容中
                 file_info = f"文件: {os.path.basename(latest_log)}\n日期: {datetime.datetime.fromtimestamp(os.path.getmtime(latest_log)).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
                 log_content = file_info + log_content
-                
+
                 record_task_history(prediction_type, 'logs', 'success', f'获取{log_type}日志 ({lines} 行)')
                 return api_success(data={'logs': log_content}, message='获取日志成功', legacy={'logs': log_content})
             except Exception as e:
@@ -1342,7 +737,7 @@ def _update_prediction_status():
     """更新全局prediction_status字典，但不返回响应"""
     try:
         processes = get_pm2_processes()
-             
+
         # 更新每个预测任务的状态
         local_status = {}
         for key in scripts.keys():
@@ -1353,17 +748,17 @@ def _update_prediction_status():
                 for proc in processes
             )
             local_status[key] = is_online
-        
+
         # 安全地更新全局字典
         with status_lock:  # 获取锁
             global prediction_status
             prediction_status.update(local_status)
-        
+
         return True
     except Exception as e:
         error_msg = f"更新状态时出错: {str(e)}"
         current_app.logger.error(error_msg, exc_info=True)
-        print(error_msg)
+        logger.error(error_msg)
         return False
 
 # 获取任务历史记录
@@ -1374,21 +769,21 @@ def get_task_history():
     action = request.args.get('action')   # 可选，筛选特定操作
     limit = request.args.get('limit', 50, type=int)  # 默认返回最近50条记录
     offset = request.args.get('offset', 0, type=int)  # 分页偏移量
-    
+
     try:
         with db_session() as db:
             query = db.query(TaskHistory).order_by(TaskHistory.created_at.desc())
-            
+
             # 应用筛选条件
             if task_type:
                 query = query.filter(TaskHistory.task_type == task_type)
             if action:
                 query = query.filter(TaskHistory.action == action)
-                
+
             # 应用分页
             total = query.count()
             history = query.offset(offset).limit(limit).all()
-            
+
             # 转换为可序列化的字典
             result = []
             for item in history:
@@ -1402,7 +797,7 @@ def get_task_history():
                     'details': item.details,
                     'user': item.user
                 })
-            
+
             legacy_data = {
                 'total': total,
                 'offset': offset,
@@ -1414,11 +809,11 @@ def get_task_history():
                 message='获取任务历史成功',
                 legacy=legacy_data
             )
-        
+
     except Exception as e:
         error_msg = f"获取任务历史记录出错: {str(e)}"
         current_app.logger.error(error_msg, exc_info=True)
-        print(error_msg)
+        logger.error(error_msg)
         return api_error(
             '获取任务历史记录失败',
             code=1500,
@@ -1444,10 +839,10 @@ def get_task_status():
             'supershort': 6    # 周日
         }
         param_opt_day = param_opt_day_map.get(prediction_type, 5)
-    
+
     if not prediction_type or prediction_type not in prediction_status:
         return api_error('无效的预测类型', code=1001, status_code=400)
-    
+
     # 初始化状态对象
     status = {
         'training': False,
@@ -1459,42 +854,38 @@ def get_task_status():
         'predictionCount': 0,
         'predictionCompleted': False # 新增字段，用于区分 short/medium 的完成与运行中
     }
-    
+
     try:
         # 解析日期
         try:
             selected_date = datetime.datetime.strptime(date_str, '%Y%m%d')
         except ValueError:
             return api_error('日期格式无效，请使用YYYYMMDD格式', code=1001, status_code=400)
-        
+
         is_today = selected_date.date() == datetime.datetime.now().date()
         is_current_week = (datetime.datetime.now() - selected_date).days < 7
-        
+
         # 检查训练任务状态（通过flag文件）
         train_flag_path = os.path.join(log_dirs[prediction_type]['train'], f"{date_str}_train_done.flag")
         if os.path.exists(train_flag_path):
             status['training'] = True
             status['trainingTime'] = datetime.datetime.fromtimestamp(os.path.getmtime(train_flag_path)).strftime('%Y-%m-%d %H:%M:%S')
-        
+
         # 检查参数优化任务状态 - 修改为根据参数优化日计算周期
         # 计算所选日期在其所在周的星期几（0-6表示周一到周日）
         selected_weekday = selected_date.weekday()
-        
+
         # 计算参数优化周期的开始日期
-        # 如果当前日期的星期几大于等于参数优化日，就查找本周的参数优化记录
-        # 否则查找上周的参数优化记录
         days_diff = 0
         if selected_weekday >= param_opt_day:
-            # 计算到本周参数优化日的天数差
             days_diff = selected_weekday - param_opt_day
         else:
-            # 计算到上周参数优化日的天数差
             days_diff = selected_weekday + 7 - param_opt_day
-        
+
         # 找到对应的参数优化日期
         param_opt_date = selected_date - datetime.timedelta(days=days_diff)
         param_opt_date_str = param_opt_date.strftime('%Y%m%d')
-        
+
         # 查找参数优化完成标志（兼容 short/medium 未配置 param 目录）
         param_log_dir = log_dirs[prediction_type].get('param')
         if param_log_dir:
@@ -1510,12 +901,12 @@ def get_task_status():
             if os.path.exists(param_flag_path):
                 status['paramOpt'] = True
                 status['paramOptTime'] = datetime.datetime.fromtimestamp(os.path.getmtime(param_flag_path)).strftime('%Y-%m-%d %H:%M:%S')
-        
+
         # 检查预测任务状态
         if prediction_type == 'supershort':
             # 超短期预测需要检查预测日志
             predict_log_dir = log_dirs[prediction_type]['predict']
-            
+
             # 查找指定日期的所有日志文件 (用于获取最新时间)
             date_logs = glob.glob(os.path.join(predict_log_dir, f"{date_str}*.log"))
 
@@ -1527,18 +918,15 @@ def get_task_status():
                  predict_done_flags = glob.glob(os.path.join(predict_flag_dir, f"predict_{date_str}*.flag"))
                  status['predictionCount'] = len(predict_done_flags)
             else:
-                 status['predictionCount'] = 0 # Default to 0 if flag dir doesn't exist
+                 status['predictionCount'] = 0
 
-            # 超短期的 'prediction' 状态表示任务是否 *应该* 在运行或已完成当天次数
-            # 如果当天完成次数 >= 96，则标记为 True (完成)
-            # 如果当天完成次数 < 96 但 > 0，或者 PM2 进程在运行 (仅限今天)，也标记为 True (运行中)
             status['prediction'] = status['predictionCount'] >= 96
 
             if status['predictionCount'] > 0:
                  # If any prediction was done, get the time of the latest flag
                  latest_flag = max(predict_done_flags, key=os.path.getmtime)
                  status['predictionTime'] = datetime.datetime.fromtimestamp(os.path.getmtime(latest_flag)).strftime('%Y-%m-%d %H:%M:%S')
-            elif date_logs: # Fallback to log time if no flags but logs exist
+            elif date_logs:
                  latest_log = max(date_logs, key=os.path.getmtime)
                  status['predictionTime'] = datetime.datetime.fromtimestamp(os.path.getmtime(latest_log)).strftime('%Y-%m-%d %H:%M:%S')
 
@@ -1546,39 +934,31 @@ def get_task_status():
             if is_today:
                 predict_online = query_pm2_state(scripts[prediction_type])
                 if predict_online and status['predictionCount'] < 96:
-                    status['prediction'] = True # Mark as 'running'
+                    status['prediction'] = True
         else: # short and medium
-            # 短期和中期预测查找完成标志文件
-            # predict_flag_dir = os.path.join(log_dirs[prediction_type]['base'], 'predictions') # 旧逻辑：错误的目录假设
-            # 使用训练日志目录查找标志文件，因为标志文件似乎在此处生成
-            predict_flag_dir = log_dirs[prediction_type].get('train') # 获取训练日志目录路径
-            
+            predict_flag_dir = log_dirs[prediction_type].get('train')
+
             if not predict_flag_dir:
-                # 如果找不到训练日志目录配置，记录错误并跳过检查
-                print(f"错误：未找到 {prediction_type} 类型的训练日志目录配置")
+                logger.error("未找到 %s 类型的训练日志目录配置", prediction_type)
                 status['prediction'] = False
                 status['predictionCompleted'] = False
             else:
-                # 假设完成标志文件名为 YYYYMMDD_predict_done.flag
                 predict_flag_path = os.path.join(predict_flag_dir, f"{date_str}_predict_done.flag")
 
                 flag_exists = os.path.exists(predict_flag_path)
 
-                if flag_exists: # 使用变量简化后续判断
-                    status['prediction'] = True 
-                    status['predictionCompleted'] = True # 标记为真正完成
+                if flag_exists:
+                    status['prediction'] = True
+                    status['predictionCompleted'] = True
                     status['predictionTime'] = datetime.datetime.fromtimestamp(os.path.getmtime(predict_flag_path)).strftime('%Y-%m-%d %H:%M:%S')
                 else:
-                    status['prediction'] = False 
-                    status['predictionCompleted'] = False # 默认未完成
+                    status['prediction'] = False
+                    status['predictionCompleted'] = False
 
-                # 只有当天才检查PM2进程状态作为补充（但主要依赖flag）
-                # 如果flag不存在，但PM2进程在运行（仅限今天），可能表示正在运行但未完成
-                if is_today and not status['predictionCompleted']: # 仅在今天且未完成时检查PM2
+                if is_today and not status['predictionCompleted']:
                     script_online = query_pm2_state(scripts[prediction_type])
                     if script_online:
-                         status['prediction'] = True # 任务状态是存在的 (运行中)
-                         # predictionCompleted 保持 False
+                         status['prediction'] = True
 
         legacy_data = {'status': status}
         return api_success(data=legacy_data, message='获取任务状态成功', legacy=legacy_data)
@@ -1701,7 +1081,7 @@ def update_schedule_config():
         return api_error(f"更新失败: {str(e)}")
 
 
-# --- 模型版本管理 API ---
+    # --- 模型版本管理 API ---
 
 @autopredict_bp.route('/model_versions', methods=['GET'])
 def get_model_versions():
