@@ -471,7 +471,65 @@ def main():
         if predictor.load_state(model_n_dir):
             successful_model_loads +=1
             predictions_series_for_shift_n = predictor.predict(processed_input_for_models)
-            
+
+            # 分位数预测
+            pred_lower = None
+            pred_upper = None
+            if hasattr(predictor, 'q_models') and predictor.q_models:
+                try:
+                    wfcapacity = float(os.environ.get('WF_CAPACITY', '779.0'))
+                    # 复用 predict() 内部相同的特征准备流程
+                    features_cleaned_q, valid_idx_q, original_idx_q = predictor._prepare_features_common(processed_input_for_models)
+                    if (not valid_idx_q.empty
+                            and predictor.numeric_features
+                            and all(c in features_cleaned_q.columns for c in predictor.numeric_features)):
+                        X_test_q = features_cleaned_q.loc[valid_idx_q, predictor.numeric_features]
+                        X_test_q.columns = X_test_q.columns.astype(str)
+                        X_test_scaled_q = predictor.scaler.transform(X_test_q)
+
+                        q05_diff = predictor.q_models[0.05].predict(X_test_scaled_q)
+                        q95_diff = predictor.q_models[0.95].predict(X_test_scaled_q)
+
+                        # 与 predict() 相同的逆变换: pred_diff + power_actual_at_t_minus_N, 然后 clip >= 0
+                        reconstruct_col = predictor.feature_power_t_minus_N_col_name
+                        if reconstruct_col in features_cleaned_q.columns:
+                            power_t_minus_N = features_cleaned_q.loc[valid_idx_q, reconstruct_col]
+                        else:
+                            power_t_minus_N = pd.Series(np.nan, index=valid_idx_q)
+
+                        q05_reconstructed = pd.Series(q05_diff, index=valid_idx_q) + power_t_minus_N
+                        q95_reconstructed = pd.Series(q95_diff, index=valid_idx_q) + power_t_minus_N
+                        q05_reconstructed = np.maximum(q05_reconstructed, 0)
+                        q95_reconstructed = np.maximum(q95_reconstructed, 0)
+
+                        # 对齐到原始索引（与 predict() 相同的模式）
+                        q05_aligned = pd.Series(np.nan, index=original_idx_q, dtype=float)
+                        q95_aligned = pd.Series(np.nan, index=original_idx_q, dtype=float)
+                        q05_aligned.update(q05_reconstructed)
+                        q95_aligned.update(q95_reconstructed)
+
+                        # 提取与点预测相同行的分位数值
+                        target_row_idx_q = HISTORICAL_ROWS_NEEDED + (n_shift_value - MIN_SHIFT)
+                        results_df_row_index_q = n_shift_value - MIN_SHIFT
+                        if (0 <= target_row_idx_q < len(q05_aligned)
+                                and 0 <= results_df_row_index_q < len(results_df)):
+                            val_lower = q05_aligned.iloc[target_row_idx_q]
+                            val_upper = q95_aligned.iloc[target_row_idx_q]
+                            if pd.notna(val_lower) and pd.notna(val_upper):
+                                # 确保点预测在区间内
+                                point_val = predictions_series_for_shift_n.iloc[target_row_idx_q] if target_row_idx_q < len(predictions_series_for_shift_n) else np.nan
+                                if pd.notna(point_val):
+                                    val_lower = min(val_lower, point_val)
+                                    val_upper = max(val_upper, point_val)
+                                val_lower = np.clip(val_lower, 0, wfcapacity)
+                                val_upper = np.clip(val_upper, 0, wfcapacity)
+                                pred_lower = val_lower
+                                pred_upper = val_upper
+                    else:
+                        logging.warning("shift %d 分位数预测跳过: 特征准备后无有效数据或特征列缺失", n_shift_value)
+                except Exception as qe:
+                    logging.warning("shift %d 分位数预测失败: %s", n_shift_value, qe)
+
             target_row_index_in_input_block = HISTORICAL_ROWS_NEEDED + (n_shift_value - MIN_SHIFT)
 
             if 0 <= target_row_index_in_input_block < len(predictions_series_for_shift_n):
@@ -479,6 +537,10 @@ def main():
                 results_df_row_index = n_shift_value - MIN_SHIFT
                 if 0 <= results_df_row_index < len(results_df):
                     results_df.loc[results_df_row_index, model_horizon_name] = actual_prediction_value
+                    # 写入分位数区间列
+                    if pred_lower is not None:
+                        results_df.loc[results_df_row_index, f'{model_horizon_name}_lower'] = pred_lower
+                        results_df.loc[results_df_row_index, f'{model_horizon_name}_upper'] = pred_upper
                 else:
                     logging.error(f"Shift={n_shift_value}: Calculated results_df_row_index {results_df_row_index} is out of bounds for results_df (len {len(results_df)}). Prediction not stored.")
                     # Ensure column exists with NaN if specific assignment fails but column was expected
@@ -546,7 +608,7 @@ def main():
         for shift_value in range(MIN_SHIFT, MAX_SHIFT + 1):
             col_name = f'prediction_horizon_{shift_value}'
             row_idx = shift_value - MIN_SHIFT # This is the index in results_df for this shift's prediction (0 to 15)
-            
+
             # New column name for the wide CSV, mapping internal shift 1 to output column wp_pred2, etc.
             wide_csv_col_name = f'wp_pred{shift_value + 1}'
 
@@ -560,7 +622,15 @@ def main():
                 elif col_name not in results_df.columns:
                      logging.warning(f"Wide format: column {col_name} for internal shift {shift_value} (output {wide_csv_col_name}) not in results_df. {wide_csv_col_name} will be NaN.")
                 wide_row[wide_csv_col_name] = np.nan
-        
+
+            # 分位数区间列
+            lower_col = f'{col_name}_lower'
+            upper_col = f'{col_name}_upper'
+            if row_idx < len(results_df) and lower_col in results_df.columns:
+                wide_row[f'wp_pred{shift_value + 1}_lower'] = results_df.iloc[row_idx][lower_col]
+            if row_idx < len(results_df) and upper_col in results_df.columns:
+                wide_row[f'wp_pred{shift_value + 1}_upper'] = results_df.iloc[row_idx][upper_col]
+
         wide_format_df = pd.DataFrame([wide_row])
         
         wide_filename = f"supershortl_wide_{target_str}.csv" # This filename seems specific for DB upload
