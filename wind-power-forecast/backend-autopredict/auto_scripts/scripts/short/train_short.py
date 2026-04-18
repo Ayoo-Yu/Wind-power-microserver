@@ -916,7 +916,35 @@ def train_multiple_datasets(data, months_list, train_ratio, lags, window_size, m
             logger.info(f"✅ 最终生产Scaler已保存到: {final_scaler_path}")
             logger.info(f"✅ 最终生产特征信息已保存到: {final_features_path}")
             logger.info(f"✅ 最终生产算法类型已保存到: {final_algo_path}")
-            
+
+            # --- 训练分位数模型 ---
+            try:
+                from models_short import get_quantile_params
+                quantile_configs = get_quantile_params()
+                best_algo_lower = best_algo_type.lower()
+
+                algo_idx = {'gbdt': 0, 'dart': 1, 'goss': 2}.get(best_algo_lower, 0)
+
+                quantile_model_dir = os.path.join(model_folder_today, 'best_models')
+                os.makedirs(quantile_model_dir, exist_ok=True)
+
+                for q_key, q_params_list in quantile_configs.items():
+                    q_params = q_params_list[algo_idx]
+                    q_params['num_iterations'] = model_final.best_iteration_ if hasattr(model_final, 'best_iteration_') and model_final.best_iteration_ is not None and model_final.best_iteration_ > 0 else q_params.get('num_iterations', 1000)
+                    q_params.pop('early_stopping_round', None)
+
+                    q_train_data = lgb.Dataset(X_final_train_selected, label=y_full_windows)
+                    q_model = lgb.train(q_params, q_train_data, num_boost_round=q_params['num_iterations'])
+
+                    q_model_path = os.path.join(quantile_model_dir, f'production_model_{q_key}.joblib')
+                    joblib.dump(q_model, q_model_path)
+                    print(f"  ✅ 分位数模型 {q_key} 已保存: {q_model_path}")
+                    logging.info("分位数模型 %s 已保存: %s", q_key, q_model_path)
+            except Exception as qe:
+                print(f"  ⚠️ 分位数模型训练失败（不影响点预测）: {qe}")
+                logging.warning("分位数模型训练失败（不影响点预测）: %s", qe, exc_info=True)
+            # --- 分位数训练结束 ---
+
             # 记录到best_model_type.txt，覆盖原来每种算法类型的记录
             best_model_type_path = os.path.join(model_folder_today, 'best_model_type.txt')
             with open(best_model_type_path, 'w') as f:

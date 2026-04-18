@@ -183,3 +183,24 @@ def save_param_versions_to_file():
     except Exception as e:
         print(f"更新文件失败: {str(e)}")
         return False
+
+def get_quantile_params(version=None):
+    """为每个算法变体生成 5% 和 95% 分位数参数。
+
+    基于 get_unified_params() 的基础参数，只修改 objective 和 alpha。
+    返回格式: {'q05': [gbdt_q05, dart_q05, goss_q05], 'q95': [gbdt_q95, dart_q95, goss_q95]}
+    """
+    import copy
+    base_params_list = get_unified_params(version)
+    result = {}
+    for quantile_key, alpha_val in [('q05', 0.05), ('q95', 0.95)]:
+        q_params = []
+        for params in base_params_list:
+            p = copy.deepcopy(params)
+            p['objective'] = 'quantile'
+            p['alpha'] = alpha_val
+            if 'metric' in p:
+                p['metric'] = 'quantile'
+            q_params.append(p)
+        result[quantile_key] = q_params
+    return result
