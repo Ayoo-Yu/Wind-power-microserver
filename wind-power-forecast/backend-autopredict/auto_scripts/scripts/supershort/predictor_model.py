@@ -219,7 +219,7 @@ class WindPowerPredictor:
         return True
 
     def train_quantile(self, data, alpha=0.5):
-        """训练分位数回归模型。"""
+        """训练分位数回归模型，存储到 self.q_models 字典。"""
         import xgboost as xgb
 
         if self.features is None or self.scaler is None:
@@ -228,7 +228,7 @@ class WindPowerPredictor:
         X = self.scaler.transform(self.features)
         y = self.targets
 
-        self.q_model = xgb.XGBRegressor(
+        q_model = xgb.XGBRegressor(
             n_estimators=100,
             learning_rate=0.1,
             max_depth=6,
@@ -238,8 +238,11 @@ class WindPowerPredictor:
             objective='reg:quantileerror',
             quantile_alpha=alpha,
         )
-        self.q_model.fit(X, y)
-        self.quantile_alpha = alpha
+        q_model.fit(X, y)
+
+        if not hasattr(self, 'q_models'):
+            self.q_models = {}
+        self.q_models[alpha] = q_model
 
     def predict(self, test_data):
         if not self._is_fitted:
@@ -336,9 +339,10 @@ class WindPowerPredictor:
             self.model.save_model(model_path)
 
             # 保存分位数模型
-            if hasattr(self, 'q_model') and self.q_model is not None:
-                q_model_path = os.path.join(directory, f'model_q{int(self.quantile_alpha * 100):02d}.json')
-                self.q_model.save_model(q_model_path)
+            if hasattr(self, 'q_models') and self.q_models:
+                for q_alpha, q_m in self.q_models.items():
+                    q_model_path = os.path.join(directory, f'model_q{int(q_alpha * 100):02d}.json')
+                    q_m.save_model(q_model_path)
 
             joblib.dump(self.scaler, scaler_path)
             joblib.dump(self.numeric_features, features_path)

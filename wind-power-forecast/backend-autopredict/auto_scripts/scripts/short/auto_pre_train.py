@@ -291,6 +291,10 @@ def train_model(data_file_path, model_folder_today):
                 logging.info(f"已注册 %s 模型到 ModelRegistry", algo_type)
 
             # 注册分位数模型
+            _best_algo_for_q = max(
+                best_models_info.items(),
+                key=lambda kv: kv[1].get('score', float('-inf')) if kv[1].get('model') else float('-inf'),
+            )[0] if best_models_info else 'gbdt'
             quantile_model_dir = os.path.join(model_folder_today, 'best_models')
             for q_key in ['q05', 'q95']:
                 q_path = os.path.join(quantile_model_dir, f'production_model_{q_key}.joblib')
@@ -298,7 +302,7 @@ def train_model(data_file_path, model_folder_today):
                     registry.register(
                         farm_code=farm_code,
                         task_type="short",
-                        algorithm=f"{best_algo_type.lower()}_{q_key}",
+                        algorithm=f"{_best_algo_for_q.lower()}_{q_key}",
                         model_path=q_path,
                         val_accuracy=None,
                     )

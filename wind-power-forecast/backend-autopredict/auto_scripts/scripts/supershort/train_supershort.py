@@ -161,17 +161,11 @@ def main():
                 if predictor.save_state(model_n_dir):
                     successful_trains += 1
                     logging.info(f"Shift={n} 的模型成功训练并保存到 {model_n_dir}")
-                    # 训练分位数模型
+                    # 训练分位数模型（复用已训练的 predictor 实例）
                     try:
-                        predictor_q05 = WindPowerPredictor(n_shift=n)
-                        predictor_q05.train(train_data)
-                        predictor_q05.train_quantile(train_data, alpha=0.05)
-                        predictor_q05.save_state(model_n_dir)
-
-                        predictor_q95 = WindPowerPredictor(n_shift=n)
-                        predictor_q95.train(train_data)
-                        predictor_q95.train_quantile(train_data, alpha=0.95)
-                        predictor_q95.save_state(model_n_dir)
+                        predictor.train_quantile(train_data, alpha=0.05)
+                        predictor.train_quantile(train_data, alpha=0.95)
+                        predictor.save_state(model_n_dir)
                     except Exception as qe:
                         logging.warning("shift %d 分位数训练失败: %s", n, qe)
                 else:
