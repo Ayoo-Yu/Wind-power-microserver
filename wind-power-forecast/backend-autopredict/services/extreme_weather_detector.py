@@ -74,6 +74,13 @@ class ExtremeWeatherDetector:
         if thresholds:
             self._thresholds.update(thresholds)
 
+    # -- properties ---------------------------------------------------------
+
+    @property
+    def thresholds(self) -> dict[str, float]:
+        """Return a reference to the mutable thresholds dict."""
+        return self._thresholds
+
     # -- public API ---------------------------------------------------------
 
     def detect(self, ecmwf_row: dict) -> WeatherCondition:

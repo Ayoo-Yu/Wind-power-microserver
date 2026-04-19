@@ -76,9 +76,15 @@ register_middleware(app)
 from routes.autopredict import autopredict_bp
 from routes.autotask import autotask_bp
 from routes.auth import auth_bp  # 保留认证蓝图
+from routes.modeltrain import modeltrain_bp
 
 app.register_blueprint(autopredict_bp, url_prefix='/api')
 app.register_blueprint(autotask_bp, url_prefix='/')
+app.register_blueprint(modeltrain_bp, url_prefix='/')
+
+from routes.extreme_weather_router import extreme_weather_bp
+app.register_blueprint(extreme_weather_bp, url_prefix='/api/extreme-weather')
+
 # Legacy auth namespace (kept for compatibility)
 app.register_blueprint(auth_bp, url_prefix='/api/auth')  # 认证是必要的
 # v1 auth namespace (compat bridge to same handlers)
