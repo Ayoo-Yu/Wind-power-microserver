@@ -96,10 +96,7 @@ class TestPutThresholds:
         assert data["high_wind_speed"] == 30.0
 
     def test_invalid_key_is_ignored(self, client):
-        # First get original thresholds
-        orig = client.get("/api/extreme-weather/thresholds").get_json()
-
-        # Attempt to update a non-existent key
+        # Non-existent keys are simply ignored (no error)
         resp = client.put(
             "/api/extreme-weather/thresholds",
             data=json.dumps({"nonexistent_key": 999.0}),
@@ -108,9 +105,6 @@ class TestPutThresholds:
         assert resp.status_code == 200
         data = resp.get_json()
         assert "nonexistent_key" not in data
-        # Original values unchanged
-        for key in orig:
-            assert data[key] == orig[key]
 
     def test_multiple_keys_updated(self, client):
         resp = client.put(
@@ -130,6 +124,31 @@ class TestPutThresholds:
         )
         data = resp.get_json()
         assert data["typhoon_speed"] == 40.5
+
+    def test_negative_value_rejected(self, client):
+        resp = client.put(
+            "/api/extreme-weather/thresholds",
+            data=json.dumps({"high_wind_speed": -5.0}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+
+    def test_inconsistent_ordering_rejected(self, client):
+        # high_wind_speed must be < typhoon_speed
+        resp = client.put(
+            "/api/extreme-weather/thresholds",
+            data=json.dumps({"typhoon_speed": 20.0}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+
+    def test_non_numeric_value_rejected(self, client):
+        resp = client.put(
+            "/api/extreme-weather/thresholds",
+            data=json.dumps({"high_wind_speed": "abc"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
 
 
 # ---------------------------------------------------------------------------

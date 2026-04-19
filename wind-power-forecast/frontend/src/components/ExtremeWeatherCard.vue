@@ -58,8 +58,11 @@ async function fetchStatus() {
   try {
     const response = await getWeatherStatus(farmCode)
     const data = response?.data?.data || response?.data || {}
-    severity.value = data.severity || 'normal'
-    statusMessage.value = data.message || ''
+    const condition = data.current_condition || {}
+    severity.value = condition.severity || 'normal'
+    statusMessage.value = condition.type && condition.type !== 'normal'
+      ? `${condition.type}`
+      : ''
   } catch {
     severity.value = 'normal'
     statusMessage.value = ''

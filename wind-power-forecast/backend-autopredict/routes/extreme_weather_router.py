@@ -17,6 +17,9 @@ from services.extreme_weather_detector import DEFAULT_THRESHOLDS, ExtremeWeather
 logger = logging.getLogger(__name__)
 
 # Module-level detector instance (uses default thresholds initially).
+# NOTE: The prediction pipeline (auto_pre_train_base.py) creates its own
+# independent detector with default thresholds. Changes here only affect
+# the /status and /thresholds API responses, not the prediction pipeline.
 _detector = ExtremeWeatherDetector()
 
 extreme_weather_bp = Blueprint("extreme_weather", __name__)
@@ -67,7 +70,19 @@ def update_thresholds() -> tuple[dict[str, float], int]:
     if not body or not isinstance(body, dict):
         return jsonify({"error": "Request body must be a JSON object"}), 400
 
-    updated: dict[str, float] = {}
+    # Validate individual values
+    MIN_BOUNDS: dict[str, float] = {
+        "high_wind_speed": 10.0,
+        "typhoon_speed": 15.0,
+        "calm_wind_speed": 0.0,
+        "cold_wave_temp": -50.0,
+        "cold_wave_drop_24h": 1.0,
+        "icing_temp_low": -30.0,
+        "icing_temp_high": -30.0,
+        "icing_tcwv": 0.0,
+    }
+
+    pending: dict[str, float] = {}
     current = _detector.thresholds
 
     for key, value in body.items():
@@ -77,13 +92,25 @@ def update_thresholds() -> tuple[dict[str, float], int]:
         try:
             converted = float(value)
         except (TypeError, ValueError):
-            logger.warning("Invalid value for %s: %r -- skipping", key, value)
-            continue
-        current[key] = converted
-        updated[key] = converted
+            return jsonify({"error": f"Invalid value for {key}: {value!r}"}), 400
+        if converted < MIN_BOUNDS.get(key, 0.0):
+            return jsonify({"error": f"Value for {key} too low: {converted}"}), 400
+        pending[key] = converted
 
-    logger.info("Updated thresholds: %s", updated)
-    return jsonify(_detector.thresholds), 200
+    # Apply pending updates
+    current.update(pending)
+
+    # Inter-threshold consistency: calm < high < typhoon
+    calm = current.get("calm_wind_speed", 0.0)
+    high = current.get("high_wind_speed", 25.0)
+    typhoon = current.get("typhoon_speed", 32.0)
+    if not (calm < high < typhoon):
+        return jsonify(
+            {"error": f"Inconsistent thresholds: calm({calm}) < high({high}) < typhoon({typhoon}) violated"}
+        ), 400
+
+    logger.info("Updated thresholds: %s", pending)
+    return jsonify(current), 200
 
 
 @extreme_weather_bp.route("/status", methods=["GET"])

@@ -1028,12 +1028,18 @@ def _extract_ecmwf_features_for_detection(input_df: pd.DataFrame) -> list[dict]:
         return float(numeric.mean())
 
     results: list[dict] = []
+    prev_temp: float | None = None
     for _, row in input_df.iterrows():
+        current_temp = _safe_mean(row, temp_2t_cols)
+        drop_24h = 0.0
+        if prev_temp is not None:
+            drop_24h = max(0.0, prev_temp - current_temp)
+        prev_temp = current_temp
         results.append({
             "ws100_avg": _safe_mean(row, ws100_cols),
-            "temp_2t_avg": _safe_mean(row, temp_2t_cols),
+            "temp_2t_avg": current_temp,
             "tcwv_avg": _safe_mean(row, tcwv_cols),
-            "temp_24h_drop": 0.0,
+            "temp_24h_drop": drop_24h,
         })
     return results
 
@@ -1059,9 +1065,22 @@ def _inject_extreme_weather_alarms(conditions: list, farm_code: str) -> None:
     try:
         from db_session import db_session
         from db_models.alarm import AlarmRecord
+        from sqlalchemy import func as sa_func
 
         with db_session() as session:
             for cond in alarming:
+                # Skip if an open alarm of the same type already exists
+                existing = session.query(AlarmRecord).filter(
+                    AlarmRecord.source == "extreme_weather",
+                    AlarmRecord.farm_code == farm_code,
+                    AlarmRecord.status == "open",
+                    AlarmRecord.message.like(
+                        f"%类型={cond.condition_type}%"
+                    ),
+                ).first()
+                if existing:
+                    continue
+
                 msg = (f"[极端天气] 类型={cond.condition_type}, "
                        f"严重级别={cond.severity}, "
                        f"详情={cond.details}")
