@@ -44,8 +44,8 @@ export async function getReportFarms() {
 
 export async function getFarms() {
   const response = await withLegacyFallback(
-    () => axiosInstance.get('/api/v1/farms'),
-    () => axiosInstance.get('/api/farms')
+    () => axiosInstance.get('/api/v1/farms', { _silent: true }),
+    () => axiosInstance.get('/api/farms', { _silent: true })
   )
   return unwrapList(response?.data)
 }

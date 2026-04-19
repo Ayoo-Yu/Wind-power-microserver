@@ -150,3 +150,16 @@ export async function uploadManualWeatherFile(formData) {
     return axiosInstance.post('/operational/api/upload_operational_csv', fallbackData, { headers })
   }
 }
+
+// ECMWF 气象数据库状态
+export function getEcmwfAvailability(params) {
+  return axiosInstance.get('/api/ecmwf/availability', { params })
+}
+
+export function getEcmwfLatest(params) {
+  return axiosInstance.get('/api/ecmwf/latest', { params })
+}
+
+export function getEcmwfData(params) {
+  return axiosInstance.get('/api/ecmwf/data', { params, _silent: true })
+}

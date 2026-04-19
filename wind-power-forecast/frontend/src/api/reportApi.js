@@ -53,8 +53,8 @@ export function stopReportScheduler() {
 
 export function getReportLogs(params = {}) {
   return withLegacyFallback(
-    () => axiosInstance.get('/api/v1/report/logs', { params }),
-    () => axiosInstance.get('/api/report/logs', { params })
+    () => axiosInstance.get('/api/v1/report/logs', { params, _silent: true }),
+    () => axiosInstance.get('/api/report/logs', { params, _silent: true })
   )
 }
 

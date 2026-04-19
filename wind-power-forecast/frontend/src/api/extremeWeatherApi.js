@@ -3,7 +3,7 @@ import axiosInstance from './axios'
 const BASE = '/api/extreme-weather'
 
 export function getWeatherStatus(farmCode) {
-  return axiosInstance.get(`${BASE}/status`, { params: { farm_code: farmCode } })
+  return axiosInstance.get(`${BASE}/status`, { params: { farm_code: farmCode }, _silent: true })
 }
 
 export function getThresholds() {
