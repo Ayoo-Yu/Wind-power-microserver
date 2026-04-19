@@ -12,53 +12,53 @@
       <el-button type="primary" :loading="loading" @click="loadData">刷新</el-button>
     </div>
 
-    <KpiCards :items="cards" />
+    <div class="kpi-row">
+      <KpiCards :items="cards" />
+      <ExtremeWeatherCard />
+    </div>
 
     <div class="dashboard-grid">
       <div class="panel-card panel-trend">
         <div class="panel-title">日功率预测（实绩 / 短期 / 超短期 / 可用容量）</div>
-        <PowerTrendChart :points="trendPoints" />
+        <PowerTrendChart v-if="trendPoints.length" :points="trendPoints" />
+        <div v-else-if="!loading" class="empty-state">暂无功率预测数据</div>
       </div>
 
       <div class="panel-card panel-left">
         <div class="panel-title">场站出力排名</div>
-        <StationRankChart :rows="rankRows" />
+        <StationRankChart v-if="rankRows.length" :rows="rankRows" />
+        <div v-else-if="!loading" class="empty-state">暂无场站排名数据</div>
       </div>
 
       <div class="panel-card panel-center">
         <div class="panel-title">多场站预测任务监控矩阵</div>
-        <FleetMap :points="topologyPoints" />
+        <FleetMap v-if="topologyPoints.length" :points="topologyPoints" />
+        <div v-else-if="!loading" class="empty-state">暂无监控数据</div>
       </div>
     </div>
 
     <div class="dashboard-bottom">
       <div class="panel-card weather-card">
-        <div class="panel-title">气象概览</div>
-
-        <div v-if="weatherMode === 'fleet'" class="fleet-weather-grid">
-          <div v-for="item in weatherRows" :key="item.code" class="fleet-weather-item">
-            <div class="fleet-label">{{ item.label }}</div>
-            <div class="fleet-value">{{ item.value }} {{ item.unit }}</div>
-            <div class="fleet-hint">{{ item.hint }}</div>
-          </div>
+        <div class="panel-title">
+          气象概览
+          <span v-if="weatherUpdateTime" class="weather-update-hint">NWP更新: {{ weatherUpdateTime.slice(11, 16) }}</span>
         </div>
 
-        <div v-else class="weather-grid">
-          <div v-for="item in weatherRows" :key="item.code" class="weather-item">
-            <div class="weather-name">{{ item.name }}</div>
-            <div class="weather-main">
-              <div class="weather-wind-wrap">
-                <i class="wind-icon"></i>
-                <span class="weather-wind">{{ item.windSpeed }} m/s</span>
-              </div>
-              <span class="weather-dir">{{ item.windDirection }}</span>
+        <div v-if="weatherMetrics.length" class="weather-metrics-grid">
+          <div v-for="item in weatherMetrics" :key="item.label" class="weather-metric-item">
+            <div class="metric-icon" :class="`metric-${item.icon}`">
+              <i v-if="item.icon === 'wind'" class="wind-icon-sm"></i>
+              <i v-else-if="item.icon === 'compass'" class="compass-icon-sm"></i>
+              <i v-else-if="item.icon === 'temp'" class="temp-icon-sm"></i>
+              <i v-else class="drop-icon-sm"></i>
             </div>
-            <div class="wind-level">
-              <span class="wind-level-fill" :style="windLevelStyle(item.windSpeed)"></span>
+            <div class="metric-info">
+              <div class="metric-label">{{ item.label }}</div>
+              <div class="metric-value">{{ item.value }} <small>{{ item.unit }}</small></div>
             </div>
-            <div class="weather-sub">温度 {{ item.temperature }} C - 气压 {{ item.pressure }} hPa</div>
           </div>
         </div>
+        <div v-else-if="!loading" class="empty-state">暂无气象数据</div>
       </div>
 
       <div class="panel-card events-card">
@@ -86,6 +86,7 @@
             <span class="event-text">{{ event.message }}</span>
           </li>
         </ul>
+        <div v-if="events.length === 0 && !loading" class="empty-state">暂无事件记录</div>
       </div>
     </div>
   </div>
@@ -102,6 +103,7 @@ import {
   getDashboardEvents
 } from '@/services/dashboardService'
 import KpiCards from '@/components/dashboard/KpiCards.vue'
+import ExtremeWeatherCard from '@/components/ExtremeWeatherCard.vue'
 import FleetMap from '@/components/dashboard/FleetMap.vue'
 import StationRankChart from '@/components/dashboard/StationRankChart.vue'
 import PowerTrendChart from '@/components/dashboard/PowerTrendChart.vue'
@@ -111,15 +113,15 @@ const cards = ref([])
 const topologyPoints = ref([])
 const rankRows = ref([])
 const trendPoints = ref([])
-const weatherMode = ref('fleet')
-const weatherRows = ref([])
+const weatherMetrics = ref([])
+const weatherUpdateTime = ref(null)
 const events = ref([])
 const updatedAt = ref('--')
 
 const eventTabs = [
-  { key: 'all', label: 'All' },
-  { key: 'system', label: 'System' },
-  { key: 'business', label: 'Business' }
+  { key: 'all', label: '全部' },
+  { key: 'system', label: '系统' },
+  { key: 'business', label: '业务' }
 ]
 const activeEventTab = ref('all')
 
@@ -153,23 +155,13 @@ async function loadData() {
     topologyPoints.value = overview.topology || []
     rankRows.value = rank || []
     trendPoints.value = trend || []
-    weatherMode.value = weather?.mode || 'fleet'
-    weatherRows.value = weather?.rows || []
+    weatherMetrics.value = weather?.metrics || []
+    weatherUpdateTime.value = weather?.updateTime || null
     events.value = eventRows || []
     updatedAt.value = formatNow()
   } finally {
     loading.value = false
   }
-}
-
-function windLevelStyle(speed) {
-  const numeric = Number(speed) || 0
-  const ratio = Math.max(0, Math.min(1, numeric / 15))
-  const width = `${Math.round(ratio * 100)}%`
-  let background = '#2dd36f'
-  if (numeric >= 10) background = '#ff7d45'
-  else if (numeric >= 7) background = '#f6b73c'
-  return { width, background }
 }
 
 const filteredEvents = computed(() => {
@@ -263,6 +255,13 @@ onBeforeUnmount(() => {
   background: linear-gradient(90deg, rgba(18, 215, 255, 0.45), rgba(18, 215, 255, 0));
 }
 
+.kpi-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: start;
+}
+
 .dashboard-grid {
   display: grid;
   grid-template-columns: 1fr 1.8fr;
@@ -270,10 +269,6 @@ onBeforeUnmount(() => {
 }
 
 .panel-trend {
-  grid-column: 1 / 3;
-}
-
-.panel-center {
   grid-column: 1 / 3;
 }
 
@@ -304,110 +299,108 @@ onBeforeUnmount(() => {
   margin-bottom: 10px;
 }
 
-.weather-grid {
+.weather-update-hint {
+  margin-left: 12px;
+  font-size: 12px;
+  color: #7ca8c4;
+}
+
+.weather-metrics-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(5, 1fr);
   gap: 10px;
 }
 
-.weather-item {
+.weather-metric-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
   border: 1px solid rgba(136, 186, 217, 0.2);
   border-radius: 10px;
   background: rgba(7, 24, 39, 0.58);
-  padding: 10px;
 }
 
-.weather-name {
-  font-size: 13px;
-  color: #dbefff;
-}
-
-.weather-main {
-  margin-top: 8px;
+.metric-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-}
-
-.weather-wind-wrap {
-  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-.wind-icon {
-  width: 14px;
-  height: 14px;
-  border: 2px solid #77dcff;
+.metric-wind { background: rgba(18, 215, 255, 0.12); }
+.metric-compass { background: rgba(45, 211, 111, 0.12); }
+.metric-temp { background: rgba(255, 125, 69, 0.12); }
+.metric-drop { background: rgba(100, 160, 255, 0.12); }
+
+.wind-icon-sm {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #5de0ff;
   border-left-color: transparent;
   border-radius: 50%;
   display: inline-block;
-  animation: spin 1.2s linear infinite;
+  animation: spin 2s linear infinite;
 }
 
-.weather-wind {
-  font-family: Consolas, Menlo, Monaco, monospace;
-  color: #53f0b0;
-  font-size: 20px;
-  text-shadow: 0 0 10px rgba(83, 240, 176, 0.28);
+.compass-icon-sm {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #2dd36f;
+  border-radius: 50%;
+  display: inline-block;
+  position: relative;
 }
 
-.weather-dir {
-  color: #9fd5f7;
-  font-size: 13px;
+.compass-icon-sm::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  width: 0;
+  height: 0;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-bottom: 6px solid #2dd36f;
 }
 
-.wind-level {
-  margin-top: 8px;
-  width: 100%;
-  height: 5px;
-  border-radius: 999px;
-  background: rgba(110, 157, 190, 0.26);
-  overflow: hidden;
+.temp-icon-sm, .drop-icon-sm {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
 }
 
-.wind-level-fill {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  transition: width 0.35s ease;
+.temp-icon-sm { background: #ff7d45; }
+.drop-icon-sm { background: #64a0ff; }
+
+.metric-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
-.weather-sub {
-  margin-top: 8px;
+.metric-label {
   font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.fleet-weather-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.fleet-weather-item {
-  border: 1px solid rgba(136, 186, 217, 0.2);
-  border-radius: 10px;
-  background: rgba(7, 24, 39, 0.58);
-  padding: 10px;
-}
-
-.fleet-label {
-  font-size: 13px;
   color: #9fc4df;
+  white-space: nowrap;
 }
 
-.fleet-value {
-  margin-top: 8px;
+.metric-value {
+  font-size: 18px;
   font-family: Consolas, Menlo, Monaco, monospace;
-  font-size: 24px;
-  color: #49ecff;
+  color: #dff3ff;
+  white-space: nowrap;
 }
 
-.fleet-hint {
-  margin-top: 8px;
+.metric-value small {
   font-size: 12px;
-  color: #b2cee3;
+  color: #8fb2ca;
+  margin-left: 2px;
 }
 
 .event-title-row {
@@ -532,7 +525,18 @@ onBeforeUnmount(() => {
   50% { opacity: 0.35; }
 }
 
+.empty-state {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 24px 16px;
+  font-size: 14px;
+}
+
 @media (max-width: 1280px) {
+  .kpi-row {
+    grid-template-columns: 1fr;
+  }
+
   .dashboard-grid {
     grid-template-columns: 1fr;
   }
@@ -548,9 +552,8 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 720px) {
-  .weather-grid,
-  .fleet-weather-grid {
-    grid-template-columns: 1fr;
+  .weather-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .event-item {
