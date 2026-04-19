@@ -14,7 +14,11 @@ from datetime import datetime, timedelta
 from threading import Event, Lock, Thread
 
 import joblib
+import numpy as np
 import pandas as pd
+
+from services.extreme_weather_detector import ExtremeWeatherDetector
+from services.prediction_corrector import PredictionCorrector
 
 # ---------------------------------------------------------------------------
 # Module-level shared state
@@ -829,6 +833,91 @@ def monitor_prediction(today_date):
             )
 
             if combined_pred is not None and pred_timestamps is not None:
+                # --- Extreme weather detection + correction ---
+                try:
+                    input_df = pd.read_csv(csv_file)
+                    ecmwf_features = _extract_ecmwf_features_for_detection(
+                        input_df
+                    )
+                    detector = ExtremeWeatherDetector()
+                    conditions = [detector.detect(row) for row in ecmwf_features]
+                    active = detector.get_active_conditions(conditions)
+
+                    if active:
+                        capacity = float(
+                            os.environ.get('WF_CAPACITY', '779.0')
+                        )
+                        pred_array = np.asarray(combined_pred, dtype=float)
+                        # Pad conditions if prediction has more timesteps
+                        if len(pred_array) > len(conditions):
+                            conditions_extended = conditions + [
+                                conditions[-1]
+                            ] * (len(pred_array) - len(conditions))
+                        else:
+                            conditions_extended = conditions[:len(pred_array)]
+
+                        corrector = PredictionCorrector()
+                        corrected, correction_records = corrector.correct(
+                            pred_array, conditions_extended, capacity
+                        )
+                        combined_pred = corrected.tolist()
+
+                        summary = corrector.get_correction_summary(
+                            correction_records
+                        )
+                        logging.info(
+                            "极端天气校正完成: %d corrections / %d predictions, "
+                            "by_type=%s",
+                            summary["total_corrections"],
+                            len(pred_array),
+                            summary["by_type"],
+                        )
+                        print(f"⚠️ 极端天气校正: "
+                              f"{summary['total_corrections']} corrections "
+                              f"applied, types: {summary['by_type']}")
+
+                        # Re-save corrected predictions to output file
+                        try:
+                            result_df = pd.read_csv(output_file)
+                            if len(result_df) == len(combined_pred):
+                                # Find the power column
+                                power_col = None
+                                for col_name in ('power', 'Power',
+                                                 'predicted_power',
+                                                 'prediction'):
+                                    if col_name in result_df.columns:
+                                        power_col = col_name
+                                        break
+                                if power_col is None:
+                                    power_col = result_df.columns[-1]
+                                result_df[power_col] = combined_pred
+                                result_df.to_csv(output_file, index=False)
+                                logging.info(
+                                    "校正后预测结果已覆盖保存到 %s",
+                                    output_file,
+                                )
+                            else:
+                                logging.warning(
+                                    "输出文件行数(%d)与校正结果(%d)不匹配，"
+                                    "跳过覆盖保存",
+                                    len(result_df),
+                                    len(combined_pred),
+                                )
+                        except Exception as save_err:
+                            logging.warning(
+                                "校正后结果保存失败（不影响预测完成标记）: %s",
+                                save_err,
+                            )
+
+                        _inject_extreme_weather_alarms(active, farm_code)
+                    else:
+                        logging.info("未检测到极端天气条件，预测结果无需校正")
+                except Exception as ew_err:
+                    logging.warning(
+                        "极端天气检测/校正失败（不影响预测结果）: %s",
+                        ew_err,
+                    )
+
                 predict_success = True
                 print(f"✅ 预测成功完成，结果已保存到 {output_file}")
                 logging.info(f"✅ 预测成功完成，结果已保存到 {output_file}")
@@ -896,6 +985,100 @@ def _check_production_model(model_folder_today):
         logging.info(f"ℹ️ 未检测到生产模型，或类型文件标记为 "
                      f"'{type_file_content}'。预测将尝试使用评估阶段的"
                      "最佳模型。")
+
+
+# ---------------------------------------------------------------------------
+# Extreme weather detection helpers
+# ---------------------------------------------------------------------------
+
+def _extract_ecmwf_features_for_detection(input_df: pd.DataFrame) -> list[dict]:
+    """Extract averaged ECMWF meteorological features for extreme weather detection.
+
+    For each row in *input_df*, computes averaged values across grid-point
+    columns and returns a list of dicts suitable for
+    :meth:`ExtremeWeatherDetector.detect`.
+
+    Parameters
+    ----------
+    input_df:
+        DataFrame containing ECMWF columns such as ``ws100_1..ws100_15``,
+        ``2t_23.8_103.2``, ``tcwv_*``, etc.
+
+    Returns
+    -------
+    list[dict]
+        One dict per row with keys ``ws100_avg``, ``temp_2t_avg``,
+        ``tcwv_avg``, ``temp_24h_drop``.
+    """
+    import re
+
+    ws100_cols = [c for c in input_df.columns
+                  if re.match(r'^ws100_\d', c)]
+    temp_2t_cols = [c for c in input_df.columns if c.startswith('2t_')]
+    tcwv_cols = [c for c in input_df.columns if c.startswith('tcwv_')]
+
+    def _safe_mean(row: pd.Series, cols: list[str]) -> float:
+        """Average of *cols* for one row, skipping NaN/None."""
+        if not cols:
+            return 0.0
+        vals = row[cols]
+        numeric = vals.dropna()
+        if numeric.empty:
+            return 0.0
+        return float(numeric.mean())
+
+    results: list[dict] = []
+    for _, row in input_df.iterrows():
+        results.append({
+            "ws100_avg": _safe_mean(row, ws100_cols),
+            "temp_2t_avg": _safe_mean(row, temp_2t_cols),
+            "tcwv_avg": _safe_mean(row, tcwv_cols),
+            "temp_24h_drop": 0.0,
+        })
+    return results
+
+
+def _inject_extreme_weather_alarms(conditions: list, farm_code: str) -> None:
+    """Create alarm records for warning/danger weather conditions.
+
+    Parameters
+    ----------
+    conditions:
+        List of :class:`WeatherCondition` instances.
+    farm_code:
+        Wind farm identifier.
+
+    This is a best-effort operation -- failures are logged but never
+    propagated, so the prediction pipeline is never broken by alarm issues.
+    """
+    alarming = [c for c in conditions
+                if c.severity in ("warning", "danger")]
+    if not alarming:
+        return
+
+    try:
+        from db_session import db_session
+        from db_models.alarm import AlarmRecord
+
+        with db_session() as session:
+            for cond in alarming:
+                msg = (f"[极端天气] 类型={cond.condition_type}, "
+                       f"严重级别={cond.severity}, "
+                       f"详情={cond.details}")
+                record = AlarmRecord(
+                    source="extreme_weather",
+                    farm_code=farm_code,
+                    module="prediction",
+                    level=cond.severity,
+                    message=msg,
+                    status="open",
+                )
+                session.add(record)
+        logging.info("已注入 %d 条极端天气告警 (场站: %s)",
+                     len(alarming), farm_code)
+    except Exception as alarm_err:
+        logging.warning("极端天气告警注入失败（不影响预测结果）: %s",
+                        alarm_err)
 
 
 # ---------------------------------------------------------------------------
