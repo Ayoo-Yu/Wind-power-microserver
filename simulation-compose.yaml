@@ -1,0 +1,191 @@
+# ============================================================
+# Simulation Infrastructure (模拟基础设施)
+# 仅包含模拟生产环境所需的服务，前后端使用本地开发模式
+#
+# 前后端本地启动:
+#   cd wind-power-forecast/backend && python app.py          (:5000)
+#   cd wind-power-forecast/backend-autopredict && python app.py (:5001)
+#   cd wind-power-forecast/frontend && npm run serve         (:8080)
+#
+# 模拟环境启动:
+#   docker compose -f simulation-compose.yaml up -d
+# ============================================================
+
+services:
+  # ==========================================================
+  # ZONE 3 - 中转服务（从腾讯云拉取E-text）
+  # ==========================================================
+  zone3-relay:
+    build:
+      context: .
+      dockerfile: simulation/zone3-relay/Dockerfile
+    image: sim-zone3-relay:v1
+    container_name: sim-zone3-relay
+    environment:
+      - TZ=Asia/Shanghai
+      - FETCH_INTERVAL_MINUTES=${FETCH_INTERVAL_MINUTES:-15}
+    volumes:
+      - ./simulation/data/etext:/data/from_server_c
+      - ./simulation/logs/zone3:/var/log
+      - ./simulation/ssh/id_rsa:/home/ecs-user/.ssh/id_rsa
+    networks:
+      - sim-external
+      - sim-zone-transfer
+    restart: unless-stopped
+
+  # ==========================================================
+  # ZONE 2 - 数据处理器（E-text → CSV → 预测输入）
+  # 输出到宿主机目录，本地 autopredict 直接读取
+  # ==========================================================
+  zone2-processor:
+    build:
+      context: .
+      dockerfile: simulation/zone2-processor/Dockerfile
+    image: sim-zone2-processor:v1
+    container_name: sim-zone2-processor
+    environment:
+      - TZ=Asia/Shanghai
+      - FETCH_INTERVAL_MINUTES=${FETCH_INTERVAL_MINUTES:-15}
+      - DB_INGEST_ENABLED=${DB_INGEST_ENABLED:-true}
+      - DB_HOST=sim-kingbase
+      - DB_PORT=54321
+      - DB_USER=${DB_USER:-system}
+      - DB_PASSWORD=${DB_PASSWORD:-12345678ab}
+      - DB_NAME=${DB_NAME:-windpower}
+      - FARM_CODE=${FARM_CODE:-DEFAULT_FARM}
+      - FARM_CODES=${FARM_CODES:-CF,BNJ,SDS,DPLZ,ZYX}
+    volumes:
+      # E-text输入（与Zone3共享）
+      - ./simulation/data/etext:/data/from_server_c
+      # 预测输入输出 → 本地 autopredict 的 predict_inputs 目录
+      - ./wind-power-forecast/backend-autopredict/auto_scripts/scripts/short/predict_inputs:/data/daily_pre_csv/short
+      - ./wind-power-forecast/backend-autopredict/auto_scripts/scripts/middle/predict_inputs:/data/daily_pre_csv/middle
+      # 模板文件
+      - ./simulation/data/template:/data/daily_pre_csv/example:ro
+      # 日志
+      - ./simulation/logs/zone2:/var/log
+    networks:
+      - sim-zone-transfer
+      - sim-scada-net
+    depends_on:
+      zone3-relay:
+        condition: service_started
+      kingbase:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ==========================================================
+  # SCADA 模拟器（IEC 60870-5-104 Server）
+  # ==========================================================
+  scada-simulator:
+    build:
+      context: .
+      dockerfile: simulation/scada-simulator/Dockerfile
+    image: sim-scada-simulator:v1
+    container_name: sim-scada-server
+    environment:
+      - TZ=Asia/Shanghai
+      - SIMULATOR_PORT=2404
+      - POWER_MIN=${POWER_MIN:-0}
+      - POWER_MAX=${POWER_MAX:-200}
+      - UPDATE_INTERVAL_SECONDS=${UPDATE_INTERVAL_SECONDS:-10}
+    ports:
+      - "2404:2404"
+    networks:
+      - sim-scada-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 2404 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ==========================================================
+  # 多场站 SCADA 功率模拟器（直接 HTTP POST，无需 C104）
+  # ==========================================================
+  scada_multifarm:
+    build:
+      context: .
+      dockerfile: simulation/scada-simulator/Dockerfile.multifarm
+    container_name: sim-multifarm-scada
+    environment:
+      - TZ=Asia/Shanghai
+      - FARM_CODES=${FARM_CODES:-CF,BNJ,SDS,DPLZ,ZYX}
+      - FARM_CAPACITIES=${FARM_CAPACITIES:-48.0,34.0,193.5,50.0,453.5}
+      - BACKEND_URL=http://host.docker.internal:${MAIN_APP_PORT:-5000}
+      - UPDATE_INTERVAL=60
+    entrypoint: ["python3", "scada_multifarm.py"]
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - sim-scada-net
+
+  # ==========================================================
+  # KINGBASE（金仓数据库）- 前后端本地开发也需要此服务
+  # ==========================================================
+  kingbase:
+    image: kingbase_v009r001c002b0014_single_x86:v1
+    container_name: sim-kingbase
+    privileged: true
+    environment:
+      - NEED_START=yes
+      - DB_USER=${DB_USER:-system}
+      - DB_PASSWORD=${DB_PASSWORD:-12345678ab}
+      - DB_MODE=oracle
+      - ENCODING=UTF8
+      - TZ=Asia/Shanghai
+    volumes:
+      - sim_kingbase_data:/home/kingbase/userdata/
+    ports:
+      - "15432:54321"
+    command: /usr/sbin/init
+    restart: unless-stopped
+    networks:
+      - sim-zone-transfer
+    healthcheck:
+      test: ["CMD", "ls", "/home/kingbase/userdata/data"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ==========================================================
+  # MINIO（对象存储）
+  # ==========================================================
+  minio:
+    image: minio/minio
+    container_name: sim-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      TZ: Asia/Shanghai
+    volumes:
+      - sim_minio_data:/data
+    ports:
+      - "9900:9000"
+      - "9901:9001"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  sim_kingbase_data:
+  sim_minio_data:
+
+networks:
+  sim-external:
+    name: sim-external
+    driver: bridge
+  sim-zone-transfer:
+    name: sim-zone-transfer
+    driver: bridge
+  sim-scada-net:
+    name: sim-scada-net
+    driver: bridge
