@@ -334,6 +334,7 @@ const formRef = ref(null)
 
 const mapChartRef = ref(null)
 let mapChart = null
+let mapDisposed = false
 
 const formData = reactive({
   farm_code: '',
@@ -632,7 +633,7 @@ function initMapChart() {
 }
 
 function renderMapChart() {
-  if (!mapChartRef.value) return
+  if (mapDisposed || !mapChartRef.value) return
   initMapChart()
   if (!mapChart) return
 
@@ -644,7 +645,7 @@ function renderMapChart() {
   }))
 
   mapChart.setOption({
-    backgroundColor: '#ffffff',
+    backgroundColor: '#0b1d2d',
     grid: {
       left: 58,
       right: 24,
@@ -699,7 +700,7 @@ function renderMapChart() {
 }
 
 function handleWindowResize() {
-  if (mapChart) {
+  if (!mapDisposed && mapChart) {
     mapChart.resize()
   }
 }
@@ -726,6 +727,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  mapDisposed = true
   window.removeEventListener('resize', handleWindowResize)
   if (mapChart) {
     mapChart.dispose()
@@ -779,12 +781,12 @@ onBeforeUnmount(() => {
 .farm-title {
   font-size: 16px;
   font-weight: 600;
-  color: #203449;
+  color: var(--text-primary);
 }
 
 .farm-code {
   margin-top: 4px;
-  color: #6d7c8c;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -799,13 +801,15 @@ onBeforeUnmount(() => {
 }
 
 .status-pill.active {
-  color: #148f44;
-  background: #e7f8ee;
+  color: #7ef3b7;
+  background: rgba(45, 211, 111, 0.15);
+  border: 1px solid rgba(45, 211, 111, 0.3);
 }
 
 .status-pill.inactive {
-  color: #a63a3a;
-  background: #fce9eb;
+  color: #ff8f9f;
+  background: rgba(255, 93, 115, 0.15);
+  border: 1px solid rgba(255, 93, 115, 0.3);
 }
 
 .core-meta {
@@ -821,17 +825,18 @@ onBeforeUnmount(() => {
 }
 
 .meta-label {
-  color: #748294;
+  color: var(--text-secondary);
 }
 
 .meta-value {
-  color: #2b3c4f;
+  color: var(--text-primary);
   font-weight: 500;
 }
 
 .biz-status {
   margin-top: 12px;
-  background: #f7fafc;
+  background: rgba(10, 25, 38, 0.5);
+  border: 1px solid var(--border-color);
   border-radius: 10px;
   padding: 10px 12px;
 }
@@ -842,7 +847,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 10px;
   font-size: 13px;
-  color: #34495e;
+  color: var(--text-secondary);
 }
 
 .biz-row + .biz-row {
@@ -885,7 +890,8 @@ onBeforeUnmount(() => {
 .map-chart {
   width: 100%;
   height: 560px;
-  border: 1px solid #ebeff5;
+  border: 1px solid var(--border-color);
+  background: rgba(8, 24, 38, 0.5);
   border-radius: 12px;
 }
 
@@ -896,7 +902,7 @@ onBeforeUnmount(() => {
   transform: translate(-50%, -50%);
   color: #6f7f93;
   font-size: 14px;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(7, 24, 39, 0.58);
   padding: 10px 14px;
   border-radius: 8px;
 }

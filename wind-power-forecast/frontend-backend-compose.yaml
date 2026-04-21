@@ -28,12 +28,13 @@ services:
       - DB_HOST=kingbase       # 使用金仓数据库服务名称
       - DB_PORT=54321          # 金仓数据库端口
       - DB_USER=system         # 金仓默认用户
-      - DB_PASSWORD=12345678ab # 金仓默认密码
+      - DB_PASSWORD=${DB_PASSWORD:-change-me-in-production}
       - DB_NAME=windpower      # 连接到windpower数据库
       - MINIO_ENDPOINT=minio   # 使用MinIO服务名称
       - MINIO_PORT=9000
       - TZ=Asia/Shanghai # Set Timezone to Beijing Time
-    
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+
     networks:
       - wind-power-network  # 连接同一网络
     depends_on:
@@ -61,12 +62,15 @@ services:
       - DB_HOST=kingbase
       - DB_PORT=54321
       - DB_USER=system
-      - DB_PASSWORD=12345678ab
+      - DB_PASSWORD=${DB_PASSWORD:-change-me-in-production}
       - DB_NAME=windpower
       - MINIO_ENDPOINT=minio
       - MINIO_PORT=9000
       - BACKEND_API_URL=http://backend:5000
       - TZ=Asia/Shanghai
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     networks:
       - wind-power-network
     depends_on:
@@ -74,6 +78,8 @@ services:
         condition: service_started
       minio:
         condition: service_healthy
+      redis:
+        condition: service_started
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
@@ -136,7 +142,7 @@ services:
     environment:
       - NEED_START=yes
       - DB_USER=system  # 金仓默认用户
-      - DB_PASSWORD=12345678ab  # 金仓默认密码
+      - DB_PASSWORD=${DB_PASSWORD:-change-me-in-production}  # 金仓默认密码
       - DB_MODE=oracle  # 使用oracle模式，这是金仓推荐的模式
       - ENCODING=UTF8
       - TZ=Asia/Shanghai # Set Timezone to Beijing Time
@@ -154,6 +160,123 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  autopredict-worker:
+    build:
+      context: ..
+      dockerfile: wind-power-forecast/backend-autopredict/Dockerfile
+    image: wind-power-backend-autopredict:v250714_1.0
+    entrypoint: ["/bin/bash", "/app/docker-entrypoint-celery.sh"]
+    command: ["celery", "-A", "celery_app", "worker", "--loglevel=info", "-c", "4", "--without-heartbeat"]
+    environment:
+      - DB_HOST=kingbase
+      - DB_PORT=54321
+      - DB_USER=system
+      - DB_PASSWORD=${DB_PASSWORD:-12345678ab}
+      - DB_NAME=windpower
+      - MINIO_ENDPOINT=minio
+      - MINIO_PORT=9000
+      - TZ=Asia/Shanghai
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    networks:
+      - wind-power-network
+    depends_on:
+      kingbase:
+        condition: service_started
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    volumes:
+      - ./backend-autopredict/auto_scripts/scripts/middle/datasets:/app/auto_scripts/scripts/middle/datasets
+      - ./backend-autopredict/auto_scripts/scripts/middle/predict_inputs:/app/auto_scripts/scripts/middle/predict_inputs
+      - ./backend-autopredict/auto_scripts/scripts/middle/models:/app/auto_scripts/scripts/middle/models
+      - ./backend-autopredict/auto_scripts/scripts/middle/predict_outputs:/app/auto_scripts/scripts/middle/predict_outputs
+      - ./backend-autopredict/auto_scripts/scripts/middle/logs:/app/auto_scripts/scripts/middle/logs
+      - ./backend-autopredict/auto_scripts/scripts/middle/merged_predict_outputs:/app/auto_scripts/scripts/middle/merged_predict_outputs
+      - ./backend-autopredict/auto_scripts/scripts/middle/feature_importance:/app/auto_scripts/scripts/middle/feature_importance
+      - ./backend-autopredict/auto_scripts/scripts/short/datasets:/app/auto_scripts/scripts/short/datasets
+      - ./backend-autopredict/auto_scripts/scripts/short/predict_inputs:/app/auto_scripts/scripts/short/predict_inputs
+      - ./backend-autopredict/auto_scripts/scripts/short/models:/app/auto_scripts/scripts/short/models
+      - ./backend-autopredict/auto_scripts/scripts/short/predict_outputs:/app/auto_scripts/scripts/short/predict_outputs
+      - ./backend-autopredict/auto_scripts/scripts/short/logs:/app/auto_scripts/scripts/short/logs
+      - ./backend-autopredict/auto_scripts/scripts/short/feature_importance:/app/auto_scripts/scripts/short/feature_importance
+      - ./backend-autopredict/auto_scripts/scripts/supershort/datasets:/app/auto_scripts/scripts/supershort/datasets
+      - ./backend-autopredict/auto_scripts/scripts/supershort/saved_models:/app/auto_scripts/scripts/supershort/saved_models
+      - ./backend-autopredict/auto_scripts/scripts/supershort/prediction_inputs:/app/auto_scripts/scripts/supershort/prediction_inputs
+      - ./backend-autopredict/auto_scripts/scripts/supershort/prediction_results:/app/auto_scripts/scripts/supershort/prediction_results
+      - ./backend-autopredict/auto_scripts/scripts/supershort/logs:/app/auto_scripts/scripts/supershort/logs
+
+  autopredict-beat:
+    build:
+      context: ..
+      dockerfile: wind-power-forecast/backend-autopredict/Dockerfile
+    image: wind-power-backend-autopredict:v250714_1.0
+    entrypoint: ["/bin/bash", "/app/docker-entrypoint-celery.sh"]
+    command: ["celery", "-A", "celery_app", "beat", "--loglevel=info"]
+    environment:
+      - DB_HOST=kingbase
+      - DB_PORT=54321
+      - DB_USER=system
+      - DB_PASSWORD=${DB_PASSWORD:-12345678ab}
+      - DB_NAME=windpower
+      - MINIO_ENDPOINT=minio
+      - MINIO_PORT=9000
+      - TZ=Asia/Shanghai
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    networks:
+      - wind-power-network
+    depends_on:
+      kingbase:
+        condition: service_started
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  autopredict-flower:
+    build:
+      context: ..
+      dockerfile: wind-power-forecast/backend-autopredict/Dockerfile
+    image: wind-power-backend-autopredict:v250714_1.0
+    entrypoint: ["/bin/bash", "/app/docker-entrypoint-celery.sh"]
+    command: ["celery", "-A", "celery_app", "flower", "--port=5555", "--basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-celery123}"]
+    ports:
+      - "127.0.0.1:5555:5555"
+    environment:
+      - DB_HOST=kingbase
+      - DB_PORT=54321
+      - DB_USER=system
+      - DB_PASSWORD=${DB_PASSWORD:-12345678ab}
+      - DB_NAME=windpower
+      - TZ=Asia/Shanghai
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    networks:
+      - wind-power-network
+    depends_on:
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: wind-power-redis
+    ports:
+      - "127.0.0.1:6379:6379"
+    restart: unless-stopped
+    networks:
+      - wind-power-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   minio:
     image: minio/minio

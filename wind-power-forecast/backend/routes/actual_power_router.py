@@ -20,6 +20,7 @@ def create_actual_power():
         return jsonify({"error": "缺少必要参数: Timestamp"}), 400
 
     wp_true_input = data.get('wp_true') # 使用 .get() 获取，如果键不存在则为 None
+    farm_code = str(data.get('farm_code', '') or '').strip() or 'DEFAULT_FARM'
 
     processed_wp_true = None # 默认值，如果 wp_true_input 是 None 或无效，则存为 NULL
 
@@ -56,7 +57,8 @@ def create_actual_power():
         with db_session() as db:
             # 检查时间戳是否已存在
             existing = db.query(ActualPower).filter(
-                ActualPower.timestamp == timestamp_dt
+                ActualPower.timestamp == timestamp_dt,
+                ActualPower.farm_code == farm_code
             ).first()
             
             if existing:
@@ -67,6 +69,7 @@ def create_actual_power():
                 return jsonify({
                     "id": existing.id,
                     "timestamp": existing.timestamp.isoformat(),
+                    "farm_code": existing.farm_code,
                     "wp_true": existing.wp_true,
                     "action": "updated"
                 }), 200
@@ -74,7 +77,8 @@ def create_actual_power():
                 # 创建新记录
                 db_record = ActualPower(
                     timestamp=timestamp_dt,
-                    wp_true=processed_wp_true # 使用处理后的值
+                    farm_code=farm_code,
+                    wp_true=processed_wp_true
                 )
                 
                 db.add(db_record)
@@ -84,6 +88,7 @@ def create_actual_power():
                 return jsonify({
                     "id": db_record.id,
                     "timestamp": db_record.timestamp.isoformat(),
+                    "farm_code": db_record.farm_code,
                     "wp_true": db_record.wp_true,
                     "action": "created"
                 }), 201
@@ -92,7 +97,7 @@ def create_actual_power():
         current_app.logger.error(f"数据存储失败: {e}")
         # 如果 db_session 实现了自动回滚，则不需要手动 rollback
         # 否则可能需要 db.rollback()
-        return jsonify({"error": f"数据存储失败: {str(e)}"}), 500
+        return jsonify({"error": "数据存储失败，请稍后重试"}), 500
 
 def process_wp_true_value(wp_true_input, row_index=None):
     """处理wp_true值的通用函数"""
@@ -125,6 +130,8 @@ def batch_create_actual_power():
     
     if not file.filename.endswith('.csv'):
         return jsonify({"error": "仅支持CSV文件"}), 400
+
+    batch_farm_code = str(request.form.get('farm_code', '') or '').strip() or 'DEFAULT_FARM'
 
     total_inserted_count = 0
     total_updated_count = 0
@@ -182,8 +189,10 @@ def batch_create_actual_power():
                             current_app.logger.error(error_msg)
                             continue
                         
+                        row_farm_code = str(row.get('farm_code', '') or '').strip() if 'farm_code' in chunk_df.columns else ''
                         chunk_records.append({
                             "timestamp": timestamp,
+                            "farm_code": row_farm_code or batch_farm_code,
                             "wp_true": processed_wp_true
                         })
                         
@@ -200,37 +209,39 @@ def batch_create_actual_power():
                     current_app.logger.warning(f"数据块 {processed_chunks} 中没有有效记录，跳过...")
                     continue
 
-                # 处理数据块内部的重复时间戳
+                # 处理数据块内部的重复时间戳（按 timestamp+farm_code 组合去重）
                 seen_timestamps_in_chunk = {}
                 chunk_skipped_duplicates = 0
-                
+
                 for record in chunk_records:
-                    if record['timestamp'] not in seen_timestamps_in_chunk:
-                        seen_timestamps_in_chunk[record['timestamp']] = record
-                    else:
-                        seen_timestamps_in_chunk[record['timestamp']] = record
+                    key = (record['timestamp'], record['farm_code'])
+                    if key in seen_timestamps_in_chunk:
                         chunk_skipped_duplicates += 1
-                        current_app.logger.warning(f"数据块内重复时间戳，使用最新值: {record['timestamp'].isoformat()}")
+                        current_app.logger.warning(f"数据块内重复记录，使用最新值: {record['timestamp'].isoformat()} farm={record['farm_code']}")
+                    seen_timestamps_in_chunk[key] = record
                 
                 total_skipped_intra_batch_duplicates += chunk_skipped_duplicates
                 unique_chunk_records = list(seen_timestamps_in_chunk.values())
 
                 # 查询数据库中已存在的记录
                 chunk_timestamps = [r['timestamp'] for r in unique_chunk_records]
+                chunk_farm_codes = list(set(r['farm_code'] for r in unique_chunk_records))
                 existing_records = session.query(ActualPower).filter(
-                    ActualPower.timestamp.in_(chunk_timestamps)
+                    ActualPower.timestamp.in_(chunk_timestamps),
+                    ActualPower.farm_code.in_(chunk_farm_codes)
                 ).all()
-                
-                existing_timestamp_map = {record.timestamp: record for record in existing_records}
+
+                existing_timestamp_map = {(record.timestamp, record.farm_code): record for record in existing_records}
 
                 # 分离需要插入和更新的记录
                 records_to_insert = []
                 records_to_update = []
                 
                 for record in unique_chunk_records:
-                    if record['timestamp'] in existing_timestamp_map:
+                    key = (record['timestamp'], record['farm_code'])
+                    if key in existing_timestamp_map:
                         # 更新现有记录
-                        existing_record = existing_timestamp_map[record['timestamp']]
+                        existing_record = existing_timestamp_map[key]
                         existing_record.wp_true = record['wp_true']
                         records_to_update.append(existing_record)
                     else:
@@ -287,4 +298,4 @@ def batch_create_actual_power():
         return jsonify({"error": "CSV文件为空"}), 400
     except Exception as e:
         current_app.logger.error(f"文件处理失败: {str(e)}", exc_info=True)
-        return jsonify({"error": f"文件处理失败: {str(e)}"}), 500 
+        return jsonify({"error": "文件处理失败，请检查数据格式后重试"}), 500 

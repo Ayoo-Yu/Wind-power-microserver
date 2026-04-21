@@ -124,7 +124,7 @@ export default {
     },
     wfCapacity: {
       type: Number,
-      default: 453.5
+      default: 779.0
     },
     downloadUrl: {
       type: String,

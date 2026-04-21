@@ -392,8 +392,8 @@ export default {
 }
 
 .summary-card {
-  background: rgba(6, 21, 34, 0.86);
-  border: 1px solid rgba(130, 178, 212, 0.2);
+  background: var(--gradient-card);
+  border: 1px solid var(--border-color);
 }
 
 .summary-label {
@@ -404,19 +404,20 @@ export default {
 .summary-value {
   margin-top: 8px;
   color: var(--text-primary);
+  font-family: var(--font-mono);
   font-size: 26px;
   font-weight: 700;
 }
 
 .summary-tip {
   margin-top: 8px;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   font-size: 12px;
 }
 
 .card-shell {
-  background: rgba(6, 21, 34, 0.86);
-  border: 1px solid rgba(130, 178, 212, 0.2);
+  background: var(--gradient-card);
+  border: 1px solid var(--border-color);
 }
 
 .toolbar {

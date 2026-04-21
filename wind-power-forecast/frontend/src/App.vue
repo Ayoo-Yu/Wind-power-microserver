@@ -5,12 +5,6 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
-import { ensureFormControlsTextColor } from './utils/styleCheck'
-
-onMounted(() => {
-  ensureFormControlsTextColor()
-})
 </script>
 
 <style>

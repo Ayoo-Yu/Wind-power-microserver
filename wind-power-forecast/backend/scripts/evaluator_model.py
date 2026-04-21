@@ -10,7 +10,7 @@ import os
 import pathlib
 
 class ModelEvaluator:
-    def __init__(self, data_path, output_dir=None, wfcapacity=453.5):
+    def __init__(self, data_path, output_dir=None, wfcapacity=779.0):
         """
         初始化模型评估器
         
@@ -21,7 +21,7 @@ class ModelEvaluator:
         output_dir : str, optional
             结果保存目录，如果未提供，将自动创建
         wfcapacity : float, optional
-            风电场装机容量，默认为453.5 MW
+            风电场装机容量，默认为779.0 MW
         """
         # 读取数据
         self.data = pd.read_csv(data_path)
@@ -466,7 +466,7 @@ def evaluate_model(
     save_csv=True,
     save_report=True,
     custom_save_dir=None,
-    wfcapacity=453.5,
+    wfcapacity=779.0,
     model_info=None,
 ):
     """
@@ -485,7 +485,7 @@ def evaluate_model(
     custom_save_dir : str, optional
         自定义的结果保存目录，如果不提供则使用默认目录结构
     wfcapacity : float, optional
-        风电场装机容量，默认为453.5 MW
+        风电场装机容量，默认为779.0 MW
     model_info : dict, optional
         模型相关信息，包括模型类型、训练参数等
     """

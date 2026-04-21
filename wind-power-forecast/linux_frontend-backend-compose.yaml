@@ -30,6 +30,7 @@ services:
       - MINIO_ENDPOINT=minio
       - MINIO_PORT=9000
       - TZ=Asia/Shanghai
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
     networks:
       - wind-power-network
     depends_on:
@@ -61,6 +62,7 @@ services:
       - MINIO_PORT=9000
       - BACKEND_API_URL=http://backend:5000
       - TZ=Asia/Shanghai
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
     networks:
       - wind-power-network
     depends_on:

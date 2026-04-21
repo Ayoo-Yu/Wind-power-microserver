@@ -86,10 +86,10 @@ export default {
 }
 .el-upload__text {
   font-size: 14px;
-  color: #666;
+  color: var(--text-secondary);
 }
 .el-upload__tip {
   font-size: 12px;
-  color: #999;
+  color: var(--text-muted);
 }
 </style>

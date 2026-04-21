@@ -16,7 +16,7 @@ def _env(name, default):
 DB_HOST = _env('DB_HOST', 'kingbase')
 DB_PORT = _env('DB_PORT', '54321')
 DB_USER = _env('DB_USER', 'system')
-DB_PASSWORD = _env('DB_PASSWORD', '12345678ab')
+DB_PASSWORD = _env('DB_PASSWORD', '')
 DB_NAME = _env('DB_NAME', 'windpower')
 
 # MinIO 配置
@@ -38,9 +38,12 @@ KINGBASE_CONFIG = {
     'host': _env('DB_HOST_OVERRIDE', DB_HOST),
     'port': int(_env('DB_PORT_OVERRIDE', DB_PORT)),
     'user': DB_USER,
-    'password': DB_PASSWORD, # Consider better secret management
+    'password': DB_PASSWORD,
     'database': DB_NAME,
 }
+
+if not KINGBASE_CONFIG['password']:
+    raise RuntimeError("DB_PASSWORD environment variable is required")
 
 # MinIO Configuration
 # For local development, set MINIO_HOST_OVERRIDE and MINIO_PORT_OVERRIDE environment variables.
@@ -105,37 +108,18 @@ class Config:
         }
     }
 
-    KINGBASE_CONFIG = {
-        "host": DB_HOST,
-        "port": DB_PORT,
-        "user": DB_USER,
-        "password": DB_PASSWORD,
-        "database": DB_NAME
-    }
-    
-    MINIO_CONFIG = {
-        "endpoint": MINIO_ENDPOINT,
-        "port": MINIO_PORT,
-        "access_key": MINIO_ACCESS_KEY,
-        "secret_key": MINIO_SECRET_KEY,
-        "secure": MINIO_SECURE,
-        "buckets": {
-            "datasets": "wind-datasets",
-            "models": "wind-models",
-            "predictions": "wind-predictions",
-            "scalers": "wind-scalers",
-            "metrics": "wind-metrics",
-            "logs": "wind-logs"
-        },
-        "policies": {
-            "wind-datasets": "private",
-            "wind-models": "public-read",
-            "wind-predictions": "private",
-            "wind-scalers": "private",
-            "wind-metrics": "public-read",
-            "wind-logs": "public-read"
-        }
-    }
+    # Redis / Celery 配置
+    REDIS_HOST = _env('REDIS_HOST', 'localhost')
+    REDIS_PORT = _env('REDIS_PORT', '6379')
+    REDIS_PASSWORD = _env('REDIS_PASSWORD', '')
+    REDIS_URL = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/0" if REDIS_PASSWORD else f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
+
+    CELERY_BROKER_URL = REDIS_URL
+    CELERY_RESULT_BACKEND = REDIS_URL
+
+    KINGBASE_CONFIG = KINGBASE_CONFIG
+
+    MINIO_CONFIG = MINIO_CONFIG
 
     MODEL_STORAGE = {
         'model_dir': os.path.join(BASE_DIR, 'saved_models'),
@@ -143,8 +127,12 @@ class Config:
         'metrics_dir': os.path.join(BASE_DIR, 'saved_metrics')
     }
 
-    SECRET_KEY = _env('SECRET_KEY', 'your-secret-key')
-    SQLALCHEMY_DATABASE_URI = f"postgresql+kingbase://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    SECRET_KEY = _env('SECRET_KEY', '')
+    if not SECRET_KEY:
+        raise RuntimeError("SECRET_KEY environment variable is required")
+    # Real connections use database_config.py which reads KINGBASE_CONFIG with overrides.
+    # This placeholder satisfies libraries that expect SQLALCHEMY_DATABASE_URI to exist.
+    SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     DEBUG = _env('FLASK_DEBUG', 'True').lower() == 'true'
     SESSION_TYPE = 'filesystem'

@@ -9,7 +9,7 @@ class FarmService {
   constructor() {
     this.currentFarm = localStorage.getItem('selectedFarm') || 'DEFAULT_FARM'
     this.availableFarms = [
-      { code: 'DEFAULT_FARM', name: '默认风场' }
+      { code: 'DEFAULT_FARM', name: '全部风电场' }
     ]
     this.farmsLoaded = false
     this.listeners = []
@@ -66,7 +66,7 @@ class FarmService {
     if (!scopeCodes) return farms
     const whitelist = new Set(scopeCodes.map(item => String(item).toLowerCase()))
     const filtered = farms.filter(farm => whitelist.has(String(farm.code).toLowerCase()))
-    return filtered.length > 0 ? filtered : [{ code: 'DEFAULT_FARM', name: '默认风场' }]
+    return filtered.length > 0 ? filtered : [{ code: 'DEFAULT_FARM', name: '全部风电场' }]
   }
 
   /**
@@ -74,10 +74,15 @@ class FarmService {
    */
   setAvailableFarms(farms) {
     if (!Array.isArray(farms) || farms.length === 0) {
-      this.availableFarms = [{ code: 'DEFAULT_FARM', name: '默认风场' }]
+      this.availableFarms = [{ code: 'DEFAULT_FARM', name: '全部风电场' }]
       this.farmsLoaded = false
     } else {
-      this.availableFarms = this.applyUserScope(farms)
+      const scoped = this.applyUserScope(farms)
+      // 在列表头部插入全局选项（避免与 applyUserScope 的回退重复）
+      const hasDefault = scoped.some(f => f.code === 'DEFAULT_FARM')
+      this.availableFarms = hasDefault
+        ? scoped
+        : [{ code: 'DEFAULT_FARM', name: '全部风电场' }, ...scoped]
     }
 
     const exists = this.availableFarms.some(f => f.code === this.currentFarm)
@@ -179,12 +184,12 @@ class FarmService {
         this.setAvailableFarms(mappedFarms)
         this.farmsLoaded = true
       } else {
-        this.setAvailableFarms([{ code: 'DEFAULT_FARM', name: '默认风场' }])
+        this.setAvailableFarms([{ code: 'DEFAULT_FARM', name: '全部风电场' }])
         this.farmsLoaded = false
       }
     } catch (error) {
       console.error('加载场站列表失败，使用本地默认列表', error)
-      this.setAvailableFarms([{ code: 'DEFAULT_FARM', name: '默认风场' }])
+      this.setAvailableFarms([{ code: 'DEFAULT_FARM', name: '全部风电场' }])
       this.farmsLoaded = false
     }
 

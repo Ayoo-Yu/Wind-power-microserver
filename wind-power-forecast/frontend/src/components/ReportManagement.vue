@@ -357,11 +357,11 @@
           <el-table-column label="上报设置" max-width="140" align="center">
             <template #default="scope">
               <div v-if="scope.row.report_type === 'forecast_long'">
-                <div style="font-size: 12px; color: #909399;">定时时间</div>
+                <div style="font-size: 12px; color: var(--text-muted);">定时时间</div>
                 <div>{{ scope.row.report_time || '09:00' }}</div>
               </div>
               <div v-else>
-                <div style="font-size: 12px; color: #909399;">周期(分钟)</div>
+                <div style="font-size: 12px; color: var(--text-muted);">周期(分钟)</div>
                 <div>{{ scope.row.report_interval && scope.row.report_interval > 0 ? scope.row.report_interval : 15 }}</div>
               </div>
             </template>
@@ -585,10 +585,10 @@
               <el-option label="可用容量上报" value="available_capacity"></el-option>
             </el-option-group>
           </el-select>
-          <div v-if="configForm.report_type === 'forecast_long'" style="font-size: 12px; color: #909399; margin-top: 5px;">
+          <div v-if="configForm.report_type === 'forecast_long'" style="font-size: 12px; color: var(--text-muted); margin-top: 5px;">
             <i class="el-icon-info"></i> 长期预测每天只需定时上报一次，通常在每天上午进行
           </div>
-          <div v-else-if="configForm.report_type" style="font-size: 12px; color: #909399; margin-top: 5px;">
+          <div v-else-if="configForm.report_type" style="font-size: 12px; color: var(--text-muted); margin-top: 5px;">
             <i class="el-icon-info"></i> 此类型采用周期性上报，需设置上报间隔时间
           </div>
         </el-form-item>
@@ -630,7 +630,7 @@
             value-format="HH:mm"
             placeholder="09:00">
           </el-time-picker>
-          <div style="font-size: 12px; color: #909399; margin-top: 5px;">
+          <div style="font-size: 12px; color: var(--text-muted); margin-top: 5px;">
             长期预测每天定时上报一次，无需设置周期
           </div>
         </el-form-item>
@@ -989,9 +989,6 @@ export default {
     RefreshLeft
   },
   setup() {
-    // 保存原始的console.error用于清理
-    const originalError = console.error
-    
     // 数据定义
     const windFarms = ref([])
     const reportConfigs = ref([])
@@ -2564,28 +2561,8 @@ export default {
       monitorTimer = setInterval(() => {
         refreshRealtimeMonitor()
       }, 60 * 1000)
-      
-      // 全局ResizeObserver错误处理 - 使用debounce和requestAnimationFrame
-      const handleResizeObserverError = (e) => {
-        if (e.message && e.message.includes('ResizeObserver loop completed with undelivered notifications')) {
-          e.preventDefault()
-          e.stopPropagation()
-          return false
-        }
-      }
-      
-      // 添加错误监听器
-      window.addEventListener('error', handleResizeObserverError, { passive: true })
-      
-      // 重写console.error来过滤ResizeObserver错误
-      console.error = function(...args) {
-        if (args[0] && args[0].toString().includes('ResizeObserver loop completed with undelivered notifications')) {
-          return // 静默忽略这个错误
-        }
-        originalError.apply(console, args)
-      }
     })
-    
+
     // 组件卸载时清理
     onUnmounted(() => {
       // 清理定时器
@@ -2597,9 +2574,6 @@ export default {
         clearInterval(monitorTimer)
         monitorTimer = null
       }
-      
-      // 恢复原始的console.error
-      console.error = originalError
     })
     
     // 获取统计数据
@@ -2830,37 +2804,11 @@ export default {
   overflow: hidden;
 }
 
-/* 动态渐变背景 */
-.gradient-background {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
-  background-size: 400% 400%;
-  animation: gradientShift 15s ease infinite;
-  z-index: -1;
-}
-
-@keyframes gradientShift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
 /* 页面标题 */
 .page-title {
   text-align: center;
   margin-bottom: 30px;
-  color: white;
-  text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+  color: var(--text-primary);
 }
 
 .summary-alert {
@@ -2882,7 +2830,7 @@ export default {
 
 .page-title p {
   font-size: 1em;
-  opacity: 0.9;
+  color: var(--text-secondary);
   margin: 0;
 }
 
@@ -2897,7 +2845,7 @@ export default {
 
 /* 信息卡片 */
 .info-card {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(7, 24, 39, 0.58);
   backdrop-filter: blur(10px);
   border-radius: 15px;
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -2906,7 +2854,7 @@ export default {
 
 .info-card :deep(.el-card__header) {
   background: transparent;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .card-header {
@@ -2914,14 +2862,14 @@ export default {
   justify-content: space-between;
   align-items: center;
   font-weight: 600;
-  color: #333;
+  color: var(--text-primary);
   flex-wrap: nowrap;
   gap: 10px;
 }
 
 .card-header i {
   margin-right: 8px;
-  color: #409EFF;
+  color: var(--accent);
 }
 
 .card-header > div {
@@ -2948,9 +2896,9 @@ export default {
 .query-form {
   margin-bottom: 20px;
   padding: 20px;
-  background: rgba(240, 248, 255, 0.8);
+  background: rgba(10, 25, 38, 0.5);
   border-radius: 8px;
-  border: 1px solid rgba(64, 158, 255, 0.2);
+  border: 1px solid var(--border-color);
 }
 
 /* 表格样式 */
@@ -2959,30 +2907,30 @@ export default {
 }
 
 .info-card :deep(.el-table__header) {
-  background: rgba(248, 249, 250, 0.8);
+  background: transparent;
 }
 
 .info-card :deep(.el-table__body tr:hover > td) {
-  background-color: rgba(64, 158, 255, 0.1) !important;
+  background-color: rgba(16, 54, 84, 0.45) !important;
 }
 
 /* 对话框样式 */
 :deep(.el-dialog) {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(7, 24, 39, 0.58);
   backdrop-filter: blur(10px);
   border-radius: 15px;
 }
 
 :deep(.el-dialog__header) {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: transparent;
+  border-bottom: 1px solid var(--border-color);
   border-radius: 15px 15px 0 0;
   margin: 0;
   padding: 20px;
 }
 
 :deep(.el-dialog__title) {
-  color: white;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
@@ -3012,7 +2960,7 @@ export default {
 
 :deep(.el-form-item__label) {
   font-weight: 500;
-  color: #333;
+  color: var(--text-secondary);
 }
 
 :deep(.el-input) {
@@ -3084,260 +3032,6 @@ export default {
   }
 }
 
-/* 按钮和操作样式 */
-.el-button--mini {
-  padding: 5px 8px;
-  font-size: 12px;
-}
-
-/* 全局按钮样式 - 去掉边框，文字居中 */
-:deep(.el-button) {
-  border: none !important;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  text-align: center;
-  padding: 8px 16px;
-  gap: 6px; /* 图标和文字之间的间隙 */
-}
-
-:deep(.el-button:hover) {
-  border: none !important;
-}
-
-:deep(.el-button:focus) {
-  border: none !important;
-}
-
-:deep(.el-button:active) {
-  border: none !important;
-}
-
-:deep(.el-button.is-plain) {
-  border: none !important;
-}
-
-:deep(.el-button.is-plain:hover) {
-  border: none !important;
-}
-
-:deep(.el-button.is-plain:focus) {
-  border: none !important;
-}
-
-:deep(.el-button.is-plain:active) {
-  border: none !important;
-}
-
-/* 按钮组样式 */
-:deep(.el-button-group .el-button) {
-  border: none !important;
-}
-
-:deep(.el-button-group .el-button:hover) {
-  border: none !important;
-}
-
-:deep(.el-button-group .el-button:focus) {
-  border: none !important;
-}
-
-:deep(.el-button-group .el-button:active) {
-  border: none !important;
-}
-
-/* 小按钮样式 */
-:deep(.el-button--small) {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  border: none !important;
-  padding: 6px 12px;
-  gap: 4px;
-  min-height: 28px;
-}
-
-:deep(.el-button--mini) {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  border: none !important;
-  padding: 4px 8px;
-  gap: 3px;
-  min-height: 24px;
-}
-
-/* 按钮内图标样式 */
-:deep(.el-button i) {
-  margin: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-}
-
-:deep(.el-button .el-icon) {
-  margin: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-}
-
-/* 调度器控制按钮特殊样式 */
-.scheduler-controls .el-button {
-  min-width: 70px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 6px 12px;
-}
-
-/* 统计查询按钮样式 */
-.stats-controls .el-button {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 4px !important;
-  padding: 6px 12px !important;
-  min-height: 28px !important;
-  border: none !important;
-  text-align: center !important;
-  line-height: 1 !important;
-}
-
-/* 强制覆盖统计区域的查询按钮样式 */
-.stats-controls :deep(.el-button) {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 4px !important;
-  padding: 6px 12px !important;
-  min-height: 28px !important;
-  border: none !important;
-  text-align: center !important;
-  line-height: 1 !important;
-  box-sizing: border-box !important;
-}
-
-.stats-controls :deep(.el-button i) {
-  margin: 0 !important;
-  line-height: 1 !important;
-}
-
-/* 卡片头部按钮样式 */
-.card-header .el-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 6px 12px;
-  min-height: 28px;
-}
-
-/* 确保所有按钮内容垂直居中 */
-:deep(.el-button span) {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-}
-
-/* 强制按钮内容居中 */
-:deep(.el-button) {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-}
-
-:deep(.el-button--small) {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-}
-
-:deep(.el-button--mini) {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-}
-
-/* 按钮loading状态样式 */
-:deep(.el-button.is-loading) {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-}
-
-/* 移除Element Plus默认的边距和填充 */
-:deep(.el-button > *) {
-  margin: 0;
-  vertical-align: middle;
-}
-
-/* 确保图标和文字在同一行 */
-:deep(.el-button .el-icon + span),
-:deep(.el-button i + span) {
-  margin-left: 4px;
-}
-
-/* 处理只有图标的按钮 */
-:deep(.el-button .el-icon:only-child),
-:deep(.el-button i:only-child) {
-  margin: 0;
-}
-
-/* Element Plus icon属性按钮特殊处理 */
-:deep(.el-button[class*="el-icon-"]) {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  padding: 6px 12px !important;
-  gap: 6px !important;
-}
-
-:deep(.el-button[class*="el-icon-"]:before) {
-  margin-right: 6px;
-  line-height: 1;
-  vertical-align: middle;
-}
-
-/* 统计查询按钮特别处理 */
-.stats-controls .el-button[class*="el-icon-"] {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  padding: 6px 12px !important;
-  min-height: 28px !important;
-  gap: 6px !important;
-}
-
-/* 强制所有按钮内容居中 - 更强的选择器 */
-:deep(.el-button),
-:deep(.el-button--primary),
-:deep(.el-button--success),
-:deep(.el-button--warning),
-:deep(.el-button--danger),
-:deep(.el-button--info) {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  text-align: center !important;
-}
-
-:deep(.el-button--small),
-:deep(.el-button--mini) {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  text-align: center !important;
-}
-
 /* 状态标签样式 */
 .el-tag {
   font-weight: 500;
@@ -3384,7 +3078,6 @@ export default {
   justify-content: center;
   gap: 4px;
   transition: all 0.3s ease;
-  border: none !important;
   white-space: nowrap;
   line-height: 1;
   box-sizing: border-box;
@@ -3409,14 +3102,12 @@ export default {
 /* 编辑按钮特殊样式 - 白色字体，无边框 */
 .action-btn.el-button--primary.is-plain {
   color: #fff !important;
-  border: none !important;
   background-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 .action-btn.el-button--primary.is-plain:hover {
   color: #fff !important;
   background-color: rgba(255, 255, 255, 0.2) !important;
-  border: none !important;
   transform: translateY(-1px);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
@@ -3425,14 +3116,12 @@ export default {
 .action-btn.el-button--warning.is-plain:hover {
   transform: translateY(-1px);
   box-shadow: 0 2px 6px rgba(230, 162, 60, 0.3);
-  border: none !important;
 }
 
 /* 删除按钮样式 */
 .action-btn.el-button--danger.is-plain:hover {
   transform: translateY(-1px);
   box-shadow: 0 2px 6px rgba(245, 108, 108, 0.3);
-  border: none !important;
 }
 
 .action-btn .el-icon {
@@ -3484,7 +3173,7 @@ export default {
 
 .header-form :deep(.el-form-item__label) {
   font-size: 12px;
-  color: #666;
+  color: var(--text-secondary);
   font-weight: 500;
 }
 
@@ -3541,13 +3230,13 @@ export default {
 
 .scheduler-info .info-label {
   font-weight: 500;
-  color: #666;
+  color: var(--text-secondary);
   min-width: 80px;
   margin-right: 10px;
 }
 
 .scheduler-info .info-value {
-  color: #333;
+  color: var(--text-primary);
   flex: 1;
 }
 
@@ -3560,11 +3249,11 @@ export default {
 
 .short-term-status-text {
   font-size: 13px;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .monitor-reason-text {
-  color: #606266;
+  color: var(--text-secondary);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -3582,7 +3271,7 @@ export default {
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.4;
-  color: #606266;
+  color: var(--text-secondary);
 }
 
 .log-reason-inline.is-error {
@@ -3621,7 +3310,7 @@ export default {
 
 .preview-section-title {
   font-weight: 600;
-  color: #409EFF;
+  color: var(--accent);
   font-size: 16px;
 }
 
@@ -3643,8 +3332,8 @@ export default {
 
 .preview-card :deep(.el-card__header) {
   padding: 12px 20px;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-  border-bottom: 1px solid #e4e7ed;
+  background: transparent;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .preview-card :deep(.el-card__body) {
@@ -3681,7 +3370,7 @@ export default {
 
 .pagination-info {
   font-size: 12px;
-  color: #666;
+  color: var(--text-secondary);
   font-weight: normal;
   margin-left: 10px;
 }
@@ -3724,7 +3413,7 @@ export default {
   justify-content: flex-start;
   align-items: center;
   padding: 10px 0;
-  border-top: 1px solid #e4e7ed;
+  border-top: 1px solid var(--border-color);
   margin-top: 10px !important;
 }
 
@@ -3791,7 +3480,7 @@ export default {
 
 .stat-label {
   font-size: 14px;
-  color: #606266;
+  color: var(--text-secondary);
   margin-bottom: 10px;
 }
 
@@ -3841,7 +3530,7 @@ export default {
 .stat-text {
   font-size: 12px;
   white-space: nowrap;
-  color: #606266;
+  color: var(--text-secondary);
 }
 
 .stat-text span {
@@ -3850,7 +3539,7 @@ export default {
 }
 
 .no-data {
-  color: #909399;
+  color: var(--text-muted);
   font-size: 12px;
   text-align: center;
   padding: 10px 0;

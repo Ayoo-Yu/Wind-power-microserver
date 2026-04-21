@@ -46,6 +46,8 @@
       </div>
     </el-card>
 
+    <EcmwfStatusCard :status="ecmwfStatus" :loading="loadingEcmwf" @refresh="refreshEcmwfStatus" />
+
     <el-card class="manual-card" shadow="hover">
       <template #header>
         <div class="card-header">
@@ -250,6 +252,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
+import EcmwfStatusCard from './EcmwfStatusCard.vue'
 import {
   getWeatherConnections,
   getWeatherTasks,
@@ -265,7 +268,9 @@ import {
   getWeatherTaskLogs,
   getWeatherSchedulerStatus,
   restartWeatherScheduler,
-  uploadManualWeatherFile
+  uploadManualWeatherFile,
+  getEcmwfAvailability,
+  getEcmwfLatest
 } from '../api/weatherFetchApi'
 import { getFarms } from '../api/farmApi'
 
@@ -275,7 +280,7 @@ function extractErrorMessage(error, fallback) {
 
 export default {
   name: 'WeatherDataFetcher',
-  components: { UploadFilled },
+  components: { UploadFilled, EcmwfStatusCard },
   setup() {
     const farms = ref([])
     const connections = ref([])
@@ -307,6 +312,30 @@ export default {
     const logLevel = ref('')
     const schedulerInfo = ref({ is_running: false, jobs: [], total_jobs: 0 })
     const schedulerCheckedAt = ref('')
+
+    // ECMWF 数据库状态
+    const ecmwfStatus = ref(null)
+    const loadingEcmwf = ref(false)
+
+    const refreshEcmwfStatus = async () => {
+      loadingEcmwf.value = true
+      try {
+        const today = new Date().toISOString().slice(0, 10)
+        const farmCode = connectionForm.farm_code || farms.value[0]?.farm_code || 'DEFAULT_FARM'
+        const [availRes, latestRes] = await Promise.all([
+          getEcmwfAvailability({ farm_code: farmCode, date: today }),
+          getEcmwfLatest({ farm_code: farmCode, data_type: 'DQ' }),
+        ])
+        const avail = availRes.data?.data?.availability || {}
+        const latest = latestRes.data?.data?.latest_timestamp || null
+        ecmwfStatus.value = { availability: avail, latest_timestamp: latest ? latest.slice(0, 19) : null }
+      } catch (e) {
+        console.warn('ECMWF status fetch failed:', e)
+        ecmwfStatus.value = { availability: {}, latest_timestamp: null }
+      } finally {
+        loadingEcmwf.value = false
+      }
+    }
 
     const connectionForm = reactive({
       id: null,
@@ -696,6 +725,7 @@ export default {
 
     onMounted(async () => {
       await Promise.all([fetchFarms(), fetchConnections(), fetchTasks(), checkSchedulerStatus()])
+      refreshEcmwfStatus()
       if (!connectionForm.farm_code) connectionForm.farm_code = farms.value[0]?.farm_code || ''
       if (!taskForm.farm_code) taskForm.farm_code = farms.value[0]?.farm_code || ''
     })
@@ -707,6 +737,7 @@ export default {
       connectionFormRef, taskFormRef, manualUploadFormRef,
       connectionForm, taskForm, manualUploadForm, manualUploadRules, connectionRules, taskRules, manualUploadFileList, manualUploadResult,
       currentTaskName, logLevel, schedulerCheckedAt, healthBoard,
+      ecmwfStatus, loadingEcmwf, refreshEcmwfStatus,
       checkSchedulerStatus, restartScheduler, openConnectionDialog, editConnection, saveConnection, deleteConnection, testConnection,
       openTaskDialog, editTask, saveTask, deleteTask, runTask, toggleTask,
       viewTaskLogs, fetchTaskLogs, getLogLevelType, getLogLevelText,
@@ -719,14 +750,12 @@ export default {
 
 <style scoped>
 .weather-data-fetcher { position: relative; min-height: 100vh; padding: 20px; }
-.gradient-background { position: fixed; inset: 0; background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab); background-size: 400% 400%; animation: gradientShift 15s ease infinite; z-index: -1; }
-@keyframes gradientShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
 .page-header { text-align: center; margin-bottom: 14px; }
 .page-title { margin: 0 0 6px; color: var(--text-primary); }
 .page-description { margin: 0; color: var(--text-secondary); }
 .meta-updated { margin-bottom: 12px; color: var(--text-secondary); font-size: 12px; font-family: Consolas, "Roboto Mono", monospace; }
 .card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.card-title { font-weight: 600; color: #2c3e50; font-size: 16px; }
+.card-title { font-weight: 600; color: var(--text-primary); font-size: 16px; }
 .health-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .health-node { border: 1px solid rgba(146, 186, 220, 0.25); border-radius: 12px; background: rgba(8, 24, 38, 0.58); padding: 12px; min-height: 100px; }
 .health-name { color: var(--text-primary); font-size: 13px; font-weight: 600; margin-bottom: 6px; }
@@ -748,7 +777,7 @@ export default {
 .log-item.log-warning { border-left-color: #e6a23c; }
 .log-item.log-error { border-left-color: #f56c6c; }
 .log-header-line { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.log-time { font-size: 12px; color: #909399; font-family: Consolas, "Roboto Mono", monospace; }
+.log-time { font-size: 12px; color: var(--text-muted); font-family: Consolas, "Roboto Mono", monospace; }
 .log-message { color: var(--text-primary); font-size: 14px; margin-bottom: 4px; }
 .log-details { color: var(--text-secondary); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
 @media (max-width: 1200px) { .health-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

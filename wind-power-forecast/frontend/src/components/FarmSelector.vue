@@ -3,7 +3,7 @@
   <div class="farm-selector">
     <el-dropdown @command="handleFarmChange" trigger="click">
       <div class="farm-selector-trigger">
-        <el-icon><Location /></el-icon>
+        <el-icon><component :is="currentFarm === 'DEFAULT_FARM' ? 'Grid' : 'Location'" /></el-icon>
         <span class="current-farm">{{ currentFarmName }}</span>
         <el-icon class="arrow-icon"><ArrowDown /></el-icon>
       </div>
@@ -16,9 +16,10 @@
             :class="{ 'is-active': farm.code === currentFarm }"
           >
             <div class="farm-item">
+              <el-icon class="farm-item-icon" v-if="farm.code === 'DEFAULT_FARM'"><Grid /></el-icon>
               <div class="farm-info">
                 <div class="farm-name">{{ farm.name }}</div>
-                <div class="farm-code">{{ farm.code }}</div>
+                <div class="farm-code" v-if="farm.code !== 'DEFAULT_FARM'">{{ farm.code }}</div>
               </div>
               <el-icon v-if="farm.code === currentFarm" class="check-icon">
                 <Check />
@@ -34,7 +35,7 @@
 <script>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Location, ArrowDown, Check } from '@element-plus/icons-vue'
+import { Location, ArrowDown, Check, Grid } from '@element-plus/icons-vue'
 import farmService from '../utils/farmService'
 
 export default {
@@ -42,7 +43,8 @@ export default {
   components: {
     Location,
     ArrowDown,
-    Check
+    Check,
+    Grid
   },
   emits: ['farm-changed'],
   setup(props, { emit }) {
@@ -77,11 +79,6 @@ export default {
       currentFarm.value = farmCode
       emit('farm-changed', farmCode)
     }
-
-    // 监听风场变化，可在这里追加额外逻辑
-    watch(currentFarm, (newFarm, oldFarm) => {
-      console.log(`风场已从 ${oldFarm} 切换到 ${newFarm}`)
-    })
 
     // 组件挂载时，初始化场站列表并同步当前选择
     onMounted(async () => {
@@ -126,19 +123,20 @@ export default {
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(18, 215, 255, 0.06);
+  border: 1px solid rgba(18, 215, 255, 0.2);
   border-radius: 20px;
   cursor: pointer;
-  transition: all 0.3s ease;
-  color: #111827;
+  transition: all var(--transition-normal);
+  color: var(--text-primary);
   min-width: 140px;
   justify-content: space-between;
 }
 
 .farm-selector-trigger:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(18, 215, 255, 0.12);
+  border-color: rgba(18, 215, 255, 0.4);
+  box-shadow: 0 0 8px rgba(18, 215, 255, 0.15);
 }
 
 .current-farm {
@@ -159,6 +157,13 @@ export default {
   justify-content: space-between;
   padding: 4px 0;
   min-width: 180px;
+  gap: 8px;
+}
+
+.farm-item-icon {
+  color: var(--accent);
+  font-size: 16px;
+  flex-shrink: 0;
 }
 
 .farm-info {
@@ -170,42 +175,42 @@ export default {
 .farm-name {
   font-size: 14px;
   font-weight: 500;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .farm-code {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--text-muted);
 }
 
 .check-icon {
-  color: #34C759;
+  color: var(--accent);
   font-size: 16px;
 }
 
 /* 下拉项样式（Element Plus 实际类名为 el-dropdown-menu__item） */
 :deep(.el-dropdown-menu__item) {
-  color: #111827 !important;
+  color: var(--text-primary) !important;
   padding: 8px 16px !important;
-  background: #ffffff !important;
+  background: rgba(16, 38, 58, 0.95) !important;
 }
 
 :deep(.el-dropdown-menu__item:hover) {
-  background: #f3f4f6 !important;
-  color: #111827 !important;
+  background: rgba(16, 54, 84, 0.45) !important;
+  color: var(--text-primary) !important;
 }
 
 :deep(.el-dropdown-menu__item.is-active) {
-  background: #ecfdf3 !important;
-  color: #047857 !important;
+  background: rgba(18, 215, 255, 0.12) !important;
+  color: #2dd36f !important;
 }
 
 :deep(.el-dropdown-menu__item.is-active .farm-name) {
-  color: #047857 !important;
+  color: #2dd36f !important;
 }
 
 :deep(.el-dropdown-menu__item.is-active .farm-code) {
-  color: #065f46 !important;
+  color: #2dd36f !important;
 }
 
 /* 响应式设计 */

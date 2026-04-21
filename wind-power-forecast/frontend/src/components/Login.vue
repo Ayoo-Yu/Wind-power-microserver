@@ -649,6 +649,11 @@ export default {
   background: rgba(255, 255, 255, 0.055);
   backdrop-filter: blur(10px);
   box-shadow: 0 20px 46px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  animation: cardGlow 4s ease-in-out infinite alternate;
+}
+@keyframes cardGlow {
+  from { box-shadow: 0 20px 46px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 1px rgba(18, 215, 255, 0.1); }
+  to { box-shadow: 0 20px 46px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 20px rgba(18, 215, 255, 0.08); }
 }
 
 .logo-line {

@@ -566,7 +566,7 @@ export default {
 }
 
 .upload-card {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(7, 24, 39, 0.58);
   backdrop-filter: blur(20px);
   border-radius: 16px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
@@ -618,7 +618,7 @@ export default {
 }
 
 .action-card, .status-card {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(7, 24, 39, 0.58);
   backdrop-filter: blur(20px);
   border-radius: 16px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
@@ -629,12 +629,12 @@ export default {
 .empty-action-panel {
   padding: 40px 24px;
   text-align: center;
-  color: #666;
+  color: var(--text-muted);
 }
 
 .empty-icon {
   font-size: 48px;
-  color: #ddd;
+  color: var(--text-muted);
   margin-bottom: 16px;
 }
 
@@ -690,12 +690,12 @@ export default {
 }
 
 .param-label {
-  color: #666;
+  color: var(--text-secondary);
   font-weight: 500;
 }
 
 .param-value {
-  color: #333;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
@@ -725,7 +725,7 @@ export default {
 }
 
 .chart-card, .table-card {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(7, 24, 39, 0.58);
   backdrop-filter: blur(20px);
   border-radius: 16px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);

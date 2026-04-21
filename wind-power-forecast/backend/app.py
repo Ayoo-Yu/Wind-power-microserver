@@ -25,7 +25,7 @@ def is_running_in_docker():
     try:
         with open('/proc/1/cgroup', 'r') as f:
             return any('docker' in line for line in f)
-    except:
+    except (FileNotFoundError, PermissionError, OSError):
         return False
 
 if not is_running_in_docker():
@@ -36,7 +36,7 @@ if not is_running_in_docker():
     if not os.environ.get('DB_USER'):
         os.environ['DB_USER'] = 'system'
     if not os.environ.get('DB_PASSWORD'):
-        os.environ['DB_PASSWORD'] = '12345678ab'
+        raise RuntimeError('DB_PASSWORD not set. Create a .env file or set the environment variable.')
     if not os.environ.get('DB_NAME'):
         os.environ['DB_NAME'] = 'windpower'
     if not os.environ.get('MINIO_ENDPOINT'):
@@ -52,7 +52,10 @@ app = Flask(__name__, static_folder='./static')
 app.config.from_object(Config)
 METRICS_ENABLED = os.environ.get("METRICS_ENABLED", "false").lower() == "true"
 
-app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY", "wind-power-forecast-secret-key")
+jwt_secret = os.environ.get("JWT_SECRET_KEY") or os.environ.get("SECRET_KEY")
+if not jwt_secret:
+    raise RuntimeError('JWT_SECRET_KEY or SECRET_KEY not set. Create a .env file or set the environment variable.')
+app.config["JWT_SECRET_KEY"] = jwt_secret
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=12)
 jwt = JWTManager(app)
 
@@ -100,6 +103,7 @@ from routes.weather_fetch_router import weather_fetch_bp
 from routes.operational_data_upload import operational_data_upload_bp
 from routes.farm_management import farm_management_bp
 from routes.v1_compat import v1_compat_bp
+from routes.ecmwf_data_router import ecmwf_data_bp
 
 # app.register_blueprint(upload_bp, url_prefix='/')
 app.register_blueprint(download_bp, url_prefix='/')
@@ -126,13 +130,16 @@ app.register_blueprint(weather_fetch_bp, url_prefix='/weather-fetch')
 app.register_blueprint(operational_data_upload_bp, url_prefix='/operational')
 app.register_blueprint(farm_management_bp, url_prefix='/api')
 app.register_blueprint(v1_compat_bp)  # compat bridge
+app.register_blueprint(ecmwf_data_bp)  # ECMWF气象数据API
 
 try:
     from services.scheduler_service import init_scheduler
     db_host = os.environ.get('DB_HOST', 'localhost')
     db_port = os.environ.get('DB_PORT', '54321')
     db_user = os.environ.get('DB_USER', 'system')
-    db_password = os.environ.get('DB_PASSWORD', '12345678ab')
+    db_password = os.environ.get('DB_PASSWORD')
+    if not db_password:
+        raise RuntimeError('DB_PASSWORD not set for scheduler.')
     db_name = os.environ.get('DB_NAME', 'windpower')
     database_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
     

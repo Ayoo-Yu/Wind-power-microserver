@@ -1,4 +1,14 @@
 :root {
   --el-text-color-primary: #eaf4ff;
   --el-text-color-regular: #9fb6cc;
+  --el-text-color-secondary: #6f89a3;
+  --el-text-color-placeholder: #5a7a94;
+  --el-text-color-disabled: #4a6478;
+  --el-disabled-text-color: #4a6478;
+  --el-disabled-bg-color: #0a1e30;
+  --el-disabled-border-color: rgba(146, 186, 220, 0.15);
+  --el-fill-color: rgba(120, 166, 201, 0.12);
+  --el-fill-color-light: rgba(120, 166, 201, 0.08);
+  --el-fill-color-lighter: rgba(120, 166, 201, 0.04);
+  --el-fill-color-blank: #0d263a;
 }

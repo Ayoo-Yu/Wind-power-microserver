@@ -1,6 +1,6 @@
 ﻿// frontend/vue.config.js
-const MAIN_BACKEND_PORT = process.env.MAIN_BACKEND_PORT || process.env.VUE_APP_MAIN_BACKEND_PORT || '18080'
-const AUTO_BACKEND_PORT = process.env.AUTO_BACKEND_PORT || process.env.VUE_APP_AUTO_BACKEND_PORT || '18081'
+const MAIN_BACKEND_PORT = process.env.MAIN_BACKEND_PORT || process.env.VUE_APP_MAIN_BACKEND_PORT || '5000'
+const AUTO_BACKEND_PORT = process.env.AUTO_BACKEND_PORT || process.env.VUE_APP_AUTO_BACKEND_PORT || '5001'
 
 function attachJsonBodyForward(proxy) {
   proxy.on('proxyReq', (proxyReq, req, res) => {
@@ -40,11 +40,16 @@ module.exports = {
         configure: (proxy) => attachJsonBodyForward(proxy)
       },
 
+      '/get-daily-metrics': {
+        target: `http://127.0.0.1:${AUTO_BACKEND_PORT}`,
+        ws: false,
+        changeOrigin: true,
+        secure: false,
+        configure: (proxy) => attachJsonBodyForward(proxy)
+      },
+
       '/api': {
         target: `http://127.0.0.1:${MAIN_BACKEND_PORT}`,
-        pathRewrite: {
-          '^/api': ''
-        },
         ws: true,
         secure: false,
         changeOrigin: true,

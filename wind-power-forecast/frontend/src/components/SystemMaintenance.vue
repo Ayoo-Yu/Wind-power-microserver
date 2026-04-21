@@ -427,7 +427,7 @@ export default {
 }
 
 .info-card {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(7, 24, 39, 0.58);
   backdrop-filter: blur(15px);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 20px;
@@ -438,7 +438,7 @@ export default {
 .info-card:hover {
   transform: translateY(-6px);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
-  background: rgba(255, 255, 255, 0.98);
+  background: rgba(7, 24, 39, 0.58);
 }
 
 .card-header {
@@ -446,7 +446,7 @@ export default {
   align-items: center;
   justify-content: space-between;
   font-weight: 600;
-  color: #2c3e50;
+  color: var(--text-primary);
 }
 
 .card-icon {
@@ -481,31 +481,31 @@ export default {
   display: flex;
   flex-direction: column;
   padding: 16px;
-  background: rgba(248, 249, 250, 0.8);
+  background: rgba(18, 215, 255, 0.06);
   border-radius: 12px;
   transition: background 0.3s ease;
 }
 
 .info-item:hover {
-  background: rgba(248, 249, 250, 1);
+  background: rgba(18, 215, 255, 0.08);
 }
 
 .info-label {
   font-size: 14px;
-  color: #909399;
+  color: var(--text-muted);
   margin-bottom: 8px;
   font-weight: 500;
 }
 
 .info-value {
   font-size: 16px;
-  color: #2c3e50;
+  color: var(--text-primary);
   font-weight: 600;
   line-height: 1.4;
 }
 
 .log-card {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(7, 24, 39, 0.58);
   backdrop-filter: blur(15px);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 20px;
@@ -526,7 +526,7 @@ export default {
 
 .no-logs {
   text-align: center;
-  color: #909399;
+  color: var(--text-muted);
   font-size: 16px;
   padding: 40px;
 }
@@ -548,13 +548,13 @@ export default {
 }
 
 .log-item:hover {
-  background: rgba(248, 249, 250, 1);
+  background: rgba(18, 215, 255, 0.08);
 }
 
 .log-time {
   flex-shrink: 0;
   width: 140px;
-  color: #909399;
+  color: var(--text-muted);
   font-family: 'Courier New', monospace;
 }
 
@@ -567,7 +567,7 @@ export default {
 
 .log-message {
   flex: 1;
-  color: #2c3e50;
+  color: var(--text-primary);
   margin-left: 16px;
 }
 

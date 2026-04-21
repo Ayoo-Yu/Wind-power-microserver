@@ -798,8 +798,8 @@ export default {
 .side,
 .chart-card,
 .table-card {
-  background: rgba(6, 21, 34, 0.86);
-  border: 1px solid rgba(130, 178, 212, 0.2);
+  background: var(--gradient-card);
+  border: 1px solid var(--border-color);
 }
 
 .config-meta {

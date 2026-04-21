@@ -19,10 +19,11 @@ const props = defineProps({
 })
 
 const chartRef = ref(null)
-let chart
+let chart = null
+let disposed = false
 
 function render() {
-  if (!chart) return
+  if (!chart || disposed) return
   chart.setOption({
     xAxis: { type: 'category', show: false, data: props.values.map((_, i) => i) },
     yAxis: { type: 'value', show: false },
@@ -46,7 +47,9 @@ onMounted(() => {
 watch(() => [props.values, props.active], render, { deep: true })
 
 onBeforeUnmount(() => {
+  disposed = true
   chart?.dispose()
+  chart = null
 })
 </script>
 

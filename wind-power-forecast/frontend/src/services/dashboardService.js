@@ -1,6 +1,7 @@
 import { getFarms } from '../api/farmApi'
 import { getPowerCompareData } from '../api/powerCompareApi'
 import { getReportLogs } from '../api/reportApi'
+import { getEcmwfData } from '../api/weatherFetchApi'
 import farmService from '../utils/farmService'
 
 const TASK_KEYS = [
@@ -34,6 +35,11 @@ function nowRange() {
 function safeNumber(value, fallback = 0) {
   const n = Number(value)
   return Number.isFinite(n) ? n : fallback
+}
+
+function shortFarmName(name) {
+  if (!name) return name
+  return name.replace(/风电场$/, '')
 }
 
 function extractApiData(response) {
@@ -146,8 +152,8 @@ function toHHmm(value) {
 }
 
 function farmCountByScope(activeFarmCode, farms) {
-  if (activeFarmCode && activeFarmCode !== 'DEFAULT_FARM') return 1
-  return Math.max(1, farms.length)
+  if (activeFarmCode && activeFarmCode !== 'DEFAULT_FARM') return farms.length ? 1 : 0
+  return farms.length
 }
 
 function isUltraType(row) {
@@ -182,7 +188,7 @@ function collectFarmLogs(logs, farmCode) {
 }
 
 function taskStatusFromLogs(logs, keywords = []) {
-  if (!logs.length) return 'warn'
+  if (!logs.length) return 'ok'
   const related = logs.filter((row) => {
     const text = `${row?.message || ''} ${row?.response_message || ''} ${row?.error_message || ''} ${row?.report_type || ''}`.toLowerCase()
     return keywords.length === 0 || keywords.some(word => text.includes(word))
@@ -197,11 +203,11 @@ function taskStatusFromLogs(logs, keywords = []) {
 function buildTaskMatrix(farms = [], logs = [], commMap = new Map()) {
   return farms.map((farm) => {
     const farmLogs = collectFarmLogs(logs, farm.code)
-    const isCommOnline = commMap.get(farm.code) === 'ok'
-    const scadaStatus = isCommOnline ? 'ok' : 'error'
+    const commStatus = commMap.get(farm.code)
+    const scadaStatus = commStatus === 'ok' ? 'ok' : commStatus === 'error' ? 'warn' : 'ok'
     return {
       code: farm.code,
-      name: farm.name,
+      name: shortFarmName(farm.name),
       tasks: {
         scada: scadaStatus,
         nwp: taskStatusFromLogs(farmLogs, ['weather', 'nwp', '气象']),
@@ -220,14 +226,6 @@ function weightedAccuracy(values) {
   const totalWeight = valid.reduce((sum, item) => sum + item.weight, 0)
   if (totalWeight <= 0) return 0
   return valid.reduce((sum, item) => sum + item.acc * item.weight, 0) / totalWeight
-}
-
-function buildFallbackFarms() {
-  return Array.from({ length: 10 }).map((_, idx) => ({
-    code: `F${String(idx + 1).padStart(2, '0')}`,
-    name: `场站${idx + 1}`,
-    capacity: 200
-  }))
 }
 
 export async function getDashboardOverview({ farmCode } = {}) {
@@ -259,13 +257,13 @@ export async function getDashboardOverview({ farmCode } = {}) {
   }
 
   if (!farms.length) {
-    farms = farmMeta.length ? farmMeta : buildFallbackFarms()
+    farms = farmMeta
   } else {
     const metaMap = new Map(farmMeta.map(item => [item.code, item]))
     farms = farms.map((farm) => ({
       code: farm.code,
       name: farm.name,
-      capacity: safeNumber(metaMap.get(farm.code)?.capacity, 200)
+      capacity: safeNumber(metaMap.get(farm.code)?.capacity, 0)
     }))
   }
 
@@ -290,7 +288,7 @@ export async function getDashboardOverview({ farmCode } = {}) {
   const compareList = await Promise.all(
     selectedFarms.map(async (farm) => {
       try {
-        const compareResp = await getPowerCompareData({ start, end, farm_code: farm.code })
+        const compareResp = await getPowerCompareData({ start, end, farm_code: farm.code, types: ['实测值', '短期预测', '超短期预测'] })
         const data = extractApiData(compareResp)
         const series = extractSeriesFromPowerCompare(data)
         const latestActual = series.actual.length ? safeNumber(series.actual[series.actual.length - 1].power, 0) : 0
@@ -320,10 +318,10 @@ export async function getDashboardOverview({ farmCode } = {}) {
   )
 
   const commMap = new Map(compareList.map(item => [item.code, item.online ? 'ok' : 'error']))
-  const stationTotal = Math.max(1, selectedFarms.length)
+  const stationTotal = selectedFarms.length
   const onlineCount = compareList.filter(item => item.online).length
   const offlineCount = Math.max(0, stationTotal - onlineCount)
-  const totalCapacity = selectedFarms.reduce((sum, farm) => sum + safeNumber(farm.capacity, 200), 0)
+  const totalCapacity = selectedFarms.reduce((sum, farm) => sum + safeNumber(farm.capacity, 0), 0)
   const totalPower = compareList.reduce((sum, item) => sum + safeNumber(item.latestActual, 0), 0)
   const loadRate = totalCapacity > 0 ? (totalPower / totalCapacity) * 100 : 0
 
@@ -378,30 +376,6 @@ export async function getDashboardOverview({ farmCode } = {}) {
   }
 }
 
-function buildFallbackTrend() {
-  const now = new Date()
-  const start = new Date(now)
-  start.setHours(0, 0, 0, 0)
-  const points = []
-  for (let i = 0; i < 96; i += 1) {
-    const ts = new Date(start.getTime() + i * 15 * 60 * 1000)
-    const hour = i / 4
-    const shortTerm = Number((280 + Math.sin(hour / 2.6) * 90 + hour * 4.3).toFixed(1))
-    const ultraShort = Number((shortTerm + Math.sin(hour * 1.1) * 18).toFixed(1))
-    const cap = 420
-    const isFuture = ts.getTime() > now.getTime()
-    points.push({
-      time: ts.toISOString(),
-      label: toHHmm(ts.toISOString()),
-      actual: isFuture ? null : Number((shortTerm + Math.sin(hour * 0.7) * 14).toFixed(1)),
-      shortTerm,
-      ultraShort: ts.getTime() <= now.getTime() + 4 * 60 * 60 * 1000 ? ultraShort : null,
-      availableCap: cap
-    })
-  }
-  return points
-}
-
 function mergeTrendSeries(actual, shortTerm, ultraShort, availableCap) {
   const now = Date.now()
   const maxUltraMs = now + 4 * 60 * 60 * 1000
@@ -422,20 +396,11 @@ function mergeTrendSeries(actual, shortTerm, ultraShort, availableCap) {
   const ultraMap = toMap(ultraShort)
   const capMap = toMap(availableCap)
 
-  const maxObserved = Math.max(
-    ...sorted.map((item) => Math.max(
-      safeNumber(actualMap.get(item.raw), 0),
-      safeNumber(shortMap.get(item.raw), 0),
-      safeNumber(ultraMap.get(item.raw), 0)
-    ))
-  )
-  const fallbackCap = maxObserved > 0 ? Number((maxObserved * 1.15).toFixed(1)) : 100
-
   return sorted.map((item) => {
     const actualVal = actualMap.has(item.raw) ? actualMap.get(item.raw) : null
     const shortVal = shortMap.has(item.raw) ? shortMap.get(item.raw) : null
     const ultraVal = ultraMap.has(item.raw) ? ultraMap.get(item.raw) : null
-    const capVal = capMap.has(item.raw) ? capMap.get(item.raw) : fallbackCap
+    const capVal = capMap.has(item.raw) ? capMap.get(item.raw) : null
     const isFuture = item.ms > now
     return {
       time: item.raw,
@@ -452,22 +417,76 @@ export async function getDashboardTrend({ farmCode, start, end } = {}) {
   const activeFarmCode = farmCode || farmService.getCurrentFarm()
   const range = start && end ? { start, end } : nowRange()
 
-  try {
+  const isAllFarms = !activeFarmCode || activeFarmCode === 'DEFAULT_FARM'
+
+  const fetchSeriesForFarm = async (code) => {
     const resp = await getPowerCompareData({
       start: range.start,
       end: range.end,
-      farm_code: activeFarmCode
+      farm_code: code,
+      types: ['实测值', '短期预测', '超短期预测']
     })
-    const data = extractApiData(resp)
-    const series = extractSeriesFromPowerCompare(data)
-    const shortSeries = series.shortTerm.length ? series.shortTerm : series.predicted
-    const merged = mergeTrendSeries(series.actual, shortSeries, series.ultraShort, series.availableCap)
-    if (merged.length > 0) return merged
+    return extractSeriesFromPowerCompare(extractApiData(resp))
+  }
+
+  const mergeMultiFarmSeries = (allSeries) => {
+    const tsMap2 = new Map()
+    for (const s of allSeries) {
+      for (const pt of s.actual) {
+        const key = pt.timestamp
+        if (!tsMap2.has(key)) tsMap2.set(key, { timestamp: key, actual: 0, shortTerm: null, ultraShort: null, _ac: 0, _sc: 0, _uc: 0, _sv: 0, _uv: 0 })
+        const e = tsMap2.get(key)
+        const v = safeNumber(pt.power, null)
+        if (v !== null) { e.actual += v; e._ac++ }
+      }
+      for (const pt of s.shortTerm) {
+        const e = tsMap2.get(pt.timestamp)
+        if (e) { const v = safeNumber(pt.power, null); if (v !== null) { e.shortTerm = (e.shortTerm || 0) + v; e._sc++; e._sv++ } }
+      }
+      for (const pt of s.ultraShort) {
+        const e = tsMap2.get(pt.timestamp)
+        if (e) { const v = safeNumber(pt.power, null); if (v !== null) { e.ultraShort = (e.ultraShort || 0) + v; e._uc++; e._uv++ } }
+      }
+    }
+    const points = [...tsMap2.values()].sort((a, b) => a.timestamp < b.timestamp ? -1 : 1)
+    return points.map(p => ({
+      timestamp: p.timestamp,
+      power: p._ac > 0 ? p.actual : null,
+      shortTerm: p._sv > 0 ? p.shortTerm : null,
+      ultraShort: p._uv > 0 ? p.ultraShort : null
+    }))
+  }
+
+  try {
+    if (isAllFarms) {
+      const farms = await farmService.loadAvailableFarms()
+      const codes = farms.map(f => f.code).filter(c => c && c !== 'DEFAULT_FARM')
+      const allSeries = await Promise.all(codes.map(code => fetchSeriesForFarm(code).catch(() => ({ actual: [], shortTerm: [], ultraShort: [], predicted: [], availableCap: [] }))))
+      const aggregated = mergeMultiFarmSeries(allSeries)
+      const merged = mergeTrendSeries(
+        aggregated.map(p => ({ timestamp: p.timestamp, power: p.power })),
+        aggregated.map(p => ({ timestamp: p.timestamp, power: p.shortTerm })),
+        aggregated.map(p => ({ timestamp: p.timestamp, power: p.ultraShort })),
+        []
+      )
+      if (merged.length > 0) return merged
+    } else {
+      const resp = await getPowerCompareData({
+        start: range.start,
+        end: range.end,
+        farm_code: activeFarmCode,
+        types: ['实测值', '短期预测', '超短期预测']
+      })
+      const data = extractApiData(resp)
+      const series = extractSeriesFromPowerCompare(data)
+      const shortSeries = series.shortTerm.length ? series.shortTerm : series.predicted
+      const merged = mergeTrendSeries(series.actual, shortSeries, series.ultraShort, series.availableCap)
+      if (merged.length > 0) return merged
+    }
   } catch (error) {
     console.warn('getDashboardTrend fallback:', error)
   }
-
-  return buildFallbackTrend()
+  return []
 }
 
 export async function getDashboardStationRank({ farmCode, start, end } = {}) {
@@ -484,16 +503,17 @@ export async function getDashboardStationRank({ farmCode, start, end } = {}) {
           const resp = await getPowerCompareData({
             start: range.start,
             end: range.end,
-            farm_code: code
+            farm_code: code,
+            types: ['实测值']
           })
           const data = extractApiData(resp)
           const { actual } = extractSeriesFromPowerCompare(data)
           const avg = actual.length
             ? actual.reduce((sum, cur) => sum + safeNumber(cur.power, 0), 0) / actual.length
             : 0
-          return { name: farms.find(f => f.code === code)?.name || code, value: Number(avg.toFixed(2)) }
+          return { name: shortFarmName(farms.find(f => f.code === code)?.name || code), value: Number(avg.toFixed(2)) }
         } catch (error) {
-          return { name: farms.find(f => f.code === code)?.name || code, value: 0 }
+          return { name: shortFarmName(farms.find(f => f.code === code)?.name || code), value: 0 }
         }
       })
     )
@@ -503,65 +523,72 @@ export async function getDashboardStationRank({ farmCode, start, end } = {}) {
   } catch (error) {
     console.warn('getDashboardStationRank fallback:', error)
   }
-
-  return [
-    { name: 'Station A', value: 320 },
-    { name: 'Station B', value: 280 },
-    { name: 'Station C', value: 260 },
-    { name: 'Station D', value: 240 }
-  ]
+  return []
 }
 
 export async function getDashboardWeatherSnapshot({ farmCode } = {}) {
   const activeFarmCode = farmCode || farmService.getCurrentFarm()
-  const farms = farmService.getAvailableFarms().filter(f => f.code !== 'DEFAULT_FARM')
+  const now = new Date()
+  const start = new Date(now)
+  start.setHours(start.getHours() - 6, 0, 0, 0)
 
-  if (!farms.length) {
-    return {
-      mode: 'fleet',
-      rows: [
-        { code: 'avg_wind', label: '全场平均风速', value: 6.8, unit: 'm/s', hint: '较昨日 +0.4 m/s' },
-        { code: 'p90_wind', label: 'P90风速', value: 9.2, unit: 'm/s', hint: '高风速场站 2/10' },
-        { code: 'gust_warn', label: '恶劣天气预警', value: 1, unit: '条', hint: '大风黄色预警' },
-        { code: 'low_wind', label: '低风速场站', value: 2, unit: '座', hint: '建议关注限电策略' }
-      ]
+  const fmt = (d) => d.toISOString().slice(0, 19)
+
+  try {
+    const resp = await getEcmwfData({
+      farm_code: activeFarmCode === 'DEFAULT_FARM' ? 'DEFAULT_FARM' : activeFarmCode,
+      data_type: 'DQ',
+      start: fmt(start),
+      end: fmt(now),
+      limit: 1
+    })
+    const rows = resp?.data?.data?.data || []
+    if (!rows.length) {
+      return { mode: 'fleet', metrics: [], updateTime: null }
     }
-  }
 
-  if (activeFarmCode && activeFarmCode !== 'DEFAULT_FARM') {
-    const station = farms.find(f => f.code === activeFarmCode) || farms[0]
-    return {
-      mode: 'station',
-      rows: [
-        {
-          code: station.code,
-          name: station.name,
-          windSpeed: 6.9,
-          windDirection: 'NE',
-          pressure: 1008,
-          temperature: 16
-        },
-        {
-          code: `${station.code}-future`,
-          name: '未来4小时风速',
-          windSpeed: 7.5,
-          windDirection: 'ENE',
-          pressure: 1005,
-          temperature: 15
-        }
-      ]
+    const latestRow = rows[rows.length - 1]
+    const cols = Object.keys(latestRow)
+
+    const avgColumns = (prefix) => {
+      const matched = cols.filter(c => c.startsWith(prefix))
+      if (!matched.length) return null
+      const vals = matched.map(c => safeNumber(latestRow[c], null)).filter(v => v !== null)
+      return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null
     }
-  }
 
-  const avgWind = farms.reduce((sum, _, idx) => sum + (5.8 + idx * 0.6), 0) / Math.max(1, farms.length)
-  return {
-    mode: 'fleet',
-    rows: [
-      { code: 'avg_wind', label: '全场平均风速', value: Number(avgWind.toFixed(1)), unit: 'm/s', hint: '集团视角' },
-      { code: 'bad_weather', label: '恶劣天气预警', value: 2, unit: '条', hint: '沿海区域阵风增强' },
-      { code: 'nwp_delay', label: 'NWP延迟场站', value: 1, unit: '座', hint: '建议优先排查链路' },
-      { code: 'high_load', label: '高负荷场站', value: 3, unit: '座', hint: '负荷率 > 80%' }
+    const u100 = avgColumns('100u_')
+    const v100 = avgColumns('100v_')
+    const u10 = avgColumns('10u_')
+    const v10 = avgColumns('10v_')
+    const t2 = avgColumns('2t_')
+    const d2 = avgColumns('2d_')
+
+    const windSpeed100 = u100 !== null && v100 !== null ? Math.sqrt(u100 ** 2 + v100 ** 2) : null
+    const windSpeed10 = u10 !== null && v10 !== null ? Math.sqrt(u10 ** 2 + v10 ** 2) : null
+    const windDir = u100 !== null && v100 !== null ? ((Math.atan2(u100, v100) * 180 / Math.PI + 360) % 360) : null
+
+    const dirLabels = ['北', '东北', '东', '东南', '南', '西南', '西', '西北']
+    const dirLabel = windDir !== null ? dirLabels[Math.round(windDir / 45) % 8] : '--'
+
+    const tempC = t2 !== null ? (t2 - 273.15) : null
+    const dewC = d2 !== null ? (d2 - 273.15) : null
+    const humidity = tempC !== null && dewC !== null ? Math.max(0, Math.min(100, 100 - 5 * (tempC - dewC))) : null
+
+    const metrics = [
+      { label: '轮毂高度风速', value: windSpeed100 !== null ? windSpeed100.toFixed(1) : '--', unit: 'm/s', icon: 'wind' },
+      { label: '地面风速', value: windSpeed10 !== null ? windSpeed10.toFixed(1) : '--', unit: 'm/s', icon: 'wind' },
+      { label: '主导风向', value: dirLabel, unit: windDir !== null ? `${Math.round(windDir)}°` : '', icon: 'compass' },
+      { label: '气温', value: tempC !== null ? tempC.toFixed(1) : '--', unit: '°C', icon: 'temp' },
+      { label: '湿度', value: humidity !== null ? humidity.toFixed(0) : '--', unit: '%', icon: 'drop' },
     ]
+
+    const updateTime = latestRow.timestamp || null
+
+    return { mode: 'fleet', metrics, updateTime }
+  } catch (error) {
+    console.warn('getDashboardWeatherSnapshot backend unavailable:', error)
+    return { mode: 'fleet', metrics: [], updateTime: null }
   }
 }
 
@@ -573,9 +600,9 @@ function normalizeEventLevel(row) {
 }
 
 function levelText(level) {
-  if (level === 'error') return 'ERROR'
-  if (level === 'warn') return 'WARN'
-  return 'INFO'
+  if (level === 'error') return '异常'
+  if (level === 'warn') return '告警'
+  return '正常'
 }
 
 function resolveEventCategory(row) {
@@ -626,14 +653,7 @@ export async function getDashboardEvents({ farmCode, limit = 10 } = {}) {
   } catch (error) {
     console.warn('getDashboardEvents fallback:', error)
   }
-
-  return [
-    { id: 'evt-1', time: '14:15', level: 'info', levelText: 'INFO', category: 'system', message: '气象数据拉取成功，耗时 1.2s' },
-    { id: 'evt-2', time: '14:10', level: 'warn', levelText: 'WARN', category: 'business', message: '[F02] 超短期预测误差率接近阈值' },
-    { id: 'evt-3', time: '14:03', level: 'info', levelText: 'INFO', category: 'business', message: '[F01] 短期预测上报成功' },
-    { id: 'evt-4', time: '13:56', level: 'error', levelText: 'ERROR', category: 'business', message: '[F03] 14:15 超短期上报失败' },
-    { id: 'evt-5', time: '13:42', level: 'info', levelText: 'INFO', category: 'system', message: '数据库连接恢复正常' }
-  ]
+  return []
 }
 
 export { TASK_KEYS }

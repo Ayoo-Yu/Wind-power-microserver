@@ -1,4 +1,18 @@
 :root {
   --el-border-radius-base: 8px;
   --el-color-primary: #12d7ff;
+  --el-color-primary-light-3: #3de2ff;
+  --el-color-primary-light-5: #89edff;
+  --el-color-primary-light-7: #b5f3ff;
+  --el-color-primary-light-9: #e4fbff;
+  --el-color-primary-dark-2: #0ea8c9;
+  --el-fill-color-blank: #0d263a;
+  --el-bg-color: #0b1d2d;
+  --el-bg-color-overlay: #0f2a40;
+  --el-bg-color-page: #06121f;
+  --el-border-color: rgba(146, 186, 220, 0.26);
+  --el-border-color-light: rgba(146, 186, 220, 0.18);
+  --el-border-color-lighter: rgba(146, 186, 220, 0.12);
+  --el-border-color-extra-light: rgba(146, 186, 220, 0.08);
+  --el-mask-color: rgba(3, 10, 18, 0.7);
 }

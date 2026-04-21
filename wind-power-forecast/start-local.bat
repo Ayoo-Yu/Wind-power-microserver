@@ -10,7 +10,7 @@ set "FRONTEND_DIR=%PROJECT_DIR%\frontend"
 
 REM Local infrastructure
 set "DB_HOST=localhost"
-set "DB_PORT=54321"
+set "DB_PORT=15432"
 set "DB_USER=system"
 set "DB_PASSWORD=12345678ab"
 set "DB_NAME=windpower"
@@ -21,6 +21,7 @@ set "MINIO_REQUIRED=false"
 set "MINIO_CONNECT_RETRIES=1"
 set "MINIO_CONNECT_RETRY_DELAY=1"
 set "METRICS_ENABLED=false"
+set "SECRET_KEY=local-dev-secret-key-do-not-use-in-prod"
 
 REM Local service ports (avoid restricted 500x ports on some Windows setups)
 set "MAIN_APP_HOST=127.0.0.1"
@@ -77,11 +78,16 @@ IF ERRORLEVEL 1 (
   exit /b 1
 )
 
+REM Seed farms and historical data
+echo [INFO] Running seed script...
+cd /D "%BACKEND_DIR%" && set DB_HOST=%DB_HOST% && set DB_PORT=%DB_PORT% && set DB_USER=%DB_USER% && set DB_PASSWORD=%DB_PASSWORD% && set DB_NAME=%DB_NAME% && ""%MAIN_PY%"" seed_farms.py
+echo [OK] Seed data initialized.
+
 REM Start main backend
-start "Main Backend" /D "%BACKEND_DIR%" cmd /k "chcp 65001 > nul && set DB_HOST=%DB_HOST% && set DB_PORT=%DB_PORT% && set DB_USER=%DB_USER% && set DB_PASSWORD=%DB_PASSWORD% && set DB_NAME=%DB_NAME% && set MINIO_ENDPOINT=%MINIO_ENDPOINT% && set MINIO_PORT=%MINIO_PORT% && set MINIO_ENABLED=%MINIO_ENABLED% && set MINIO_REQUIRED=%MINIO_REQUIRED% && set MINIO_CONNECT_RETRIES=%MINIO_CONNECT_RETRIES% && set MINIO_CONNECT_RETRY_DELAY=%MINIO_CONNECT_RETRY_DELAY% && set METRICS_ENABLED=%METRICS_ENABLED% && set APP_HOST=%MAIN_APP_HOST% && set APP_PORT=%MAIN_APP_PORT% && set APP_DEBUG=%APP_DEBUG% && set PYTHONIOENCODING=utf-8 && ""%MAIN_PY%"" app.py"
+start "Main Backend" /D "%BACKEND_DIR%" cmd /k "chcp 65001 > nul && set DB_HOST=%DB_HOST% && set DB_PORT=%DB_PORT% && set DB_USER=%DB_USER% && set DB_PASSWORD=%DB_PASSWORD% && set DB_NAME=%DB_NAME% && set MINIO_ENDPOINT=%MINIO_ENDPOINT% && set MINIO_PORT=%MINIO_PORT% && set MINIO_ENABLED=%MINIO_ENABLED% && set MINIO_REQUIRED=%MINIO_REQUIRED% && set MINIO_CONNECT_RETRIES=%MINIO_CONNECT_RETRIES% && set MINIO_CONNECT_RETRY_DELAY=%MINIO_CONNECT_RETRY_DELAY% && set METRICS_ENABLED=%METRICS_ENABLED% && set SECRET_KEY=%SECRET_KEY% && set APP_HOST=%MAIN_APP_HOST% && set APP_PORT=%MAIN_APP_PORT% && set APP_DEBUG=%APP_DEBUG% && set PYTHONIOENCODING=utf-8 && ""%MAIN_PY%"" app.py"
 
 REM Start autopredict backend
-start "AutoPredict Backend" /D "%AUTO_BACKEND_DIR%" cmd /k "chcp 65001 > nul && set DB_HOST=%DB_HOST% && set DB_PORT=%DB_PORT% && set DB_USER=%DB_USER% && set DB_PASSWORD=%DB_PASSWORD% && set DB_NAME=%DB_NAME% && set MINIO_ENDPOINT=%MINIO_ENDPOINT% && set MINIO_PORT=%MINIO_PORT% && set MINIO_ENABLED=%MINIO_ENABLED% && set MINIO_REQUIRED=%MINIO_REQUIRED% && set MINIO_CONNECT_RETRIES=%MINIO_CONNECT_RETRIES% && set MINIO_CONNECT_RETRY_DELAY=%MINIO_CONNECT_RETRY_DELAY% && set METRICS_ENABLED=%METRICS_ENABLED% && set APP_HOST=%AUTO_APP_HOST% && set APP_PORT=%AUTO_APP_PORT% && set APP_DEBUG=%APP_DEBUG% && set PYTHONIOENCODING=utf-8 && ""%AUTO_PY%"" app.py"
+start "AutoPredict Backend" /D "%AUTO_BACKEND_DIR%" cmd /k "chcp 65001 > nul && set DB_HOST=%DB_HOST% && set DB_PORT=%DB_PORT% && set DB_USER=%DB_USER% && set DB_PASSWORD=%DB_PASSWORD% && set DB_NAME=%DB_NAME% && set MINIO_ENDPOINT=%MINIO_ENDPOINT% && set MINIO_PORT=%MINIO_PORT% && set MINIO_ENABLED=%MINIO_ENABLED% && set MINIO_REQUIRED=%MINIO_REQUIRED% && set MINIO_CONNECT_RETRIES=%MINIO_CONNECT_RETRIES% && set MINIO_CONNECT_RETRY_DELAY=%MINIO_CONNECT_RETRY_DELAY% && set METRICS_ENABLED=%METRICS_ENABLED% && set SECRET_KEY=%SECRET_KEY% && set APP_HOST=%AUTO_APP_HOST% && set APP_PORT=%AUTO_APP_PORT% && set APP_DEBUG=%APP_DEBUG% && set PYTHONIOENCODING=utf-8 && ""%AUTO_PY%"" app.py"
 
 REM Wait for backend ports to be ready before launching frontend
 CALL :wait_tcp %MAIN_APP_HOST% %MAIN_APP_PORT% MainBackend

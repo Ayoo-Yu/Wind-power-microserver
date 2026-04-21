@@ -30,6 +30,8 @@ from .task import TaskHistory
 from .training_history import TrainingHistory
 from .user_roles import UserRole
 from .features import TrainPreShort, TrainPreMiddle
+# ECMWF气象数据集中存储模型
+from .ecmwf_model import EcmwfMeteorologicalData
 
 # 导出所有模型，方便其他模块直接从models导入
 __all__ = [
@@ -47,6 +49,7 @@ __all__ = [
     'UserProfileMeta', 'OperationAuditLog',
     # 新增模型到 __all__
     'TrainPreShort', 'TrainPreMiddle', 'TrainPreSupershort',
+    'EcmwfMeteorologicalData',
     # 物理仿真模型
     'Condition', 'Turbine', 'Reading',
     # 上报管理模型

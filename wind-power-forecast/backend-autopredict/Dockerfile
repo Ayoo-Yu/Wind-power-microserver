@@ -64,7 +64,8 @@ RUN echo "module.exports = { apps: [{\
 
 # 创建启动脚本
 COPY wind-power-forecast/backend-autopredict/docker-entrypoint.sh /app/docker-entrypoint.sh
-RUN chmod +x /app/docker-entrypoint.sh
+COPY wind-power-forecast/backend-autopredict/docker-entrypoint-celery.sh /app/docker-entrypoint-celery.sh
+RUN chmod +x /app/docker-entrypoint.sh /app/docker-entrypoint-celery.sh
 
 # 暴露端口
 EXPOSE 5001

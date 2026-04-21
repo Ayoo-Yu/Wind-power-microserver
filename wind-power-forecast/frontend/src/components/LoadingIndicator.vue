@@ -31,7 +31,7 @@ export default {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background-color: rgba(255, 255, 255, 0.9);
+  background-color: rgba(6, 18, 31, 0.85);
   display: flex;
   justify-content: center;
   align-items: center;

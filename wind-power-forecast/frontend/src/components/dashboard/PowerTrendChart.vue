@@ -15,7 +15,8 @@ const props = defineProps({
 })
 
 const chartRef = ref(null)
-let chart
+let chart = null
+let disposed = false
 
 function resolveNowIndex(labels) {
   const now = new Date()
@@ -37,7 +38,8 @@ function resolveNowIndex(labels) {
 }
 
 function render() {
-  if (!chart) return
+  if (!chart || disposed) return
+  if (!props.points?.length) return
 
   const labels = props.points.map(item => item.label || item.time)
   const actual = props.points.map(item => item.actual)
@@ -109,7 +111,7 @@ function render() {
             lineStyle: { color: '#ff5d73', width: 1.5, type: 'solid' },
             label: {
               show: true,
-              formatter: 'Now',
+              formatter: '当前',
               color: '#ffb8c2',
               backgroundColor: 'rgba(255,93,115,.15)',
               padding: [2, 6, 2, 6]
@@ -131,17 +133,21 @@ function render() {
   )
 }
 
+const handleResize = () => { if (!disposed && chart) chart.resize() }
+
 onMounted(() => {
   chart = echarts.init(chartRef.value)
   render()
-  window.addEventListener('resize', chart.resize)
+  window.addEventListener('resize', handleResize)
 })
 
 watch(() => props.points, render, { deep: true })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', chart?.resize)
+  disposed = true
+  window.removeEventListener('resize', handleResize)
   chart?.dispose()
+  chart = null
 })
 </script>
 

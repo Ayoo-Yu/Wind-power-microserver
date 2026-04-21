@@ -389,12 +389,9 @@ const predictions = reactive([
   }
 ])
 
-const predictionTableRows = computed(() => predictions.map((item, idx) => ({
+const predictionTableRows = computed(() => predictions.map((item) => ({
   ...item,
-  trend: Array.from({ length: 18 }, (_, i) => {
-    const base = item.status ? 72 : 48
-    return Number((base + Math.sin((i + idx) / 2.5) * 12 + i * 0.6).toFixed(2))
-  })
+  trend: []
 })))
 
 const loading = ref(true)
@@ -560,69 +557,55 @@ const computeNextRunByType = (predictionName) => {
   return next
 }
 
-const normalizeBizState = (raw, fallback = 'disabled', ts = statusUpdatedAt.value) => {
-  if (typeof raw === 'boolean') {
-    return raw
-      ? { level: 'ready', text: `${formatHms(ts)} 已更新`, reason: '' }
+const normalizeBizState = (statusObj) => {
+  if (!statusObj) return { level: 'disabled', text: '未配置', reason: '未配置' }
+  if (typeof statusObj === 'boolean') {
+    return statusObj
+      ? { level: 'ready', text: '已启用', reason: '' }
       : { level: 'disabled', text: '未启用', reason: '' }
   }
-
-  const payload = raw && typeof raw === 'object' ? raw : {}
-  const stateToken = String(payload.state || payload.status || payload.level || '').toLowerCase()
-  const message = String(payload.message || payload.desc || payload.reason || '').trim()
-  const updatedAt = payload.updated_at || payload.updatedAt || payload.timestamp || ts
-  const merged = `${stateToken} ${message}`.toLowerCase()
-
-  if (merged.includes('degrad') || merged.includes('fallback') || merged.includes('降级')) {
-    return { level: 'degraded', text: message || '降级预测中', reason: message || '降级预测中' }
+  if (typeof statusObj === 'object') {
+    if (!statusObj.enabled) return { level: 'disabled', text: '未启用', reason: '' }
+    const lastStatus = statusObj.last_predict_status || statusObj.last_train_status
+    if (lastStatus === 'running') return { level: 'running', text: '执行中...', reason: '' }
+    if (lastStatus === 'failed') return { level: 'failed', text: '失败', reason: statusObj.last_error || '' }
+    if (lastStatus === 'success') {
+      const updatedAt = statusObj.last_predict_at || statusObj.last_train_at
+      const timeStr = updatedAt ? updatedAt.slice(11, 16) : ''
+      return { level: 'ready', text: timeStr ? `${timeStr} 已更新` : '已启用', reason: '' }
+    }
+    return { level: 'ready', text: '已启用', reason: '' }
   }
-  if (merged.includes('delay') || merged.includes('延时')) {
-    return { level: 'delayed', text: message || '延时', reason: message || '延时' }
-  }
-  if (merged.includes('running') || merged.includes('processing') || merged.includes('计算中')) {
-    return { level: 'running', text: message || '计算中...', reason: message || '计算中...' }
-  }
-  if (merged.includes('error') || merged.includes('fail') || merged.includes('缺失') || merged.includes('missing') || merged.includes('报错')) {
-    return { level: 'failed', text: message || '失败/缺数据', reason: message || '失败/缺数据' }
-  }
-  if (merged.includes('ready') || merged.includes('success') || merged.includes('ok') || merged.includes('updated')) {
-    return { level: 'ready', text: `${formatHms(updatedAt)} 已更新`, reason: '' }
-  }
-  if (merged.includes('disable') || merged.includes('stop') || merged.includes('未启用')) {
-    return { level: 'disabled', text: '未启用', reason: '' }
-  }
-  if (fallback === 'ready') {
-    return { level: 'ready', text: `${formatHms(updatedAt)} 已更新`, reason: '' }
-  }
-  return { level: fallback, text: fallback === 'unknown' ? '状态未知' : '未启用', reason: message }
+  return { level: 'unknown', text: '状态未知', reason: '' }
 }
 
 const fleetMatrixRows = computed(() => {
   const rows = Array.isArray(fleetStatus.value) ? fleetStatus.value : []
   const filterCodes = Array.isArray(selectedFleetFarmCodes.value) ? selectedFleetFarmCodes.value : []
   const applyFilter = filterCodes.length > 0
-  const baseTs = statusUpdatedAt.value
 
   return rows
     .filter((farm) => !applyFilter || filterCodes.includes(farm.farm_code))
     .map((farm) => {
-      const nwpRaw = farm.nwp_status || farm.nwp || farm.weather_status || farm.weather || null
-      const nwpState = nwpRaw
-        ? normalizeBizState(nwpRaw, 'unknown', baseTs)
-        : normalizeBizState(farm.status?.supershort || farm.status?.short || farm.status?.medium, 'unknown', baseTs)
+      const status = farm.status || {}
+
+      const nwpState = normalizeBizState(
+        status.supershort?.enabled ? status.supershort : null
+      )
 
       const supershortState = nwpState.level === 'failed'
         ? { level: 'failed', text: 'NWP缺失', reason: 'NWP缺失' }
-        : normalizeBizState(farm.status?.supershort, 'disabled', baseTs)
-      const shortState = normalizeBizState(farm.status?.short, 'disabled', baseTs)
-      const mediumState = normalizeBizState(farm.status?.medium, 'disabled', baseTs)
+        : normalizeBizState(status.supershort)
+
+      const shortState = normalizeBizState(status.short)
+      const mediumState = normalizeBizState(status.medium)
 
       return {
         ...farm,
         nwpState,
         supershortState,
         shortState,
-        mediumState
+        mediumState,
       }
     })
 })
@@ -1337,7 +1320,7 @@ const handleLogTypeChange = () => {
   font-weight: 600;
   margin-bottom: 40px;
   text-align: center;
-  color: #1d1d1f;
+  color: var(--text-primary);
   letter-spacing: -0.003em;
   line-height: 1.1;
 }
@@ -1349,81 +1332,6 @@ const handleLogTypeChange = () => {
   margin-bottom: 24px;
 }
 
-.el-button {
-  height: 40px;  
-  padding: 0 20px;
-  font-size: 15px;
-  font-weight: 500;
-  border-radius: 20px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  letter-spacing: -0.01em;
-  border: none;
-  min-width: 100px; 
-}
-
-.el-button--primary {
-  background: #0071e3;
-  color: #ffffff;
-}
-
-.el-button--primary:hover {
-  background: #0077ed;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 113, 227, 0.12);
-}
-
-.el-button--success {
-  background: #34c759;
-  color: #ffffff;
-}
-
-.el-button--success:hover {
-  background: #30b753;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(52, 199, 89, 0.12);
-}
-
-.el-button--danger {
-  background: #ff3b30;
-  color: #ffffff;
-}
-
-.el-button--danger:hover {
-  background: #ff291e;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(255, 59, 48, 0.12);
-}
-
-.el-button--warning {
-  background: #ff9500;
-  color: #ffffff;
-}
-
-.el-button--warning:hover {
-  background: #ff8500;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(255, 149, 0, 0.12);
-}
-
-.el-button--info {
-  background: #8e8e93;
-  color: #ffffff;
-}
-
-.el-button--info:hover {
-  background: #7c7c82;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(142, 142, 147, 0.12);
-}
-
-.el-button.is-disabled,
-.el-button.is-disabled:hover {
-  background: #e5e5ea;
-  color: #8e8e93;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
 
 .button-group {
   display: grid;
@@ -1474,9 +1382,9 @@ const handleLogTypeChange = () => {
 }
 
 .el-card {
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(7, 24, 39, 0.58);
   backdrop-filter: blur(10px);
-  border: 1px solid #f0f0f0;
+  border: 1px solid rgba(136, 186, 217, 0.2);
   border-radius: 20px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
   padding: 16px;
@@ -1667,13 +1575,13 @@ const handleLogTypeChange = () => {
 
 .prediction-card :deep(.el-card__header) {
   display: none;
-  border-bottom: 1px solid #f2f2f2;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .prediction-card :deep(.el-card__header span) {
   font-size: 24px;
   font-weight: 500;
-  color: #1d1d1f;
+  color: var(--text-primary);
 }
 
 .el-dialog {
@@ -1695,15 +1603,16 @@ const handleLogTypeChange = () => {
 }
 
 .el-dialog :deep(.el-dialog__header) {
-  padding: 24px;
+  padding: 16px 20px;
   margin: 0;
-  background: #f5f5f7;
+  background: transparent;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .el-dialog :deep(.el-dialog__title) {
-  font-size: 20px;
-  font-weight: 500;
-  color: #1d1d1f;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .el-dialog :deep(.el-dialog__body) {
@@ -1741,13 +1650,14 @@ const handleLogTypeChange = () => {
 .info-content, .logs-content, .error-content, .history-detail-content {
   max-height: 600px;
   overflow-y: auto;
-  background: #fafafa;
+  background: rgba(8, 24, 38, 0.65);
   padding: 24px;
   border-radius: 12px;
-  font-family: "SF Mono", Monaco, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 14px;
   line-height: 1.5;
-  color: #1d1d1f;
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
 }
 
 .history-filters {
@@ -1812,9 +1722,10 @@ const handleLogTypeChange = () => {
 
 .logs-filters {
   margin-bottom: 20px;
-  background: #f9f9f9;
+  background: rgba(8, 24, 38, 0.5);
   padding: 16px;
   border-radius: 8px;
+  border: 1px solid var(--border-color);
 }
 
 /* Styles for removed dialogs and their contents can be cleaned up if desired */

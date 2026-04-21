@@ -16,7 +16,7 @@ def _env(name, default):
 DB_HOST = _env('DB_HOST', 'localhost')  # 本地默认 localhost
 DB_PORT = _env('DB_PORT', '54321')
 DB_USER = _env('DB_USER', 'system')
-DB_PASSWORD = _env('DB_PASSWORD', '12345678ab')
+DB_PASSWORD = _env('DB_PASSWORD', '')
 DB_NAME = _env('DB_NAME', 'windpower')
 
 # MinIO 配置
@@ -31,16 +31,19 @@ print(f"数据库连接配置: {DB_HOST}:{DB_PORT}/{DB_NAME}")
 print(f"MinIO 连接配置: {'https' if MINIO_SECURE else 'http'}://{MINIO_ENDPOINT}:{MINIO_PORT}")
 
 KINGBASE_CONFIG = {
-    "host": DB_HOST,
-    "port": DB_PORT,
+    "host": _env('DB_HOST_OVERRIDE', DB_HOST),
+    "port": _env('DB_PORT_OVERRIDE', DB_PORT),
     "user": DB_USER,
     "password": DB_PASSWORD,
     "database": DB_NAME
 }
 
+if not KINGBASE_CONFIG['password']:
+    raise RuntimeError("DB_PASSWORD environment variable is required")
+
 MINIO_CONFIG = {
-    "endpoint": MINIO_ENDPOINT,
-    "port": MINIO_PORT,
+    "endpoint": _env('MINIO_HOST_OVERRIDE', MINIO_ENDPOINT),
+    "port": _env('MINIO_PORT_OVERRIDE', MINIO_PORT),
     "access_key": MINIO_ACCESS_KEY,
     "secret_key": MINIO_SECRET_KEY,
     "secure": MINIO_SECURE,
@@ -69,37 +72,9 @@ class Config:
     MAX_CONTENT_LENGTH = 500 * 1024 * 1024  # 500MB
     ALLOWED_EXTENSIONS = {'csv', 'xlsx', 'xls', 'pkl', 'json', 'joblib', 'h5', 'hdf5', 'pb', 'pt', 'pth'}
 
-    KINGBASE_CONFIG = {
-        "host": DB_HOST,
-        "port": DB_PORT,
-        "user": DB_USER,
-        "password": DB_PASSWORD,
-        "database": DB_NAME
-    }
-    
-    MINIO_CONFIG = {
-        "endpoint": MINIO_ENDPOINT,
-        "port": MINIO_PORT,
-        "access_key": MINIO_ACCESS_KEY,
-        "secret_key": MINIO_SECRET_KEY,
-        "secure": MINIO_SECURE,
-        "buckets": {
-            "datasets": "wind-datasets",
-            "models": "wind-models",
-            "predictions": "wind-predictions",
-            "scalers": "wind-scalers",
-            "metrics": "wind-metrics",
-            "logs": "wind-logs"
-        },
-        "policies": {
-            "wind-datasets": "private",
-            "wind-models": "public-read",
-            "wind-predictions": "private",
-            "wind-scalers": "private",
-            "wind-metrics": "public-read",
-            "wind-logs": "public-read"
-        }
-    }
+    KINGBASE_CONFIG = KINGBASE_CONFIG
+
+    MINIO_CONFIG = MINIO_CONFIG
 
     MODEL_STORAGE = {
         'model_dir': os.path.join(BASE_DIR, 'saved_models'),
@@ -107,8 +82,12 @@ class Config:
         'metrics_dir': os.path.join(BASE_DIR, 'saved_metrics')
     }
 
-    SECRET_KEY = _env('SECRET_KEY', 'your-secret-key')
-    SQLALCHEMY_DATABASE_URI = f"postgresql+kingbase://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    SECRET_KEY = _env('SECRET_KEY', '')
+    if not SECRET_KEY:
+        raise RuntimeError("SECRET_KEY environment variable is required")
+    # DEPRECATED: This URI is intentionally non-functional (masked password, no override host).
+    # Real connections use database_config.py which reads KINGBASE_CONFIG with overrides.
+    SQLALCHEMY_DATABASE_URI = f"postgresql+kingbase://{DB_USER}:***@{KINGBASE_CONFIG['host']}:{KINGBASE_CONFIG['port']}/{DB_NAME}"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     DEBUG = _env('FLASK_DEBUG', 'True').lower() == 'true'
     SESSION_TYPE = 'filesystem'

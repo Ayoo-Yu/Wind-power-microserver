@@ -692,7 +692,7 @@ export default {
     renderMainChart() {
       if (this._disposed) return
       const state = this.singleSeriesState
-      if (!state || !this.$refs.mainChartEl) return
+      if (!state || !state.labels?.length || !this.$refs.mainChartEl) return
       this.mainChart = this.ensureChartInstance('mainChart', 'mainChartEl')
       if (!this.mainChart) return
       const series = this.getMainSeriesFromState()
@@ -737,7 +737,7 @@ export default {
     renderErrorChart() {
       if (this._disposed) return
       const state = this.singleSeriesState
-      if (!state || !this.$refs.errorChartEl) return
+      if (!state || !state.labels?.length || !this.$refs.errorChartEl) return
       this.errorChart = this.ensureChartInstance('errorChart', 'errorChartEl')
       if (!this.errorChart) return
       const toErr = (arr) => arr.map((v, i) => (Number.isFinite(v) && Number.isFinite(state.actualValues[i]) ? Number(v) - Number(state.actualValues[i]) : null))
@@ -765,7 +765,7 @@ export default {
     renderScatterChart() {
       if (this._disposed) return
       const state = this.singleSeriesState
-      if (!state || !this.$refs.scatterChartEl) return
+      if (!state || !state.labels?.length || !this.$refs.scatterChartEl) return
       this.scatterChart = this.ensureChartInstance('scatterChart', 'scatterChartEl')
       if (!this.scatterChart) return
       const points = []
@@ -829,7 +829,7 @@ export default {
     },
     renderFleetBarChart() {
       if (this._disposed) return
-      if (!this.$refs.fleetBarChartEl) return
+      if (!this.fleetCompareRows?.length || !this.$refs.fleetBarChartEl) return
       this.fleetBarChart = this.ensureChartInstance('fleetBarChart', 'fleetBarChartEl')
       if (!this.fleetBarChart) return
       this.fleetBarChart.setOption({

@@ -20,7 +20,7 @@ def is_running_in_docker():
     try:
         with open('/proc/1/cgroup', 'r') as f:
             return any('docker' in line for line in f)
-    except:
+    except (FileNotFoundError, PermissionError, OSError):
         return False
 
 # 如果在本地环境运行且未设置数据库连接信息，则设置为本地Docker连接
@@ -33,7 +33,7 @@ if not is_running_in_docker():
     if not os.environ.get('DB_USER'):
         os.environ['DB_USER'] = 'system'
     if not os.environ.get('DB_PASSWORD'):
-        os.environ['DB_PASSWORD'] = '12345678ab'
+        raise RuntimeError('DB_PASSWORD not set. Create a .env file or set the environment variable.')
     if not os.environ.get('DB_NAME'):
         os.environ['DB_NAME'] = 'windpower'
     if not os.environ.get('MINIO_ENDPOINT'):
@@ -48,7 +48,10 @@ app.config.from_object(Config)
 
 # --- JWT配置 ---
 # 设置JWT密钥，与backend服务使用相同的密钥
-app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY", "wind-power-forecast-secret-key")
+jwt_secret = os.environ.get("JWT_SECRET_KEY") or os.environ.get("SECRET_KEY")
+if not jwt_secret:
+    raise RuntimeError('JWT_SECRET_KEY or SECRET_KEY not set. Create a .env file or set the environment variable.')
+app.config["JWT_SECRET_KEY"] = jwt_secret
 # 设置与backend服务相同的令牌过期时间（12小时）
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=12)
 # 初始化JWTManager

@@ -87,6 +87,15 @@ function ringStyle(rate) {
 
 .kpi-card {
   padding: 14px;
+  position: relative;
+  overflow: hidden;
+}
+.kpi-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 16px rgba(18, 215, 255, 0.06);
 }
 
 .kpi-head {
@@ -102,7 +111,8 @@ function ringStyle(rate) {
 
 .kpi-icon {
   font-size: 18px;
-  color: #63ddff;
+  color: var(--accent);
+  filter: drop-shadow(0 0 6px rgba(18, 215, 255, 0.3));
 }
 
 .kpi-body {
@@ -117,19 +127,19 @@ function ringStyle(rate) {
 }
 
 .kpi-main {
-  color: #dff3ff;
+  color: var(--text-primary);
   font-size: 20px;
-  font-family: Consolas, Menlo, Monaco, monospace;
+  font-family: var(--font-mono);
 }
 
 .kpi-main strong {
-  color: #49ecff;
+  color: var(--accent);
 }
 
 .kpi-subline {
   margin-top: 8px;
-  font-size: 13px;
-  color: #9ec0d8;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
 }
 
 .danger {

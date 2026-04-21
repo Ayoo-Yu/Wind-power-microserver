@@ -35,20 +35,20 @@
       
       <!-- 风电场装机容量输入框及提示文字 -->
       <div v-if="selectedModelLocal" style="margin-top: 20px;">
-        <label for="wfCapacity" style="margin-right: 10px;color: #909399">整场装机容量 (MW)：</label>
+        <label for="wfCapacity" style="margin-right: 10px;">整场装机容量 (MW)：</label>
         <el-input
           id="wfCapacity"
           v-model="wfCapacityLocal"
           placeholder="请输入风电场总装机容量（MW）"
           style="width: 400px;"
           @change="onWindFarmCapacityChange"
-          :input-style="{ color: '#909399' }"
+          :input-style="{ color: 'var(--text-muted)' }"
         ></el-input>
       </div>
 
       <!-- 训练集占比输入框及提示文字 -->
       <div v-if="selectedModelLocal" style="margin-top: 20px;">
-        <label for="trainRatio" style="margin-right: 10px;color: #909399">训练集占比：</label>
+        <label for="trainRatio" style="margin-right: 10px;">训练集占比：</label>
         <el-slider
           id="trainRatio"
           v-model="trainRatioLocal"
@@ -67,7 +67,7 @@
         
         <!-- 提升类型选择 -->
         <div class="param-item">
-          <label for="boosting_type" style="color: #909399">提升类型：</label>
+          <label for="boosting_type" class="param-label">提升类型：</label>
           <el-select 
             id="boosting_type"
             v-model="customParams.boosting_type" 
@@ -82,7 +82,7 @@
         
         <!-- 学习率 -->
         <div class="param-item">
-          <label for="learning_rate" style="color: #909399">学习率：</label>
+          <label for="learning_rate" class="param-label">学习率：</label>
           <el-input-number
             id="learning_rate"
             v-model="customParams.learning_rate"
@@ -96,7 +96,7 @@
         
         <!-- 叶子节点数 -->
         <div class="param-item">
-          <label for="num_leaves" style="color: #909399">叶子节点数：</label>
+          <label for="num_leaves" class="param-label">叶子节点数：</label>
           <el-input-number
             id="num_leaves"
             v-model="customParams.num_leaves"
@@ -109,7 +109,7 @@
         
         <!-- 特征抽样比例 -->
         <div class="param-item">
-          <label for="feature_fraction" style="color: #909399">特征抽样比例：</label>
+          <label for="feature_fraction" class="param-label">特征抽样比例：</label>
           <el-slider
             id="feature_fraction"
             v-model="customParams.feature_fraction"
@@ -123,7 +123,7 @@
         
         <!-- DART特有参数 -->
         <div v-if="customParams.boosting_type === 'dart'" class="param-item">
-          <label for="drop_rate" style="color: #909399">丢弃率：</label>
+          <label for="drop_rate" class="param-label">丢弃率：</label>
           <el-slider
             id="drop_rate"
             v-model="customParams.drop_rate"
@@ -137,7 +137,7 @@
         
         <!-- GOSS特有参数 -->
         <div v-if="customParams.boosting_type === 'goss'" class="param-item">
-          <label for="top_rate" style="color: #909399">顶部样本比例：</label>
+          <label for="top_rate" class="param-label">顶部样本比例：</label>
           <el-slider
             id="top_rate"
             v-model="customParams.top_rate"
@@ -150,7 +150,7 @@
         </div>
         
         <div v-if="customParams.boosting_type === 'goss'" class="param-item">
-          <label for="other_rate" style="color: #909399">其他样本比例：</label>
+          <label for="other_rate" class="param-label">其他样本比例：</label>
           <el-slider
             id="other_rate"
             v-model="customParams.other_rate"
@@ -193,7 +193,7 @@ export default {
     },
     wfCapacity: {
       type: Number,
-      default: 453.5,
+      default: 779.0,
     },
     trainRatio: {
       type: Number,
@@ -273,19 +273,19 @@ export default {
   align-items: center;
   justify-content: center;
   padding: 32px;
-  background: #f8f9fa;
+  background: var(--input-bg);
   border-radius: 8px;
-  border: 1px dashed #dcdfe6;
+  border: 1px dashed var(--border-color);
 }
 
 .empty-icon {
   font-size: 24px;
-  color: #909399;
+  color: var(--text-muted);
   margin-bottom: 12px;
 }
 
 .empty-text {
-  color: #909399;
+  color: var(--text-muted);
   font-size: 14px;
   text-align: center;
   margin: 0;
@@ -301,11 +301,12 @@ export default {
   width: 120px;
   text-align: right;
   margin-right: 10px;
+  color: var(--text-muted);
 }
 
 /* 新增placeholder样式 */
 :deep(.el-input__inner::placeholder) {
-  color: #909399;
+  color: var(--text-muted);
   opacity: 1;
 }
 </style>

@@ -25,13 +25,13 @@ const statusClass = computed(() => (props.active ? 'active' : 'inactive'))
 }
 
 .active {
-  background: #2dd36f;
-  box-shadow: 0 0 0 0 rgba(45, 211, 111, .6);
+  background: var(--accent-2);
+  box-shadow: 0 0 0 0 rgba(45, 211, 111, 0.6), 0 0 6px rgba(45, 211, 111, 0.3);
   animation: pulse 1.8s infinite;
 }
 
 .inactive {
-  background: #7f8fa3;
+  background: var(--text-muted);
 }
 
 @keyframes pulse {

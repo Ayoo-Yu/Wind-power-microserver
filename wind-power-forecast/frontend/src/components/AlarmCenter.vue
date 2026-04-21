@@ -642,6 +642,18 @@ export default {
   border-radius: 12px;
   padding: 14px;
   color: #fff;
+  position: relative;
+  overflow: hidden;
+}
+.stat::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -30%;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .stat .label {
@@ -653,12 +665,14 @@ export default {
   font-size: 30px;
   font-weight: 700;
   margin-top: 4px;
+  position: relative;
+  z-index: 1;
 }
 
-.danger { background: linear-gradient(135deg, #a63e4e, #d85162); }
-.warning { background: linear-gradient(135deg, #9d6a1e, #d89d2b); }
-.info { background: linear-gradient(135deg, #235c81, #2c86b8); }
-.neutral { background: linear-gradient(135deg, #445469, #617691); }
+.danger { background: linear-gradient(135deg, #8b2236, #d85162); box-shadow: var(--glow-danger); }
+.warning { background: linear-gradient(135deg, #8a5a14, #d89d2b); box-shadow: var(--glow-warning); }
+.info { background: linear-gradient(135deg, #1a4a6b, #2c86b8); box-shadow: 0 0 12px rgba(44, 134, 184, 0.3); }
+.neutral { background: linear-gradient(135deg, #2e3d4e, #617691); }
 
 .notification-panel {
   margin-top: 18px;

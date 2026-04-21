@@ -15,14 +15,21 @@ const props = defineProps({
 })
 
 const chartRef = ref(null)
-let chart
+let chart = null
+let disposed = false
 
 function render() {
-  if (!chart) return
+  if (!chart || disposed) return
+  if (!props.rows?.length) return
 
   const sortedRows = [...props.rows].sort((a, b) => b.value - a.value)
   const names = sortedRows.map(item => item.name)
   const values = sortedRows.map(item => item.value)
+  const barHeight = 22
+  const barGap = 10
+  const chartHeight = Math.min(Math.max(200, names.length * (barHeight + barGap) + 40), 360)
+  chartRef.value.style.height = `${chartHeight}px`
+  chart.resize()
 
   chart.setOption(
     {
@@ -39,7 +46,7 @@ function render() {
         axisLabel: {
           color: '#d6ebff',
           formatter: (value, index) => {
-            if (index === 0) return `{top|TOP1}  ${value}`
+            if (index === 0) return `{top|第一}  ${value}`
             return value
           },
           rich: {
@@ -87,23 +94,29 @@ function render() {
   )
 }
 
+const handleResize = () => { if (!disposed && chart) chart.resize() }
+
 onMounted(() => {
   chart = echarts.init(chartRef.value)
   render()
-  window.addEventListener('resize', chart.resize)
+  window.addEventListener('resize', handleResize)
 })
 
 watch(() => props.rows, render, { deep: true })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', chart?.resize)
+  disposed = true
+  window.removeEventListener('resize', handleResize)
   chart?.dispose()
+  chart = null
 })
 </script>
 
 <style scoped>
 .chart-host {
   width: 100%;
-  height: 320px;
+  min-height: 200px;
+  max-height: 360px;
+  overflow-y: auto;
 }
 </style>
