@@ -1,7 +1,26 @@
 import logging
 import os
+import time
 from logging.handlers import TimedRotatingFileHandler
 from datetime import datetime, timedelta, timezone
+
+
+class SafeTimedRotatingFileHandler(TimedRotatingFileHandler):
+    """Windows-safe TimedRotatingFileHandler that handles locked log files."""
+
+    def doRollover(self):
+        try:
+            super().doRollover()
+        except PermissionError:
+            # Another process holds the log file; skip rotation this time
+            pass
+
+    def emit(self, record):
+        try:
+            super().emit(record)
+        except PermissionError:
+            # If write fails, just skip this log entry
+            pass
 
 class BeijingTimeFormatter(logging.Formatter):
     """自定义日志格式化器，使用北京时间"""
@@ -49,7 +68,7 @@ def configure_logging(app, socketio):
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
         
-    file_handler = TimedRotatingFileHandler(
+    file_handler = SafeTimedRotatingFileHandler(
         os.path.join(log_dir, 'app.log'),
         when="midnight",      # Rotate at midnight
         interval=1,           # Daily rotation

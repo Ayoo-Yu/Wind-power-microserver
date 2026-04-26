@@ -210,7 +210,57 @@ def health_check_v1():
     payload = success(data=health_status, message="ok" if is_healthy else "degraded")
     return jsonify(payload), status_code
 
-@app.route('/metrics', methods=['GET'])
+@app.route('/api/v1/public/overview', methods=['GET'])
+def public_overview():
+    """登录页公开概览数据（无需认证）"""
+    try:
+        from db_session import db_session
+        from db_models import WindFarm
+        from sqlalchemy import text
+
+        with db_session() as db:
+            farm_count = db.query(WindFarm).filter(WindFarm.is_active == True).count()
+
+            # 获取最新实际功率
+            latest_power = 0.0
+            try:
+                result = db.execute(text(
+                    "SELECT COALESCE(SUM(wp_actual), 0) FROM actual_power "
+                    "WHERE timestamp = (SELECT MAX(timestamp) FROM actual_power)"
+                ))
+                row = result.fetchone()
+                latest_power = float(row[0]) if row and row[0] else 0.0
+            except Exception:
+                pass
+
+            # 获取今日预测准确率
+            accuracy = None
+            try:
+                result = db.execute(text("""
+                    SELECT 1 - (
+                        AVG(ABS(wp_pred - wp_actual)::float) / NULLIF(AVG(ABS(wp_actual)::float), 0)
+                    ) as accuracy
+                    FROM shortl_power
+                    WHERE timestamp >= CURRENT_DATE
+                      AND wp_pred IS NOT NULL AND wp_actual IS NOT NULL
+                """))
+                row = result.fetchone()
+                if row and row[0] is not None:
+                    accuracy = round(float(row[0]) * 100, 1)
+            except Exception:
+                pass
+
+        return jsonify(success(data={
+            'farm_count': farm_count,
+            'total_power': round(latest_power, 1),
+            'accuracy': accuracy
+        }))
+    except Exception as e:
+        return jsonify(success(data={
+            'farm_count': 0,
+            'total_power': 0,
+            'accuracy': None
+        }))
 def metrics():
     """Prometheus 指标接口"""
     if not METRICS_ENABLED:

@@ -14,6 +14,13 @@ function attachJsonBodyForward(proxy) {
 }
 
 module.exports = {
+  css: {
+    loaderOptions: {
+      sass: {
+        api: 'modern'
+      }
+    }
+  },
   devServer: {
     proxy: {
       '/api/v1/autopredict': {

@@ -146,6 +146,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock, OfficeBuilding, Lightning, Aim } from '@element-plus/icons-vue'
 import { login, changePassword, getCurrentUser } from '../api/auth'
+import axios from 'axios'
 import { isAuthReady, isAuthLoading } from '../store/authReady'
 
 export default {
@@ -334,9 +335,22 @@ export default {
       })
     }
 
+    async function fetchOverview() {
+      try {
+        const resp = await axios.get('/api/v1/public/overview')
+        const d = resp.data?.data || resp.data || {}
+        if (d.farm_count) maskedMetrics.stationCount = d.farm_count
+        if (d.total_power) maskedMetrics.totalPower = d.total_power + ' MW'
+        if (d.accuracy != null) maskedMetrics.accuracy = d.accuracy + '%'
+      } catch {
+        // keep defaults ----
+      }
+    }
+
     onMounted(() => {
       refreshCaptcha()
       loadLockState()
+      fetchOverview()
       timerId.value = setInterval(() => {
         nowTs.value = Date.now()
       }, 1000)
