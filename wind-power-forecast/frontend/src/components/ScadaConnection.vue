@@ -158,7 +158,7 @@
         <el-form-item label="IOA点位" prop="ioa_points" v-if="form.protocol === 'c104'">
           <div class="ioa-points-editor">
             <div v-for="(type, ioa) in form.ioa_points" :key="ioa" class="ioa-row">
-              <el-input :model-value="ioa" disabled style="width: 120px" />
+              <el-input :model-value="ioa" @update:model-value="val => updateIoaAddress(ioa, val)" style="width: 120px" />
               <el-select :model-value="type" @update:model-value="val => updateIoaType(ioa, val)" style="width: 180px">
                 <el-option label="M_ME_NC_1 (短浮点)" value="M_ME_NC_1" />
                 <el-option label="M_ME_NB_1 (标度化)" value="M_ME_NB_1" />
@@ -411,6 +411,15 @@ export default {
       form.ioa_points = { ...form.ioa_points, [ioa]: val }
     }
 
+    const updateIoaAddress = (oldIoa, newIoa) => {
+      if (!newIoa || newIoa === oldIoa) return
+      const updated = {}
+      for (const [k, v] of Object.entries(form.ioa_points)) {
+        updated[k === oldIoa ? String(newIoa) : k] = v
+      }
+      form.ioa_points = updated
+    }
+
     const startRefreshTimer = () => {
       if (refreshTimer) clearInterval(refreshTimer)
       refreshTimer = setInterval(loadConnections, 15000)
@@ -440,7 +449,7 @@ export default {
       statusText, formatTime, loadConnections,
       openAddDialog, openEditDialog, handleSave,
       handleStart, handleStop, handleRestart, handleTest, handleDelete,
-      addIoa, removeIoa, updateIoaType,
+      addIoa, removeIoa, updateIoaType, updateIoaAddress,
       Plus, Refresh, Delete, OfficeBuilding, Link, DataLine,
     }
   }

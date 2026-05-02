@@ -161,6 +161,9 @@ export default {
       errorChart: null,
       fleetBarChart: null,
       _disposed: false,
+      _chartRenderRaf: null,
+      _chartResizeObserver: null,
+      _observedChartEls: [],
       exportData: { comparison: null, metrics: null },
       singleSeriesState: null,
       singleMetricsSummary: {
@@ -232,6 +235,15 @@ export default {
     this._disposed = true
     farmService.removeListener(this.handleFarmChanged)
     window.removeEventListener('resize', this.resizeCharts)
+    if (this._chartRenderRaf) {
+      cancelAnimationFrame(this._chartRenderRaf)
+      this._chartRenderRaf = null
+    }
+    if (this._chartResizeObserver) {
+      this._chartResizeObserver.disconnect()
+      this._chartResizeObserver = null
+    }
+    this._observedChartEls = []
     this.destroyAllCharts()
   },
   methods: {
@@ -334,6 +346,54 @@ export default {
       if (this._disposed) return
       [this.mainChart, this.errorChart, this.fleetBarChart].forEach((chart) => chart && chart.resize())
     },
+    isChartElementReady(el) {
+      if (!el) return false
+      const rect = el.getBoundingClientRect()
+      return rect.width > 0 && rect.height > 0
+    },
+    observeChartElement(el) {
+      if (!el || typeof ResizeObserver === 'undefined') return
+      if (!this._chartResizeObserver) {
+        this._chartResizeObserver = new ResizeObserver(() => {
+          if (this._disposed) return
+          this.resizeCharts()
+          if (this.analysisTab === 'single' && this.singleSeriesState) this.scheduleChartRender('single')
+          if (this.analysisTab === 'fleet' && this.fleetCompareRows.length) this.scheduleChartRender('fleet')
+        })
+      }
+      if (!this._observedChartEls.includes(el)) {
+        this._chartResizeObserver.observe(el)
+        this._observedChartEls.push(el)
+      }
+    },
+    scheduleChartRender(mode = 'single', attempts = 0) {
+      if (this._disposed) return
+      if (this._chartRenderRaf) {
+        cancelAnimationFrame(this._chartRenderRaf)
+        this._chartRenderRaf = null
+      }
+      this.$nextTick(() => {
+        this._chartRenderRaf = requestAnimationFrame(() => {
+          this._chartRenderRaf = null
+          const refKeys = mode === 'fleet' ? ['fleetBarChartEl'] : ['mainChartEl', 'errorChartEl']
+          const requiredEls = refKeys.map(refKey => this.$refs[refKey]).filter(Boolean)
+          requiredEls.forEach(el => this.observeChartElement(el))
+          const ready = requiredEls.length > 0 && requiredEls.every(el => this.isChartElementReady(el))
+
+          if (!ready && attempts < 12) {
+            window.setTimeout(() => this.scheduleChartRender(mode, attempts + 1), 50)
+            return
+          }
+
+          if (mode === 'fleet') {
+            this.renderFleetBarChart()
+          } else {
+            this.renderSingleCharts()
+          }
+          this.resizeCharts()
+        })
+      })
+    },
     setQuickTimeRange(period) {
       const end = new Date()
       const start = new Date(end)
@@ -357,6 +417,8 @@ export default {
       const currentEl = this.$refs[refKey]
       const currentChart = this[chartKey]
       if (!currentEl) return null
+      this.observeChartElement(currentEl)
+      if (!this.isChartElementReady(currentEl)) return null
       if (currentChart && currentChart.getDom() !== currentEl) {
         currentChart.dispose()
         this[chartKey] = null
@@ -628,9 +690,7 @@ export default {
         }
       }
 
-      this.$nextTick(() => {
-        this.renderSingleCharts()
-      })
+      this.scheduleChartRender('single')
     },
     buildCurtailmentMarkAreas(labels, curtailmentValues) {
       if (!this.showCurtailmentTag || !Array.isArray(curtailmentValues) || !curtailmentValues.length) return []
@@ -888,7 +948,7 @@ export default {
       this.fleetCompareRows = Array.from(map.values())
       this.exportData.metrics = this.fleetCompareRows
       this.exportData.comparison = null
-      this.$nextTick(() => this.renderFleetBarChart())
+      this.scheduleChartRender('fleet')
     },
     renderFleetBarChart() {
       if (this._disposed) return
@@ -984,10 +1044,10 @@ export default {
       this.syncRouteQuery()
     },
     selectedTypes() {
-      if (this.analysisTab === 'single' && this.singleSeriesState) this.$nextTick(() => this.renderSingleCharts())
+      if (this.analysisTab === 'single' && this.singleSeriesState) this.scheduleChartRender('single')
     },
     showCurtailmentTag() {
-      if (this.analysisTab === 'single' && this.singleSeriesState) this.$nextTick(() => this.renderSingleCharts())
+      if (this.analysisTab === 'single' && this.singleSeriesState) this.scheduleChartRender('single')
     }
   }
 }

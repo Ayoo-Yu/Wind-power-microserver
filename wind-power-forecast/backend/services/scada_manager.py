@@ -38,10 +38,10 @@ class ScadaManager:
 
     def _detect_backend_url(self) -> str:
         """Detect the backend URL for workers to POST data to."""
-        host = os.environ.get('APP_HOST', '127.0.0.1')
+        host = os.environ.get('APP_HOST', '127.0.0.1').strip()
         if host == '0.0.0.0':
             host = '127.0.0.1'
-        port = os.environ.get('APP_PORT', '5000')
+        port = os.environ.get('APP_PORT', '5000').strip()
         return f'http://{host}:{port}'
 
     def _get_worker_python(self) -> str:
@@ -96,9 +96,14 @@ class ScadaManager:
             config_json = json.dumps(config, ensure_ascii=False)
             python = self._get_worker_python()
 
+            log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'logs')
+            os.makedirs(log_dir, exist_ok=True)
+            log_path = os.path.join(log_dir, f'scada_worker_{conn_id}.log')
+            log_file = open(log_path, 'a', encoding='utf-8')
+
             popen_kwargs = {
-                'stdout': subprocess.DEVNULL,
-                'stderr': subprocess.DEVNULL,
+                'stdout': log_file,
+                'stderr': log_file,
             }
             if sys.platform == 'win32':
                 popen_kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW

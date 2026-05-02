@@ -164,70 +164,74 @@ def run_c104(config: dict):
     backend_url = config.get('backend_url', 'http://127.0.0.1:5000')
     interval = config.get('fetch_interval', 60)
     casdu_address = config.get('casdu_address', 1)
-    originator_address = config.get('originator_address', 0)
     ioa_points = config.get('ioa_points', {})
     target_ioa = config.get('upload_target_ioa')
 
     try:
         import c104
     except ImportError:
-        logger.error("c104 library not installed. Falling back to http_poll mode.")
+        logger.error("c104 library not installed.")
         update_status(config, 'error', 'c104 library not available')
         return
 
     update_status(config, 'connecting', f'Connecting to {server_ip}:{server_port}')
 
-    latest_power = None
-
-    def on_point_callback(point):
-        nonlocal latest_power
+    def on_measurement(point: c104.Point, previous_info: c104.Information,
+                       message: c104.IncomingMessage) -> c104.ResponseState:
         value = point.value
         if value is not None:
-            latest_power = float(value)
-            logger.info(f"IOA={point.io_address}: {latest_power} MW")
+            power = float(value)
+            logger.info(f"IOA={point.io_address}: {power} MW")
             now = datetime.now(BEIJING_TZ)
-            post_power(backend_url, farm_code, now.strftime('%Y-%m-%dT%H:%M:%S'), latest_power)
-            update_status(config, 'running', f'IOA={point.io_address}: {latest_power:.2f} MW', latest_power)
+            post_power(backend_url, farm_code, now.strftime('%Y-%m-%dT%H:%M:%S'), power)
+            update_status(config, 'running', f'IOA={point.io_address}: {power:.2f} MW', power)
+        return c104.ResponseState.SUCCESS
 
-    def on_connect(client):
-        logger.info(f"Connected to {server_ip}:{server_port}")
-        update_status(config, 'running', f'Connected to {server_ip}:{server_port}')
+    def on_state_change(connection: c104.Connection,
+                        state: c104.ConnectionState) -> None:
+        state_names = {
+            c104.ConnectionState.CLOSED: 'CLOSED',
+            c104.ConnectionState.CLOSED_AWAIT_OPEN: 'CONNECTING',
+            c104.ConnectionState.CLOSED_AWAIT_RECONNECT: 'RECONNECTING',
+            c104.ConnectionState.OPEN: 'CONNECTED',
+            c104.ConnectionState.OPEN_AWAIT_CLOSED: 'DISCONNECTING',
+            c104.ConnectionState.OPEN_MUTED: 'MUTED',
+        }
+        name = state_names.get(state, str(state))
+        logger.info(f"Connection state: {name}")
+        if state == c104.ConnectionState.OPEN:
+            update_status(config, 'running', f'Connected to {server_ip}:{server_port}')
+        elif state == c104.ConnectionState.CLOSED:
+            update_status(config, 'error', 'Disconnected')
 
-    def on_disconnect(client):
-        logger.warning(f"Disconnected from {server_ip}:{server_port}")
-        update_status(config, 'error', 'Disconnected')
+    client = c104.Client()
 
-    client = c104.Client(
-        server_ip=server_ip,
-        server_port=server_port,
-        originator_address=originator_address,
+    connection = client.add_connection(
+        ip=server_ip,
+        port=server_port,
+        init=c104.Init.INTERROGATION,
     )
+    connection.on_state_change(callable=on_state_change)
 
-    # Set up station and points
-    station = c104.Station(common_address=casdu_address)
+    station = connection.add_station(common_address=casdu_address)
     for ioa_str, point_type_str in ioa_points.items():
         ioa = int(ioa_str)
         point_type = getattr(c104.Type, point_type_str, c104.Type.M_ME_NC_1)
-        point = c104.Point(io_address=ioa, type=point_type)
-        point.on_callback(on_point_callback)
-        station.add_point(point)
-
-    client.add_station(station)
-    client.on_connect(on_connect)
-    client.on_disconnect(on_disconnect)
+        point = station.add_point(io_address=ioa, type=point_type)
+        point.on_receive(callable=on_measurement)
 
     try:
-        client.connect()
-        update_status(config, 'running', 'C104 connected, monitoring...')
+        client.start()
+        logger.info("Client started, waiting for connection...")
 
         while running:
-            # Periodic General Interrogation
             try:
-                station.interrogation()
-                logger.info("Sent General Interrogation")
+                if connection.interrogation(common_address=casdu_address):
+                    logger.info("Sent General Interrogation")
+                else:
+                    logger.warning("GI failed: connection not open")
             except Exception as e:
                 logger.error(f"GI failed: {e}")
-                update_status(config, 'error', f'GI failed: {e}')
 
             for _ in range(interval):
                 if not running:
@@ -239,7 +243,7 @@ def run_c104(config: dict):
         update_status(config, 'error', str(e))
     finally:
         try:
-            client.disconnect()
+            client.stop()
         except Exception:
             pass
         update_status(config, 'stopped', 'Worker shut down')

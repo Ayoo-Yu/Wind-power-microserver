@@ -1,24 +1,24 @@
-from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
-from models import ActualPower, SupershortlPower, ShortlPower, MidPower
+
+from flask import Blueprint, request, jsonify
 from sqlalchemy import func, text
-from database_config import get_db
-from sqlalchemy.orm import Session
-from db_session import db_session
+
+from db_models.operational_data import AvailableCapacityData, TurbinePowerData
 from db_models.report_config import WindFarm
-from db_models.operational_data import AvailableCapacityData
+from db_session import db_session
 from db_models.ecmwf_grid_model import ecmwf_grid_table_name
+from models import ActualPower, SupershortlPower, ShortlPower, MidPower
+
 
 bp = Blueprint('power_compare', __name__, url_prefix='/power-compare')
-
 
 _BEIJING_OFFSET = timedelta(hours=8)
 
 
 def _fetch_wind_speed_ecmwf(db, farm_code, start_dt, end_dt, lead_days):
-    """从 ECMWF 格点表查 ws200 平均风速，对缺失小时进行线性插值。"""
     if not farm_code:
         return []
+
     table = ecmwf_grid_table_name(farm_code)
     start_utc = start_dt - _BEIJING_OFFSET
     end_utc = end_dt - _BEIJING_OFFSET
@@ -40,7 +40,7 @@ def _fetch_wind_speed_ecmwf(db, farm_code, start_dt, end_dt, lead_days):
         raw = {r[0]: round(float(r[1]), 4) for r in rows if r[1] is not None}
         if not raw:
             return []
-        # 逐小时对齐，缺失的做线性插值
+
         result = []
         ts = min(raw)
         last = max(raw)
@@ -48,7 +48,6 @@ def _fetch_wind_speed_ecmwf(db, farm_code, start_dt, end_dt, lead_days):
             if ts in raw:
                 result.append({"timestamp": (ts + _BEIJING_OFFSET).isoformat(), "wind_speed": raw[ts]})
             else:
-                # 找前后最近的有效值做插值
                 prev_ts, prev_val = None, None
                 nxt_ts, nxt_val = None, None
                 for k, v in raw.items():
@@ -82,222 +81,190 @@ def _calc_basic_metrics(actual_values, predicted_values):
         valid_pairs.append((float(actual), float(predicted)))
 
     if not valid_pairs:
-        return {
-            'points': 0,
-            'mae': None,
-            'rmse': None,
-            'mse': None
-        }
+        return {'points': 0, 'mae': None, 'rmse': None, 'mse': None}
 
     errors = [pred - actual for actual, pred in valid_pairs]
     abs_errors = [abs(err) for err in errors]
     sq_errors = [err * err for err in errors]
     count = len(valid_pairs)
     mse = sum(sq_errors) / count
-    rmse = mse ** 0.5
-    mae = sum(abs_errors) / count
     return {
         'points': count,
-        'mae': mae,
-        'rmse': rmse,
+        'mae': sum(abs_errors) / count,
+        'rmse': mse ** 0.5,
         'mse': mse
     }
 
 
+def _series_from_rows(rows, value_attr='power'):
+    return [
+        {"timestamp": row.timestamp.isoformat(), "power": getattr(row, value_attr)}
+        for row in rows
+        if getattr(row, value_attr) is not None
+    ]
+
+
+def _query_actual_series(db, farm_code, start_dt, end_dt):
+    query = db.query(ActualPower.timestamp, ActualPower.wp_true.label("power"))
+    if farm_code:
+        query = query.filter(ActualPower.farm_code == farm_code)
+    rows = query.filter(
+        ActualPower.timestamp.between(start_dt, end_dt),
+        ActualPower.wp_true.isnot(None)
+    ).order_by(ActualPower.timestamp).all()
+    series = _series_from_rows(rows)
+    if series:
+        return series
+
+    turbine_query = db.query(
+        TurbinePowerData.timestamp,
+        func.sum(TurbinePowerData.active_power).label("power")
+    )
+    if farm_code:
+        turbine_query = turbine_query.filter(TurbinePowerData.farm_code == farm_code)
+    rows = turbine_query.filter(
+        TurbinePowerData.timestamp.between(start_dt, end_dt),
+        TurbinePowerData.active_power.isnot(None)
+    ).group_by(TurbinePowerData.timestamp).order_by(TurbinePowerData.timestamp).all()
+    return _series_from_rows(rows)
+
+
 def _query_prediction_series(db, farm_code, prediction_type, start_dt, end_dt):
     if prediction_type == 'short':
-        pred_rows = db.query(ShortlPower.timestamp, ShortlPower.wp_pred).filter(
+        pred_rows = db.query(ShortlPower.timestamp, ShortlPower.wp_pred.label("power")).filter(
             ShortlPower.farm_code == farm_code,
             ShortlPower.timestamp.between(start_dt, end_dt)
         ).order_by(ShortlPower.timestamp).all()
-        return [{"timestamp": row.timestamp.isoformat(), "power": row.wp_pred} for row in pred_rows if row.wp_pred is not None]
+        return _series_from_rows(pred_rows)
     if prediction_type == 'mid':
-        pred_rows = db.query(MidPower.timestamp, MidPower.wp_pred).filter(
+        pred_rows = db.query(MidPower.timestamp, MidPower.wp_pred.label("power")).filter(
             MidPower.farm_code == farm_code,
             MidPower.timestamp.between(start_dt, end_dt)
         ).order_by(MidPower.timestamp).all()
-        return [{"timestamp": row.timestamp.isoformat(), "power": row.wp_pred} for row in pred_rows if row.wp_pred is not None]
-    pred_rows = db.query(SupershortlPower.timestamp, SupershortlPower.wp_pred2).filter(
+        return _series_from_rows(pred_rows)
+    pred_rows = db.query(SupershortlPower.timestamp, SupershortlPower.wp_pred2.label("power")).filter(
         SupershortlPower.farm_code == farm_code,
         SupershortlPower.timestamp.between(start_dt, end_dt)
     ).order_by(SupershortlPower.timestamp).all()
-    return [{"timestamp": row.timestamp.isoformat(), "power": row.wp_pred2} for row in pred_rows if row.wp_pred2 is not None]
+    return _series_from_rows(pred_rows)
+
+
+def _query_supershort_average(db, farm_code, start_dt, end_dt, min_predictions_required, include_quality_info):
+    max_offset_minutes = (17 - 2) * 15
+    earliest_needed_dt = start_dt - timedelta(minutes=max_offset_minutes)
+
+    query = db.query(SupershortlPower)
+    if farm_code:
+        query = query.filter(SupershortlPower.farm_code == farm_code)
+    records = query.filter(
+        SupershortlPower.timestamp.between(earliest_needed_dt, end_dt)
+    ).order_by(SupershortlPower.timestamp).all()
+
+    records_by_timestamp = {rec.timestamp: rec for rec in records}
+    averaged_data = []
+    current_target_dt = start_dt
+    while current_target_dt <= end_dt:
+        predictions = []
+        sources = []
+        for k in range(2, 18):
+            offset_minutes = (k - 2) * 15
+            source_timestamp = current_target_dt - timedelta(minutes=offset_minutes)
+            source_record = records_by_timestamp.get(source_timestamp)
+            if not source_record:
+                continue
+            column_name = f"wp_pred{k}"
+            pred_value = getattr(source_record, column_name, None)
+            if pred_value is not None:
+                predictions.append(pred_value)
+                sources.append(column_name)
+
+        if len(predictions) >= min_predictions_required:
+            data_point = {
+                "timestamp": current_target_dt.isoformat(),
+                "power": sum(predictions) / len(predictions)
+            }
+            if include_quality_info:
+                data_point["prediction_count"] = len(predictions)
+                data_point["prediction_sources"] = sources
+                data_point["data_completeness"] = len(predictions) / 16.0
+            averaged_data.append(data_point)
+        current_target_dt += timedelta(minutes=15)
+    return averaged_data
+
 
 @bp.route('/data', methods=['POST'])
 def get_power_data():
-    data = request.get_json()
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "缺少请求体"}), 400
-    
+
     try:
         start = data.get('start')
         end = data.get('end')
         types = data.get('types', [])
+        if not isinstance(types, list):
+            types = []
+        type_set = {str(item).strip() for item in types if str(item).strip()}
+
         farm_code = data.get('farm_code')
         if isinstance(farm_code, str):
             farm_code = farm_code.strip() or None
         elif farm_code is not None:
             farm_code = str(farm_code).strip() or None
-        # New parameter for ultra-short-term horizon selection
-        supershort_horizon_requested = data.get('supershort_horizon', 'average')
-        # 新增参数：最小预测值数量要求
-        min_predictions_required = data.get('min_predictions_required', 1)  # 默认至少需要1个预测值
-        # 新增参数：是否包含数据质量信息
-        include_quality_info = data.get('include_quality_info', False)
+
+        supershort_horizon = data.get('supershort_horizon', 'average')
+        min_predictions_required = int(data.get('min_predictions_required', 1) or 1)
+        include_quality_info = bool(data.get('include_quality_info', False))
 
         if not start or not end:
             return jsonify({"error": "必须提供开始和结束时间"}), 400
 
         start_dt = datetime.fromisoformat(start)
         end_dt = datetime.fromisoformat(end)
-        
+
         with db_session() as db:
             result = {}
 
-            def apply_farm_filter(query, model):
-                if farm_code and hasattr(model, 'farm_code'):
-                    return query.filter(model.farm_code == farm_code)
-                return query
+            if '实测值' in type_set:
+                result['实测值'] = _query_actual_series(db, farm_code, start_dt, end_dt)
 
-            if '实测值' in types:
-                actual_query = apply_farm_filter(db.query(ActualPower), ActualPower)
-                actual = actual_query.filter(
-                    ActualPower.timestamp.between(start_dt, end_dt)
-                ).order_by(ActualPower.timestamp).all()
-                result['实测值'] = [
-                    {"timestamp": a.timestamp.isoformat(), "power": a.wp_true} 
-                    for a in actual if a.wp_true is not None
-                ]
-
-            if '超短期预测' in types:
+            if '超短期预测' in type_set:
                 valid_horizons = [f"wp_pred{i}" for i in range(2, 18)]
-
-                if supershort_horizon_requested == 'average':
-                    # 计算正确的超短期预测均值
-                    # 最大偏移量：wp_pred17需要回溯(17-2)*15=225分钟的数据
-                    max_offset_minutes = (17 - 2) * 15
-                    earliest_needed_dt = start_dt - timedelta(minutes=max_offset_minutes)
-
-                    # 获取所有可能需要的SupershortlPower记录
-                    potential_query = apply_farm_filter(db.query(SupershortlPower), SupershortlPower)
-                    potential_records = potential_query.filter(
-                        SupershortlPower.timestamp.between(earliest_needed_dt, end_dt)
-                    ).order_by(SupershortlPower.timestamp).all()
-
-                    # 按时间戳组织记录，便于快速查找
-                    records_by_timestamp = {rec.timestamp: rec for rec in potential_records}
-                    averaged_supershort_data = []
-
-                    # 遍历目标时间范围内的每个15分钟间隔
-                    current_target_dt = start_dt
-                    while current_target_dt <= end_dt:
-                        predictions_for_target = []
-                        available_predictions_info = []  # 用于记录哪些预测值可用
-                        
-                        # 对于每个wp_pred列，找到预测当前目标时间的值
-                        for k in range(2, 18):  # wp_pred2 到 wp_pred17
-                            column_name = f"wp_pred{k}"
-                            # 计算源时间戳：wp_pred2是当前时间，wp_pred3是15分钟前，以此类推
-                            offset_minutes = (k - 2) * 15
-                            source_timestamp = current_target_dt - timedelta(minutes=offset_minutes)
-                            
-                            # 查找对应的记录
-                            source_record = records_by_timestamp.get(source_timestamp)
-                            if source_record:
-                                pred_value = getattr(source_record, column_name, None)
-                                if pred_value is not None:
-                                    predictions_for_target.append(pred_value)
-                                    available_predictions_info.append(f"wp_pred{k}")
-                        
-                        # 如果有有效预测值，计算平均值
-                        if predictions_for_target:
-                            avg_power = sum(predictions_for_target) / len(predictions_for_target)
-                            
-                            # 可选：添加元数据信息，说明使用了多少个预测值
-                            data_point = {
-                                "timestamp": current_target_dt.isoformat(),
-                                "power": avg_power
-                            }
-                            
-                            # 如果启用了质量信息，添加额外的元数据
-                            if include_quality_info:
-                                data_point["prediction_count"] = len(predictions_for_target)
-                                data_point["prediction_sources"] = available_predictions_info
-                                data_point["data_completeness"] = len(predictions_for_target) / 16.0
-                            
-                            # 检查是否满足最小预测值数量要求
-                            if len(predictions_for_target) >= min_predictions_required:
-                                averaged_supershort_data.append(data_point)
-                                
-                                # 如果预测值数量少于期望的数量，记录警告
-                                total_expected = 16  # wp_pred2 到 wp_pred17
-                                if len(predictions_for_target) < total_expected:
-                                    print(f"警告: 时间 {current_target_dt} 只有 {len(predictions_for_target)}/{total_expected} 个预测值可用: {available_predictions_info}")
-                            else:
-                                print(f"跳过: 时间 {current_target_dt} 预测值数量 {len(predictions_for_target)} 少于最小要求 {min_predictions_required}")
-                        else:
-                            # 可选：如果完全没有预测值，也可以记录这种情况
-                            print(f"警告: 时间 {current_target_dt} 没有可用的预测值")
-                        
-                        # 移动到下一个15分钟间隔
-                        current_target_dt += timedelta(minutes=15)
-                    
-                    result['超短期预测'] = averaged_supershort_data
-
-                elif supershort_horizon_requested in valid_horizons:
-                    # 查询特定的预测列
-                    query = apply_farm_filter(
-                        db.query(
-                            SupershortlPower.timestamp,
-                            getattr(SupershortlPower, supershort_horizon_requested).label("power")
-                        ),
-                        SupershortlPower
+                if supershort_horizon == 'average':
+                    result['超短期预测'] = _query_supershort_average(
+                        db, farm_code, start_dt, end_dt, min_predictions_required, include_quality_info
                     )
-                    
-                    supershort_data = query.filter(
+                elif supershort_horizon in valid_horizons:
+                    query = db.query(
+                        SupershortlPower.timestamp,
+                        getattr(SupershortlPower, supershort_horizon).label("power")
+                    )
+                    if farm_code:
+                        query = query.filter(SupershortlPower.farm_code == farm_code)
+                    rows = query.filter(
                         SupershortlPower.timestamp.between(start_dt, end_dt)
                     ).order_by(SupershortlPower.timestamp).all()
-                    
-                    result['超短期预测'] = [
-                        {"timestamp": s.timestamp.isoformat(), "power": s.power}
-                        for s in supershort_data if s.power is not None
-                    ]
+                    result['超短期预测'] = _series_from_rows(rows)
                 else:
-                    # 无效的预测范围请求
                     result['超短期预测'] = []
 
-            if '短期预测' in types:
-                short_query = apply_farm_filter(db.query(ShortlPower), ShortlPower)
-                short = short_query.filter(
-                    ShortlPower.timestamp.between(start_dt, end_dt)
-                ).order_by(ShortlPower.timestamp).all()
-                result['短期预测'] = [
-                    {"timestamp": s.timestamp.isoformat(), "power": s.wp_pred} 
-                    for s in short if s.wp_pred is not None
-                ]
+            if '短期预测' in type_set:
+                result['短期预测'] = _query_prediction_series(db, farm_code, 'short', start_dt, end_dt)
 
-            if '中期预测' in types:
-                mid_query = apply_farm_filter(db.query(MidPower), MidPower)
-                mid = mid_query.filter(
-                    MidPower.timestamp.between(start_dt, end_dt)
-                ).order_by(MidPower.timestamp).all()
-                result['中期预测'] = [
-                    {"timestamp": m.timestamp.isoformat(), "power": m.wp_pred} 
-                    for m in mid if m.wp_pred is not None
-                ]
-            
-            if '短期风速预测' in types:
+            if '中期预测' in type_set:
+                result['中期预测'] = _query_prediction_series(db, farm_code, 'mid', start_dt, end_dt)
+
+            if '短期风速预测' in type_set:
                 ws = _fetch_wind_speed_ecmwf(db, farm_code, start_dt, end_dt, lead_days=2)
                 if ws:
-                    result['短期风速'] = ws
+                    result['短期风速预测'] = ws
 
-            if '中期风速预测' in types:
+            if '中期风速预测' in type_set:
                 ws = _fetch_wind_speed_ecmwf(db, farm_code, start_dt, end_dt, lead_days=4)
                 if ws:
-                    result['中期风速'] = ws
+                    result['中期风速预测'] = ws
 
-            # 可用容量: 优先查 available_capacity_data，回退到 wind_farms.capacity
-            if '可用容量' in types:
+            if '可用容量' in type_set:
                 cap_query = db.query(AvailableCapacityData)
                 if farm_code:
                     cap_query = cap_query.filter(AvailableCapacityData.farm_code == farm_code)
@@ -311,15 +278,16 @@ def get_power_data():
                         for c in cap_rows if c.available_capacity is not None
                     ]
                 else:
-                    # Fallback: use installed capacity from wind_farms
                     farm_row = None
                     if farm_code:
                         farm_row = db.query(WindFarm).filter(WindFarm.farm_code == farm_code).first()
                     if farm_row and farm_row.capacity:
-                        # Generate constant capacity line from actual timestamps
-                        actual_base = apply_farm_filter(
-                            db.query(ActualPower.timestamp), ActualPower
-                        ).filter(ActualPower.timestamp.between(start_dt, end_dt)).order_by(ActualPower.timestamp).all()
+                        actual_base = db.query(ActualPower.timestamp)
+                        if farm_code:
+                            actual_base = actual_base.filter(ActualPower.farm_code == farm_code)
+                        actual_base = actual_base.filter(
+                            ActualPower.timestamp.between(start_dt, end_dt)
+                        ).order_by(ActualPower.timestamp).all()
                         result['可用容量'] = [
                             {"timestamp": a.timestamp.isoformat(), "available_capacity": farm_row.capacity}
                             for a in actual_base
@@ -327,25 +295,16 @@ def get_power_data():
 
             return jsonify(result)
 
-    except ValueError as e:
-        return jsonify({"error": "时间格式错误，请使用ISO 8601格式"}), 400
+    except ValueError:
+        return jsonify({"error": "时间格式错误，请使用 ISO 8601 格式"}), 400
     except Exception as e:
         import traceback
         traceback.print_exc()
         return jsonify({"error": f"服务器错误: {str(e)}"}), 500
 
+
 @bp.route('/fleet_metrics', methods=['POST'])
 def get_fleet_metrics():
-    """
-    Multi-station comparison metrics aggregation.
-    request:
-      {
-        "start": "2026-03-01 00:00:00",
-        "end": "2026-03-01 23:59:59",
-        "farm_codes": ["farm_a", "farm_b"],
-        "prediction_type": "short|mid|supershort"
-      }
-    """
     payload = request.get_json(silent=True) or {}
     start = payload.get('start')
     end = payload.get('end')
@@ -370,7 +329,7 @@ def get_fleet_metrics():
         ).all()
         active_map = {farm.farm_code: farm for farm in active_farms}
 
-        if isinstance(farm_codes, list) and len(farm_codes) > 0:
+        if isinstance(farm_codes, list) and farm_codes:
             selected_codes = []
             for code in farm_codes:
                 if isinstance(code, str):
@@ -385,28 +344,23 @@ def get_fleet_metrics():
             return jsonify({
                 "code": 0,
                 "message": "ok",
-                "data": {
-                    "items": [],
-                    "count": 0,
-                    "prediction_type": prediction_type
-                }
+                "data": {"items": [], "count": 0, "prediction_type": prediction_type}
             }), 200
 
         result_items = []
         for farm_code in target_codes:
             farm = active_map.get(farm_code)
-            actual_rows = db.query(ActualPower.timestamp, ActualPower.wp_true).filter(
-                ActualPower.farm_code == farm_code,
-                ActualPower.timestamp.between(start_dt, end_dt)
-            ).order_by(ActualPower.timestamp).all()
+            actual_series = _query_actual_series(db, farm_code, start_dt, end_dt)
             actual_map = {
-                row.timestamp: row.wp_true
-                for row in actual_rows
-                if row.wp_true is not None
+                datetime.fromisoformat(item['timestamp']): item['power']
+                for item in actual_series
             }
 
             pred_series = _query_prediction_series(db, farm_code, prediction_type, start_dt, end_dt)
-            pred_map = {datetime.fromisoformat(item['timestamp']): item['power'] for item in pred_series}
+            pred_map = {
+                datetime.fromisoformat(item['timestamp']): item['power']
+                for item in pred_series
+            }
 
             aligned_timestamps = sorted(set(actual_map.keys()) & set(pred_map.keys()))
             actual_values = [actual_map[ts] for ts in aligned_timestamps]
@@ -435,17 +389,6 @@ def get_fleet_metrics():
 
 @bp.route('/fleet_series', methods=['POST'])
 def get_fleet_series():
-    """
-    Multi-station curve overlay data.
-    request:
-      {
-        "start": "2026-03-01 00:00:00",
-        "end": "2026-03-01 23:59:59",
-        "farm_codes": ["farm_a", "farm_b"],
-        "prediction_type": "short|mid|supershort",
-        "include_actual": true
-      }
-    """
     payload = request.get_json(silent=True) or {}
     start = payload.get('start')
     end = payload.get('end')
@@ -471,7 +414,7 @@ def get_fleet_series():
         ).all()
         active_map = {farm.farm_code: farm for farm in active_farms}
 
-        if isinstance(farm_codes, list) and len(farm_codes) > 0:
+        if isinstance(farm_codes, list) and farm_codes:
             selected_codes = []
             for code in farm_codes:
                 if isinstance(code, str):
@@ -486,16 +429,7 @@ def get_fleet_series():
         for farm_code in target_codes:
             farm = active_map.get(farm_code)
             predicted = _query_prediction_series(db, farm_code, prediction_type, start_dt, end_dt)
-            actual = []
-            if include_actual:
-                actual_rows = db.query(ActualPower.timestamp, ActualPower.wp_true).filter(
-                    ActualPower.farm_code == farm_code,
-                    ActualPower.timestamp.between(start_dt, end_dt)
-                ).order_by(ActualPower.timestamp).all()
-                actual = [
-                    {"timestamp": row.timestamp.isoformat(), "power": row.wp_true}
-                    for row in actual_rows if row.wp_true is not None
-                ]
+            actual = _query_actual_series(db, farm_code, start_dt, end_dt) if include_actual else []
             items.append({
                 "farm_code": farm_code,
                 "farm_name": farm.farm_name if farm else farm_code,
