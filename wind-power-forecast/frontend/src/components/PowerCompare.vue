@@ -76,37 +76,40 @@
       </el-dropdown>
     </el-card>
 
-    <template v-if="analysisTab === 'single'">
-      <template>
-        <el-card class="chart-card" v-if="chartData">
-          <template #header><div class="card-header">主曲线（双Y轴）</div></template>
-          <div class="series-legend">
-            <button
-              v-for="item in curveLegendItems"
-              :key="item.name"
-              type="button"
-              class="legend-toggle"
-              :class="{ inactive: !isCurveLegendActive(item.name) }"
-              @click="toggleSelectedType(item.name)"
-            >
-              <span class="legend-swatch" :style="{ backgroundColor: item.color }"></span>
-              <span>{{ item.name }}</span>
-            </button>
-          </div>
-          <div class="chart-wrapper" ref="mainChartEl" />
-        </el-card>
-        <el-card class="chart-card" v-if="chartData">
-          <template #header><div class="card-header">误差曲线（预测值 - 实测值）</div></template>
-          <div class="chart-wrapper small" ref="errorChartEl" />
-        </el-card>
-      </template>
+    <div v-if="analysisTab === 'single'" class="single-chart-section">
+      <el-card class="chart-card force-chart-card">
+        <template #header><div class="card-header">主曲线（双Y轴）</div></template>
+        <div class="series-legend">
+          <button
+            v-for="item in curveLegendItems"
+            :key="item.name"
+            type="button"
+            class="legend-toggle"
+            :class="{ inactive: !isCurveLegendActive(item.name) }"
+            @click="toggleSelectedType(item.name)"
+          >
+            <span class="legend-swatch" :style="{ backgroundColor: item.color }"></span>
+            <span>{{ item.name }}</span>
+          </button>
+        </div>
+        <div class="chart-wrapper" ref="mainChartEl">
+          <canvas ref="mainChartCanvas" class="native-chart-canvas" @mousemove="handleChartMouseMove($event, 'main')" @mouseleave="hideChartTooltip"></canvas>
+        </div>
+      </el-card>
+      <el-card class="chart-card force-chart-card">
+        <template #header><div class="card-header">误差曲线（预测值减实测值）</div></template>
+        <div class="chart-wrapper small" ref="errorChartEl">
+          <canvas ref="errorChartCanvas" class="native-chart-canvas" @mousemove="handleChartMouseMove($event, 'error')" @mouseleave="hideChartTooltip"></canvas>
+        </div>
+      </el-card>
+    </div>
 
-    </template>
-
-    <template v-else>
+    <div v-else>
       <el-card class="chart-card" v-if="fleetCompareRows.length > 0">
         <template #header><div class="card-header">多站准确率对比（短期 vs 超短期）</div></template>
-        <div class="chart-wrapper" ref="fleetBarChartEl" />
+        <div class="chart-wrapper" ref="fleetBarChartEl">
+          <canvas ref="fleetBarChartCanvas" class="native-chart-canvas" @mousemove="handleChartMouseMove($event, 'fleet')" @mouseleave="hideChartTooltip"></canvas>
+        </div>
       </el-card>
       <el-card class="chart-card" v-if="fleetCompareRows.length > 0">
         <template #header><div class="card-header">多场站详细指标表</div></template>
@@ -122,10 +125,14 @@
           <el-table-column prop="unqualified_points" label="不合格点数" width="120" />
         </el-table>
       </el-card>
-    </template>
+    </div>
 
     <div class="empty-data-container" v-if="!loading && showEmptyState">
       <el-card class="empty-data-card"><div class="empty-data-content"><h3>暂无数据</h3><p>请选择时间范围并点击“查询”。</p></div></el-card>
+    </div>
+
+    <div v-if="chartTooltip.visible" class="chart-tooltip" :style="{ left: `${chartTooltip.x}px`, top: `${chartTooltip.y}px` }">
+      <div v-for="(line, index) in chartTooltip.lines" :key="index">{{ line }}</div>
     </div>
 
     <LoadingIndicator :visible="loading" message="数据加载中..." />
@@ -133,7 +140,6 @@
 </template>
 
 <script>
-import * as echarts from 'echarts'
 import { Download } from '@element-plus/icons-vue'
 import farmService from '../utils/farmService'
 import { getFleetMetrics, getPowerCompareData } from '../api/powerCompareApi'
@@ -160,10 +166,15 @@ export default {
       mainChart: null,
       errorChart: null,
       fleetBarChart: null,
-      _disposed: false,
-      _chartRenderRaf: null,
-      _chartResizeObserver: null,
-      _observedChartEls: [],
+      chartDisposed: false,
+      fetchSeq: 0,
+      chartRenderRaf: null,
+      chartRenderTimers: [],
+      chartRenderSeq: 0,
+      chartResizeObserver: null,
+      observedChartEls: [],
+      chartMeta: {},
+      chartTooltip: { visible: false, x: 0, y: 0, lines: [] },
       exportData: { comparison: null, metrics: null },
       singleSeriesState: null,
       singleMetricsSummary: {
@@ -180,8 +191,14 @@ export default {
     }
   },
   computed: {
+    hasSingleChartData() {
+      const labels = this.exportData.comparison?.labels || []
+      const datasets = this.exportData.comparison?.datasets || {}
+      const visibleNames = ['实测值', '超短期预测', '短期预测', '中期预测', '短期风速预测', '中期风速预测']
+      return labels.length > 0 && visibleNames.some(name => this.hasSeriesValue(datasets[name]))
+    },
     showEmptyState() {
-      return this.analysisTab === 'single' ? !this.chartData : this.fleetCompareRows.length === 0
+      return this.analysisTab === 'single' ? !this.hasSingleChartData : this.fleetCompareRows.length === 0
     },
     kpiCards() {
       if (this.analysisTab === 'single') {
@@ -232,18 +249,19 @@ export default {
     window.addEventListener('resize', this.resizeCharts)
   },
   beforeUnmount() {
-    this._disposed = true
+    this.chartDisposed = true
     farmService.removeListener(this.handleFarmChanged)
     window.removeEventListener('resize', this.resizeCharts)
-    if (this._chartRenderRaf) {
-      cancelAnimationFrame(this._chartRenderRaf)
-      this._chartRenderRaf = null
+    if (this.chartRenderRaf) {
+      cancelAnimationFrame(this.chartRenderRaf)
+      this.chartRenderRaf = null
     }
-    if (this._chartResizeObserver) {
-      this._chartResizeObserver.disconnect()
-      this._chartResizeObserver = null
+    this.clearScheduledChartRender()
+    if (this.chartResizeObserver) {
+      this.chartResizeObserver.disconnect()
+      this.chartResizeObserver = null
     }
-    this._observedChartEls = []
+    this.observedChartEls = []
     this.destroyAllCharts()
   },
   methods: {
@@ -343,8 +361,9 @@ export default {
       return arrows[Math.round(normalized / 45) % 8]
     },
     resizeCharts() {
-      if (this._disposed) return
-      [this.mainChart, this.errorChart, this.fleetBarChart].forEach((chart) => chart && chart.resize())
+      if (this.chartDisposed) return
+      if (this.analysisTab === 'single' && this.hasSingleChartData) this.scheduleChartRender('single')
+      if (this.analysisTab === 'fleet' && this.fleetCompareRows.length) this.scheduleChartRender('fleet')
     },
     isChartElementReady(el) {
       if (!el) return false
@@ -353,35 +372,39 @@ export default {
     },
     observeChartElement(el) {
       if (!el || typeof ResizeObserver === 'undefined') return
-      if (!this._chartResizeObserver) {
-        this._chartResizeObserver = new ResizeObserver(() => {
-          if (this._disposed) return
+      if (!this.chartResizeObserver) {
+        this.chartResizeObserver = new ResizeObserver(() => {
+          if (this.chartDisposed) return
           this.resizeCharts()
           if (this.analysisTab === 'single' && this.singleSeriesState) this.scheduleChartRender('single')
           if (this.analysisTab === 'fleet' && this.fleetCompareRows.length) this.scheduleChartRender('fleet')
         })
       }
-      if (!this._observedChartEls.includes(el)) {
-        this._chartResizeObserver.observe(el)
-        this._observedChartEls.push(el)
+      if (!this.observedChartEls.includes(el)) {
+        this.chartResizeObserver.observe(el)
+        this.observedChartEls.push(el)
       }
     },
     scheduleChartRender(mode = 'single', attempts = 0) {
-      if (this._disposed) return
-      if (this._chartRenderRaf) {
-        cancelAnimationFrame(this._chartRenderRaf)
-        this._chartRenderRaf = null
-      }
+      if (this.chartDisposed) return
+      this.clearScheduledChartRender()
+      const renderSeq = ++this.chartRenderSeq
       this.$nextTick(() => {
-        this._chartRenderRaf = requestAnimationFrame(() => {
-          this._chartRenderRaf = null
+        if (this.chartDisposed || renderSeq !== this.chartRenderSeq || mode !== this.analysisTab) return
+        this.chartRenderRaf = requestAnimationFrame(() => {
+          this.chartRenderRaf = null
+          if (this.chartDisposed || renderSeq !== this.chartRenderSeq || mode !== this.analysisTab) return
           const refKeys = mode === 'fleet' ? ['fleetBarChartEl'] : ['mainChartEl', 'errorChartEl']
           const requiredEls = refKeys.map(refKey => this.$refs[refKey]).filter(Boolean)
           requiredEls.forEach(el => this.observeChartElement(el))
           const ready = requiredEls.length > 0 && requiredEls.every(el => this.isChartElementReady(el))
 
           if (!ready && attempts < 12) {
-            window.setTimeout(() => this.scheduleChartRender(mode, attempts + 1), 50)
+            const timer = window.setTimeout(() => {
+              this.chartRenderTimers = this.chartRenderTimers.filter(item => item !== timer)
+              if (renderSeq === this.chartRenderSeq && mode === this.analysisTab) this.scheduleChartRender(mode, attempts + 1)
+            }, 50)
+            this.chartRenderTimers.push(timer)
             return
           }
 
@@ -390,9 +413,16 @@ export default {
           } else {
             this.renderSingleCharts()
           }
-          this.resizeCharts()
         })
       })
+    },
+    clearScheduledChartRender() {
+      if (this.chartRenderRaf) {
+        cancelAnimationFrame(this.chartRenderRaf)
+        this.chartRenderRaf = null
+      }
+      ;(this.chartRenderTimers || []).forEach(timer => window.clearTimeout(timer))
+      this.chartRenderTimers = []
     },
     setQuickTimeRange(period) {
       const end = new Date()
@@ -407,26 +437,11 @@ export default {
       this.fetchComparisonData()
     },
     destroyAllCharts() {
-      [this.mainChart, this.errorChart, this.fleetBarChart].forEach((chart) => { if (chart) chart.dispose() })
+      this.clearScheduledChartRender()
+      this.chartRenderSeq += 1
       this.mainChart = null
       this.errorChart = null
       this.fleetBarChart = null
-    },
-    ensureChartInstance(chartKey, refKey) {
-      if (this._disposed) return null
-      const currentEl = this.$refs[refKey]
-      const currentChart = this[chartKey]
-      if (!currentEl) return null
-      this.observeChartElement(currentEl)
-      if (!this.isChartElementReady(currentEl)) return null
-      if (currentChart && currentChart.getDom() !== currentEl) {
-        currentChart.dispose()
-        this[chartKey] = null
-      }
-      if (!this[chartKey]) {
-        this[chartKey] = echarts.init(currentEl)
-      }
-      return this[chartKey]
     },
     normalizeTypeName(str) {
       return String(str || '').replace(/[\s_]/g, '').toLowerCase()
@@ -443,6 +458,10 @@ export default {
       return match && Array.isArray(match[1]) ? match[1] : []
     },
     toFiniteOrNull(value) {
+      const n = Number(value)
+      return Number.isFinite(n) ? n : null
+    },
+    toFiniteNumber(value) {
       const n = Number(value)
       return Number.isFinite(n) ? n : null
     },
@@ -550,19 +569,25 @@ export default {
       }
       this.syncRouteQuery()
       this.loading = true
+      const requestSeq = ++this.fetchSeq
+      const requestMode = this.analysisTab
       try {
-        if (this.analysisTab === 'single') {
-          await this.fetchSingleStationData()
+        if (requestMode === 'single') {
+          await this.fetchSingleStationData(requestSeq)
         } else {
-          await this.fetchFleetCompareData()
+          await this.fetchFleetCompareData(requestSeq)
         }
       } catch (error) {
         console.warn('查询功率对比数据失败:', error?.message || error)
       } finally {
-        this.loading = false
+        if (requestSeq === this.fetchSeq) this.loading = false
       }
     },
-    async fetchSingleStationData() {
+    isStaleRequest(requestSeq, mode) {
+      return requestSeq !== this.fetchSeq || this.analysisTab !== mode
+    },
+    async fetchSingleStationData(requestSeq = this.fetchSeq) {
+      this.fleetCompareRows = []
       const rawCode = this.singleFarmCode || farmService.getCurrentFarm()
       const farmCode = this.fleetCompareFarms.some(f => f.code === rawCode) ? rawCode : (this.fleetCompareFarms[0]?.code || '')
       if (!farmCode) {
@@ -578,6 +603,7 @@ export default {
       if (!requestTypes.includes('可用容量')) requestTypes.push('可用容量')
       const payload = { start: this.timeRange[0], end: this.timeRange[1], types: requestTypes, farm_code: farmCode, supershort_horizon: 'average' }
       const response = await getPowerCompareData(payload)
+      if (this.isStaleRequest(requestSeq, 'single')) return
       const apiData = response?.data?.data || response?.data || {}
       this.chartData = apiData
 
@@ -614,14 +640,15 @@ export default {
         windDirectionSeries
       )
       const labels = sortedTimeline.map(v => this.formatChartLabel(v.timestamp))
-      const actualValues = this.alignedSeries(sortedTimeline, sortedActual)
-      const superValues = this.alignedSeries(sortedTimeline, supershort)
-      const shortValues = this.alignedSeries(sortedTimeline, short)
-      const midValues = this.alignedSeries(sortedTimeline, mid)
-      const shortWindValues = this.alignedSeries(sortedTimeline, shortWind, 'wind_speed')
-      const midWindValues = this.alignedSeries(sortedTimeline, midWind, 'wind_speed')
-      const windDirectionValues = this.alignedSeries(sortedTimeline, windDirectionSeries, 'wind_direction')
-      const capacityValuesRaw = this.alignedSeries(sortedTimeline, capacitySeries, 'available_capacity')
+      const alignToleranceMs = 10 * 60 * 1000
+      const actualValues = this.alignedSeries(sortedTimeline, sortedActual, 'power', alignToleranceMs)
+      const superValues = this.alignedSeries(sortedTimeline, supershort, 'power', alignToleranceMs)
+      const shortValues = this.alignedSeries(sortedTimeline, short, 'power', alignToleranceMs)
+      const midValues = this.alignedSeries(sortedTimeline, mid, 'power', alignToleranceMs)
+      const shortWindValues = this.alignedSeries(sortedTimeline, shortWind, 'wind_speed', alignToleranceMs)
+      const midWindValues = this.alignedSeries(sortedTimeline, midWind, 'wind_speed', alignToleranceMs)
+      const windDirectionValues = this.alignedSeries(sortedTimeline, windDirectionSeries, 'wind_direction', alignToleranceMs)
+      const capacityValuesRaw = this.alignedSeries(sortedTimeline, capacitySeries, 'available_capacity', alignToleranceMs)
 
       const finiteCaps = capacityValuesRaw.filter(Number.isFinite)
       if (finiteCaps.length) {
@@ -630,15 +657,15 @@ export default {
       }
 
       const capacityValues = capacityValuesRaw.some(Number.isFinite) ? capacityValuesRaw : labels.map(() => this.installedCapacity)
-      const curtailmentValues = this.alignedSeries(sortedTimeline, curtailmentSeries, 'value')
+      const curtailmentValues = this.alignedSeries(sortedTimeline, curtailmentSeries, 'value', alignToleranceMs)
 
       // 对齐预测区间数据
-      const shortLowerValues = this.alignedSeries(sortedTimeline, shortLowerSeries)
-      const shortUpperValues = this.alignedSeries(sortedTimeline, shortUpperSeries)
-      const midLowerValues = this.alignedSeries(sortedTimeline, midLowerSeries)
-      const midUpperValues = this.alignedSeries(sortedTimeline, midUpperSeries)
-      const supershortLowerValues = this.alignedSeries(sortedTimeline, supershortLowerSeries)
-      const supershortUpperValues = this.alignedSeries(sortedTimeline, supershortUpperSeries)
+      const shortLowerValues = this.alignedSeries(sortedTimeline, shortLowerSeries, 'power', alignToleranceMs)
+      const shortUpperValues = this.alignedSeries(sortedTimeline, shortUpperSeries, 'power', alignToleranceMs)
+      const midLowerValues = this.alignedSeries(sortedTimeline, midLowerSeries, 'power', alignToleranceMs)
+      const midUpperValues = this.alignedSeries(sortedTimeline, midUpperSeries, 'power', alignToleranceMs)
+      const supershortLowerValues = this.alignedSeries(sortedTimeline, supershortLowerSeries, 'power', alignToleranceMs)
+      const supershortUpperValues = this.alignedSeries(sortedTimeline, supershortUpperSeries, 'power', alignToleranceMs)
 
       const shortDaily = this.calcDailyStats(sortedActual, short, 0.6)
       const superDaily = this.calcDailyStats(sortedActual, supershort, 0.65)
@@ -691,6 +718,7 @@ export default {
       }
 
       this.scheduleChartRender('single')
+      this.$nextTick(() => window.setTimeout(() => this.renderSingleCharts(), 120))
     },
     buildCurtailmentMarkAreas(labels, curtailmentValues) {
       if (!this.showCurtailmentTag || !Array.isArray(curtailmentValues) || !curtailmentValues.length) return []
@@ -730,41 +758,23 @@ export default {
     },
     pushCustomCurve(series, name, data, color, yAxisIndex, lineType = 'solid') {
       const points = this.buildPointData(data)
-      const segments = this.buildSegmentData(data)
       if (!points.length) return
       series.push({
-        name: `${name}_line`,
-        type: 'custom',
-        coordinateSystem: 'cartesian2d',
-        yAxisIndex,
-        encode: { x: [0, 2], y: [1, 3] },
-        silent: true,
-        data: segments,
-        renderItem: (params, api) => {
-          if (!api.coord) return null
-          const p1 = api.coord([api.value(0), api.value(1)])
-          const p2 = api.coord([api.value(2), api.value(3)])
-          const rect = { x: params.coordSys.x, y: params.coordSys.y, width: params.coordSys.width, height: params.coordSys.height }
-          const clipped = echarts.graphic.clipPointsByRect([p1, p2], rect)
-          if (clipped.length < 2) return null
-          return {
-            type: 'line',
-            shape: { x1: clipped[0][0], y1: clipped[0][1], x2: clipped[1][0], y2: clipped[1][1] },
-            style: api.style({ stroke: color, lineWidth: yAxisIndex === YAXIS_WINDSPEED ? 1.6 : 1.7, lineDash: lineType === 'dashed' ? [6, 4] : null })
-          }
-        },
-        z: 2
-      })
-      series.push({
         name,
-        type: 'scatter',
-        coordinateSystem: 'cartesian2d',
+        type: 'line',
         yAxisIndex,
-        encode: { x: 0, y: 1 },
-        data: points,
-        symbolSize: yAxisIndex === YAXIS_WINDSPEED ? 6 : 5,
+        coordinateSystem: 'cartesian2d',
+        data: this.sanitizeSeriesData(data),
+        connectNulls: false,
+        showSymbol: true,
+        symbolSize: yAxisIndex === YAXIS_WINDSPEED ? 5 : 4,
+        lineStyle: {
+          color,
+          width: yAxisIndex === YAXIS_WINDSPEED ? 1.6 : 1.8,
+          type: lineType
+        },
         itemStyle: { color },
-        emphasis: { scale: true, focus: 'series' },
+        emphasis: { focus: 'series' },
         z: 3
       })
     },
@@ -798,116 +808,314 @@ export default {
       }
       return series
     },
+    prepareCanvas(refKey) {
+      const canvas = this.$refs[refKey]
+      if (!canvas) return null
+      const parent = canvas.parentElement
+      const rect = parent?.getBoundingClientRect()
+      const width = Math.max(320, Math.floor(rect?.width || canvas.clientWidth || 800))
+      const height = Math.max(220, Math.floor(rect?.height || canvas.clientHeight || 360))
+      const ratio = window.devicePixelRatio || 1
+      canvas.width = Math.floor(width * ratio)
+      canvas.height = Math.floor(height * ratio)
+      canvas.style.width = `${width}px`
+      canvas.style.height = `${height}px`
+      const ctx = canvas.getContext('2d')
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
+      ctx.clearRect(0, 0, width, height)
+      ctx.font = '12px Consolas, Menlo, monospace'
+      ctx.lineCap = 'round'
+      ctx.lineJoin = 'round'
+      return { canvas, ctx, width, height }
+    },
+    finiteValues(values) {
+      return (values || []).map(Number).filter(Number.isFinite)
+    },
+    getRange(values, fallbackMin = 0, fallbackMax = 1) {
+      const arr = this.finiteValues(values)
+      if (!arr.length) return { min: fallbackMin, max: fallbackMax }
+      let min = Math.min(...arr)
+      let max = Math.max(...arr)
+      if (min === max) {
+        const pad = Math.max(1, Math.abs(max) * 0.1)
+        min -= pad
+        max += pad
+      }
+      const pad = (max - min) * 0.08
+      return { min: min - pad, max: max + pad }
+    },
+    getPositiveRange(values, fallbackMax = 1) {
+      const range = this.getRange(values, 0, fallbackMax)
+      return { min: 0, max: Math.max(fallbackMax, range.max) }
+    },
+    drawAxes(ctx, plot, labels, leftRange, rightRange, options = {}) {
+      ctx.strokeStyle = 'rgba(159, 182, 204, 0.18)'
+      ctx.fillStyle = '#9fb6cc'
+      ctx.lineWidth = 1
+      for (let i = 0; i <= 4; i += 1) {
+        const y = plot.top + (plot.height * i) / 4
+        ctx.beginPath()
+        ctx.moveTo(plot.left, y)
+        ctx.lineTo(plot.right, y)
+        ctx.stroke()
+        const leftVal = leftRange.max - ((leftRange.max - leftRange.min) * i) / 4
+        ctx.fillText(leftVal.toFixed(1), 8, y + 4)
+        if (rightRange) {
+          const rightVal = rightRange.max - ((rightRange.max - rightRange.min) * i) / 4
+          ctx.fillText(rightVal.toFixed(1), plot.right + 10, y + 4)
+        }
+      }
+      ctx.strokeStyle = '#6b8aa3'
+      ctx.beginPath()
+      ctx.moveTo(plot.left, plot.top)
+      ctx.lineTo(plot.left, plot.bottom)
+      ctx.lineTo(plot.right, plot.bottom)
+      ctx.stroke()
+      ctx.fillStyle = '#b8d7eb'
+      if (options.leftTitle) ctx.fillText(options.leftTitle, plot.left, 18)
+      if (options.rightTitle) ctx.fillText(options.rightTitle, plot.right - 60, 18)
+      const labelStep = Math.max(1, Math.ceil(labels.length / 8))
+      ctx.fillStyle = '#9fb6cc'
+      labels.forEach((label, index) => {
+        if (index % labelStep !== 0 && index !== labels.length - 1) return
+        const x = plot.left + (plot.width * index) / Math.max(1, labels.length - 1)
+        ctx.save()
+        ctx.translate(x, plot.bottom + 18)
+        ctx.rotate(-Math.PI / 8)
+        ctx.fillText(String(label), 0, 0)
+        ctx.restore()
+      })
+    },
+    drawLineCanvas(refKey, labels, series, options = {}) {
+      const prepared = this.prepareCanvas(refKey)
+      if (!prepared) return null
+      const { canvas, ctx, width, height } = prepared
+      const plot = { left: 58, right: width - 58, top: 32, bottom: height - 46 }
+      plot.width = plot.right - plot.left
+      plot.height = plot.bottom - plot.top
+      const powerSeries = series.filter(item => item.axis !== 'wind')
+      const windSeries = series.filter(item => item.axis === 'wind')
+      const powerRange = this.getPositiveRange(powerSeries.flatMap(item => item.values), this.installedCapacity)
+      const windRange = windSeries.length ? this.getPositiveRange(windSeries.flatMap(item => item.values), 25) : null
+      const yOf = (value, range) => plot.bottom - ((value - range.min) / Math.max(1e-9, range.max - range.min)) * plot.height
+      const xOf = (index) => plot.left + (plot.width * index) / Math.max(1, labels.length - 1)
+      this.drawAxes(ctx, plot, labels, powerRange, windRange, options)
+      this.chartMeta[refKey] = { labels, series, plot, type: 'line' }
+      if (!series.length) {
+        ctx.fillStyle = '#9fb6cc'
+        ctx.font = '14px Microsoft YaHei, Arial, sans-serif'
+        ctx.fillText('暂无可绘制曲线', plot.left + 18, plot.top + 34)
+        return canvas
+      }
+      series.forEach((item) => {
+        const range = item.axis === 'wind' ? windRange : powerRange
+        if (!range) return
+        ctx.strokeStyle = item.color
+        ctx.fillStyle = item.color
+        ctx.lineWidth = item.axis === 'wind' ? 1.6 : 1.9
+        ctx.setLineDash(item.dashed ? [6, 4] : [])
+        let drawing = false
+        ctx.beginPath()
+        item.values.forEach((raw, index) => {
+          const value = Number(raw)
+          if (!Number.isFinite(value)) {
+            drawing = false
+            return
+          }
+          const x = xOf(index)
+          const y = yOf(value, range)
+          if (!drawing) {
+            ctx.moveTo(x, y)
+            drawing = true
+          } else {
+            ctx.lineTo(x, y)
+          }
+        })
+        ctx.stroke()
+        ctx.setLineDash([])
+      })
+      return canvas
+    },
+    drawBarLineCanvas(refKey, labels, series, options = {}) {
+      const prepared = this.prepareCanvas(refKey)
+      if (!prepared) return null
+      const { canvas, ctx, width, height } = prepared
+      const values = series.flatMap(item => item.values)
+      const range = this.getRange(values, -1, 1)
+      range.min = Math.min(range.min, 0)
+      range.max = Math.max(range.max, 0)
+      const plot = { left: 58, right: width - 26, top: 30, bottom: height - 50 }
+      plot.width = plot.right - plot.left
+      plot.height = plot.bottom - plot.top
+      const yOf = (value) => plot.bottom - ((value - range.min) / Math.max(1e-9, range.max - range.min)) * plot.height
+      const xOf = (index) => plot.left + (plot.width * index) / Math.max(1, labels.length - 1)
+      this.drawAxes(ctx, plot, labels, range, null, options)
+      this.chartMeta[refKey] = { labels, series, plot, type: 'barLine' }
+      const zeroY = yOf(0)
+      const barWidth = Math.max(2, Math.min(14, plot.width / Math.max(1, labels.length) * 0.5))
+      series.forEach((item) => {
+        ctx.strokeStyle = item.color
+        ctx.fillStyle = item.color
+        if (item.type === 'bar') {
+          item.values.forEach((raw, index) => {
+            const value = Number(raw)
+            if (!Number.isFinite(value)) return
+            const x = xOf(index) - barWidth / 2
+            const y = yOf(value)
+            ctx.fillRect(x, Math.min(y, zeroY), barWidth, Math.max(1, Math.abs(zeroY - y)))
+          })
+        } else {
+          ctx.lineWidth = 1.8
+          let drawing = false
+          ctx.beginPath()
+          item.values.forEach((raw, index) => {
+            const value = Number(raw)
+            if (!Number.isFinite(value)) {
+              drawing = false
+              return
+            }
+            const x = xOf(index)
+            const y = yOf(value)
+            if (!drawing) {
+              ctx.moveTo(x, y)
+              drawing = true
+            } else {
+              ctx.lineTo(x, y)
+            }
+          })
+          ctx.stroke()
+        }
+      })
+      return canvas
+    },
+    drawGroupedBarCanvas(refKey, labels, series) {
+      const prepared = this.prepareCanvas(refKey)
+      if (!prepared) return null
+      const { canvas, ctx, width, height } = prepared
+      const range = { min: 0, max: 100 }
+      const plot = { left: 58, right: width - 24, top: 42, bottom: height - 72 }
+      plot.width = plot.right - plot.left
+      plot.height = plot.bottom - plot.top
+      const yOf = (value) => plot.bottom - ((value - range.min) / (range.max - range.min)) * plot.height
+      this.drawAxes(ctx, plot, labels, range, null, { leftTitle: '准确率(%)' })
+      const groupWidth = plot.width / Math.max(1, labels.length)
+      const barWidth = Math.max(8, Math.min(28, groupWidth / 4))
+      this.chartMeta[refKey] = { labels, series, plot, type: 'groupedBar' }
+      series.forEach((item, seriesIndex) => {
+        ctx.fillStyle = item.color
+        item.values.forEach((raw, index) => {
+          const value = Number(raw)
+          if (!Number.isFinite(value)) return
+          const center = plot.left + groupWidth * index + groupWidth / 2
+          const x = center + (seriesIndex - 0.5) * (barWidth + 4)
+          const y = yOf(value)
+          ctx.fillRect(x, y, barWidth, plot.bottom - y)
+        })
+        ctx.fillRect(plot.left + seriesIndex * 150, 16, 16, 8)
+        ctx.fillStyle = '#d9e9ff'
+        ctx.fillText(item.name, plot.left + seriesIndex * 150 + 22, 24)
+        ctx.fillStyle = item.color
+      })
+      return canvas
+    },
+    handleChartMouseMove(event, chartType) {
+      const refMap = {
+        main: 'mainChartCanvas',
+        error: 'errorChartCanvas',
+        fleet: 'fleetBarChartCanvas'
+      }
+      const refKey = refMap[chartType]
+      const meta = this.chartMeta[refKey]
+      if (!meta?.labels?.length || !meta.plot) {
+        this.hideChartTooltip()
+        return
+      }
+      const canvas = event.currentTarget
+      const rect = canvas.getBoundingClientRect()
+      const x = event.clientX - rect.left
+      const plot = meta.plot
+      let index = 0
+      if (meta.type === 'groupedBar') {
+        const groupWidth = plot.width / Math.max(1, meta.labels.length)
+        index = Math.floor((x - plot.left) / Math.max(1, groupWidth))
+      } else {
+        index = Math.round(((x - plot.left) / Math.max(1, plot.width)) * Math.max(1, meta.labels.length - 1))
+      }
+      index = Math.max(0, Math.min(meta.labels.length - 1, index))
+      const lines = [`时间: ${meta.labels[index] || '--'}`]
+      if (meta.type === 'groupedBar') lines[0] = `场站: ${meta.labels[index] || '--'}`
+      meta.series.forEach((item) => {
+        const value = Number(item.values?.[index])
+        if (Number.isFinite(value)) {
+          const unit = item.axis === 'wind' ? 'm/s' : (item.name.includes('率') ? '%' : 'MW')
+          lines.push(`${item.name}: ${value.toFixed(2)}${unit}`)
+        }
+      })
+      if (lines.length <= 1) {
+        lines.push('当前点暂无数据')
+      }
+      this.chartTooltip = {
+        visible: true,
+        x: Math.min(window.innerWidth - 240, event.clientX + 14),
+        y: Math.min(window.innerHeight - 140, event.clientY + 14),
+        lines
+      }
+    },
+    hideChartTooltip() {
+      this.chartTooltip = { visible: false, x: 0, y: 0, lines: [] }
+    },
     renderSingleCharts() {
-      if (this._disposed || !this.singleSeriesState) return
+      if (this.chartDisposed) return
       this.renderMainChart()
       this.renderErrorChart()
     },
     renderMainChart() {
-      if (this._disposed) return
-      const state = this.singleSeriesState
-      if (!state || !state.labels?.length || !this.$refs.mainChartEl) return
-      this.mainChart = this.ensureChartInstance('mainChart', 'mainChartEl')
-      if (!this.mainChart) return
-      const rawSeries = this.getMainSeriesFromState()
-      const series = rawSeries.filter(s => s && s.type && Array.isArray(s.data) && this.hasSeriesValue(s.data))
-      if (!series.length) { this.mainChart.clear(); return }
-      const visibleSeriesNames = new Set(series.map(item => item.name))
-      const tooltipRows = [
-        { name: '实测值', values: state.actualValues, unit: 'MW' },
-        { name: '超短期预测', values: state.superValues, unit: 'MW' },
-        { name: '短期预测', values: state.shortValues, unit: 'MW' },
-        { name: '中期预测', values: state.midValues, unit: 'MW' },
-        { name: '短期风速预测', values: state.shortWindValues, unit: 'm/s' },
-        { name: '中期风速预测', values: state.midWindValues, unit: 'm/s' }
-      ]
-
-      this.mainChart.clear()
-      this.mainChart.setOption({
-        backgroundColor: 'transparent',
-        grid: { left: 58, right: 58, top: 52, bottom: 34 },
-        legend: { show: false },
-        tooltip: {
-          trigger: 'item',
-          triggerOn: 'mousemove|click',
-          confine: true,
-          appendToBody: true,
-          renderMode: 'html',
-          formatter: (param) => {
-            const idx = Array.isArray(param?.value) ? Number(param.value[0]) : (param?.dataIndex ?? 0)
-            const actual = state.actualValues[idx]
-            const lines = [`时间: ${state.labels[idx] || '--'}`]
-            tooltipRows.forEach((row) => {
-              if (!visibleSeriesNames.has(row.name)) return
-              const rawValue = this.toFiniteOrNull(row.values[idx])
-              if (!Number.isFinite(rawValue)) return
-              lines.push(`${row.name}: ${rawValue.toFixed(2)}${row.unit}`)
-              if (Number.isFinite(actual) && (row.name === '短期预测' || row.name === '超短期预测')) {
-                const dev = ((rawValue - actual) / Math.max(Math.abs(actual), 1e-6)) * 100
-                lines.push(`${row.name}瞬时误差率: ${dev >= 0 ? '+' : ''}${dev.toFixed(1)}%${Math.abs(dev) > 20 ? ' ⚠️' : ''}`)
-              }
-            })
-            const windDirection = state.windDirectionValues[idx]
-            if (Number.isFinite(windDirection)) lines.push(`风向: ${windDirection.toFixed(0)}° ${this.getWindDirectionArrow(windDirection)}`)
-            return lines.join('<br/>')
-          }
-        },
-        xAxis: {
-          type: 'category',
-          data: state.labels,
-          axisLabel: { color: '#9fb6cc', margin: 10, hideOverlap: true },
-          axisLine: { lineStyle: { color: '#6b8aa3' } }
-        },
-        yAxis: [
-          {
-            type: 'value',
-            name: '功率(MW)',
-            nameLocation: 'end',
-            nameGap: 16,
-            axisLabel: { color: '#9fb6cc' },
-            nameTextStyle: { color: '#9fb6cc', align: 'left', padding: [0, 0, 0, -42] },
-            splitLine: { lineStyle: { color: 'rgba(159, 182, 204, 0.12)' } }
-          },
-          {
-            type: 'value',
-            name: '风速(m/s)',
-            nameLocation: 'end',
-            nameGap: 16,
-            axisLabel: { color: '#9fb6cc' },
-            nameTextStyle: { color: '#9fb6cc', align: 'right', padding: [0, -42, 0, 0] },
-            splitLine: { show: false }
-          }
-        ],
-        series
+      if (this.chartDisposed) return
+      const comparison = this.exportData.comparison || {}
+      const labels = comparison.labels || this.singleSeriesState?.labels || []
+      const datasets = comparison.datasets || {}
+      const state = this.singleSeriesState || {}
+      const series = []
+      const add = (name, values, color, axis = 'power', dashed = false) => {
+        if (this.selectedTypes.includes(name) && this.hasSeriesValue(values)) {
+          series.push({ name, values, color, axis, dashed })
+        }
+      }
+      add('实测值', datasets['实测值'] || state.actualValues, '#fb7185')
+      add('超短期预测', datasets['超短期预测'] || state.superValues, '#22d3ee')
+      add('短期预测', datasets['短期预测'] || state.shortValues, '#60a5fa')
+      add('中期预测', datasets['中期预测'] || state.midValues, '#4ade80')
+      add('短期风速预测', datasets['短期风速预测'] || state.shortWindValues, '#fbbf24', 'wind', true)
+      add('中期风速预测', datasets['中期风速预测'] || state.midWindValues, '#c084fc', 'wind', true)
+      this.mainChart = this.drawLineCanvas('mainChartCanvas', labels, series, {
+        leftTitle: '功率(MW)',
+        rightTitle: '风速(m/s)'
       })
     },
     renderErrorChart() {
-      if (this._disposed) return
-      const state = this.singleSeriesState
-      if (!state || !state.labels?.length || !this.$refs.errorChartEl) return
-      this.errorChart = this.ensureChartInstance('errorChart', 'errorChartEl')
-      if (!this.errorChart) return
-      const toErr = (arr) => arr.map((v, i) => (Number.isFinite(v) && Number.isFinite(state.actualValues[i]) ? Number(v) - Number(state.actualValues[i]) : '-'))
-      const shortErr = toErr(state.shortValues)
-      const superErr = toErr(state.superValues)
+      if (this.chartDisposed) return
+      const comparison = this.exportData.comparison || {}
+      const labels = comparison.labels || this.singleSeriesState?.labels || []
+      const datasets = comparison.datasets || {}
+      const state = this.singleSeriesState || {}
+      const actualValues = datasets['实测值'] || state.actualValues || []
+      const shortValues = datasets['短期预测'] || state.shortValues || []
+      const superValues = datasets['超短期预测'] || state.superValues || []
+      const shortErr = shortValues.map((v, i) => (Number.isFinite(v) && Number.isFinite(actualValues[i]) ? Number(v) - Number(actualValues[i]) : '-'))
+      const superErr = superValues.map((v, i) => (Number.isFinite(v) && Number.isFinite(actualValues[i]) ? Number(v) - Number(actualValues[i]) : '-'))
       const hasValidErr = shortErr.some(v => v !== '-') || superErr.some(v => v !== '-')
-      if (!hasValidErr) { this.errorChart.clear(); return }
-
-      this.errorChart.clear()
-      this.errorChart.setOption({
-        backgroundColor: 'transparent',
-        grid: { left: 54, right: 26, top: 30, bottom: 64 },
-        legend: { top: 4, textStyle: { color: '#d9e9ff' } },
-        tooltip: { trigger: 'axis' },
-        xAxis: { type: 'category', data: state.labels, axisLabel: { color: '#9fb6cc' }, axisLine: { lineStyle: { color: '#6b8aa3' } } },
-        yAxis: { type: 'value', name: '误差(MW)', axisLabel: { color: '#9fb6cc' }, nameTextStyle: { color: '#9fb6cc' }, splitLine: { lineStyle: { color: 'rgba(159, 182, 204, 0.12)' } } },
-        series: [
-          { name: '短期误差', type: 'bar', data: shortErr, itemStyle: { color: 'rgba(96, 165, 250, 0.7)' } },
-          { name: '超短期误差', type: 'scatter', data: superErr.map((value, index) => (value === '-' ? null : [index, value])).filter(Boolean), symbolSize: 5, itemStyle: { color: '#22d3ee' } }
-        ]
-      })
+      if (!hasValidErr) {
+        this.errorChart = this.drawBarLineCanvas('errorChartCanvas', labels, [], { leftTitle: '误差(MW)' })
+        return
+      }
+      this.errorChart = this.drawBarLineCanvas('errorChartCanvas', labels, [
+        { name: '短期误差', values: shortErr, color: 'rgba(96, 165, 250, 0.75)', type: 'bar' },
+        { name: '超短期误差', values: superErr, color: '#22d3ee', type: 'line' }
+      ], { leftTitle: '误差(MW)' })
     },
-    async fetchFleetCompareData() {
+    async fetchFleetCompareData(requestSeq = this.fetchSeq) {
+      this.chartData = null
+      this.singleSeriesState = null
       const validFarmCodeSet = new Set(this.fleetCompareFarms.map(item => item.code))
       const farmCodes = Array.isArray(this.fleetCompareFarmCodes)
         ? this.fleetCompareFarmCodes.filter(code => code && validFarmCodeSet.has(code))
@@ -920,30 +1128,37 @@ export default {
         getFleetMetrics({ start: this.timeRange[0], end: this.timeRange[1], farm_codes: farmCodes, prediction_type: 'short' }),
         getFleetMetrics({ start: this.timeRange[0], end: this.timeRange[1], farm_codes: farmCodes, prediction_type: 'supershort' })
       ])
+      if (this.isStaleRequest(requestSeq, 'fleet')) return
       const shortItems = shortResp?.data?.data?.items || []
       const superItems = superResp?.data?.data?.items || []
       const map = new Map()
       shortItems.forEach((item) => {
+        const rmse = this.toFiniteNumber(item.rmse)
+        const mae = this.toFiniteNumber(item.mae)
+        const points = this.toFiniteNumber(item.points)
         map.set(item.farm_code, {
           farm_code: item.farm_code,
           farm_name: item.farm_name || item.farm_code,
-          short_acc: Number.isFinite(item.rmse) ? Math.max(0, 100 * (1 - item.rmse / this.installedCapacity)) : null,
-          short_qualified_rate: Number.isFinite(item.rmse) ? (item.rmse / this.installedCapacity <= 0.2 ? 100 : 0) : null,
+          short_acc: Number.isFinite(rmse) ? Math.max(0, 100 * (1 - rmse / this.installedCapacity)) : null,
+          short_qualified_rate: Number.isFinite(rmse) ? (rmse / this.installedCapacity <= 0.2 ? 100 : 0) : null,
           supershort_acc: null,
           supershort_qualified_rate: null,
-          rmse_avg: item.rmse,
-          mae_avg: item.mae,
-          unqualified_points: Number.isFinite(item.points) && Number.isFinite(item.rmse) && item.rmse / this.installedCapacity > 0.2 ? item.points : 0
+          rmse_avg: rmse,
+          mae_avg: mae,
+          unqualified_points: Number.isFinite(points) && Number.isFinite(rmse) && rmse / this.installedCapacity > 0.2 ? points : 0
         })
       })
       superItems.forEach((item) => {
         const cur = map.get(item.farm_code)
         if (!cur) return
-        cur.supershort_acc = Number.isFinite(item.rmse) ? Math.max(0, 100 * (1 - item.rmse / this.installedCapacity)) : null
-        cur.supershort_qualified_rate = Number.isFinite(item.rmse) ? (item.rmse / this.installedCapacity <= 0.2 ? 100 : 0) : null
-        cur.rmse_avg = this.mean([cur.rmse_avg, item.rmse])
-        cur.mae_avg = this.mean([cur.mae_avg, item.mae])
-        cur.unqualified_points += Number.isFinite(item.points) && Number.isFinite(item.rmse) && item.rmse / this.installedCapacity > 0.2 ? item.points : 0
+        const rmse = this.toFiniteNumber(item.rmse)
+        const mae = this.toFiniteNumber(item.mae)
+        const points = this.toFiniteNumber(item.points)
+        cur.supershort_acc = Number.isFinite(rmse) ? Math.max(0, 100 * (1 - rmse / this.installedCapacity)) : null
+        cur.supershort_qualified_rate = Number.isFinite(rmse) ? (rmse / this.installedCapacity <= 0.2 ? 100 : 0) : null
+        cur.rmse_avg = this.mean([cur.rmse_avg, rmse])
+        cur.mae_avg = this.mean([cur.mae_avg, mae])
+        cur.unqualified_points += Number.isFinite(points) && Number.isFinite(rmse) && rmse / this.installedCapacity > 0.2 ? points : 0
       })
       this.fleetCompareRows = Array.from(map.values())
       this.exportData.metrics = this.fleetCompareRows
@@ -951,23 +1166,16 @@ export default {
       this.scheduleChartRender('fleet')
     },
     renderFleetBarChart() {
-      if (this._disposed) return
-      if (!this.fleetCompareRows?.length || !this.$refs.fleetBarChartEl) return
-      this.fleetBarChart = this.ensureChartInstance('fleetBarChart', 'fleetBarChartEl')
-      if (!this.fleetBarChart) return
-      this.fleetBarChart.clear()
-      this.fleetBarChart.setOption({
-        backgroundColor: 'transparent',
-        grid: { left: 54, right: 24, top: 36, bottom: 84 },
-        legend: { top: 4, textStyle: { color: '#d9e9ff' } },
-        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-        xAxis: { type: 'category', data: this.fleetCompareRows.map(v => v.farm_name || v.farm_code), axisLabel: { color: '#9fb6cc' } },
-        yAxis: { type: 'value', min: 0, max: 100, axisLabel: { color: '#9fb6cc' }, splitLine: { lineStyle: { color: 'rgba(159, 182, 204, 0.12)' } } },
-        series: [
-          { name: '短期准确率(%)', type: 'bar', data: this.fleetCompareRows.map(v => v.short_acc ?? '-'), itemStyle: { color: 'rgba(96, 165, 250, 0.75)' } },
-          { name: '超短期准确率(%)', type: 'bar', data: this.fleetCompareRows.map(v => v.supershort_acc ?? '-'), itemStyle: { color: 'rgba(34, 211, 238, 0.75)' } }
+      if (this.chartDisposed) return
+      if (!this.fleetCompareRows?.length) return
+      this.fleetBarChart = this.drawGroupedBarCanvas(
+        'fleetBarChartCanvas',
+        this.fleetCompareRows.map(v => v.farm_name || v.farm_code),
+        [
+          { name: '短期准确率(%)', values: this.fleetCompareRows.map(v => v.short_acc), color: 'rgba(96, 165, 250, 0.78)' },
+          { name: '超短期准确率(%)', values: this.fleetCompareRows.map(v => v.supershort_acc), color: 'rgba(34, 211, 238, 0.78)' }
         ]
-      })
+      )
     },
     handleExportCommand(command) {
       if (command === 'raw_csv') this.downloadRawCSV()
@@ -1004,11 +1212,11 @@ export default {
     },
     downloadChartPNG() {
       const chart = this.analysisTab === 'single'
-        ? this.mainChart
-        : this.fleetBarChart
+        ? (this.mainChart || this.$refs.mainChartCanvas)
+        : (this.fleetBarChart || this.$refs.fleetBarChartCanvas)
       if (!chart) return this.$message.warning('暂无可导出的图表')
       const link = document.createElement('a')
-      link.href = chart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#081827' })
+      link.href = chart.toDataURL('image/png')
       link.download = `图表导出_${Date.now()}.png`
       link.click()
     },
@@ -1070,13 +1278,17 @@ export default {
 .time-range-picker { min-width: 360px; }
 .query-btn { min-width: 92px; }
 .card-header { color: #d8edff; font-weight: 600; }
+.single-chart-section { display: block !important; width: 100%; margin-top: 12px; }
 .chart-card { margin-bottom: 12px; }
+.force-chart-card { display: block !important; min-height: 320px !important; outline: 1px solid rgba(18, 215, 255, 0.45); }
 .series-legend { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
 .legend-toggle { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid rgba(159, 182, 204, 0.32); background: rgba(10, 28, 45, 0.82); color: #d9e9ff; font-size: 12px; cursor: pointer; }
 .legend-toggle.inactive { opacity: 0.42; }
 .legend-swatch { width: 18px; height: 3px; border-radius: 2px; }
-.chart-wrapper { height: 48vh; min-height: 390px; }
-.chart-wrapper.small { height: 30vh; }
+.chart-wrapper { height: 48vh; min-height: 390px; position: relative; background: rgba(3, 16, 28, 0.45); border: 1px dashed rgba(34, 211, 238, 0.28); }
+.chart-wrapper.small { height: 30vh; min-height: 240px; }
+.native-chart-canvas { display: block !important; width: 100% !important; height: 100% !important; min-height: 220px; }
+.chart-tooltip { position: fixed; z-index: 3000; min-width: 180px; max-width: 280px; padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(34, 211, 238, 0.45); background: rgba(3, 16, 28, 0.95); color: #d9e9ff; font-size: 12px; line-height: 1.6; pointer-events: none; box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35); }
 .empty-data-content { text-align: center; color: #a9c9de; }
 @media (max-width: 980px) {
   .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
