@@ -1,20 +1,18 @@
-# ============================================================
-# Simulation Infrastructure (模拟基础设施)
-# 仅包含模拟生产环境所需的服务，前后端使用本地开发模式
-#
-# 前后端本地启动:
+﻿# ============================================================
+# Simulation Infrastructure (妯℃嫙鍩虹璁炬柦)
+# 浠呭寘鍚ā鎷熺敓浜х幆澧冩墍闇€鐨勬湇鍔★紝鍓嶅悗绔娇鐢ㄦ湰鍦板紑鍙戞ā寮?#
+# 鍓嶅悗绔湰鍦板惎鍔?
 #   cd wind-power-forecast/backend && python app.py          (:5000)
 #   cd wind-power-forecast/backend-autopredict && python app.py (:5001)
 #   cd wind-power-forecast/frontend && npm run serve         (:8080)
 #
-# 模拟环境启动:
+# 妯℃嫙鐜鍚姩:
 #   docker compose -f simulation-compose.yaml up -d
 # ============================================================
 
 services:
   # ==========================================================
-  # ZONE 3 - 中转服务（从腾讯云拉取E-text）
-  # ==========================================================
+  # ZONE 3 - 涓浆鏈嶅姟锛堜粠鑵捐浜戞媺鍙朎-text锛?  # ==========================================================
   zone3-relay:
     build:
       context: .
@@ -34,8 +32,7 @@ services:
     restart: unless-stopped
 
   # ==========================================================
-  # ZONE 2 - 数据处理器（E-text → CSV → 预测输入）
-  # 输出到宿主机目录，本地 autopredict 直接读取
+  # ZONE 2 - 鏁版嵁澶勭悊鍣紙E-text 鈫?CSV 鈫?棰勬祴杈撳叆锛?  # 杈撳嚭鍒板涓绘満鐩綍锛屾湰鍦?autopredict 鐩存帴璇诲彇
   # ==========================================================
   zone2-processor:
     build:
@@ -55,14 +52,13 @@ services:
       - FARM_CODE=${FARM_CODE:-DEFAULT_FARM}
       - FARM_CODES=${FARM_CODES:-CF,BNJ,SDS,DPLZ,ZYX}
     volumes:
-      # E-text输入（与Zone3共享）
-      - ./simulation/data/etext:/data/from_server_c
-      # 预测输入输出 → 本地 autopredict 的 predict_inputs 目录
+      # E-text杈撳叆锛堜笌Zone3鍏变韩锛?      - ./simulation/data/etext:/data/from_server_c
+      # 棰勬祴杈撳叆杈撳嚭 鈫?鏈湴 autopredict 鐨?predict_inputs 鐩綍
       - ./wind-power-forecast/backend-autopredict/auto_scripts/scripts/short/predict_inputs:/data/daily_pre_csv/short
       - ./wind-power-forecast/backend-autopredict/auto_scripts/scripts/middle/predict_inputs:/data/daily_pre_csv/middle
-      # 模板文件
+      # 妯℃澘鏂囦欢
       - ./simulation/data/template:/data/daily_pre_csv/example:ro
-      # 日志
+      # 鏃ュ織
       - ./simulation/logs/zone2:/var/log
     networks:
       - sim-zone-transfer
@@ -75,8 +71,7 @@ services:
     restart: unless-stopped
 
   # ==========================================================
-  # SCADA 模拟器（IEC 60870-5-104 Server）
-  # ==========================================================
+  # SCADA 妯℃嫙鍣紙IEC 60870-5-104 Server锛?  # ==========================================================
   scada-simulator:
     build:
       context: .
@@ -102,8 +97,7 @@ services:
       start_period: 10s
 
   # ==========================================================
-  # 多场站 SCADA 功率模拟器（直接 HTTP POST，无需 C104）
-  # ==========================================================
+  # 澶氬満绔?SCADA 鍔熺巼妯℃嫙鍣紙鐩存帴 HTTP POST锛屾棤闇€ C104锛?  # ==========================================================
   scada_multifarm:
     build:
       context: .
@@ -112,7 +106,7 @@ services:
     environment:
       - TZ=Asia/Shanghai
       - FARM_CODES=${FARM_CODES:-CF,BNJ,SDS,DPLZ,ZYX}
-      - FARM_CAPACITIES=${FARM_CAPACITIES:-48.0,34.0,193.5,50.0,453.5}
+      - FARM_CAPACITIES=${FARM_CAPACITIES:-48.0,32.0,193.5,47.5,453.5}
       - BACKEND_URL=http://host.docker.internal:${MAIN_APP_PORT:-5000}
       - UPDATE_INTERVAL=60
     entrypoint: ["python3", "scada_multifarm.py"]
@@ -123,7 +117,7 @@ services:
       - sim-scada-net
 
   # ==========================================================
-  # KINGBASE（金仓数据库）- 前后端本地开发也需要此服务
+  # KINGBASE锛堥噾浠撴暟鎹簱锛? 鍓嶅悗绔湰鍦板紑鍙戜篃闇€瑕佹鏈嶅姟
   # ==========================================================
   kingbase:
     image: kingbase_v009r001c002b0014_single_x86:v1
@@ -152,32 +146,8 @@ services:
       start_period: 30s
 
   # ==========================================================
-  # MINIO（对象存储）
   # ==========================================================
-  minio:
-    image: minio/minio
-    container_name: sim-minio
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
-      TZ: Asia/Shanghai
-    volumes:
-      - sim_minio_data:/data
-    ports:
-      - "9900:9000"
-      - "9901:9001"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 20s
-      retries: 3
-      start_period: 10s
-
-volumes:
   sim_kingbase_data:
-  sim_minio_data:
 
 networks:
   sim-external:

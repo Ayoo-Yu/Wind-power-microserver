@@ -34,13 +34,13 @@ def upgrade() -> None:
                existing_comment='更新时间',
                existing_nullable=True,
                existing_server_default=sa.text('CURRENT_TIMESTAMP'))
-    op.drop_index('idx_training_history_created_at', table_name='training_history')
-    op.drop_index('idx_training_history_file_id', table_name='training_history')
-    op.drop_index('idx_training_history_user_id', table_name='training_history')
-    op.create_index(op.f('ix_training_history_file_id'), 'training_history', ['file_id'], unique=False)
-    op.create_index(op.f('ix_training_history_user_id'), 'training_history', ['user_id'], unique=False)
-    op.add_column('user_roles', sa.Column('created_at', sa.DateTime(), nullable=True))
-    op.add_column('user_roles', sa.Column('updated_at', sa.DateTime(), nullable=True))
+    op.execute('DROP INDEX IF EXISTS idx_training_history_created_at')
+    op.execute('DROP INDEX IF EXISTS idx_training_history_file_id')
+    op.execute('DROP INDEX IF EXISTS idx_training_history_user_id')
+    op.execute('CREATE INDEX IF NOT EXISTS ix_training_history_file_id ON training_history (file_id)')
+    op.execute('CREATE INDEX IF NOT EXISTS ix_training_history_user_id ON training_history (user_id)')
+    op.execute('ALTER TABLE user_roles ADD COLUMN IF NOT EXISTS created_at TIMESTAMP')
+    op.execute('ALTER TABLE user_roles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP')
     # ### end Alembic commands ###
 
 

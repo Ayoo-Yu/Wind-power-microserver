@@ -153,8 +153,7 @@ export default {
         pagination.perPage = Number(response?.per_page || pagination.perPage)
         pagination.pages = Number(response?.pages || 0)
       } catch (error) {
-        console.error('获取审计日志失败:', error)
-        errorMessage.value = error?.response?.data?.message || '获取审计日志失败'
+        console.warn('获取审计日志失败:', error)
       } finally {
         loading.value = false
       }

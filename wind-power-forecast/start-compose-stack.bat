@@ -40,18 +40,18 @@ if "%DB_READY%"=="0" (
 echo Ensuring database windpower exists...
 docker exec wind-power-kingbase /home/kingbase/install/kingbase/bin/ksql -Usystem -d test -c "create database windpower;" >nul 2>&1
 
-echo [4/5] Starting wind-power-deployment project (minio + pgadmin)...
-docker compose -p wind-power-deployment -f "%DEPLOY_COMPOSE%" up -d --no-deps minio pgadmin
+echo [4/5] Starting wind-power-deployment project (pgadmin)...
+docker compose -p wind-power-deployment -f "%DEPLOY_COMPOSE%" up -d --no-deps pgadmin
 if errorlevel 1 (
   echo Failed to start wind-power-deployment project.
   exit /b 1
 )
 
 echo [5/5] Stack status:
-docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | findstr /I "wind-power-kingbase wind-power-minio wind-power-pgadmin"
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | findstr /I "wind-power-kingbase wind-power-pgadmin"
 
 echo.
 echo Done. Core stack is started in two projects:
 echo - database (kingbase)
-echo - wind-power-deployment (minio/pgadmin)
+echo - wind-power-deployment (pgadmin)
 exit /b 0

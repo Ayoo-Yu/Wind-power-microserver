@@ -1,64 +1,53 @@
 <template>
   <div class="login-shell">
-    <section class="login-visual">
-      <div class="texture-grid"></div>
-      <div class="texture-lines"></div>
-      <div class="particle-layer">
-        <span class="particle p1"></span>
-        <span class="particle p2"></span>
-        <span class="particle p3"></span>
-        <span class="particle p4"></span>
-        <span class="particle p5"></span>
-      </div>
-      <div class="turbine-watermark" aria-hidden="true"></div>
-      <div class="turbine-watermark turbine-watermark-far" aria-hidden="true"></div>
+    <video class="bg-video" autoplay muted loop playsinline>
+      <source src="/bg.mp4" type="video/mp4" />
+    </video>
+    <div class="bg-video-overlay"></div>
 
-      <div class="visual-overlay">
-        <h1>风电功率预测系统</h1>
-        <p>智慧能源 · 实时感知 · 智能决策</p>
+    <div class="visual-overlay">
+      <h1>风电功率预测系统</h1>
+      <p>智慧能源 · 实时感知 · 智能决策</p>
 
-        <ul class="visual-metrics">
-          <li>
-            <span class="metric-label">
-              <el-icon><OfficeBuilding /></el-icon>
-              <i class="metric-pulse"></i>
-              场站接入
-            </span>
-            <strong class="metric-value metric-mask">{{ maskedMetrics.stationCount }}</strong>
-            <i class="metric-line"></i>
-          </li>
-          <li>
-            <span class="metric-label">
-              <el-icon><Lightning /></el-icon>
-              <i class="metric-pulse"></i>
-              实时总功率
-            </span>
-            <strong class="metric-value">
-              {{ maskedMetrics.totalPower }}
-            </strong>
-            <i class="metric-line"></i>
-          </li>
-          <li>
-            <span class="metric-label">
-              <el-icon><Aim /></el-icon>
-              <i class="metric-pulse"></i>
-              今日预测准确率
-            </span>
-            <strong class="metric-value metric-mask">{{ maskedMetrics.accuracy }}</strong>
-            <i class="metric-line"></i>
-          </li>
-        </ul>
+      <ul class="visual-metrics">
+        <li>
+          <span class="metric-label">
+            <el-icon><OfficeBuilding /></el-icon>
+            <i class="metric-pulse"></i>
+            场站接入
+          </span>
+          <strong class="metric-value metric-mask">{{ maskedMetrics.stationCount }}</strong>
+          <i class="metric-line"></i>
+        </li>
+        <li>
+          <span class="metric-label">
+            <el-icon><Lightning /></el-icon>
+            <i class="metric-pulse"></i>
+            实时总功率
+          </span>
+          <strong class="metric-value">
+            {{ maskedMetrics.totalPower }}
+          </strong>
+          <i class="metric-line"></i>
+        </li>
+        <li>
+          <span class="metric-label">
+            <el-icon><Aim /></el-icon>
+            <i class="metric-pulse"></i>
+            今日预测准确率
+          </span>
+          <strong class="metric-value metric-mask">{{ maskedMetrics.accuracy }}</strong>
+          <i class="metric-line"></i>
+        </li>
+      </ul>
 
-        <div class="announcement-ticker">
-          <span class="ticker-label">系统公告</span>
-          <div class="ticker-track">
-            <div class="ticker-content">{{ systemNotice }}</div>
-          </div>
+      <div class="announcement-ticker">
+        <span class="ticker-label">系统公告</span>
+        <div class="ticker-track">
+          <div class="ticker-content">{{ systemNotice }}</div>
         </div>
       </div>
-
-      <div class="wind-scene" />
-    </section>
+    </div>
 
     <section class="login-panel">
       <div class="login-card">
@@ -399,165 +388,60 @@ export default {
 .login-shell {
   position: relative;
   min-height: 100vh;
-  display: grid;
-  grid-template-columns: 1.2fr 1fr;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 60px;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 15% 12%, rgba(30, 88, 130, 0.4) 0%, rgba(8, 26, 43, 0) 40%),
-    radial-gradient(circle at 80% 15%, rgba(16, 76, 118, 0.28) 0%, rgba(8, 26, 43, 0) 32%),
-    linear-gradient(140deg, #04101c 0%, #071a2c 55%, #050f1a 100%);
+  background: #04101c;
+  padding: 40px;
 }
 
-.login-shell::before,
-.login-shell::after {
-  content: '';
+.bg-video {
   position: absolute;
-  width: 620px;
-  height: 620px;
-  border-radius: 50%;
-  pointer-events: none;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   z-index: 0;
 }
 
-.login-shell::before {
-  left: -220px;
-  top: -280px;
-  background: radial-gradient(circle, rgba(18, 215, 255, 0.08) 0%, rgba(18, 215, 255, 0) 72%);
-}
-
-.login-shell::after {
-  right: -260px;
-  bottom: -320px;
-  background: radial-gradient(circle, rgba(35, 98, 148, 0.14) 0%, rgba(35, 98, 148, 0) 72%);
-}
-
-.login-visual {
-  position: relative;
-  z-index: 1;
-  overflow: hidden;
-  padding: 48px;
-}
-
-.texture-grid,
-.texture-lines,
-.particle-layer {
+.bg-video-overlay {
   position: absolute;
   inset: 0;
+  z-index: 0;
+  background: linear-gradient(180deg, rgba(4, 16, 28, 0.4) 0%, rgba(4, 16, 28, 0.6) 100%);
   pointer-events: none;
-}
-
-.texture-grid {
-  opacity: 0.2;
-  background:
-    linear-gradient(rgba(124, 178, 214, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(124, 178, 214, 0.08) 1px, transparent 1px);
-  background-size: 28px 28px;
-}
-
-.texture-lines {
-  opacity: 0.18;
-  background: repeating-linear-gradient(
-    120deg,
-    rgba(18, 215, 255, 0.12) 0,
-    rgba(18, 215, 255, 0.12) 1px,
-    transparent 1px,
-    transparent 90px
-  );
-  animation: drift 18s linear infinite;
-}
-
-.particle {
-  position: absolute;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: rgba(120, 223, 255, 0.65);
-  box-shadow: 0 0 12px rgba(120, 223, 255, 0.58);
-  animation: particleFloat 9s ease-in-out infinite;
-}
-
-.p1 {
-  left: 12%;
-  top: 20%;
-  animation-delay: 0s;
-}
-
-.p2 {
-  left: 32%;
-  top: 65%;
-  animation-delay: 1.3s;
-}
-
-.p3 {
-  left: 48%;
-  top: 30%;
-  animation-delay: 2.6s;
-}
-
-.p4 {
-  left: 62%;
-  top: 78%;
-  animation-delay: 3.1s;
-}
-
-.p5 {
-  left: 82%;
-  top: 26%;
-  animation-delay: 4.4s;
-}
-
-.turbine-watermark {
-  position: absolute;
-  left: 48%;
-  top: 50%;
-  width: 500px;
-  height: 500px;
-  transform: translate(-50%, -50%);
-  opacity: 0.08;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Cg fill='none' stroke='%239ad6ff' stroke-width='2.2'%3E%3Cline x1='100' y1='74' x2='100' y2='188'/%3E%3Ccircle cx='100' cy='72' r='8'/%3E%3Cpath d='M100 72L164 48'/%3E%3Cpath d='M100 72L57 11'/%3E%3Cpath d='M100 72L50 117'/%3E%3C/g%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-size: contain;
-}
-
-.turbine-watermark-far {
-  left: 74%;
-  top: 60%;
-  width: 260px;
-  height: 260px;
-  opacity: 0.035;
 }
 
 .visual-overlay {
   position: relative;
-  z-index: 2;
-  max-width: 560px;
-  margin: 52px 0 0 58px;
+  z-index: 1;
+  flex-shrink: 0;
+  max-width: 420px;
 }
 
 .visual-overlay h1 {
-  margin: 0;
-  font-size: 46px;
-  font-weight: 800;
-  letter-spacing: 1px;
-  background: linear-gradient(180deg, #f6fbff 8%, #b8dfff 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  text-shadow: 0 0 18px rgba(116, 194, 255, 0.12);
+  font-size: 38px;
+  font-weight: 700;
+  color: #eef7ff;
+  margin: 0 0 8px;
+  letter-spacing: 2px;
+  text-shadow: 0 0 30px rgba(18, 215, 255, 0.3);
 }
 
-.visual-overlay p {
-  margin-top: 12px;
-  color: #e7f2ff;
-  letter-spacing: 3px;
-  font-size: 14px;
+.visual-overlay > p {
+  font-size: 15px;
+  color: #a8c7df;
+  margin: 0 0 28px;
+  letter-spacing: 1.5px;
 }
 
 .visual-metrics {
   list-style: none;
   padding: 0;
-  margin: 34px 0 0;
+  margin: 28px 0 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -569,6 +453,7 @@ export default {
   border: 1px solid rgba(132, 191, 231, 0.24);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(8px);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -635,24 +520,10 @@ export default {
   background: linear-gradient(90deg, rgba(18, 215, 255, 0.1), rgba(83, 240, 176, 0.5), rgba(18, 215, 255, 0.1));
 }
 
-.wind-scene {
-  position: absolute;
-  inset: 0;
-  opacity: 0.34;
-  background:
-    linear-gradient(180deg, rgba(4, 12, 20, 0) 0%, rgba(4, 12, 20, 0.78) 100%),
-    radial-gradient(circle at 58% 82%, rgba(18, 215, 255, 0.24), transparent 42%),
-    repeating-radial-gradient(circle at 80% 90%, rgba(164, 209, 239, 0.08) 0, rgba(164, 209, 239, 0.08) 2px, transparent 3px, transparent 16px),
-    linear-gradient(0deg, rgba(8, 18, 30, 0.92), rgba(8, 18, 30, 0.3));
-}
-
 .login-panel {
   position: relative;
   z-index: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 24px;
+  flex-shrink: 0;
 }
 
 .login-card {
@@ -660,8 +531,8 @@ export default {
   border-radius: 14px;
   padding: 28px;
   border: 1px solid rgba(163, 205, 235, 0.28);
-  background: rgba(255, 255, 255, 0.055);
-  backdrop-filter: blur(10px);
+  background: rgba(8, 22, 38, 0.78);
+  backdrop-filter: blur(16px);
   box-shadow: 0 20px 46px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   animation: cardGlow 4s ease-in-out infinite alternate;
 }
@@ -711,6 +582,15 @@ export default {
   font-size: 12px;
 }
 
+.login-form :deep(.el-form-item) {
+  background: transparent !important;
+  margin-bottom: 18px;
+}
+
+.login-form :deep(.el-form-item__content) {
+  background: transparent !important;
+}
+
 .login-form :deep(.el-input__wrapper) {
   background: rgba(7, 26, 42, 0.72) !important;
   border: 1px solid rgba(107, 188, 230, 0.3);
@@ -720,6 +600,7 @@ export default {
 
 .login-form :deep(.el-input__inner) {
   color: #e9f7ff !important;
+  background: transparent !important;
 }
 
 .login-form :deep(.el-input__inner::placeholder) {
@@ -862,29 +743,6 @@ export default {
   animation: tickerMove 14s linear infinite;
 }
 
-@keyframes drift {
-  from {
-    transform: translateX(0);
-  }
-
-  to {
-    transform: translateX(-90px);
-  }
-}
-
-@keyframes particleFloat {
-  0%,
-  100% {
-    transform: translateY(0) scale(1);
-    opacity: 0.52;
-  }
-
-  50% {
-    transform: translateY(-12px) scale(1.12);
-    opacity: 0.92;
-  }
-}
-
 @keyframes iconBob {
   0%,
   100% {
@@ -929,31 +787,13 @@ export default {
 
 @media (max-width: 900px) {
   .login-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .login-visual {
-    min-height: 220px;
+    flex-direction: column;
     padding: 24px;
-  }
-
-  .visual-overlay {
-    margin: 12px 0 0;
+    gap: 30px;
   }
 
   .visual-overlay h1 {
     font-size: 28px;
-  }
-
-  .turbine-watermark {
-    left: 50%;
-    top: 55%;
-    width: 320px;
-    height: 320px;
-  }
-
-  .turbine-watermark-far {
-    display: none;
   }
 
   .visual-metrics {
@@ -964,5 +804,21 @@ export default {
   .visual-metrics li {
     width: calc(50% - 7px);
   }
+}
+
+.login-form :deep(input:-webkit-autofill),
+.login-form :deep(input:-webkit-autofill:hover),
+.login-form :deep(input:-webkit-autofill:focus),
+.login-form :deep(input:-webkit-autofill:active) {
+  -webkit-box-shadow: 0 0 0 1000px rgba(7, 26, 42, 1) inset !important;
+  -webkit-text-fill-color: #e9f7ff !important;
+  caret-color: #e9f7ff;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+.login-form :deep(input:-internal-autofill-selected) {
+  background-color: rgba(7, 26, 42, 1) !important;
+  background-image: none !important;
+  color: #e9f7ff !important;
 }
 </style>

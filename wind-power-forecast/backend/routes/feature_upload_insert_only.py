@@ -6,7 +6,7 @@ import io
 from datetime import datetime
 
 from db_session import db_session
-from db_models import TrainPreMiddle, TrainPreShort # Import the new models
+from db_models import TrainPreMiddle, TrainPreShort, TrainPreSupershort # Import the new models
 from services.file_service import allowed_file # Reuse existing file validation if desired
 
 feature_upload_bp = Blueprint('feature_upload', __name__)
@@ -14,7 +14,8 @@ feature_upload_bp = Blueprint('feature_upload', __name__)
 # Map table names to model classes
 TABLE_MODEL_MAP = {
     'train_pre_middle': TrainPreMiddle,
-    'train_pre_short': TrainPreShort
+    'train_pre_short': TrainPreShort,
+    'train_pre_supershort': TrainPreSupershort
 }
 
 def map_csv_to_model(row_dict, model_class):
@@ -60,12 +61,15 @@ def upload_feature_csv():
     
     file = request.files['file']
     table_name = request.form.get('table_name')
+    farm_code = (request.form.get('farm_code') or '').strip()
 
     if file.filename == '':
         return jsonify({"error": "No selected file"}), 400
         
     if not table_name or table_name not in TABLE_MODEL_MAP:
         return jsonify({"error": f"Invalid or missing 'table_name'. Must be one of: {list(TABLE_MODEL_MAP.keys())}"}), 400
+    if not farm_code:
+        return jsonify({"error": "Missing required 'farm_code'."}), 400
 
     # Optional: Reuse allowed_file logic if needed
     # if not allowed_file(file.filename, current_app.config.get('ALLOWED_EXTENSIONS', {'.csv'})):
@@ -106,6 +110,7 @@ def upload_feature_csv():
                     # Ensure only columns present in the model are passed
                     valid_model_keys = {k for k in model_data if hasattr(TargetModel, k)}
                     filtered_model_data = {k: model_data[k] for k in valid_model_keys}
+                    filtered_model_data['farm_code'] = farm_code
 
                     db_object = TargetModel(**filtered_model_data) 
                     session.add(db_object)

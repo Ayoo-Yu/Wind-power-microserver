@@ -1,6 +1,4 @@
-version: '3.8'
-
-services:
+﻿services:
   frontend:
     build:
       context: ./frontend
@@ -9,39 +7,36 @@ services:
     ports:
       - "8080:80"
     networks:
-      - wind-power-network  # 连接同一网络
+      - wind-power-network  # 鏉╃偞甯撮崥灞肩缂冩垹绮?
     depends_on:
       - backend
-      - backend-autopredict
     environment:
       - TZ=Asia/Shanghai # Set Timezone to Beijing Time
     restart: unless-stopped
   backend:
     build:
-      context: ..  # 修改构建上下文为项目根目录
-      dockerfile: wind-power-forecast/backend/Dockerfile  # 使用相对于项目根目录的Dockerfile路径
+      context: ./backend
+      dockerfile: Dockerfile
     image: wind-power-backend:v250714_1.0
     ports:
       - "5000:5000"
     environment:
       - FLASK_ENV=development
-      - DB_HOST=kingbase       # 使用金仓数据库服务名称
-      - DB_PORT=54321          # 金仓数据库端口
-      - DB_USER=system         # 金仓默认用户
+      - DB_HOST=kingbase       # 娴ｈ法鏁ら柌鎴滅波閺佺増宓佹惔鎾存箛閸斺€虫倳缁?
+      - DB_PORT=54321          # 闁叉垳绮ㄩ弫鐗堝祦鎼存挾顏崣?
+      - DB_USER=system         # 闁叉垳绮ㄦ妯款吇閻劍鍩?
       - DB_PASSWORD=${DB_PASSWORD:-change-me-in-production}
-      - DB_NAME=windpower      # 连接到windpower数据库
-      - MINIO_ENDPOINT=minio   # 使用MinIO服务名称
-      - MINIO_PORT=9000
+      - DB_NAME=windpower      # 鏉╃偞甯撮崚鐨恑ndpower閺佺増宓佹惔?
       - TZ=Asia/Shanghai # Set Timezone to Beijing Time
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
-
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - API_BASE_URL=http://backend:5000
     networks:
-      - wind-power-network  # 连接同一网络
+      - wind-power-network
     depends_on:
       kingbase:
-        condition: service_started  # 修改为service_started，不检查健康状态
-      minio:
-        condition: service_healthy
+        condition: service_started  # 娣囶喗鏁兼稉绨奺rvice_started閿涘奔绗夊Λ鈧弻銉ヤ淮鎼撮濮搁幀?
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
@@ -50,68 +45,6 @@ services:
       retries: 3
       start_period: 40s
 
-  backend-autopredict:
-    build:
-      context: ..  # 构建上下文为项目根目录
-      dockerfile: wind-power-forecast/backend-autopredict/Dockerfile
-    image: wind-power-backend-autopredict:v250714_1.0
-    ports:
-      - "5001:5001"
-    environment:
-      - FLASK_ENV=development
-      - DB_HOST=kingbase
-      - DB_PORT=54321
-      - DB_USER=system
-      - DB_PASSWORD=${DB_PASSWORD:-change-me-in-production}
-      - DB_NAME=windpower
-      - MINIO_ENDPOINT=minio
-      - MINIO_PORT=9000
-      - BACKEND_API_URL=http://backend:5000
-      - TZ=Asia/Shanghai
-      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-    networks:
-      - wind-power-network
-    depends_on:
-      kingbase:
-        condition: service_started
-      minio:
-        condition: service_healthy
-      redis:
-        condition: service_started
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    volumes:
-      # 中期预测相关目录
-      - ./backend-autopredict/auto_scripts/scripts/middle/datasets:/app/auto_scripts/scripts/middle/datasets
-      - ./backend-autopredict/auto_scripts/scripts/middle/predict_inputs:/app/auto_scripts/scripts/middle/predict_inputs
-      - ./backend-autopredict/auto_scripts/scripts/middle/models:/app/auto_scripts/scripts/middle/models
-      - ./backend-autopredict/auto_scripts/scripts/middle/predict_outputs:/app/auto_scripts/scripts/middle/predict_outputs
-      - ./backend-autopredict/auto_scripts/scripts/middle/logs:/app/auto_scripts/scripts/middle/logs
-      - ./backend-autopredict/auto_scripts/scripts/middle/merged_predict_outputs:/app/auto_scripts/scripts/middle/merged_predict_outputs
-      - ./backend-autopredict/auto_scripts/scripts/middle/feature_importance:/app/auto_scripts/scripts/middle/feature_importance
-
-      # 短期预测相关目录
-      - ./backend-autopredict/auto_scripts/scripts/short/datasets:/app/auto_scripts/scripts/short/datasets
-      - ./backend-autopredict/auto_scripts/scripts/short/predict_inputs:/app/auto_scripts/scripts/short/predict_inputs
-      - ./backend-autopredict/auto_scripts/scripts/short/models:/app/auto_scripts/scripts/short/models
-      - ./backend-autopredict/auto_scripts/scripts/short/predict_outputs:/app/auto_scripts/scripts/short/predict_outputs
-      - ./backend-autopredict/auto_scripts/scripts/short/logs:/app/auto_scripts/scripts/short/logs
-      - ./backend-autopredict/auto_scripts/scripts/short/feature_importance:/app/auto_scripts/scripts/short/feature_importance
-      
-      # 超短期预测相关目录
-      - ./backend-autopredict/auto_scripts/scripts/supershort/datasets:/app/auto_scripts/scripts/supershort/datasets
-      - ./backend-autopredict/auto_scripts/scripts/supershort/saved_models:/app/auto_scripts/scripts/supershort/saved_models
-      - ./backend-autopredict/auto_scripts/scripts/supershort/prediction_inputs:/app/auto_scripts/scripts/supershort/prediction_inputs
-      - ./backend-autopredict/auto_scripts/scripts/supershort/prediction_results:/app/auto_scripts/scripts/supershort/prediction_results
-      - ./backend-autopredict/auto_scripts/scripts/supershort/logs:/app/auto_scripts/scripts/supershort/logs
-  
   scada_client_service:
     build:
       context: ../C104_SCADA
@@ -138,22 +71,22 @@ services:
   kingbase:
     image: kingbase_v009r001c002b0014_single_x86:v1
     container_name: wind-power-kingbase
-    privileged: true  # 必须添加，否则会有权限问题
+    privileged: true  # 韫囧懘銆忓ǎ璇插閿涘苯鎯侀崚娆庣窗閺堝娼堥梽鎰版６妫?
     environment:
       - NEED_START=yes
-      - DB_USER=system  # 金仓默认用户
-      - DB_PASSWORD=${DB_PASSWORD:-change-me-in-production}  # 金仓默认密码
-      - DB_MODE=oracle  # 使用oracle模式，这是金仓推荐的模式
+      - DB_USER=system  # 闁叉垳绮ㄦ妯款吇閻劍鍩?
+      - DB_PASSWORD=${DB_PASSWORD:-change-me-in-production}  # 闁叉垳绮ㄦ妯款吇鐎靛棛鐖?
+      - DB_MODE=oracle  # 娴ｈ法鏁racle濡€崇础閿涘矁绻栭弰顖炲櫨娴犳挻甯归懡鎰畱濡€崇础
       - ENCODING=UTF8
       - TZ=Asia/Shanghai # Set Timezone to Beijing Time
     volumes:
-      - kingbase_data:/home/kingbase/userdata/  # 注意这里的路径
+      - kingbase_data:/home/kingbase/userdata/  # 濞夈劍鍓版潻娆撳櫡閻ㄥ嫯鐭惧?
     ports:
-      - "54321:54321"  # 金仓数据库默认端口为54321
+      - "54321:54321"  # 闁叉垳绮ㄩ弫鐗堝祦鎼存捇绮拋銈囶伂閸欙絼璐?4321
     restart: unless-stopped
     networks:
       - wind-power-network
-    command: /usr/sbin/init  # 必须使用此命令启动
+    command: /usr/sbin/init  # 韫囧懘銆忔担璺ㄦ暏濮濄倕鎳℃禒銈呮儙閸?
     healthcheck:
       test: ["CMD", "ls", "/home/kingbase/userdata/data"]
       interval: 10s
@@ -161,74 +94,76 @@ services:
       retries: 5
       start_period: 30s
 
-  autopredict-worker:
+  celery-worker:
     build:
-      context: ..
-      dockerfile: wind-power-forecast/backend-autopredict/Dockerfile
-    image: wind-power-backend-autopredict:v250714_1.0
-    entrypoint: ["/bin/bash", "/app/docker-entrypoint-celery.sh"]
-    command: ["celery", "-A", "celery_app", "worker", "--loglevel=info", "-c", "4", "--without-heartbeat"]
+      context: ./backend
+      dockerfile: Dockerfile.celery
+    image: wind-power-celery-worker:latest
+    container_name: wind-power-celery-worker
+    command: ["worker", "--loglevel=info", "-c", "4", "--without-heartbeat"]
     environment:
       - DB_HOST=kingbase
       - DB_PORT=54321
       - DB_USER=system
-      - DB_PASSWORD=${DB_PASSWORD:-12345678ab}
+      - DB_PASSWORD=${DB_PASSWORD:-change-me-in-production}
       - DB_NAME=windpower
-      - MINIO_ENDPOINT=minio
-      - MINIO_PORT=9000
       - TZ=Asia/Shanghai
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - API_BASE_URL=http://backend:5000
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     networks:
       - wind-power-network
     depends_on:
       kingbase:
         condition: service_started
-      minio:
-        condition: service_healthy
       redis:
         condition: service_started
     restart: unless-stopped
     volumes:
-      - ./backend-autopredict/auto_scripts/scripts/middle/datasets:/app/auto_scripts/scripts/middle/datasets
-      - ./backend-autopredict/auto_scripts/scripts/middle/predict_inputs:/app/auto_scripts/scripts/middle/predict_inputs
-      - ./backend-autopredict/auto_scripts/scripts/middle/models:/app/auto_scripts/scripts/middle/models
-      - ./backend-autopredict/auto_scripts/scripts/middle/predict_outputs:/app/auto_scripts/scripts/middle/predict_outputs
-      - ./backend-autopredict/auto_scripts/scripts/middle/logs:/app/auto_scripts/scripts/middle/logs
-      - ./backend-autopredict/auto_scripts/scripts/middle/merged_predict_outputs:/app/auto_scripts/scripts/middle/merged_predict_outputs
-      - ./backend-autopredict/auto_scripts/scripts/middle/feature_importance:/app/auto_scripts/scripts/middle/feature_importance
-      - ./backend-autopredict/auto_scripts/scripts/short/datasets:/app/auto_scripts/scripts/short/datasets
-      - ./backend-autopredict/auto_scripts/scripts/short/predict_inputs:/app/auto_scripts/scripts/short/predict_inputs
-      - ./backend-autopredict/auto_scripts/scripts/short/models:/app/auto_scripts/scripts/short/models
-      - ./backend-autopredict/auto_scripts/scripts/short/predict_outputs:/app/auto_scripts/scripts/short/predict_outputs
-      - ./backend-autopredict/auto_scripts/scripts/short/logs:/app/auto_scripts/scripts/short/logs
-      - ./backend-autopredict/auto_scripts/scripts/short/feature_importance:/app/auto_scripts/scripts/short/feature_importance
-      - ./backend-autopredict/auto_scripts/scripts/supershort/datasets:/app/auto_scripts/scripts/supershort/datasets
-      - ./backend-autopredict/auto_scripts/scripts/supershort/saved_models:/app/auto_scripts/scripts/supershort/saved_models
-      - ./backend-autopredict/auto_scripts/scripts/supershort/prediction_inputs:/app/auto_scripts/scripts/supershort/prediction_inputs
-      - ./backend-autopredict/auto_scripts/scripts/supershort/prediction_results:/app/auto_scripts/scripts/supershort/prediction_results
-      - ./backend-autopredict/auto_scripts/scripts/supershort/logs:/app/auto_scripts/scripts/supershort/logs
+      # 娑擃厽婀℃０鍕ゴ閻╃鍙ч惄顔肩秿
+      - ./backend/auto_scripts/scripts/middle/datasets:/app/auto_scripts/scripts/middle/datasets
+      - ./backend/auto_scripts/scripts/middle/predict_inputs:/app/auto_scripts/scripts/middle/predict_inputs
+      - ./backend/auto_scripts/scripts/middle/models:/app/auto_scripts/scripts/middle/models
+      - ./backend/auto_scripts/scripts/middle/predict_outputs:/app/auto_scripts/scripts/middle/predict_outputs
+      - ./backend/auto_scripts/scripts/middle/logs:/app/auto_scripts/scripts/middle/logs
+      - ./backend/auto_scripts/scripts/middle/merged_predict_outputs:/app/auto_scripts/scripts/middle/merged_predict_outputs
+      - ./backend/auto_scripts/scripts/middle/feature_importance:/app/auto_scripts/scripts/middle/feature_importance
+      # 閻厽婀℃０鍕ゴ閻╃鍙ч惄顔肩秿
+      - ./backend/auto_scripts/scripts/short/datasets:/app/auto_scripts/scripts/short/datasets
+      - ./backend/auto_scripts/scripts/short/predict_inputs:/app/auto_scripts/scripts/short/predict_inputs
+      - ./backend/auto_scripts/scripts/short/models:/app/auto_scripts/scripts/short/models
+      - ./backend/auto_scripts/scripts/short/predict_outputs:/app/auto_scripts/scripts/short/predict_outputs
+      - ./backend/auto_scripts/scripts/short/logs:/app/auto_scripts/scripts/short/logs
+      - ./backend/auto_scripts/scripts/short/feature_importance:/app/auto_scripts/scripts/short/feature_importance
+      # 鐡掑懐鐓張鐔碱暕濞村娴夐崗宕囨窗瑜?
+      - ./backend/auto_scripts/scripts/supershort/datasets:/app/auto_scripts/scripts/supershort/datasets
+      - ./backend/auto_scripts/scripts/supershort/saved_models:/app/auto_scripts/scripts/supershort/saved_models
+      - ./backend/auto_scripts/scripts/supershort/prediction_inputs:/app/auto_scripts/scripts/supershort/prediction_inputs
+      - ./backend/auto_scripts/scripts/supershort/prediction_results:/app/auto_scripts/scripts/supershort/prediction_results
+      - ./backend/auto_scripts/scripts/supershort/logs:/app/auto_scripts/scripts/supershort/logs
 
-  autopredict-beat:
+  celery-beat:
     build:
-      context: ..
-      dockerfile: wind-power-forecast/backend-autopredict/Dockerfile
-    image: wind-power-backend-autopredict:v250714_1.0
-    entrypoint: ["/bin/bash", "/app/docker-entrypoint-celery.sh"]
-    command: ["celery", "-A", "celery_app", "beat", "--loglevel=info"]
+      context: ./backend
+      dockerfile: Dockerfile.celery
+    image: wind-power-celery-worker:latest
+    container_name: wind-power-celery-beat
+    command: ["beat", "--loglevel=info"]
     environment:
       - DB_HOST=kingbase
       - DB_PORT=54321
       - DB_USER=system
-      - DB_PASSWORD=${DB_PASSWORD:-12345678ab}
+      - DB_PASSWORD=${DB_PASSWORD:-change-me-in-production}
       - DB_NAME=windpower
-      - MINIO_ENDPOINT=minio
-      - MINIO_PORT=9000
       - TZ=Asia/Shanghai
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     networks:
       - wind-power-network
     depends_on:
@@ -238,25 +173,21 @@ services:
         condition: service_started
     restart: unless-stopped
 
-  autopredict-flower:
+  celery-flower:
     build:
-      context: ..
-      dockerfile: wind-power-forecast/backend-autopredict/Dockerfile
-    image: wind-power-backend-autopredict:v250714_1.0
-    entrypoint: ["/bin/bash", "/app/docker-entrypoint-celery.sh"]
-    command: ["celery", "-A", "celery_app", "flower", "--port=5555", "--basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-celery123}"]
+      context: ./backend
+      dockerfile: Dockerfile.celery
+    image: wind-power-celery-worker:latest
+    container_name: wind-power-celery-flower
+    command: ["flower", "--port=5555", "--basic_auth=${FLOWER_USER:?FLOWER_USER is required}:${FLOWER_PASSWORD:?FLOWER_PASSWORD is required}"]
     ports:
       - "127.0.0.1:5555:5555"
     environment:
-      - DB_HOST=kingbase
-      - DB_PORT=54321
-      - DB_USER=system
-      - DB_PASSWORD=${DB_PASSWORD:-12345678ab}
-      - DB_NAME=windpower
       - TZ=Asia/Shanghai
-      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     networks:
       - wind-power-network
     depends_on:
@@ -278,29 +209,6 @@ services:
       timeout: 5s
       retries: 3
 
-  minio:
-    image: minio/minio
-    container_name: wind-power-minio
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-      TZ: Asia/Shanghai # Set Timezone to Beijing Time
-    volumes:
-      - minio_data:/data  # 使用命名卷
-    ports:
-      - "9900:9000"
-      - "9901:9001"
-    restart: unless-stopped
-    networks:
-      - wind-power-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 20s
-      retries: 3
-      start_period: 10s
-
   pgadmin:
     image: dpage/pgadmin4
     container_name: wind-power-pgadmin
@@ -314,7 +222,7 @@ services:
       - pgadmin_data:/var/lib/pgadmin
     depends_on:
       kingbase:
-        condition: service_started  # 修改为service_started，不检查健康状态
+        condition: service_started  # 娣囶喗鏁兼稉绨奺rvice_started閿涘奔绗夊Λ鈧弻銉ヤ淮鎼撮濮搁幀?
     restart: unless-stopped
     networks:
       - wind-power-network
@@ -325,9 +233,8 @@ services:
       retries: 3
       start_period: 20s
 
-volumes:  # 声明命名卷
+volumes:  # 婢圭増妲戦崨钘夋倳閸?
   kingbase_data:
-  minio_data:
   pgadmin_data:
 
 networks:

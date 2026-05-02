@@ -1,7 +1,7 @@
 from scripts.predict import predict
 
 
-def run_predict(CSV_FILE_PATH, MODEL_PATH, SCALER_PATH, farm_code='DEFAULT_FARM'):
+def run_predict(CSV_FILE_PATH, MODEL_PATH, SCALER_PATH, farm_code=''):
     """
     运行预测（支持多场站）
 

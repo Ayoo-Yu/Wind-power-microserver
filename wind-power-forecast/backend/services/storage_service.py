@@ -1,5 +1,4 @@
 from datetime import datetime
-from config import MINIO_CONFIG
 
 def get_model_path(model_type, model_name):
     return f"{model_type}/models/{datetime.now().strftime('%Y%m%d')}/{model_name}.joblib"

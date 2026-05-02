@@ -1,10 +1,13 @@
-from sqlalchemy import Column, Integer, String, DateTime, Float
+from sqlalchemy import Column, Integer, String, DateTime, Float, UniqueConstraint
 from datetime import datetime
 from .base import Base
 
 class ActualPower(Base):
     """实际功率数据模型"""
     __tablename__ = "actual_power"
+    __table_args__ = (
+        UniqueConstraint('farm_code', 'timestamp', name='uq_actual_power_farm_ts'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(DateTime, nullable=False, index=True)
@@ -15,6 +18,9 @@ class ActualPower(Base):
 class SupershortlPower(Base):
     """超短期预测功率数据模型"""
     __tablename__ = "supershortl_power"
+    __table_args__ = (
+        UniqueConstraint('farm_code', 'timestamp', name='uq_supershortl_power_farm_ts'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(DateTime, nullable=False, index=True)
@@ -73,6 +79,9 @@ class SupershortlPower(Base):
 class ShortlPower(Base):
     """短期预测功率数据模型"""
     __tablename__ = "shortl_power"
+    __table_args__ = (
+        UniqueConstraint('farm_code', 'timestamp', 'pre_at', 'pre_num', name='uq_shortl_power_farm_ts_pre'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(DateTime, nullable=False, index=True)

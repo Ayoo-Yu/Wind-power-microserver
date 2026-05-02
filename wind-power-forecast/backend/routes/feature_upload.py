@@ -8,7 +8,7 @@ import logging # Import logging
 
 from sqlalchemy import text # Import text for raw SQL if needed (optional)
 from db_session import db_session
-from db_models import TrainPreMiddle, TrainPreShort # Import the new models
+from db_models import TrainPreMiddle, TrainPreShort, TrainPreSupershort # Import the new models
 from services.file_service import allowed_file # Reuse existing file validation if desired
 
 feature_upload_bp = Blueprint('feature_upload', __name__)
@@ -16,7 +16,8 @@ feature_upload_bp = Blueprint('feature_upload', __name__)
 # Map table names to model classes
 TABLE_MODEL_MAP = {
     'train_pre_middle': TrainPreMiddle,
-    'train_pre_short': TrainPreShort
+    'train_pre_short': TrainPreShort,
+    'train_pre_supershort': TrainPreSupershort
 }
 
 # Define a chunk size for processing large files
@@ -75,12 +76,15 @@ def upload_feature_csv():
     
     file = request.files['file']
     table_name = request.form.get('table_name')
+    farm_code = (request.form.get('farm_code') or '').strip()
 
     if file.filename == '':
         return jsonify({"error": "No selected file"}), 400
         
     if not table_name or table_name not in TABLE_MODEL_MAP:
         return jsonify({"error": f"Invalid or missing 'table_name'. Must be one of: {list(TABLE_MODEL_MAP.keys())}"}), 400
+    if not farm_code:
+        return jsonify({"error": "Missing required 'farm_code'."}), 400
 
     if not file.filename.lower().endswith('.csv'):
          return jsonify({"error": "Invalid file type. Only CSV allowed."}), 400
@@ -133,6 +137,7 @@ def upload_feature_csv():
                         # Filter to only valid model attributes before adding to lists
                         valid_model_keys = {k for k in model_data if hasattr(TargetModel, k)}
                         filtered_model_data = {k: model_data[k] for k in valid_model_keys}
+                        filtered_model_data['farm_code'] = farm_code
                         
                         # Store timestamp and data for DB check
                         chunk_timestamps_valid.append(target_timestamp)
@@ -150,8 +155,11 @@ def upload_feature_csv():
                 existing_records_dict = {}
                 if chunk_timestamps_valid: # Only query if there are valid timestamps
                      try:
-                         existing_records = session.query(TargetModel).filter(TargetModel.Timestamp.in_(chunk_timestamps_valid)).all()
-                         existing_records_dict = {record.Timestamp: record for record in existing_records}
+                         existing_records = session.query(TargetModel).filter(
+                             TargetModel.farm_code == farm_code,
+                             TargetModel.Timestamp.in_(chunk_timestamps_valid)
+                         ).all()
+                         existing_records_dict = {(record.farm_code, record.Timestamp): record for record in existing_records}
                          current_app.logger.info(f"Chunk {processed_chunks}: Found {len(existing_records_dict)} existing records for {len(chunk_timestamps_valid)} valid timestamps.")
                      except Exception as db_query_error:
                           current_app.logger.error(f"Chunk {processed_chunks}: Database query failed: {db_query_error}", exc_info=True)
@@ -162,7 +170,7 @@ def upload_feature_csv():
                 # --- 3. Prepare bulk insert list and update existing ORM objects ---
                 for timestamp, mapped_data in update_candidates.items():
                      # Find corresponding ORM object (if it exists and DB query succeeded)
-                     existing_record = existing_records_dict.get(timestamp)
+                     existing_record = existing_records_dict.get((farm_code, timestamp))
 
                      if existing_record:
                          # Update existing ORM object directly

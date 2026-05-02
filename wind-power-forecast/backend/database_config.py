@@ -1,148 +1,120 @@
-from sqlalchemy import create_engine
-from sqlalchemy.engine import URL
-from sqlalchemy.orm import sessionmaker
-from minio import Minio
-from config import KINGBASE_CONFIG, MINIO_CONFIG
-from base import Base
-import psycopg2
-from psycopg2 import sql
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
-from sqlalchemy.orm import Session
-from db_models import Base, Model
-from sqlalchemy import inspect, text
-import time
 import os
-import subprocess
-from sqlalchemy.pool import QueuePool  # 添加QueuePool导入
-from sqlalchemy import event
+import time
 
-# 导入自定义金仓方言
-import kingbase_dialect
+from sqlalchemy import create_engine, event, inspect, text
+from sqlalchemy.engine import URL
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import QueuePool
 
-# 使用 URL.create() 构建连接，密码不会出现在 URI 字面量中
-print("构建数据库连接URL...")
-print(f"DB_HOST: {KINGBASE_CONFIG['host']}, DB_PORT: {KINGBASE_CONFIG['port']}, DB_NAME: {KINGBASE_CONFIG['database']}")
+from config import KINGBASE_CONFIG
+from db_models import Base, Model
+
+# Register the custom KingBase dialect.
+import kingbase_dialect  # noqa: F401
+
+
+print("building database URL...")
+print(
+    f"DB_HOST: {KINGBASE_CONFIG['host']}, "
+    f"DB_PORT: {KINGBASE_CONFIG['port']}, "
+    f"DB_NAME: {KINGBASE_CONFIG['database']}"
+)
 
 DATABASE_URL = URL.create(
     "postgresql+kingbase",
-    username=KINGBASE_CONFIG['user'],
-    password=KINGBASE_CONFIG['password'],
-    host=KINGBASE_CONFIG['host'],
-    port=int(KINGBASE_CONFIG['port']),
-    database=KINGBASE_CONFIG['database'],
+    username=KINGBASE_CONFIG["user"],
+    password=KINGBASE_CONFIG["password"],
+    host=KINGBASE_CONFIG["host"],
+    port=int(KINGBASE_CONFIG["port"]),
+    database=KINGBASE_CONFIG["database"],
 )
 
-# 兼容旧变量名
 SQLALCHEMY_DATABASE_URI = DATABASE_URL
 SQLALCHEMY_DATABASE_URL = DATABASE_URL
 
-# 创建engine，添加重试机制
+
 def create_engine_with_retry():
     max_retries = 5
-    retry_delay = 5  # 秒
-    
-    print("DEBUG: 进入 create_engine_with_retry 函数...")
+    retry_delay = 5
+
     for attempt in range(max_retries):
         try:
-            print(f"DEBUG: 尝试第 {attempt+1} 次创建引擎")
-            
-            # 更新连接池设置
+            print(f"creating database engine, attempt {attempt + 1}/{max_retries}")
             engine = create_engine(
                 SQLALCHEMY_DATABASE_URI,
-                poolclass=QueuePool,      # 使用QueuePool
-                pool_size=10,             # 增加连接池大小
-                max_overflow=10,          # 增加额外连接数
-                pool_timeout=30,          # 等待连接的超时时间(秒)
-                pool_recycle=300,         # 连接回收时间(5分钟)
-                pool_pre_ping=True,       # 使用前检查连接是否有效
-                # 使用LIFO方式可以让最近使用过的连接被复用，增加缓存命中率
+                poolclass=QueuePool,
+                pool_size=10,
+                max_overflow=10,
+                pool_timeout=30,
+                pool_recycle=300,
+                pool_pre_ping=True,
                 pool_use_lifo=True,
-                echo_pool=True            # 输出连接池日志
+                echo_pool=True,
             )
-            
-            # 添加连接池监听器，处理连接检出和归还事件
+
             @event.listens_for(engine, "checkout")
             def ping_connection(dbapi_connection, connection_record, connection_proxy):
                 cursor = dbapi_connection.cursor()
                 try:
                     cursor.execute("SELECT 1")
-                except:
-                    # 如果连接失效，断开它，这样在下次使用时会创建新连接
+                except Exception:
                     connection_proxy._pool.dispose()
                     raise
-                cursor.close()
-            
-            # 定期清理空闲连接
-            @event.listens_for(engine, "checkin")
-            def checkout_connection(dbapi_connection, connection_record):
-                # 记录上次使用时间
-                connection_record.info['last_use_time'] = time.time()
-            
-            return engine
-            
-        except Exception as e:
-            print(f"创建数据库引擎失败 (尝试 {attempt+1}/{max_retries}): {e}")
-            if attempt < max_retries - 1:
-                print(f"等待 {retry_delay} 秒后重试...")
-                time.sleep(retry_delay)
-            else:
-                print("达到最大重试次数，无法创建数据库引擎")
-                raise
+                finally:
+                    cursor.close()
 
-# 使用重试机制创建engine
+            @event.listens_for(engine, "checkin")
+            def record_checkin_time(dbapi_connection, connection_record):
+                connection_record.info["last_use_time"] = time.time()
+
+            return engine
+        except Exception as exc:
+            print(
+                f"failed to create database engine "
+                f"({attempt + 1}/{max_retries}): {exc}"
+            )
+            if attempt >= max_retries - 1:
+                raise
+            time.sleep(retry_delay)
+
+
 try:
     engine = create_engine_with_retry()
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-except Exception as e:
-    print(f"警告: 数据库引擎创建失败: {e}")
-    print("应用将继续启动，但数据库功能可能不可用")
-    # 创建一个空的引擎和会话，以便应用能够启动
+except Exception as exc:
+    print(f"warning: database engine unavailable: {exc}")
     engine = None
     SessionLocal = None
 
-# 添加一个检查和清理空闲连接的函数
-def cleanup_idle_connections(engine, idle_timeout=120):
-    """清理空闲超过指定时间的连接"""
-    if not engine:
-        return
-        
-    try:
-        # 对于QueuePool，我们不应该直接迭代_pool
-        # 而是使用连接池的内置方法来进行清理
-        pool = engine.pool
-        
-        # 检查连接池是否有dispose方法，如果有就调用它来清理连接
-        if hasattr(pool, 'dispose'):
-            # 记录当前连接池状态
-            current_size = getattr(pool, 'size', lambda: 0)()
-            checked_in = getattr(pool, 'checkedin', lambda: 0)()
-            checked_out = getattr(pool, 'checkedout', lambda: 0)()
-            
-            print(f"连接池状态: 当前大小={current_size}, 已签入={checked_in}, 已签出={checked_out}")
-            
-            # 如果有太多空闲连接，进行部分清理
-            if checked_in > 5:  # 如果有超过5个空闲连接
-                print("检测到过多空闲连接，进行部分清理...")
-                # 重新创建连接池来清理空闲连接
-                pool.dispose()
-                print("[OK] 已清理空闲连接")
-        
-    except Exception as e:
-        print(f"清理空闲连接时发生错误: {e}")
-        # 记录更详细的错误信息，但不要让它影响应用运行
-        import traceback
-        print(f"错误详情: {traceback.format_exc()}")
 
-# 在engine创建之后检查迁移
-# 初始化MinIO客户端（使用config中的配置），添加重试机制
+def cleanup_idle_connections(db_engine, idle_timeout=120):
+    if not db_engine:
+        return
+
+    try:
+        pool = db_engine.pool
+        if not hasattr(pool, "dispose"):
+            return
+
+        checked_in = getattr(pool, "checkedin", lambda: 0)()
+        checked_out = getattr(pool, "checkedout", lambda: 0)()
+        print(f"connection pool status: checked_in={checked_in}, checked_out={checked_out}")
+
+        if checked_in > 5:
+            pool.dispose()
+            print("[OK] cleaned idle database connections")
+    except Exception as exc:
+        print(f"warning: cleanup idle connections failed: {exc}")
+
+
 LEGACY_POWER_TABLES = {
-    "actual_power": "ix_actual_power_farm_code",
-    "supershortl_power": "ix_supershortl_power_farm_code",
-    "shortl_power": "ix_shortl_power_farm_code",
-    "mid_power": "ix_mid_power_farm_code",
+    "actual_power": "ix_actual_power_farm_code_farm_part",
+    "supershortl_power": "ix_supershortl_power_farm_code_farm_part",
+    "shortl_power": "ix_shortl_power_farm_code_farm_part",
+    "mid_power": "ix_mid_power_farm_code_farm_part",
 }
 
-DEFAULT_FARM_CODE = os.environ.get("DEFAULT_FARM_CODE", "DEFAULT_FARM")
+DEFAULT_FARM_CODE = os.environ.get("DEFAULT_FARM_CODE", "")
 
 
 def upgrade_legacy_power_tables():
@@ -170,15 +142,15 @@ def upgrade_legacy_power_tables():
                 connection.execute(
                     text(
                         f'UPDATE "{table_name}" '
-                        'SET farm_code = :default_farm_code '
-                        'WHERE farm_code IS NULL'
+                        "SET farm_code = :default_farm_code "
+                        "WHERE farm_code IS NULL"
                     ),
                     {"default_farm_code": DEFAULT_FARM_CODE},
                 )
                 connection.execute(
                     text(
                         f'ALTER TABLE "{table_name}" '
-                        'ALTER COLUMN farm_code SET NOT NULL'
+                        "ALTER COLUMN farm_code SET NOT NULL"
                     )
                 )
                 print(f"[OK] upgraded {table_name}.farm_code to current schema")
@@ -186,7 +158,7 @@ def upgrade_legacy_power_tables():
             if index_name.lower() not in existing_indexes:
                 connection.execute(
                     text(
-                        f'CREATE INDEX "{index_name}" '
+                        f'CREATE INDEX IF NOT EXISTS "{index_name}" '
                         f'ON "{table_name}" (farm_code)'
                     )
                 )
@@ -202,142 +174,41 @@ def check_migrations():
         Base.metadata.create_all(engine)
         print("[OK] ensured missing database tables exist")
         upgrade_legacy_power_tables()
-    except Exception as e:
-        print(f"warning: migration check failed: {e}")
+    except Exception as exc:
+        print(f"warning: migration check failed: {exc}")
 
 
 try:
     check_migrations()
-except Exception as e:
-    print(f"warning: migration check failed: {e}")
+except Exception as exc:
+    print(f"warning: migration check failed: {exc}")
 
-def init_minio_client():
-    max_retries = int(str(os.environ.get('MINIO_CONNECT_RETRIES', '5')).strip() or '5')
-    retry_delay = int(str(os.environ.get('MINIO_CONNECT_RETRY_DELAY', '5')).strip() or '5')
-    
-    for attempt in range(max_retries):
-        try:
-            # 构建完整的endpoint字符串，包含端口
-            endpoint = f"{MINIO_CONFIG['endpoint']}:{MINIO_CONFIG['port']}"
-            
-            client = Minio(
-                endpoint,
-                access_key=MINIO_CONFIG["access_key"],
-                secret_key=MINIO_CONFIG["secret_key"],
-                secure=MINIO_CONFIG["secure"]
-            )
-            
-            # 测试连接
-            client.list_buckets()
-            return client
-            
-        except Exception as e:
-            print(f"MinIO连接失败 (尝试 {attempt+1}/{max_retries}): {e}")
-            if attempt < max_retries - 1:
-                print(f"等待 {retry_delay} 秒后重试...")
-                time.sleep(retry_delay)
-            else:
-                print("达到最大重试次数，无法连接到MinIO")
-                raise
-
-try:
-    minio_client = init_minio_client()
-    
-    # 修改后的初始化部分
-    required_buckets = list(MINIO_CONFIG["buckets"].values())
-    existing_buckets = [b.name for b in minio_client.list_buckets()]
-
-    for bucket in required_buckets:
-        if bucket not in existing_buckets:
-            minio_client.make_bucket(bucket)
-            print(f"[OK] 成功创建存储桶: {bucket}")
-        else:
-            print(f"[OK] 存储桶已存在: {bucket}")
-            
-    # 导入策略设置函数
-    from config import set_bucket_policy
-    
-    # 设置存储桶策略
-    for bucket_name, policy in MINIO_CONFIG["policies"].items():
-        bucket_value = MINIO_CONFIG["buckets"].get(bucket_name.replace("wind-", ""))
-        if bucket_value:
-            try:
-                set_bucket_policy(minio_client, bucket_value, policy)
-                print(f"[OK] 成功设置存储桶策略: {bucket_value} -> {policy}")
-            except Exception as e:
-                print(f"警告: 设置存储桶策略失败 ({bucket_value}): {e}")
-                
-except Exception as e:
-    print(f"警告: MinIO初始化失败: {e}")
-    print("应用将继续启动，但MinIO功能可能不可用")
-    minio_client = None
 
 def get_db():
-    """获取数据库会话，并确保在使用后正确关闭"""
     if SessionLocal is None:
-        raise Exception("数据库连接不可用")
+        raise RuntimeError("database connection unavailable")
 
-    # 清理空闲连接
-    if engine:
-        cleanup_idle_connections(engine)
-
+    cleanup_idle_connections(engine)
     db = SessionLocal()
     try:
         yield db
     finally:
-        if db:
-            db.close()
+        db.close()
+
 
 def cleanup_old_models(db: Session, keep_last=5):
-    """保留最近5个模型版本"""
-    if minio_client is None:
-        print("警告: MinIO客户端不可用，跳过清理旧模型")
-        return
-        
+    """Keep the latest model records and remove older database rows."""
     try:
-        # 获取所有模型按时间倒序
         models = db.query(Model).order_by(Model.train_time.desc()).all()
-        
-        # 删除旧版本
-        if len(models) > keep_last:
-            for model in models[keep_last:]:
-                print(f"准备删除旧模型: {model.model_name}")
-                
-                # 删除S3上的模型文件
-                if model.model_path:
-                    try:
-                        bucket_name = MINIO_CONFIG["buckets"]["models"]
-                        object_name = model.model_path.split("/")[-1]
-                        minio_client.remove_object(bucket_name, object_name)
-                        print(f"[OK] 已从S3删除模型文件: {object_name}")
-                    except Exception as e:
-                        print(f"警告: 从S3删除模型文件失败: {e}")
-                
-                # 删除关联的缩放器
-                if model.scaler_path:
-                    try:
-                        bucket_name = MINIO_CONFIG["buckets"]["scalers"]
-                        object_name = model.scaler_path.split("/")[-1]
-                        minio_client.remove_object(bucket_name, object_name)
-                        print(f"[OK] 已从S3删除缩放器文件: {object_name}")
-                    except Exception as e:
-                        print(f"警告: 从S3删除缩放器文件失败: {e}")
-                
-                # 删除关联的指标
-                if model.metrics_path:
-                    try:
-                        bucket_name = MINIO_CONFIG["buckets"]["metrics"]
-                        object_name = model.metrics_path.split("/")[-1]
-                        minio_client.remove_object(bucket_name, object_name)
-                        print(f"[OK] 已从S3删除指标文件: {object_name}")
-                    except Exception as e:
-                        print(f"警告: 从S3删除指标文件失败: {e}")
-                
-                # 删除数据库中的记录
-                db.delete(model)
-            
-            db.commit()
-            print(f"[OK] 成功清理旧模型，保留最新的{keep_last}个")
-    except Exception as e:
-        print(f"警告: 清理旧模型失败: {e}")
+        if len(models) <= keep_last:
+            return
+
+        for model in models[keep_last:]:
+            print(f"deleting old model record: {model.model_name}")
+            db.delete(model)
+
+        db.commit()
+        print(f"[OK] cleaned old model records, kept latest {keep_last}")
+    except Exception as exc:
+        print(f"warning: cleanup old models failed: {exc}")
         db.rollback()

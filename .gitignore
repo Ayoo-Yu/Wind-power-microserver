@@ -122,8 +122,31 @@ logs/
 
 # 10. 工具和构建产物
 # =================================================
+node_modules/
 .playwright-mcp/
 .superpowers/
-dashboard-fix-verification.png
 wind-power-forecast/frontend/dist/
+wind-power-forecast/backend/results/
+
+# 11. 备份和重复文件
+# =================================================
+*.backup
+*.bak
+*.old
+*.orig
+*copy*.py
+*copy*.ini
+
+# 12. 研究数据和大型媒体
+# =================================================
+云南风机数据整理/
+bg.mp4
+*.mp4
+login-page-check.png
+dashboard-fix-verification.png
+
+# 13. 根目录临时/测试产物
+# =================================================
+*_test.log
+template_predict_input.csv
 

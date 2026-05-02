@@ -14,7 +14,7 @@ class WeatherDataService:
 
     def __init__(self):
         self.supported_formats = ['.csv', '.txt', '.data']
-        self.default_farm_code = 'DEFAULT_FARM'
+        self.default_farm_code = ''
         
     def process_weather_file_local(self, file_path: str, 
                                  processing_options: Dict[str, Any] = None) -> Dict[str, Any]:

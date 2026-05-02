@@ -1,6 +1,5 @@
-﻿// frontend/vue.config.js
-const MAIN_BACKEND_PORT = process.env.MAIN_BACKEND_PORT || process.env.VUE_APP_MAIN_BACKEND_PORT || '5000'
-const AUTO_BACKEND_PORT = process.env.AUTO_BACKEND_PORT || process.env.VUE_APP_AUTO_BACKEND_PORT || '5001'
+// frontend/vue.config.js
+const BACKEND_PORT = process.env.MAIN_BACKEND_PORT || process.env.VUE_APP_MAIN_BACKEND_PORT || '5000'
 
 function attachJsonBodyForward(proxy) {
   proxy.on('proxyReq', (proxyReq, req, res) => {
@@ -13,6 +12,19 @@ function attachJsonBodyForward(proxy) {
   })
 }
 
+const proxyTarget = {
+  target: `http://127.0.0.1:${BACKEND_PORT}`,
+  ws: false,
+  changeOrigin: true,
+  secure: false,
+  configure: (proxy) => attachJsonBodyForward(proxy)
+}
+
+const proxyTargetWs = {
+  ...proxyTarget,
+  ws: true
+}
+
 module.exports = {
   css: {
     loaderOptions: {
@@ -23,45 +35,13 @@ module.exports = {
   },
   devServer: {
     proxy: {
-      '/api/v1/autopredict': {
-        target: `http://127.0.0.1:${AUTO_BACKEND_PORT}`,
-        ws: false,
-        changeOrigin: true,
-        secure: false,
-        configure: (proxy) => attachJsonBodyForward(proxy)
-      },
-
-      '/api/v1': {
-        target: `http://127.0.0.1:${MAIN_BACKEND_PORT}`,
-        ws: false,
-        changeOrigin: true,
-        secure: false,
-        configure: (proxy) => attachJsonBodyForward(proxy)
-      },
-
-      '/api/(start|start_ultra|stop|status|tasks|logs|save|resurrect|clearsave|delete|schedule|script_info|task_status)': {
-        target: `http://127.0.0.1:${AUTO_BACKEND_PORT}`,
-        ws: false,
-        changeOrigin: true,
-        secure: false,
-        configure: (proxy) => attachJsonBodyForward(proxy)
-      },
-
-      '/get-daily-metrics': {
-        target: `http://127.0.0.1:${AUTO_BACKEND_PORT}`,
-        ws: false,
-        changeOrigin: true,
-        secure: false,
-        configure: (proxy) => attachJsonBodyForward(proxy)
-      },
-
-      '/api': {
-        target: `http://127.0.0.1:${MAIN_BACKEND_PORT}`,
-        ws: true,
-        secure: false,
-        changeOrigin: true,
-        configure: (proxy) => attachJsonBodyForward(proxy)
-      }
+      '/api/v1/autopredict': proxyTarget,
+      '/api/v1': proxyTarget,
+      '/api/(start|start_ultra|stop|status|tasks|logs|save|resurrect|clearsave|delete|schedule|script_info|task_status)': proxyTarget,
+      '/get-daily-metrics': proxyTarget,
+      '/api': proxyTargetWs,
+      '/scada/': proxyTarget,
+      '/operational': proxyTarget
     }
   }
 }

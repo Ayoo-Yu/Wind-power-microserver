@@ -25,20 +25,27 @@ function render() {
   const sortedRows = [...props.rows].sort((a, b) => b.value - a.value)
   const names = sortedRows.map(item => item.name)
   const values = sortedRows.map(item => item.value)
-  const barHeight = 22
-  const barGap = 10
-  const chartHeight = Math.min(Math.max(200, names.length * (barHeight + barGap) + 40), 360)
+  const barHeight = 20
+  const barGap = 8
+  const chartHeight = Math.min(Math.max(160, names.length * (barHeight + barGap) + 30), 360)
   chartRef.value.style.height = `${chartHeight}px`
   chart.resize()
 
   chart.setOption(
     {
-      grid: { top: 20, right: 40, bottom: 18, left: 112 },
-      tooltip: { trigger: 'axis' },
+      grid: { top: 16, right: 36, bottom: 14, left: 100 },
+      tooltip: {
+        trigger: 'axis',
+        formatter: (params) => {
+          if (!params?.length) return ''
+          const p = params[0]
+          return `${p.marker} ${p.name}<br/><span style="font-weight:600">${Number(p.value).toFixed(1)} MW</span>`
+        }
+      },
       xAxis: {
         type: 'value',
-        splitLine: { lineStyle: { color: 'rgba(159,182,204,.2)', type: 'dashed' } },
-        axisLabel: { color: '#9fb6cc' }
+        splitLine: { lineStyle: { color: 'rgba(159,182,204,.12)', type: 'dashed' } },
+        axisLabel: { color: '#8ba4b8', fontSize: 11 }
       },
       yAxis: {
         type: 'category',
@@ -46,17 +53,17 @@ function render() {
         axisLabel: {
           color: '#d6ebff',
           formatter: (value, index) => {
-            if (index === 0) return `{top|第一}  ${value}`
+            if (index === 0) return `{top|TOP} ${value}`
             return value
           },
           rich: {
             top: {
               color: '#f7c850',
               fontWeight: 700,
-              fontSize: 11,
-              padding: [1, 6, 1, 6],
-              borderRadius: 10,
-              backgroundColor: 'rgba(247, 200, 80, 0.14)'
+              fontSize: 9,
+              padding: [0, 3, 0, 3],
+              borderRadius: 3,
+              backgroundColor: 'rgba(247, 200, 80, 0.12)'
             }
           }
         }
@@ -75,15 +82,10 @@ function render() {
           itemStyle: {
             borderRadius: [0, 6, 6, 0],
             color: (p) => {
-              if (p.dataIndex === 0) {
-                return new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                  { offset: 0, color: '#f7c850' },
-                  { offset: 1, color: '#ff9f43' }
-                ])
-              }
+              const ratio = names.length > 1 ? p.dataIndex / (names.length - 1) : 0
               return new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0, color: '#1bb1ff' },
-                { offset: 1, color: '#2dd36f' }
+                { offset: 0, color: '#0ea5e9' },
+                { offset: 1, color: `rgba(14, 165, 233, ${0.55 + ratio * 0.45})` }
               ])
             }
           }
@@ -115,8 +117,8 @@ onBeforeUnmount(() => {
 <style scoped>
 .chart-host {
   width: 100%;
-  min-height: 200px;
+  flex: 1;
+  min-height: 160px;
   max-height: 360px;
-  overflow-y: auto;
 }
 </style>

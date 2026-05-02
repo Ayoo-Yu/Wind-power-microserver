@@ -20,7 +20,9 @@ def create_actual_power():
         return jsonify({"error": "缺少必要参数: Timestamp"}), 400
 
     wp_true_input = data.get('wp_true') # 使用 .get() 获取，如果键不存在则为 None
-    farm_code = str(data.get('farm_code', '') or '').strip() or 'DEFAULT_FARM'
+    farm_code = str(data.get('farm_code', '') or '').strip()
+    if not farm_code:
+        return jsonify({"error": "缺少必要参数: farm_code"}), 400
 
     processed_wp_true = None # 默认值，如果 wp_true_input 是 None 或无效，则存为 NULL
 
@@ -131,7 +133,7 @@ def batch_create_actual_power():
     if not file.filename.endswith('.csv'):
         return jsonify({"error": "仅支持CSV文件"}), 400
 
-    batch_farm_code = str(request.form.get('farm_code', '') or '').strip() or 'DEFAULT_FARM'
+    batch_farm_code = str(request.form.get('farm_code', '') or '').strip()
 
     total_inserted_count = 0
     total_updated_count = 0
@@ -190,9 +192,16 @@ def batch_create_actual_power():
                             continue
                         
                         row_farm_code = str(row.get('farm_code', '') or '').strip() if 'farm_code' in chunk_df.columns else ''
+                        resolved_farm_code = row_farm_code or batch_farm_code
+                        if not resolved_farm_code:
+                            chunk_errors += 1
+                            error_msg = f"行 {global_row_index}: 缺少必要参数 farm_code"
+                            all_errors.append(error_msg)
+                            current_app.logger.error(error_msg)
+                            continue
                         chunk_records.append({
                             "timestamp": timestamp,
-                            "farm_code": row_farm_code or batch_farm_code,
+                            "farm_code": resolved_farm_code,
                             "wp_true": processed_wp_true
                         })
                         

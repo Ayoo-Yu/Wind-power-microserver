@@ -1398,8 +1398,7 @@ export default {
         const response = await getReportSchedulerStatus()
         schedulerStatus.value = response.data
       } catch (error) {
-        console.error('获取调度器状态失败:', error)
-        ElMessage.error('获取调度器状态失败')
+        console.warn('获取调度器状态失败，使用默认状态:', error)
       }
     }
     

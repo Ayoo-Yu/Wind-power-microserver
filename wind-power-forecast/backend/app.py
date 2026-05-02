@@ -6,9 +6,8 @@ from flask import Flask, request, jsonify, current_app
 from flask_cors import CORS
 from flask_socketio import SocketIO
 from dotenv import load_dotenv
-from database_config import Base, engine, minio_client
-from config import Config, MINIO_CONFIG
-from s3_error import S3Error
+from database_config import Base, engine
+from config import Config
 from db_models import Dataset
 from datetime import datetime,timedelta
 from services.file_service import allowed_file, save_uploaded_file
@@ -39,10 +38,6 @@ if not is_running_in_docker():
         raise RuntimeError('DB_PASSWORD not set. Create a .env file or set the environment variable.')
     if not os.environ.get('DB_NAME'):
         os.environ['DB_NAME'] = 'windpower'
-    if not os.environ.get('MINIO_ENDPOINT'):
-        os.environ['MINIO_ENDPOINT'] = 'localhost'
-    if not os.environ.get('MINIO_PORT'):
-        os.environ['MINIO_PORT'] = '9900'
 
 from logging_config import configure_logging
 from db_session import get_db, db_session
@@ -104,6 +99,10 @@ from routes.operational_data_upload import operational_data_upload_bp
 from routes.farm_management import farm_management_bp
 from routes.v1_compat import v1_compat_bp
 from routes.ecmwf_data_router import ecmwf_data_bp
+from routes.ecmwf_grid_router import ecmwf_grid_bp
+from routes.autopredict import autopredict_bp
+from routes.extreme_weather_router import extreme_weather_bp
+from routes.scada_connection import scada_connection_bp
 
 # app.register_blueprint(upload_bp, url_prefix='/')
 app.register_blueprint(download_bp, url_prefix='/')
@@ -131,6 +130,10 @@ app.register_blueprint(operational_data_upload_bp, url_prefix='/operational')
 app.register_blueprint(farm_management_bp, url_prefix='/api')
 app.register_blueprint(v1_compat_bp)  # compat bridge
 app.register_blueprint(ecmwf_data_bp)  # ECMWF气象数据API
+app.register_blueprint(ecmwf_grid_bp)  # ECMWF格点数据API
+app.register_blueprint(autopredict_bp, url_prefix='/api')  # 自动预测调度API
+app.register_blueprint(extreme_weather_bp)  # 极端天气检测API
+app.register_blueprint(scada_connection_bp)  # SCADA connection management API
 
 try:
     from services.scheduler_service import init_scheduler
@@ -163,26 +166,16 @@ def missing_token_callback(error):
 def _build_health_status():
     health_status = {
         "status": "ok",
-        "database": "unknown",
-        "minio": "unknown"
+        "database": "unknown"
     }
-    
+
     try:
         with db_session() as db:
             db.execute(text("SELECT 1"))
             health_status["database"] = "ok"
     except Exception as e:
         health_status["database"] = f"error: {str(e)}"
-    
-    try:
-        if minio_client is not None:
-            minio_client.list_buckets()
-            health_status["minio"] = "ok"
-        else:
-            health_status["minio"] = "unavailable"
-    except Exception as e:
-        health_status["minio"] = f"error: {str(e)}"
-    
+
     return health_status
 
 
@@ -190,8 +183,7 @@ def _build_health_status():
 def health_check():
     health_status = _build_health_status()
 
-    if "error" in health_status["database"] or "error" in health_status["minio"] or \
-       health_status["database"] == "unavailable" or health_status["minio"] == "unavailable":
+    if "error" in health_status["database"] or health_status["database"] == "unavailable":
         return jsonify(health_status), 503
     
     return jsonify(health_status)
@@ -202,9 +194,7 @@ def health_check_v1():
     health_status = _build_health_status()
     is_healthy = not (
         "error" in health_status["database"]
-        or "error" in health_status["minio"]
         or health_status["database"] == "unavailable"
-        or health_status["minio"] == "unavailable"
     )
     status_code = 200 if is_healthy else 503
     payload = success(data=health_status, message="ok" if is_healthy else "degraded")
@@ -225,7 +215,7 @@ def public_overview():
             latest_power = 0.0
             try:
                 result = db.execute(text(
-                    "SELECT COALESCE(SUM(wp_actual), 0) FROM actual_power "
+                    "SELECT COALESCE(SUM(wp_true), 0) FROM actual_power "
                     "WHERE timestamp = (SELECT MAX(timestamp) FROM actual_power)"
                 ))
                 row = result.fetchone()
@@ -238,11 +228,14 @@ def public_overview():
             try:
                 result = db.execute(text("""
                     SELECT 1 - (
-                        AVG(ABS(wp_pred - wp_actual)::float) / NULLIF(AVG(ABS(wp_actual)::float), 0)
+                        AVG(ABS(s.wp_pred - a.wp_true)::float) / NULLIF(AVG(ABS(a.wp_true)::float), 0)
                     ) as accuracy
-                    FROM shortl_power
-                    WHERE timestamp >= CURRENT_DATE
-                      AND wp_pred IS NOT NULL AND wp_actual IS NOT NULL
+                    FROM shortl_power s
+                    JOIN actual_power a
+                      ON a.farm_code = s.farm_code
+                     AND a.timestamp = s.timestamp
+                    WHERE s.timestamp >= CURRENT_DATE
+                      AND s.wp_pred IS NOT NULL AND a.wp_true IS NOT NULL
                 """))
                 row = result.fetchone()
                 if row and row[0] is not None:
@@ -323,23 +316,17 @@ def initialize():
         else:
             print("数据库引擎不可用，跳过数据库初始化")
 
-        if minio_client is not None:
-            try:
-                required_buckets = list(MINIO_CONFIG["buckets"].values())
-                existing_buckets = [b.name for b in minio_client.list_buckets()]
-
-                for bucket in required_buckets:
-                    if bucket not in existing_buckets:
-                        minio_client.make_bucket(bucket)
-                        print(f"已创建存储桶: {bucket}")
-                    else:
-                        print(f"存储桶已存在: {bucket}")
-            except Exception as e:
-                print(f"MinIO 初始化失败: {e}")
-        else:
-            print("MinIO 客户端不可用，跳过存储桶初始化")
-
 initialize()
+
+# SCADA连接自动恢复：后端启动时重新启动之前运行中的Worker
+try:
+    from services.scada_manager import get_scada_manager
+    _scada_mgr = get_scada_manager()
+    _recovered = _scada_mgr.recover_on_startup()
+    if _recovered:
+        print(f"SCADA自动恢复: 重新启动 {_recovered} 个连接")
+except Exception as e:
+    print(f"SCADA自动恢复失败: {e}")
 
 @app.route('/upload_train_csv', methods=['POST'])
 def upload_train_csv():
@@ -357,31 +344,16 @@ def upload_train_csv():
     
     try:
         save_uploaded_file(file, file_id, current_app.config['UPLOAD_FOLDER'])
-        file.stream.seek(0)
 
         data_type = request.form.get('data_type', 'traincsv')
-        file_path = f"datasets/{data_type}/{datetime.now().strftime('%Y%m%d')}/{file.filename}"
-        
-        minio_client.put_object(
-            MINIO_CONFIG["buckets"]["datasets"],
-            file_path,
-            file.stream,
-            length=-1,
-            part_size=10*1024*1024
+        ext = os.path.splitext(file.filename)[1]
+        local_path = os.path.join(
+            current_app.config['UPLOAD_FOLDER'],
+            f"{file_id}{ext}"
         )
-
-        obj_info = minio_client.stat_object(
-            MINIO_CONFIG["buckets"]["datasets"],
-            file_path
-        )
-        print("文件已上传至 MinIO")
+        file_path = local_path
 
         with db_session() as db:
-            ext = os.path.splitext(file.filename)[1]
-            local_path = os.path.join(
-                current_app.config['UPLOAD_FOLDER'], 
-                f"{file_id}{ext}"
-            )
 
             db_dataset = Dataset(
                 file_id=file_id,
@@ -424,31 +396,16 @@ def upload_predict_csv():
     
     try:
         save_uploaded_file(file, file_id, current_app.config['UPLOAD_FOLDER'])
-        file.stream.seek(0)
 
         data_type = request.form.get('data_type', 'predictcsv')
-        file_path = f"datasets/{data_type}/{datetime.now().strftime('%Y%m%d')}/{file.filename}"
-        
-        minio_client.put_object(
-            MINIO_CONFIG["buckets"]["datasets"],
-            file_path,
-            file.stream,
-            length=-1,
-            part_size=10*1024*1024
+        ext = os.path.splitext(file.filename)[1]
+        local_path = os.path.join(
+            current_app.config['UPLOAD_FOLDER'],
+            f"{file_id}{ext}"
         )
-
-        obj_info = minio_client.stat_object(
-            MINIO_CONFIG["buckets"]["datasets"],
-            file_path
-        )
-        print("文件已上传至 MinIO")
+        file_path = local_path
 
         with db_session() as db:
-            ext = os.path.splitext(file.filename)[1]
-            local_path = os.path.join(
-                current_app.config['UPLOAD_FOLDER'], 
-                f"{file_id}{ext}"
-            )
 
             db_dataset = Dataset(
                 file_id=file_id,
@@ -491,31 +448,16 @@ def upload_model():
     
     try:
         save_uploaded_file(file, file_id, current_app.config['UPLOAD_FOLDER'])
-        file.stream.seek(0)
 
         data_type = request.form.get('data_type', 'model')
-        file_path = f"datasets/{data_type}/{datetime.now().strftime('%Y%m%d')}/{file.filename}"
-        
-        minio_client.put_object(
-            MINIO_CONFIG["buckets"]["datasets"],
-            file_path,
-            file.stream,
-            length=-1,
-            part_size=10*1024*1024
+        ext = os.path.splitext(file.filename)[1]
+        local_path = os.path.join(
+            current_app.config['UPLOAD_FOLDER'],
+            f"{file_id}{ext}"
         )
-
-        obj_info = minio_client.stat_object(
-            MINIO_CONFIG["buckets"]["datasets"],
-            file_path
-        )
-        print("文件已上传至 MinIO")
+        file_path = local_path
 
         with db_session() as db:
-            ext = os.path.splitext(file.filename)[1]
-            local_path = os.path.join(
-                current_app.config['UPLOAD_FOLDER'], 
-                f"{file_id}{ext}"
-            )
 
             db_dataset = Dataset(
                 file_id=file_id,
@@ -558,31 +500,16 @@ def upload_scaler():
     
     try:
         save_uploaded_file(file, file_id, current_app.config['UPLOAD_FOLDER'])
-        file.stream.seek(0)
 
         data_type = request.form.get('data_type', 'scaler')
-        file_path = f"datasets/{data_type}/{datetime.now().strftime('%Y%m%d')}/{file.filename}"
-        
-        minio_client.put_object(
-            MINIO_CONFIG["buckets"]["datasets"],
-            file_path,
-            file.stream,
-            length=-1,
-            part_size=10*1024*1024
+        ext = os.path.splitext(file.filename)[1]
+        local_path = os.path.join(
+            current_app.config['UPLOAD_FOLDER'],
+            f"{file_id}{ext}"
         )
-
-        obj_info = minio_client.stat_object(
-            MINIO_CONFIG["buckets"]["datasets"],
-            file_path
-        )
-        print("文件已上传至 MinIO")
+        file_path = local_path
 
         with db_session() as db:
-            ext = os.path.splitext(file.filename)[1]
-            local_path = os.path.join(
-                current_app.config['UPLOAD_FOLDER'], 
-                f"{file_id}{ext}"
-            )
 
             db_dataset = Dataset(
                 file_id=file_id,

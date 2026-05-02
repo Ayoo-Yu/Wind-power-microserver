@@ -1,11 +1,10 @@
-@echo off
+﻿@echo off
 chcp 65001 > nul
 setlocal
 
 set "SCRIPT_DIR=%~dp0"
 set "PROJECT_DIR=%SCRIPT_DIR:~0,-1%"
 set "BACKEND_DIR=%PROJECT_DIR%\backend"
-set "AUTO_BACKEND_DIR=%PROJECT_DIR%\backend-autopredict"
 set "FRONTEND_DIR=%PROJECT_DIR%\frontend"
 
 REM Local infrastructure
@@ -14,30 +13,27 @@ set "DB_PORT=15432"
 set "DB_USER=system"
 set "DB_PASSWORD=12345678ab"
 set "DB_NAME=windpower"
-set "MINIO_ENDPOINT=localhost"
-set "MINIO_PORT=9900"
-set "MINIO_ENABLED=false"
-set "MINIO_REQUIRED=false"
-set "MINIO_CONNECT_RETRIES=1"
-set "MINIO_CONNECT_RETRY_DELAY=1"
 set "METRICS_ENABLED=false"
 set "SECRET_KEY=local-dev-secret-key-do-not-use-in-prod"
 
-REM Local service ports (avoid restricted 500x ports on some Windows setups)
+REM Redis and Celery
+set "REDIS_HOST=localhost"
+set "REDIS_PORT=6379"
+set "CELERY_BROKER_URL=redis://%REDIS_HOST%:%REDIS_PORT%/0"
+set "CELERY_RESULT_BACKEND=redis://%REDIS_HOST%:%REDIS_PORT%/0"
+set "CELERY_BEAT_RELOAD_INTERVAL_SEC=30"
+
+REM Local service ports
 set "MAIN_APP_HOST=127.0.0.1"
 set "MAIN_APP_PORT=18080"
-set "AUTO_APP_HOST=127.0.0.1"
-set "AUTO_APP_PORT=18081"
 set "APP_DEBUG=false"
 
-REM Frontend dev proxy target ports
+REM Frontend dev proxy target ports. Keep AUTO_BACKEND_PORT for vue.config.js compatibility.
 set "MAIN_BACKEND_PORT=%MAIN_APP_PORT%"
-set "AUTO_BACKEND_PORT=%AUTO_APP_PORT%"
+set "AUTO_BACKEND_PORT=%MAIN_APP_PORT%"
+set "BACKEND_ENV_CMD=set DB_HOST=%DB_HOST% && set DB_PORT=%DB_PORT% && set DB_USER=%DB_USER% && set DB_PASSWORD=%DB_PASSWORD% && set DB_NAME=%DB_NAME% && set METRICS_ENABLED=%METRICS_ENABLED% && set SECRET_KEY=%SECRET_KEY% && set REDIS_HOST=%REDIS_HOST% && set REDIS_PORT=%REDIS_PORT% && set CELERY_BROKER_URL=%CELERY_BROKER_URL% && set CELERY_RESULT_BACKEND=%CELERY_RESULT_BACKEND% && set CELERY_BEAT_RELOAD_INTERVAL_SEC=%CELERY_BEAT_RELOAD_INTERVAL_SEC% && set API_BASE_URL=http://%MAIN_APP_HOST%:%MAIN_APP_PORT% && set APP_HOST=%MAIN_APP_HOST% && set APP_PORT=%MAIN_APP_PORT% && set APP_DEBUG=%APP_DEBUG% && set PYTHONIOENCODING=utf-8"
 
-call :resolve_python MAIN_PY "%BACKEND_DIR%\wind-power-env\python.exe" "D:\my-vue-project\wind-power-forecast\backend\wind-power-env\python.exe"
-if errorlevel 1 exit /b 1
-
-call :resolve_python AUTO_PY "%AUTO_BACKEND_DIR%\wind-power-env\python.exe" "D:\my-vue-project\wind-power-forecast\backend-autopredict\wind-power-env\python.exe"
+call :resolve_python MAIN_PY "%BACKEND_DIR%\wind-power-env\python.exe"
 if errorlevel 1 exit /b 1
 
 set "FRONTEND_CMD="
@@ -53,8 +49,8 @@ if not exist "%BACKEND_DIR%\app.py" (
   exit /b 1
 )
 
-if not exist "%AUTO_BACKEND_DIR%\app.py" (
-  echo [ERROR] Auto backend entry not found: "%AUTO_BACKEND_DIR%\app.py"
+if not exist "%BACKEND_DIR%\celery_app\__init__.py" (
+  echo [ERROR] Celery app not found: "%BACKEND_DIR%\celery_app"
   pause
   exit /b 1
 )
@@ -65,12 +61,19 @@ if not exist "%FRONTEND_DIR%\vue.config.js" (
   exit /b 1
 )
 
-REM Release local backend ports if occupied by stale processes
+REM Release stale local app ports.
 CALL :free_port %MAIN_APP_PORT% MainBackend
-CALL :free_port %AUTO_APP_PORT% AutoPredictBackend
 CALL :free_port 8080 Frontend
 
-REM Wait for infra dependencies to be ready before starting backends
+REM Start Redis locally if port 6379 is not available.
+CALL :ensure_redis
+IF ERRORLEVEL 1 (
+  echo [ERROR] Redis is not ready. Abort startup.
+  pause
+  exit /b 1
+)
+
+REM Wait for database before starting backend and Celery.
 CALL :wait_tcp %DB_HOST% %DB_PORT% Kingbase
 IF ERRORLEVEL 1 (
   echo [ERROR] Kingbase is not ready. Abort startup.
@@ -78,33 +81,34 @@ IF ERRORLEVEL 1 (
   exit /b 1
 )
 
-REM Seed farms and historical data
+REM Seed farms and historical data.
 echo [INFO] Running seed script...
 cd /D "%BACKEND_DIR%" && set DB_HOST=%DB_HOST% && set DB_PORT=%DB_PORT% && set DB_USER=%DB_USER% && set DB_PASSWORD=%DB_PASSWORD% && set DB_NAME=%DB_NAME% && ""%MAIN_PY%"" seed_farms.py
+IF ERRORLEVEL 1 (
+  echo [ERROR] Seed script failed.
+  pause
+  exit /b 1
+)
 echo [OK] Seed data initialized.
 
-REM Start main backend
-start "Main Backend" /D "%BACKEND_DIR%" cmd /k "chcp 65001 > nul && set DB_HOST=%DB_HOST% && set DB_PORT=%DB_PORT% && set DB_USER=%DB_USER% && set DB_PASSWORD=%DB_PASSWORD% && set DB_NAME=%DB_NAME% && set MINIO_ENDPOINT=%MINIO_ENDPOINT% && set MINIO_PORT=%MINIO_PORT% && set MINIO_ENABLED=%MINIO_ENABLED% && set MINIO_REQUIRED=%MINIO_REQUIRED% && set MINIO_CONNECT_RETRIES=%MINIO_CONNECT_RETRIES% && set MINIO_CONNECT_RETRY_DELAY=%MINIO_CONNECT_RETRY_DELAY% && set METRICS_ENABLED=%METRICS_ENABLED% && set SECRET_KEY=%SECRET_KEY% && set APP_HOST=%MAIN_APP_HOST% && set APP_PORT=%MAIN_APP_PORT% && set APP_DEBUG=%APP_DEBUG% && set PYTHONIOENCODING=utf-8 && ""%MAIN_PY%"" app.py"
+REM Start merged backend.
+start "Backend" /D "%BACKEND_DIR%" cmd /k "chcp 65001 > nul && %BACKEND_ENV_CMD% && ""%MAIN_PY%"" app.py"
 
-REM Start autopredict backend
-start "AutoPredict Backend" /D "%AUTO_BACKEND_DIR%" cmd /k "chcp 65001 > nul && set DB_HOST=%DB_HOST% && set DB_PORT=%DB_PORT% && set DB_USER=%DB_USER% && set DB_PASSWORD=%DB_PASSWORD% && set DB_NAME=%DB_NAME% && set MINIO_ENDPOINT=%MINIO_ENDPOINT% && set MINIO_PORT=%MINIO_PORT% && set MINIO_ENABLED=%MINIO_ENABLED% && set MINIO_REQUIRED=%MINIO_REQUIRED% && set MINIO_CONNECT_RETRIES=%MINIO_CONNECT_RETRIES% && set MINIO_CONNECT_RETRY_DELAY=%MINIO_CONNECT_RETRY_DELAY% && set METRICS_ENABLED=%METRICS_ENABLED% && set SECRET_KEY=%SECRET_KEY% && set APP_HOST=%AUTO_APP_HOST% && set APP_PORT=%AUTO_APP_PORT% && set APP_DEBUG=%APP_DEBUG% && set PYTHONIOENCODING=utf-8 && ""%AUTO_PY%"" app.py"
+REM Start Celery worker. Use solo pool for Windows local development.
+start "Celery Worker" /D "%BACKEND_DIR%" cmd /k "chcp 65001 > nul && %BACKEND_ENV_CMD% && ""%MAIN_PY%"" -m celery -A celery_app.celery_app worker --loglevel=info --pool=solo"
 
-REM Wait for backend ports to be ready before launching frontend
-CALL :wait_tcp %MAIN_APP_HOST% %MAIN_APP_PORT% MainBackend
+REM Start Celery beat with DB-backed schedule reload.
+start "Celery Beat" /D "%BACKEND_DIR%" cmd /k "chcp 65001 > nul && %BACKEND_ENV_CMD% && ""%MAIN_PY%"" -m celery -A celery_app.celery_app beat --loglevel=info"
+
+REM Wait for backend before launching frontend.
+CALL :wait_tcp %MAIN_APP_HOST% %MAIN_APP_PORT% Backend
 IF ERRORLEVEL 1 (
-  echo [ERROR] Main backend is not ready. Abort frontend startup.
+  echo [ERROR] Backend is not ready. Abort frontend startup.
   pause
   exit /b 1
 )
 
-CALL :wait_tcp %AUTO_APP_HOST% %AUTO_APP_PORT% AutoPredictBackend
-IF ERRORLEVEL 1 (
-  echo [ERROR] AutoPredict backend is not ready. Abort frontend startup.
-  pause
-  exit /b 1
-)
-
-REM Start frontend
+REM Start frontend.
 if defined FRONTEND_CMD (
   start "Frontend" /D "%FRONTEND_DIR%" cmd /k "chcp 65001 > nul && set NODE_OPTIONS=--trace-deprecation && set MAIN_BACKEND_PORT=%MAIN_BACKEND_PORT% && set AUTO_BACKEND_PORT=%AUTO_BACKEND_PORT% && %FRONTEND_CMD%"
 ) else (
@@ -112,8 +116,10 @@ if defined FRONTEND_CMD (
 )
 
 echo Services are starting...
-echo Main backend:  http://%MAIN_APP_HOST%:%MAIN_APP_PORT%
-echo Auto backend:  http://%AUTO_APP_HOST%:%AUTO_APP_PORT%
+echo Backend:       http://%MAIN_APP_HOST%:%MAIN_APP_PORT%
+echo Celery worker: local console window
+echo Celery beat:   local console window
+echo Redis:         %REDIS_HOST%:%REDIS_PORT%
 echo Frontend:      http://localhost:8080
 echo.
 exit /b 0
@@ -125,22 +131,42 @@ if exist "%~2" (
   echo [OK] Using Python: %~2
   exit /b 0
 )
-if exist "%~3" (
-  set "%~1=%~3"
-  echo [WARN] Using fallback Python: %~3
-  exit /b 0
-)
 for /f "delims=" %%p in ('where python 2^>nul') do (
   set "%~1=%%p"
   echo [WARN] Using system Python: %%p
   exit /b 0
 )
 echo [ERROR] Python executable not found for %~1.
-echo         Checked:
-echo         %~2
-echo         %~3
+echo         Checked: %~2
 pause
 exit /b 1
+
+:ensure_redis
+CALL :check_tcp %REDIS_HOST% %REDIS_PORT%
+IF %ERRORLEVEL% EQU 0 exit /b 0
+
+echo [INFO] Redis is not listening. Trying Docker container wind-power-local-redis...
+docker version > nul 2>&1
+IF ERRORLEVEL 1 (
+  echo [ERROR] Docker is not available and Redis is not running on %REDIS_HOST%:%REDIS_PORT%.
+  exit /b 1
+)
+
+docker start wind-power-local-redis > nul 2>&1
+IF ERRORLEVEL 1 (
+  docker run -d --name wind-power-local-redis -p %REDIS_PORT%:6379 redis:7-alpine > nul
+  IF ERRORLEVEL 1 (
+    echo [ERROR] Failed to start Redis container.
+    exit /b 1
+  )
+)
+
+CALL :wait_tcp %REDIS_HOST% %REDIS_PORT% Redis
+exit /b %ERRORLEVEL%
+
+:check_tcp
+powershell -NoProfile -Command "$c = New-Object Net.Sockets.TcpClient; try { $c.Connect('%~1', %~2); if ($c.Connected) { $c.Close(); exit 0 } else { exit 1 } } catch { exit 1 }"
+exit /b %ERRORLEVEL%
 
 :wait_tcp
 set "_host=%~1"

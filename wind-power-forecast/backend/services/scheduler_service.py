@@ -8,6 +8,7 @@ from typing import Dict, Any
 from db_session import db_session
 from db_models.weather_fetch import WeatherTask, WeatherConnection, WeatherLog
 from services.task_executor import execute_weather_task
+from services.partition_maintenance_service import ensure_future_partitions
 
 logger = logging.getLogger(__name__)
 
@@ -46,11 +47,37 @@ class WeatherSchedulerService:
                 
                 # 加载所有启用的任务
                 self.load_all_tasks()
+                self.add_partition_maintenance_job()
+                self._execute_partition_maintenance()
                 
             except Exception as e:
                 logger.error(f"启动调度器失败: {e}")
                 raise
     
+    def add_partition_maintenance_job(self):
+        """Ensure future monthly partitions exist and drain default partitions."""
+        job_id = "partition_maintenance_daily"
+        if self.scheduler.get_job(job_id):
+            self.scheduler.remove_job(job_id)
+
+        self.scheduler.add_job(
+            func=self._execute_partition_maintenance,
+            trigger=CronTrigger(hour=2, minute=10),
+            id=job_id,
+            name="Partition maintenance",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+        logger.info("Partition maintenance job scheduled")
+
+    def _execute_partition_maintenance(self):
+        try:
+            result = ensure_future_partitions()
+            logger.info("Partition maintenance result: %s", result)
+        except Exception as e:
+            logger.error(f"Partition maintenance failed: {e}", exc_info=True)
+
     def stop(self):
         """停止调度器"""
         if self.is_running:

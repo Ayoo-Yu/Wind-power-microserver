@@ -260,7 +260,6 @@ export default {
         }
       } catch (error) {
         farms.value = []
-        ElMessage.error(error.response?.data?.error || '获取场站列表失败')
       }
     }
 
@@ -276,8 +275,6 @@ export default {
         statistics.value = Array.isArray(response.data?.daily_stats) ? response.data.daily_stats : []
       } catch (error) {
         statistics.value = []
-        errorMessage.value = error.response?.data?.error || '获取质量统计失败'
-        ElMessage.error(errorMessage.value)
       } finally {
         loadingStats.value = false
       }
@@ -300,7 +297,6 @@ export default {
         }))
       } catch (error) {
         markers.value = []
-        ElMessage.error(error.response?.data?.error || '获取质量标记失败')
       } finally {
         loadingMarkers.value = false
       }
@@ -339,7 +335,7 @@ export default {
         await loadMarkers()
         ElMessage.success('质量标记已保存到后端')
       } catch (error) {
-        ElMessage.error(error.response?.data?.error || '保存质量标记失败')
+        console.warn('保存质量标记失败')
       } finally {
         submitting.value = false
       }
@@ -351,7 +347,7 @@ export default {
         await loadMarkers()
         ElMessage.success('质量标记已删除')
       } catch (error) {
-        ElMessage.error(error.response?.data?.error || '删除质量标记失败')
+        console.warn('删除质量标记失败')
       }
     }
 

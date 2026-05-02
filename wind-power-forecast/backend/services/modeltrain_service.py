@@ -1,7 +1,7 @@
 from scripts.train_run import train_run
 from scripts.prediction_timestamp import post_process_predictions
 
-def run_modeltrain(upload_path, model, train_ratio=0.9, custom_params=None, farm_code='DEFAULT_FARM'):
+def run_modeltrain(upload_path, model, train_ratio=0.9, custom_params=None, farm_code=''):
     """
     运行模型训练（支持多场站）
 

@@ -31,7 +31,8 @@ export const PERMISSION_TREE = [
     label: '运维与质量',
     children: [
       { id: 'view_alarm_center', label: '统一告警中心' },
-      { id: 'manage_data_quality', label: '数据质量与限电标记' }
+      { id: 'manage_data_quality', label: '数据质量与限电标记' },
+      { id: 'manage_data_import', label: '数据补齐工具' }
     ]
   },
   {
@@ -78,7 +79,8 @@ export const ROLE_PRESETS = [
       'manage_reports',
       'view_accuracy_report',
       'view_alarm_center',
-      'manage_data_quality'
+      'manage_data_quality',
+      'manage_data_import'
     ]
   },
   {

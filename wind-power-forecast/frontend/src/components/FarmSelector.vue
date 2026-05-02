@@ -3,7 +3,7 @@
   <div class="farm-selector">
     <el-dropdown @command="handleFarmChange" trigger="click">
       <div class="farm-selector-trigger">
-        <el-icon><component :is="currentFarm === 'DEFAULT_FARM' ? 'Grid' : 'Location'" /></el-icon>
+        <el-icon><Location /></el-icon>
         <span class="current-farm">{{ currentFarmName }}</span>
         <el-icon class="arrow-icon"><ArrowDown /></el-icon>
       </div>
@@ -16,10 +16,10 @@
             :class="{ 'is-active': farm.code === currentFarm }"
           >
             <div class="farm-item">
-              <el-icon class="farm-item-icon" v-if="farm.code === 'DEFAULT_FARM'"><Grid /></el-icon>
+
               <div class="farm-info">
                 <div class="farm-name">{{ farm.name }}</div>
-                <div class="farm-code" v-if="farm.code !== 'DEFAULT_FARM'">{{ farm.code }}</div>
+                <div class="farm-code">{{ farm.code }}</div>
               </div>
               <el-icon v-if="farm.code === currentFarm" class="check-icon">
                 <Check />
@@ -35,7 +35,7 @@
 <script>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Location, ArrowDown, Check, Grid } from '@element-plus/icons-vue'
+import { Location, ArrowDown, Check } from '@element-plus/icons-vue'
 import farmService from '../utils/farmService'
 
 export default {
@@ -43,8 +43,7 @@ export default {
   components: {
     Location,
     ArrowDown,
-    Check,
-    Grid
+    Check
   },
   emits: ['farm-changed'],
   setup(props, { emit }) {

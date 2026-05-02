@@ -19,10 +19,12 @@ from .features import TrainPreSupershort
 from .physical_simulation import Condition, Turbine, Reading
 # 上报管理模型
 from .report_config import WindFarm, ReportConfig, ReportLog, ReportQualityStatistics, DataQualityMarker
+# SCADA连接管理模型
+from .scada_connection import ScadaConnection
 # 运行数据模型
 from .operational_data import (
-    WindSpeedData, TurbinePowerData, WeatherData, 
-    InstalledCapacityData, AvailableCapacityData, 
+    WindSpeedData, TurbinePowerData, WeatherData,
+    InstalledCapacityData, AvailableCapacityData,
     TheoreticalPowerData, AvailablePowerData
 )
 # 其他模型 - 确保导入被遗漏的模型
@@ -30,14 +32,24 @@ from .task import TaskHistory
 from .training_history import TrainingHistory
 from .user_roles import UserRole
 from .features import TrainPreShort, TrainPreMiddle
-# ECMWF气象数据集中存储模型
-from .ecmwf_model import EcmwfMeteorologicalData
+# 自动预测模型
+from .prediction_task import PredictionTask
+from .prediction_run import PredictionRun
+from .model_version import ModelVersion
+# ECMWF 格点数据工具 (每场独立表)
+from .ecmwf_grid_model import (
+    ecmwf_grid_table_name,
+    ensure_ecmwf_grid_table,
+    ensure_ecmwf_grid_month_partitions,
+    META_COLUMNS,
+    WIND_DERIVE_RULES,
+)
 
 # 导出所有模型，方便其他模块直接从models导入
 __all__ = [
     'Base', 'TimeStampMixin',
     # 核心模型
-    'Dataset', 
+    'Dataset',
     'ActualPower', 'SupershortlPower', 'ShortlPower', 'MidPower',
     'Model', 'TrainingRecord', 'EvaluationMetrics', 'PredictionRecord', 'AutoPredictionTask', 'DailyMetrics',
     'User', 'Role', 'LoginHistory',
@@ -47,17 +59,20 @@ __all__ = [
     'FarmProfileConfig',
     'ReportConfigMeta',
     'UserProfileMeta', 'OperationAuditLog',
-    # 新增模型到 __all__
+    # 特征模型
     'TrainPreShort', 'TrainPreMiddle', 'TrainPreSupershort',
-    'EcmwfMeteorologicalData',
+    'ecmwf_grid_table_name', 'ensure_ecmwf_grid_table', 'ensure_ecmwf_grid_month_partitions', 'META_COLUMNS', 'WIND_DERIVE_RULES',
     # 物理仿真模型
     'Condition', 'Turbine', 'Reading',
     # 上报管理模型
     'WindFarm', 'ReportConfig', 'ReportLog', 'ReportQualityStatistics', 'DataQualityMarker',
+    'ScadaConnection',
     # 运行数据模型
     'WindSpeedData', 'TurbinePowerData', 'WeatherData',
-    'InstalledCapacityData', 'AvailableCapacityData', 
+    'InstalledCapacityData', 'AvailableCapacityData',
     'TheoreticalPowerData', 'AvailablePowerData',
     # 其他模型
     'TaskHistory', 'TrainingHistory', 'UserRole',
+    # 自动预测模型
+    'PredictionTask', 'PredictionRun', 'ModelVersion',
 ] 

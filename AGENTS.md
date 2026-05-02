@@ -102,7 +102,7 @@ python check_db.py
 ### Environment Configuration
 Key environment variables (set in docker-compose or .env):
 - Database: DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
-- MinIO/S3: MINIO_ENDPOINT, MINIO_PORT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY
+- Redis: REDIS_HOST, REDIS_PORT
 - JWT: JWT_SECRET_KEY
 - Redis: REDIS_HOST, REDIS_PORT
 

@@ -18,6 +18,8 @@ const ReportManagement = () => import('../components/ReportManagement.vue')
 const WeatherDataFetcher = () => import('../components/WeatherDataFetcher.vue')
 const FarmManagement = () => import('../components/FarmManagement.vue')
 const PowerCurveAnalysis = () => import('../components/PowerCurveAnalysis.vue')
+const ScadaConnection = () => import('../components/ScadaConnection.vue')
+const DataPopulation = () => import('../views/DataPopulation.vue')
 
 const routes = [
   {
@@ -81,6 +83,12 @@ const routes = [
         meta: { requiredPermissions: ['manage_weather_data'], keepAlive: true }
       },
       {
+        path: 'data-population',
+        name: 'DataPopulation',
+        component: DataPopulation,
+        meta: { requiredPermissions: ['manage_data_import'], keepAlive: true }
+      },
+      {
         path: 'farmmanagement',
         name: 'FarmManagement',
         component: FarmManagement,
@@ -91,6 +99,12 @@ const routes = [
         name: 'PowerCurveAnalysis',
         component: PowerCurveAnalysis,
         meta: { requiredPermissions: ['view_all_data'], keepAlive: true }
+      },
+      {
+        path: 'scada-connections',
+        name: 'ScadaConnection',
+        component: ScadaConnection,
+        meta: { requiredPermissions: ['manage_system_settings'], keepAlive: true }
       },
       {
         path: 'alarm-center',

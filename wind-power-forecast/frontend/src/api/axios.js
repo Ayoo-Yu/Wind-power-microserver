@@ -36,14 +36,15 @@ instance.interceptors.response.use(
     return response
   },
   (error) => {
-    console.error('Response error:', error.message)
+    const silent = error.config?._silent
+    const status = error.response?.status
+
+    if (!silent) {
+      console.warn('Response error:', error.message, status ? `(HTTP ${status})` : '')
+    }
 
     if (error.response) {
-      console.error('Status code:', error.response.status)
-      console.error('Response data:', error.response.data)
-      console.error('Request URL:', error.config?.url)
-
-      if (error.response.status === 401) {
+      if (status === 401) {
         console.warn('Authentication failed or token expired:', error.config?.url)
 
         localStorage.removeItem('accessToken')
@@ -58,17 +59,23 @@ instance.interceptors.response.use(
           router.push('/login')
         }
       }
-    } else if (error.request) {
-      console.error('Request was sent but no response was received')
-      console.error('Request details:', error.request)
+    } else if (error.request && !silent) {
+      console.warn('No response received for:', error.config?.url)
+    }
+
+    // For 5xx server errors, suppress toast but still reject so callers
+    // (including withLegacyFallback) can handle the error properly.
+    // Attach a marker so callers know this was a server error.
+    if (status >= 500 && status < 600) {
+      error._serverError = true
+      return Promise.reject(error)
     }
 
     // Suppress error toasts for requests that opt out via _silent config
-    const silent = error.config?._silent
     if (!silent) {
       if (error.message === 'Network Error') {
         ElMessage.error('网络错误，请检查您的网络连接或服务状态')
-      } else if (!error.response || error.response.status !== 401) {
+      } else if (!error.response || status !== 401) {
         ElMessage.error(error.response?.data?.message || '请求失败')
       }
     }

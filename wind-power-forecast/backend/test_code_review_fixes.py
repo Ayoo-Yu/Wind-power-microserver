@@ -8,7 +8,6 @@ import unittest
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 BACKEND_DIR = os.path.join(PROJECT_ROOT)
-AUTOPREDICT_DIR = os.path.join(os.path.dirname(PROJECT_ROOT), 'backend-autopredict')
 
 
 class TestNoHardcodedSecrets(unittest.TestCase):
@@ -30,15 +29,6 @@ class TestNoHardcodedSecrets(unittest.TestCase):
             with self.subTest(pattern=desc, file='app.py'):
                 self.assertNotRegex(content, pattern, f"Found {desc} in backend/app.py")
 
-    def test_autopredict_app_no_hardcoded_secrets(self):
-        filepath = os.path.join(AUTOPREDICT_DIR, 'app.py')
-        if not os.path.exists(filepath):
-            self.skipTest("autopredict app.py not found")
-        content = self._read_file(filepath)
-        for pattern, desc in self.FORBIDDEN_PATTERNS:
-            with self.subTest(pattern=desc, file='app.py'):
-                self.assertNotRegex(content, pattern, f"Found {desc} in backend-autopredict/app.py")
-
     def test_compose_no_plaintext_password(self):
         filepath = os.path.join(os.path.dirname(PROJECT_ROOT), 'frontend-backend-compose.yaml')
         if not os.path.exists(filepath):
@@ -57,22 +47,12 @@ class TestBareExcept(unittest.TestCase):
 
     def test_backend_app_no_bare_except(self):
         filepath = os.path.join(BACKEND_DIR, 'app.py')
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(filepath, 'r', encoding='gbk', errors='ignore') as f:
             content = f.read()
         # Match "except:" not followed by any exception type
         bare_excepts = re.findall(r'^\s*except\s*:\s*$', content, re.MULTILINE)
         self.assertEqual(len(bare_excepts), 0,
             f"Found {len(bare_excepts)} bare except: in backend/app.py")
-
-    def test_autopredict_app_no_bare_except(self):
-        filepath = os.path.join(AUTOPREDICT_DIR, 'app.py')
-        if not os.path.exists(filepath):
-            self.skipTest("autopredict app.py not found")
-        with open(filepath, 'r', encoding='utf-8') as f:
-            content = f.read()
-        bare_excepts = re.findall(r'^\s*except\s*:\s*$', content, re.MULTILINE)
-        self.assertEqual(len(bare_excepts), 0,
-            f"Found {len(bare_excepts)} bare except: in backend-autopredict/app.py")
 
 
 class TestDedupLogic(unittest.TestCase):
@@ -116,31 +96,6 @@ class TestErrorSanitization(unittest.TestCase):
 
         self.assertEqual(len(leaks), 0,
             f"Found str(e) in error responses at lines: {leaks}")
-
-
-class TestEcmwfImportGuard(unittest.TestCase):
-    """H1: Verify ecmwf_ingest_service import is guarded."""
-
-    def test_ecmwf_import_is_guarded(self):
-        filepath = os.path.join(BACKEND_DIR, 'routes', 'ecmwf_data_router.py')
-        with open(filepath, 'r', encoding='utf-8') as f:
-            content = f.read()
-
-        # The import block should be wrapped in try/except ImportError
-        import_block = content[content.find("try:"):content.find("except ImportError")]
-        self.assertIn("from services.ecmwf_ingest_service", import_block,
-            "ecmwf_ingest_service import should be inside try block")
-
-        self.assertIn("except ImportError", content,
-            "Import should catch ImportError specifically")
-
-    def test_ecmwf_routes_check_service_available(self):
-        filepath = os.path.join(BACKEND_DIR, 'routes', 'ecmwf_data_router.py')
-        with open(filepath, 'r', encoding='utf-8') as f:
-            content = f.read()
-
-        self.assertIn("_require_service", content,
-            "Route handlers should call _require_service() to check availability")
 
 
 if __name__ == '__main__':

@@ -1,13 +1,77 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
-from models import ActualPower, SupershortlPower, ShortlPower, MidPower, TrainPreShort, TrainPreMiddle
-from sqlalchemy import func
+from models import ActualPower, SupershortlPower, ShortlPower, MidPower
+from sqlalchemy import func, text
 from database_config import get_db
 from sqlalchemy.orm import Session
 from db_session import db_session
 from db_models.report_config import WindFarm
+from db_models.operational_data import AvailableCapacityData
+from db_models.ecmwf_grid_model import ecmwf_grid_table_name
 
 bp = Blueprint('power_compare', __name__, url_prefix='/power-compare')
+
+
+_BEIJING_OFFSET = timedelta(hours=8)
+
+
+def _fetch_wind_speed_ecmwf(db, farm_code, start_dt, end_dt, lead_days):
+    """从 ECMWF 格点表查 ws200 平均风速，对缺失小时进行线性插值。"""
+    if not farm_code:
+        return []
+    table = ecmwf_grid_table_name(farm_code)
+    start_utc = start_dt - _BEIJING_OFFSET
+    end_utc = end_dt - _BEIJING_OFFSET
+    try:
+        rows = db.execute(text(f"""
+            SELECT forecast_time,
+                   AVG((features->>'ws200')::float) AS ws200
+            FROM {table}
+            WHERE forecast_time BETWEEN :s AND :e
+              AND forecast_source = (
+                  date_trunc('day', forecast_time + interval '8 hours')
+                  - interval '1 day' * :ld
+                  + interval '18 hours'
+              )
+              AND features ? 'ws200'
+            GROUP BY forecast_time
+            ORDER BY forecast_time
+        """), {"s": start_utc, "e": end_utc, "ld": lead_days}).fetchall()
+        raw = {r[0]: round(float(r[1]), 4) for r in rows if r[1] is not None}
+        if not raw:
+            return []
+        # 逐小时对齐，缺失的做线性插值
+        result = []
+        ts = min(raw)
+        last = max(raw)
+        while ts <= last:
+            if ts in raw:
+                result.append({"timestamp": (ts + _BEIJING_OFFSET).isoformat(), "wind_speed": raw[ts]})
+            else:
+                # 找前后最近的有效值做插值
+                prev_ts, prev_val = None, None
+                nxt_ts, nxt_val = None, None
+                for k, v in raw.items():
+                    if k < ts and (prev_ts is None or k > prev_ts):
+                        prev_ts, prev_val = k, v
+                    if k > ts and (nxt_ts is None or k < nxt_ts):
+                        nxt_ts, nxt_val = k, v
+                if prev_ts is not None and nxt_ts is not None:
+                    ratio = (ts - prev_ts).total_seconds() / (nxt_ts - prev_ts).total_seconds()
+                    interp = prev_val + (nxt_val - prev_val) * ratio
+                    result.append({"timestamp": (ts + _BEIJING_OFFSET).isoformat(), "wind_speed": round(interp, 4)})
+                elif prev_ts is not None:
+                    result.append({"timestamp": (ts + _BEIJING_OFFSET).isoformat(), "wind_speed": prev_val})
+                elif nxt_ts is not None:
+                    result.append({"timestamp": (ts + _BEIJING_OFFSET).isoformat(), "wind_speed": nxt_val})
+            ts += timedelta(hours=1)
+        return result
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning(
+            "ECMWF ws200 query failed for %s lead=%d", table, lead_days, exc_info=True
+        )
+        return []
 
 
 def _calc_basic_metrics(actual_values, predicted_values):
@@ -223,42 +287,43 @@ def get_power_data():
                 ]
             
             if '短期风速预测' in types:
-                avg_ws_expr = (
-                    (func.coalesce(TrainPreShort.col_ws200_8, 0)) 
-                )
-                short_ws_query = apply_farm_filter(
-                    db.query(
-                        TrainPreShort.Timestamp,
-                        avg_ws_expr.label("avg_wind_speed")
-                    ),
-                    TrainPreShort
-                )
-                short_ws = short_ws_query.filter(
-                    TrainPreShort.Timestamp.between(start_dt, end_dt)
-                ).order_by(TrainPreShort.Timestamp).all()
-                result['短期风速'] = [
-                    {"timestamp": sw.Timestamp.isoformat(), "wind_speed": sw.avg_wind_speed}
-                    for sw in short_ws if sw.avg_wind_speed is not None
-                ]
+                ws = _fetch_wind_speed_ecmwf(db, farm_code, start_dt, end_dt, lead_days=2)
+                if ws:
+                    result['短期风速'] = ws
 
             if '中期风速预测' in types:
-                avg_ws_expr = (
-                    (func.coalesce(TrainPreMiddle.col_ws200_8, 0)) 
-                )
-                mid_ws_query = apply_farm_filter(
-                    db.query(
-                        TrainPreMiddle.Timestamp,
-                        avg_ws_expr.label("avg_wind_speed")
-                    ),
-                    TrainPreMiddle
-                )
-                mid_ws = mid_ws_query.filter(
-                    TrainPreMiddle.Timestamp.between(start_dt, end_dt)
-                ).order_by(TrainPreMiddle.Timestamp).all()
-                result['中期风速'] = [
-                    {"timestamp": mw.Timestamp.isoformat(), "wind_speed": mw.avg_wind_speed}
-                    for mw in mid_ws if mw.avg_wind_speed is not None
-                ]
+                ws = _fetch_wind_speed_ecmwf(db, farm_code, start_dt, end_dt, lead_days=4)
+                if ws:
+                    result['中期风速'] = ws
+
+            # 可用容量: 优先查 available_capacity_data，回退到 wind_farms.capacity
+            if '可用容量' in types:
+                cap_query = db.query(AvailableCapacityData)
+                if farm_code:
+                    cap_query = cap_query.filter(AvailableCapacityData.farm_code == farm_code)
+                cap_rows = cap_query.filter(
+                    AvailableCapacityData.timestamp.between(start_dt, end_dt)
+                ).order_by(AvailableCapacityData.timestamp).all()
+
+                if cap_rows:
+                    result['可用容量'] = [
+                        {"timestamp": c.timestamp.isoformat(), "available_capacity": c.available_capacity}
+                        for c in cap_rows if c.available_capacity is not None
+                    ]
+                else:
+                    # Fallback: use installed capacity from wind_farms
+                    farm_row = None
+                    if farm_code:
+                        farm_row = db.query(WindFarm).filter(WindFarm.farm_code == farm_code).first()
+                    if farm_row and farm_row.capacity:
+                        # Generate constant capacity line from actual timestamps
+                        actual_base = apply_farm_filter(
+                            db.query(ActualPower.timestamp), ActualPower
+                        ).filter(ActualPower.timestamp.between(start_dt, end_dt)).order_by(ActualPower.timestamp).all()
+                        result['可用容量'] = [
+                            {"timestamp": a.timestamp.isoformat(), "available_capacity": farm_row.capacity}
+                            for a in actual_base
+                        ]
 
             return jsonify(result)
 

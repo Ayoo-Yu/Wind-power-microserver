@@ -10,13 +10,15 @@ from sqlalchemy import text
 from db_session import db_session
 from db_models.operational_data import (
     WindSpeedData,
-    TurbinePowerData, 
+    TurbinePowerData,
     WeatherData,
     InstalledCapacityData,
     AvailableCapacityData,
     TheoreticalPowerData,
     AvailablePowerData
 )
+from db_models.power import ActualPower
+from services.import_job_service import import_job_store
 
 operational_data_upload_bp = Blueprint('operational_data_upload', __name__)
 
@@ -28,7 +30,8 @@ OPERATIONAL_TABLE_MODEL_MAP = {
     'installed_capacity_data': InstalledCapacityData,
     'available_capacity_data': AvailableCapacityData,
     'theoretical_power_data': TheoreticalPowerData,
-    'available_power_data': AvailablePowerData
+    'available_power_data': AvailablePowerData,
+    'actual_power': ActualPower
 }
 
 # 定义处理大文件的块大小
@@ -108,7 +111,8 @@ def upload_operational_csv():
 
     file = request.files['file']
     table_name = request.form.get('table_name')
-    farm_code = request.form.get('farm_code', 'DEFAULT_FARM')  # 新增场站参数
+    farm_code = request.form.get('farm_code', '')  # 新增场站参数
+    strategy = request.form.get('strategy', 'overwrite')  # fill_only 或 overwrite
 
     if file.filename == '':
         return jsonify({"error": "未选择文件"}), 400
@@ -117,6 +121,9 @@ def upload_operational_csv():
         return jsonify({
             "error": f"无效或缺失的 'table_name'。必须是以下之一: {list(OPERATIONAL_TABLE_MODEL_MAP.keys())}"
         }), 400
+
+    if strategy not in ('fill_only', 'overwrite'):
+        return jsonify({"error": "strategy 参数必须是 'fill_only' 或 'overwrite'"}), 400
 
     if not file.filename.lower().endswith('.csv'):
         return jsonify({"error": "无效的文件类型。仅支持CSV文件。"}), 400
@@ -132,10 +139,11 @@ def upload_operational_csv():
                 return jsonify({"error": f"指定的场站代码 '{farm_code}' 不存在"}), 400
     except Exception as e:
         logger.warning(f"验证场站代码失败: {e}，使用默认场站")
-        farm_code = 'DEFAULT_FARM'
+        farm_code = ''
 
     total_inserted_count = 0
     total_updated_count = 0
+    total_skipped_count = 0
     total_error_count = 0
     all_errors = []
     processed_chunks = 0
@@ -207,17 +215,19 @@ def upload_operational_csv():
                     existing_record = existing_records_dict.get(timestamp)
 
                     if existing_record:
-                        # 更新现有记录
-                        try:
-                            for key, value in mapped_data.items():
-                                if key != 'timestamp':
-                                    setattr(existing_record, key, value)
-                            total_updated_count += 1
-                        except Exception as update_attr_err:
-                            total_error_count += 1
-                            err_msg = f"更新时间戳为 {timestamp} 的现有记录属性时出错: {update_attr_err}"
-                            all_errors.append(err_msg)
-                            current_app.logger.error(err_msg)
+                        if strategy == 'fill_only':
+                            total_skipped_count += 1
+                        else:
+                            try:
+                                for key, value in mapped_data.items():
+                                    if key != 'timestamp':
+                                        setattr(existing_record, key, value)
+                                total_updated_count += 1
+                            except Exception as update_attr_err:
+                                total_error_count += 1
+                                err_msg = f"更新时间戳为 {timestamp} 的现有记录属性时出错: {update_attr_err}"
+                                all_errors.append(err_msg)
+                                current_app.logger.error(err_msg)
                     else:
                         # 准备插入新记录
                         to_insert.append(mapped_data)
@@ -245,19 +255,23 @@ def upload_operational_csv():
                     return jsonify({
                         "message": f"成功处理表 {table_name} 的CSV数据",
                         "farm_code": farm_code,
+                        "strategy": strategy,
                         "inserted_count": total_inserted_count,
-                        "updated_count": total_updated_count
+                        "updated_count": total_updated_count,
+                        "skipped_count": total_skipped_count
                     }), 200
                 else:
                     return jsonify({
                         "warning": f"处理表 {table_name} 的CSV数据时遇到 {total_error_count} 个错误",
                         "farm_code": farm_code,
+                        "strategy": strategy,
                         "inserted_count": total_inserted_count,
                         "updated_count": total_updated_count,
+                        "skipped_count": total_skipped_count,
                         "error_count": total_error_count,
-                        "errors": all_errors[:50]  # 限制返回的错误数量
+                        "errors": all_errors[:50]
                     }), 207  # Multi-Status
-                    
+
             except Exception as commit_error:
                 current_app.logger.error(f"表 {table_name} 最终提交失败: {commit_error}", exc_info=True)
                 session.rollback()
@@ -265,6 +279,7 @@ def upload_operational_csv():
                     "error": f"处理完成后提交更改失败: {commit_error}",
                     "processed_inserted_count": total_inserted_count,
                     "processed_updated_count": total_updated_count,
+                    "skipped_count": total_skipped_count,
                     "error_count": total_error_count,
                     "errors": all_errors[:50]
                 }), 500
@@ -283,6 +298,47 @@ def upload_operational_csv():
 
 
 # 获取支持的表名列表的端点
+@operational_data_upload_bp.route('/api/upload_actual_power_async', methods=['POST'])
+def upload_actual_power_async():
+    """Create an async import job for large actual_power CSV files."""
+    if 'file' not in request.files:
+        return jsonify({"error": "file is required"}), 400
+
+    file = request.files['file']
+    farm_code = str(request.form.get('farm_code', '') or '').strip()
+    strategy = request.form.get('strategy', 'fill_only')
+
+    if file.filename == '':
+        return jsonify({"error": "file is required"}), 400
+
+    if strategy not in ('fill_only', 'overwrite'):
+        return jsonify({"error": "strategy must be fill_only or overwrite"}), 400
+
+    if not file.filename.lower().endswith('.csv'):
+        return jsonify({"error": "only CSV files are supported"}), 400
+
+    if not farm_code:
+        return jsonify({"error": "farm_code is required"}), 400
+
+    try:
+        job = import_job_store.create_actual_power_job(file, farm_code, strategy)
+        return jsonify(job.to_dict()), 202
+    except Exception as e:
+        current_app.logger.error(f"failed to create actual_power import job: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@operational_data_upload_bp.route('/api/import_jobs/<job_id>', methods=['GET'])
+def get_import_job(job_id):
+    """Return async import job progress."""
+    job = import_job_store.get_job(job_id)
+    if not job:
+        return jsonify({"error": "job not found"}), 404
+    response = jsonify(job.to_dict())
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    return response, 200
+
+
 @operational_data_upload_bp.route('/api/operational_tables', methods=['GET'])
 def get_operational_tables():
     """返回支持的运营数据表名列表及其描述"""
@@ -293,7 +349,8 @@ def get_operational_tables():
         'installed_capacity_data': '装机容量数据',
         'available_capacity_data': '可用容量数据',
         'theoretical_power_data': '理论功率数据',
-        'available_power_data': '可用功率数据'
+        'available_power_data': '可用功率数据',
+        'actual_power': '实际功率数据'
     }
     
     return jsonify({

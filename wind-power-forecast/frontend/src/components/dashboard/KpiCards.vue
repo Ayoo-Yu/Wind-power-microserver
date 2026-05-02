@@ -4,56 +4,33 @@
       <div class="kpi-head">
         <span class="kpi-label">{{ item.label }}</span>
         <el-icon class="kpi-icon">
-          <component :is="resolveIcon(item.key)" />
+          <Aim />
         </el-icon>
       </div>
 
-      <div v-if="item.type === 'station-comm'" class="kpi-body">
-        <div class="kpi-main">
-          正常运行:
-          <strong>{{ item.value?.online ?? 0 }}</strong>
-          / 总场站:
-          <strong>{{ item.value?.total ?? 0 }}</strong>
+      <div v-if="item.type === 'accuracy-split'" class="kpi-body">
+        <div class="accuracy-row">
+          <div class="accuracy-item">
+            <div class="accuracy-value">{{ item.value?.shortTerm ?? 0 }}<small>%</small></div>
+            <div class="accuracy-label">短期</div>
+          </div>
+          <div class="accuracy-sep"></div>
+          <div class="accuracy-item">
+            <div class="accuracy-value">{{ item.value?.ultraShort ?? 0 }}<small>%</small></div>
+            <div class="accuracy-label">超短期</div>
+          </div>
         </div>
-        <div class="kpi-subline">
-          离线:
-          <span class="danger">{{ item.value?.offline ?? 0 }}</span>
-        </div>
-      </div>
-
-      <div v-else-if="item.type === 'power-capacity'" class="kpi-body kpi-body-row">
-        <div class="kpi-main">
-          <strong>{{ item.value?.power ?? 0 }}</strong> / <strong>{{ item.value?.capacity ?? 0 }}</strong> MW
-        </div>
-        <div class="load-ring" :style="ringStyle(item.value?.loadRate)">
-          <span>{{ Math.round(item.value?.loadRate || 0) }}%</span>
-        </div>
-      </div>
-
-      <div v-else-if="item.type === 'accuracy-split'" class="kpi-body">
-        <div class="kpi-main">综合准确率</div>
-        <div class="kpi-subline">
-          短期准确率 {{ item.value?.shortTerm ?? 0 }}%
-          <span class="sep">|</span>
-          超短期准确率 {{ item.value?.ultraShort ?? 0 }}%
-        </div>
-      </div>
-
-      <div v-else-if="item.type === 'report-completion'" class="kpi-body">
-        <div class="kpi-main">超短期成功: {{ item.value?.ultraSuccess ?? 0 }}/{{ item.value?.ultraExpected ?? 0 }}</div>
-        <div class="kpi-subline">短期成功: {{ item.value?.shortSuccess ?? 0 }}/{{ item.value?.shortExpected ?? 0 }}</div>
       </div>
 
       <div v-else class="kpi-body">
-        <div class="kpi-main">{{ item.value }}</div>
+        <div class="value-big">{{ item.value }}</div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-/* global defineProps */
-import { OfficeBuilding, Aim, Lightning, Bell } from '@element-plus/icons-vue'
+import { Aim } from '@element-plus/icons-vue'
 
 defineProps({
   items: {
@@ -61,41 +38,27 @@ defineProps({
     default: () => []
   }
 })
-
-function resolveIcon(key) {
-  if (key === 'station_comm') return OfficeBuilding
-  if (key === 'accuracy') return Aim
-  if (key === 'power_capacity') return Lightning
-  if (key === 'report_completion') return Bell
-  return OfficeBuilding
-}
-
-function ringStyle(rate) {
-  const value = Math.max(0, Math.min(100, Number(rate) || 0))
-  return {
-    background: `conic-gradient(#12d7ff ${value * 3.6}deg, rgba(125, 170, 200, 0.2) 0deg)`
-  }
-}
 </script>
 
 <style scoped>
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: 1fr;
+  gap: 8px;
 }
 
 .kpi-card {
-  padding: 14px;
+  padding: 10px 12px;
   position: relative;
   overflow: hidden;
 }
+
 .kpi-card::after {
   content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
-  box-shadow: inset 0 0 16px rgba(18, 215, 255, 0.06);
+  box-shadow: inset 0 0 14px rgba(18, 215, 255, 0.04);
 }
 
 .kpi-head {
@@ -105,90 +68,67 @@ function ringStyle(rate) {
 }
 
 .kpi-label {
-  color: var(--text-secondary);
-  font-size: 13px;
+  color: #8fb2ca;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .kpi-icon {
-  font-size: 18px;
+  font-size: 15px;
   color: var(--accent);
-  filter: drop-shadow(0 0 6px rgba(18, 215, 255, 0.3));
+  filter: drop-shadow(0 0 4px rgba(18, 215, 255, 0.2));
+  flex-shrink: 0;
 }
 
 .kpi-body {
-  margin-top: 10px;
+  margin-top: 6px;
 }
 
-.kpi-body-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-}
-
-.kpi-main {
+.value-big {
   color: var(--text-primary);
   font-size: 20px;
-  font-family: var(--font-mono);
-}
-
-.kpi-main strong {
-  color: var(--accent);
-}
-
-.kpi-subline {
-  margin-top: 8px;
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-}
-
-.danger {
-  color: #ff5d73;
+  font-family: 'DIN Alternate', Consolas, Menlo, Monaco, monospace;
   font-weight: 700;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
 }
 
-.sep {
-  margin: 0 8px;
-  color: rgba(158, 192, 216, 0.5);
-}
-
-.load-ring {
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
-  display: flex;
+/* ---- accuracy split ---- */
+.accuracy-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 6px;
   align-items: center;
-  justify-content: center;
-  position: relative;
-  flex: 0 0 auto;
 }
 
-.load-ring::after {
-  content: '';
-  position: absolute;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: rgba(6, 24, 39, 0.94);
+.accuracy-sep {
+  width: 1px;
+  height: 26px;
+  background: rgba(158, 192, 216, 0.18);
 }
 
-.load-ring span {
-  position: relative;
-  z-index: 1;
-  color: #dff3ff;
-  font-size: 12px;
-  font-family: Consolas, Menlo, Monaco, monospace;
+.accuracy-item {
+  text-align: center;
 }
 
-@media (max-width: 1280px) {
-  .kpi-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+.accuracy-value {
+  color: var(--text-primary);
+  font-size: 17px;
+  font-weight: 600;
+  font-family: 'DIN Alternate', Consolas, Menlo, Monaco, monospace;
 }
 
-@media (max-width: 640px) {
-  .kpi-grid {
-    grid-template-columns: 1fr;
-  }
+.accuracy-value small {
+  font-size: 10px;
+  color: #8fb2ca;
+  margin-left: 1px;
+}
+
+.accuracy-label {
+  color: #7a96aa;
+  font-size: 10px;
+  margin-top: 1px;
 }
 </style>

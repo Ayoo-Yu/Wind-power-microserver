@@ -46,12 +46,13 @@
           <el-menu-item index="/power-curve" v-if="hasPermission('view_all_data')">功率曲线分析</el-menu-item>
         </el-sub-menu>
 
-        <el-sub-menu index="/group-exchange" v-if="hasPermission('manage_weather_data') || hasPermission('manage_reports')">
+        <el-sub-menu index="/group-exchange" v-if="hasPermission('manage_weather_data') || hasPermission('manage_reports') || hasPermission('manage_data_import')">
           <template #title>
             <el-icon><Upload /></el-icon>
             <span>数据交互</span>
           </template>
           <el-menu-item index="/weatherdatafetcher" v-if="hasPermission('manage_weather_data')">气象数据拉取</el-menu-item>
+          <el-menu-item index="/data-population" v-if="hasPermission('manage_data_import')">数据补齐</el-menu-item>
           <el-menu-item index="/reportmanagement" v-if="hasPermission('manage_reports')">上报配置与调度</el-menu-item>
         </el-sub-menu>
 
@@ -75,6 +76,7 @@
             <span>系统管理</span>
           </template>
           <el-menu-item index="/farmmanagement" v-if="hasPermission('manage_reports')">场站管理</el-menu-item>
+          <el-menu-item index="/scada-connections" v-if="hasPermission('manage_system_settings')">SCADA数据源</el-menu-item>
           <el-menu-item index="/users" v-if="hasPermission('manage_users')">用户列表</el-menu-item>
           <el-menu-item index="/users/roles" v-if="hasPermission('manage_roles')">用户与权限</el-menu-item>
           <el-menu-item index="/system-settings" v-if="hasPermission('manage_system_settings') || hasPermission('system_maintenance')">
@@ -459,10 +461,10 @@ export default {
 }
 
 .el-menu-item.is-active {
-  background: linear-gradient(90deg, rgba(18, 215, 255, 0.2), rgba(18, 215, 255, 0.03));
+  background: linear-gradient(90deg, rgba(18, 215, 255, 0.14), rgba(18, 215, 255, 0.02));
   color: #9beaff;
   border-left: 3px solid var(--accent);
-  box-shadow: inset 0 0 0 1px rgba(18, 215, 255, 0.15), inset 4px 0 12px rgba(18, 215, 255, 0.06);
+  box-shadow: inset 3px 0 10px rgba(18, 215, 255, 0.08);
 }
 
 .el-menu-item:hover {

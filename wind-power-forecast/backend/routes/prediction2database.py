@@ -15,7 +15,7 @@ def batch_create_supershortl_power():
         return jsonify({"error": "未上传文件"}), 400
 
     file = request.files['file']
-    farm_code = request.form.get('farm_code', 'DEFAULT_FARM')  # 新增场站参数
+    farm_code = request.form.get('farm_code', '')  # 新增场站参数
 
     if file.filename == '':
         return jsonify({"error": "空文件名"}), 400
@@ -127,7 +127,7 @@ def batch_create_shortl_power():
         return jsonify({"error": "未上传文件"}), 400
 
     file = request.files['file']
-    farm_code = request.form.get('farm_code', 'DEFAULT_FARM')  # 新增场站参数
+    farm_code = request.form.get('farm_code', '')  # 新增场站参数
 
     if file.filename == '':
         return jsonify({"error": "空文件名"}), 400
@@ -216,7 +216,7 @@ def batch_create_mid_power():
         return jsonify({"error": "未上传文件"}), 400
 
     file = request.files['file']
-    farm_code = request.form.get('farm_code', 'DEFAULT_FARM')  # 新增场站参数
+    farm_code = request.form.get('farm_code', '')  # 新增场站参数
 
     if file.filename == '':
         return jsonify({"error": "空文件名"}), 400

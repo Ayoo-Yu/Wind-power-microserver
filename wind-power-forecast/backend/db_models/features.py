@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, DateTime, Float, TIMESTAMP, BigInteger
+from sqlalchemy import Column, Integer, DateTime, Float, TIMESTAMP, BigInteger, String
 from sqlalchemy.dialects.postgresql import DOUBLE_PRECISION
 from sqlalchemy.ext.declarative import declarative_base
 from .base import Base  # 假设你的 Base 模型在 .base 中
@@ -12,6 +12,7 @@ class TrainPreMiddle(Base):
 
     record_id = Column(BigInteger, primary_key=True, autoincrement=True)
     Timestamp = Column(TIMESTAMP(timezone=False), nullable=False)
+    farm_code = Column(String(50), nullable=False, index=True)
     
     # --- 特征列示例 ---
     # 根据 create_feature_table.sql 文件的定义，所有特征列名都需要加上引号，因为它们包含特殊字符或以数字开头
@@ -372,6 +373,7 @@ class TrainPreShort(Base):
 
     record_id = Column(BigInteger, primary_key=True, autoincrement=True)
     Timestamp = Column(TIMESTAMP(timezone=False), nullable=False)
+    farm_code = Column(String(50), nullable=False, index=True)
     
     # --- 特征列示例 ---
     # 根据 create_feature_table.sql 文件的定义，所有特征列名都需要加上引号，因为它们包含特殊字符或以数字开头
@@ -732,6 +734,7 @@ class TrainPreSupershort(Base):
 
     record_id = Column(BigInteger, primary_key=True, autoincrement=True)
     Timestamp = Column(TIMESTAMP(timezone=False), nullable=False)
+    farm_code = Column(String(50), nullable=False, index=True)
     
     # --- 特征列示例 ---
     # 根据 create_feature_table.sql 文件的定义，所有特征列名都需要加上引号，因为它们包含特殊字符或以数字开头

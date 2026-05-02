@@ -5,11 +5,11 @@ import { getEcmwfData } from '../api/weatherFetchApi'
 import farmService from '../utils/farmService'
 
 const TASK_KEYS = [
-  { key: 'scada', label: 'SCADA接入' },
-  { key: 'nwp', label: '气象NWP拉取' },
-  { key: 'ultra', label: '超短期计算' },
-  { key: 'short', label: '短期计算' },
-  { key: 'grid', label: '电网通信' }
+  { key: 'scada', label: 'SCADA' },
+  { key: 'nwp', label: 'NWP' },
+  { key: 'ultra', label: '超短期' },
+  { key: 'short', label: '短期' },
+  { key: 'grid', label: '电网' }
 ]
 
 function nowRange() {
@@ -152,7 +152,7 @@ function toHHmm(value) {
 }
 
 function farmCountByScope(activeFarmCode, farms) {
-  if (activeFarmCode && activeFarmCode !== 'DEFAULT_FARM') return farms.length ? 1 : 0
+  if (activeFarmCode) return farms.length ? 1 : 0
   return farms.length
 }
 
@@ -238,7 +238,7 @@ export async function getDashboardOverview({ farmCode } = {}) {
 
   try {
     const loaded = await farmService.loadAvailableFarms()
-    farms = loaded.filter(f => f.code && f.code !== 'DEFAULT_FARM')
+    farms = loaded.filter(f => f.code)
   } catch (error) {
     farms = []
   }
@@ -267,7 +267,7 @@ export async function getDashboardOverview({ farmCode } = {}) {
     }))
   }
 
-  const selectedFarms = activeFarmCode && activeFarmCode !== 'DEFAULT_FARM'
+  const selectedFarms = activeFarmCode
     ? farms.filter(f => f.code === activeFarmCode)
     : farms
 
@@ -318,39 +318,12 @@ export async function getDashboardOverview({ farmCode } = {}) {
   )
 
   const commMap = new Map(compareList.map(item => [item.code, item.online ? 'ok' : 'error']))
-  const stationTotal = selectedFarms.length
-  const onlineCount = compareList.filter(item => item.online).length
-  const offlineCount = Math.max(0, stationTotal - onlineCount)
-  const totalCapacity = selectedFarms.reduce((sum, farm) => sum + safeNumber(farm.capacity, 0), 0)
-  const totalPower = compareList.reduce((sum, item) => sum + safeNumber(item.latestActual, 0), 0)
-  const loadRate = totalCapacity > 0 ? (totalPower / totalCapacity) * 100 : 0
 
   const shortAcc = weightedAccuracy(compareList.map(item => ({ acc: item.shortAcc, weight: item.shortWeight })))
   const ultraAcc = weightedAccuracy(compareList.map(item => ({ acc: item.ultraAcc, weight: item.ultraWeight })))
-  const completion = summarizeReportCompletion(logs, farmCountByScope(activeFarmCode, selectedFarms))
 
   return {
     cards: [
-      {
-        key: 'station_comm',
-        type: 'station-comm',
-        label: '场站通讯状态',
-        value: {
-          online: onlineCount,
-          total: stationTotal,
-          offline: offlineCount
-        }
-      },
-      {
-        key: 'power_capacity',
-        type: 'power-capacity',
-        label: '当前总功率 / 总装机容量',
-        value: {
-          power: Math.round(totalPower),
-          capacity: Math.round(totalCapacity),
-          loadRate: Number(loadRate.toFixed(1))
-        }
-      },
       {
         key: 'accuracy',
         type: 'accuracy-split',
@@ -358,17 +331,6 @@ export async function getDashboardOverview({ farmCode } = {}) {
         value: {
           shortTerm: Number(shortAcc.toFixed(1)),
           ultraShort: Number(ultraAcc.toFixed(1))
-        }
-      },
-      {
-        key: 'report_completion',
-        type: 'report-completion',
-        label: '今日上报完成率',
-        value: {
-          ultraSuccess: completion.ultra.success,
-          ultraExpected: completion.ultra.expected,
-          shortSuccess: completion.short.success,
-          shortExpected: completion.short.expected
         }
       }
     ],
@@ -417,7 +379,7 @@ export async function getDashboardTrend({ farmCode, start, end } = {}) {
   const activeFarmCode = farmCode || farmService.getCurrentFarm()
   const range = start && end ? { start, end } : nowRange()
 
-  const isAllFarms = !activeFarmCode || activeFarmCode === 'DEFAULT_FARM'
+  const isAllFarms = !activeFarmCode
 
   const fetchSeriesForFarm = async (code) => {
     const resp = await getPowerCompareData({
@@ -460,7 +422,7 @@ export async function getDashboardTrend({ farmCode, start, end } = {}) {
   try {
     if (isAllFarms) {
       const farms = await farmService.loadAvailableFarms()
-      const codes = farms.map(f => f.code).filter(c => c && c !== 'DEFAULT_FARM')
+      const codes = farms.map(f => f.code).filter(c => c)
       const allSeries = await Promise.all(codes.map(code => fetchSeriesForFarm(code).catch(() => ({ actual: [], shortTerm: [], ultraShort: [], predicted: [], availableCap: [] }))))
       const aggregated = mergeMultiFarmSeries(allSeries)
       const merged = mergeTrendSeries(
@@ -494,8 +456,8 @@ export async function getDashboardStationRank({ farmCode, start, end } = {}) {
 
   try {
     const farms = await farmService.loadAvailableFarms()
-    const codes = farms.map(item => item.code).filter(code => code && code !== 'DEFAULT_FARM')
-    const targetCodes = farmCode && farmCode !== 'DEFAULT_FARM' ? [farmCode] : codes
+    const codes = farms.map(item => item.code).filter(code => code)
+    const targetCodes = farmCode ? [farmCode] : codes
 
     const ranked = await Promise.all(
       targetCodes.map(async (code) => {
@@ -536,7 +498,7 @@ export async function getDashboardWeatherSnapshot({ farmCode } = {}) {
 
   try {
     const resp = await getEcmwfData({
-      farm_code: activeFarmCode === 'DEFAULT_FARM' ? 'DEFAULT_FARM' : activeFarmCode,
+      farm_code: activeFarmCode,
       data_type: 'DQ',
       start: fmt(start),
       end: fmt(now),
@@ -573,7 +535,10 @@ export async function getDashboardWeatherSnapshot({ farmCode } = {}) {
 
     const tempC = t2 !== null ? (t2 - 273.15) : null
     const dewC = d2 !== null ? (d2 - 273.15) : null
-    const humidity = tempC !== null && dewC !== null ? Math.max(0, Math.min(100, 100 - 5 * (tempC - dewC))) : null
+    let humidity = null
+    if (tempC !== null && dewC !== null) {
+      humidity = Math.max(0, Math.min(100, 100 - 5 * (tempC - dewC)))
+    }
 
     const metrics = [
       { label: '轮毂高度风速', value: windSpeed100 !== null ? windSpeed100.toFixed(1) : '--', unit: 'm/s', icon: 'wind' },

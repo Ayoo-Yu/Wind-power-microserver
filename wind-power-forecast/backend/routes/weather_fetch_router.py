@@ -83,7 +83,7 @@ def create_connection():
                 password=data.get('password', ''),
                 private_key_path=data.get('private_key_path', ''),
                 key_passphrase=data.get('key_passphrase', ''),
-                farm_code=data.get('farm_code', 'DEFAULT_FARM'),  # 新增场站字段
+                farm_code=data.get('farm_code', ''),  # 新增场站字段
                 description=data.get('description', ''),  # 新增描述字段
                 created_by=current_user_id
             )

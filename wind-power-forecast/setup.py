@@ -6,7 +6,9 @@ setup(
     packages=find_packages(),
     install_requires=[
         'flask',
-        'minio',
-        'sqlalchemy'
+        'sqlalchemy',
+        'lightgbm',
+        'xgboost',
+        'catboost'
     ]
 ) 

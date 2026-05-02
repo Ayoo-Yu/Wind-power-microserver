@@ -5,9 +5,9 @@
 
 风电场:
   - 会泽仓房      24台   48.0MW  (混装机组, 历史最大出力45.8MW)
-  - 会泽白泥井    16台   34.0MW  (混装机组, 历史最大出力31.5MW)
+  - 会泽白泥井    16台   32.0MW  (混装机组)
   - 弥勒石洞山   105台  193.5MW  (48×2.0 + 24×2.0 + 33×1.5MW)
-  - 马龙陡坡梁子  19台   50.0MW  (混装机组, 历史最大出力47.3MW)
+  - 马龙陡坡梁子  19台   47.5MW  (混装机组)
   - 竹园西       72台  453.5MW  (55×6.7 + 17×5.0MW)
 """
 
@@ -25,7 +25,7 @@ from database_config import engine, SessionLocal
 from db_models.report_config import WindFarm
 from db_models.farm_profile import FarmProfileConfig
 from db_models.power import ActualPower, SupershortlPower, ShortlPower
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 
 # ── 5个真实风电场配置 ──
 FARMS = [
@@ -44,7 +44,7 @@ FARMS = [
     {
         "farm_code": "BNJ",
         "farm_name": "会泽白泥井风电场",
-        "capacity": 34.0,
+        "capacity": 32.0,
         "location": "云南省曲靖市会泽县",
         "longitude": 103.3293,
         "latitude": 25.8660,
@@ -68,7 +68,7 @@ FARMS = [
     {
         "farm_code": "DPLZ",
         "farm_name": "马龙陡坡梁子风电场",
-        "capacity": 50.0,
+        "capacity": 47.5,
         "location": "云南省曲靖市马龙区",
         "longitude": 103.4053,
         "latitude": 25.2933,
@@ -93,10 +93,43 @@ FARMS = [
 
 
 def ensure_tables():
-    """确保所有表存在"""
+    """确保所有表存在，并补建 ON CONFLICT 所需的唯一约束"""
     from db_models.base import Base
     Base.metadata.create_all(engine)
     print("[OK] 数据库表检查完成")
+
+    # 补建唯一约束（create_all 不会给已有表加约束）
+    constraints = [
+        ("uq_actual_power_farm_ts", "actual_power", "farm_code, timestamp"),
+        ("uq_supershortl_power_farm_ts", "supershortl_power", "farm_code, timestamp"),
+        ("uq_shortl_power_farm_ts_pre", "shortl_power", "farm_code, timestamp, pre_at, pre_num"),
+    ]
+    with engine.connect() as conn:
+        for cname, table, cols in constraints:
+            col_list = [c.strip() for c in cols.split(",")]
+            try:
+                conn.execute(text(
+                    f"CREATE UNIQUE INDEX IF NOT EXISTS {cname} ON {table} ({cols})"
+                ))
+                conn.commit()
+            except Exception:
+                # 可能有重复行，先去重再建索引
+                conn.rollback()
+                try:
+                    dedup_cols = ', '.join(col_list)
+                    conn.execute(text(
+                        f"DELETE FROM {table} a USING {table} b "
+                        f"WHERE a.id < b.id AND "
+                        + " AND ".join(f"a.{c} = b.{c}" for c in col_list)
+                    ))
+                    conn.commit()
+                    conn.execute(text(
+                        f"CREATE UNIQUE INDEX IF NOT EXISTS {cname} ON {table} ({cols})"
+                    ))
+                    conn.commit()
+                except Exception as e2:
+                    print(f"  [WARN] 约束 {cname}: {e2}")
+                    conn.rollback()
 
 
 def seed_farms(db):
@@ -254,13 +287,35 @@ def seed_power_data(db, hours=48):
 
             current += timedelta(minutes=15)
 
-        # 批量写入
+        # 批量写入 — 使用 ON CONFLICT 保证事务安全
         if actual_records:
-            db.bulk_insert_mappings(ActualPower, actual_records)
+            db.execute(text(
+                "INSERT INTO actual_power (timestamp, farm_code, wp_true) "
+                "VALUES (:timestamp, :farm_code, :wp_true) "
+                "ON CONFLICT (farm_code, timestamp) DO UPDATE SET wp_true = EXCLUDED.wp_true"
+            ), actual_records)
         if supershort_records:
-            db.bulk_insert_mappings(SupershortlPower, supershort_records)
+            db.execute(text(
+                "INSERT INTO supershortl_power (timestamp, farm_code, wp_pred2, wp_pred3, wp_pred4, "
+                "wp_pred5, wp_pred6, wp_pred7, wp_pred8, wp_pred9, wp_pred10, wp_pred11, wp_pred12, "
+                "wp_pred13, wp_pred14, wp_pred15, wp_pred16, wp_pred17) "
+                "VALUES (:timestamp, :farm_code, :wp_pred2, :wp_pred3, :wp_pred4, "
+                ":wp_pred5, :wp_pred6, :wp_pred7, :wp_pred8, :wp_pred9, :wp_pred10, :wp_pred11, :wp_pred12, "
+                ":wp_pred13, :wp_pred14, :wp_pred15, :wp_pred16, :wp_pred17) "
+                "ON CONFLICT (farm_code, timestamp) DO UPDATE SET "
+                "wp_pred2 = EXCLUDED.wp_pred2, wp_pred3 = EXCLUDED.wp_pred3, wp_pred4 = EXCLUDED.wp_pred4, "
+                "wp_pred5 = EXCLUDED.wp_pred5, wp_pred6 = EXCLUDED.wp_pred6, wp_pred7 = EXCLUDED.wp_pred7, "
+                "wp_pred8 = EXCLUDED.wp_pred8, wp_pred9 = EXCLUDED.wp_pred9, wp_pred10 = EXCLUDED.wp_pred10, "
+                "wp_pred11 = EXCLUDED.wp_pred11, wp_pred12 = EXCLUDED.wp_pred12, wp_pred13 = EXCLUDED.wp_pred13, "
+                "wp_pred14 = EXCLUDED.wp_pred14, wp_pred15 = EXCLUDED.wp_pred15, wp_pred16 = EXCLUDED.wp_pred16, "
+                "wp_pred17 = EXCLUDED.wp_pred17"
+            ), supershort_records)
         if short_records:
-            db.bulk_insert_mappings(ShortlPower, short_records)
+            db.execute(text(
+                "INSERT INTO shortl_power (timestamp, farm_code, wp_pred, pre_at, pre_num) "
+                "VALUES (:timestamp, :farm_code, :wp_pred, :pre_at, :pre_num) "
+                "ON CONFLICT (farm_code, timestamp, pre_at, pre_num) DO UPDATE SET wp_pred = EXCLUDED.wp_pred"
+            ), short_records)
 
         print(f"  [OK] {code}: {len(actual_records)} 条功率 + {len(supershort_records)} 条超短期 + {len(short_records)} 条短期")
 

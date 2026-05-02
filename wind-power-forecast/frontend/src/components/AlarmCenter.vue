@@ -399,8 +399,7 @@ export default {
         await Promise.all([loadAlarms(), loadNotifications(), loadConfigs()])
         playBeep()
       } catch (error) {
-        console.error('refresh alarms failed', error)
-        errorMessage.value = error.response?.data?.error || '刷新告警中心失败'
+        console.warn('refresh alarms failed', error)
       } finally {
         loading.value = false
       }
@@ -438,7 +437,7 @@ export default {
         ElMessage.success('告警已确认')
         await refresh()
       } catch (error) {
-        ElMessage.error(error.response?.data?.error || '确认告警失败')
+        console.warn('确认告警失败:', error)
       }
     }
 
@@ -448,7 +447,7 @@ export default {
         ElMessage.success('告警已关闭')
         await refresh()
       } catch (error) {
-        ElMessage.error(error.response?.data?.error || '关闭告警失败')
+        console.warn('关闭告警失败:', error)
       }
     }
 
@@ -477,7 +476,7 @@ export default {
         ElMessage.success('告警规则已保存')
         await loadConfigs()
       } catch (error) {
-        ElMessage.error(error.response?.data?.error || '保存告警规则失败')
+        console.warn('保存告警规则失败:', error)
       } finally {
         ruleSaving.value = false
       }
@@ -496,34 +495,42 @@ export default {
         ElMessage.success('通知策略已保存')
         await loadConfigs()
       } catch (error) {
-        ElMessage.error(error.response?.data?.error || '保存通知策略失败')
+        console.warn('保存通知策略失败:', error)
       } finally {
         policySaving.value = false
       }
     }
 
     const toggleRule = async (row, value) => {
-      await updateAlarmRule(row.id, { is_enabled: value })
-      row.is_enabled = value
+      try {
+        await updateAlarmRule(row.id, { is_enabled: value })
+        row.is_enabled = value
+      } catch (error) { console.warn('切换规则状态失败:', error) }
     }
 
     const togglePolicy = async (row, value) => {
-      await updateAlarmPolicy(row.id, { is_enabled: value })
-      row.is_enabled = value
+      try {
+        await updateAlarmPolicy(row.id, { is_enabled: value })
+        row.is_enabled = value
+      } catch (error) { console.warn('切换策略状态失败:', error) }
     }
 
     const handleDeleteRule = async (row) => {
-      await ElMessageBox.confirm(`确认删除规则 ${row.rule_name} 吗？`, '提示', { type: 'warning' })
-      await deleteAlarmRule(row.id)
-      ElMessage.success('告警规则已删除')
-      await loadConfigs()
+      try {
+        await ElMessageBox.confirm(`确认删除规则 ${row.rule_name} 吗？`, '提示', { type: 'warning' })
+        await deleteAlarmRule(row.id)
+        ElMessage.success('告警规则已删除')
+        await loadConfigs()
+      } catch (error) { if (error !== 'cancel') console.warn('删除规则失败:', error) }
     }
 
     const handleDeletePolicy = async (row) => {
-      await ElMessageBox.confirm(`确认删除策略 ${row.policy_name} 吗？`, '提示', { type: 'warning' })
-      await deleteAlarmPolicy(row.id)
-      ElMessage.success('通知策略已删除')
-      await loadConfigs()
+      try {
+        await ElMessageBox.confirm(`确认删除策略 ${row.policy_name} 吗？`, '提示', { type: 'warning' })
+        await deleteAlarmPolicy(row.id)
+        ElMessage.success('通知策略已删除')
+        await loadConfigs()
+      } catch (error) { if (error !== 'cancel') console.warn('删除策略失败:', error) }
     }
 
     onMounted(async () => {

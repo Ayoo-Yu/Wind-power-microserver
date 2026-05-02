@@ -1,4 +1,4 @@
-# 风电功率预测系统 - 多场站适配集成测试报告
+﻿# 风电功率预测系统 - 多场站适配集成测试报告
 
 **测试时间**: 2025-09-27 16:40
 **测试环境**: Docker KingBase 数据库环境
@@ -80,12 +80,12 @@ farm_code = request.form.get('farm_code', 'DEFAULT_FARM')
 
 **测试结果**:
 - ✅ **AutoPredictionTask 模型**: 支持 farm_code 字段
-- ✅ **backend-autopredict 服务**: 支持多场站参数
+- ✅ **backend 服务**: 支持多场站参数
 - ✅ **自动预测路由**: 处理多场站任务调度
 
 **多场站支持特性**:
 ```python
-# backend-autopredict/routes/autopredict.py
+# backend/routes/autopredict.py
 farm_code = request.args.get('farm_code', 'DEFAULT_FARM')
 valid_farm_codes = ['DEFAULT_FARM', 'zyx01', 'zyx02']
 process_name = f"{farm_code}_{os.path.splitext(os.path.basename(script_path))[0]}"

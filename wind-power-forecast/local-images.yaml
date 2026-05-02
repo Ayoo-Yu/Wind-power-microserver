@@ -1,4 +1,4 @@
-# 已更新的local-images.yaml，适用于云服务器部署
+﻿# 宸叉洿鏂扮殑local-images.yaml锛岄€傜敤浜庝簯鏈嶅姟鍣ㄩ儴缃?
 
 services:
   frontend:
@@ -16,20 +16,16 @@ services:
       - "5000:5000"
     environment:
       - FLASK_ENV=development
-      - DB_HOST=kingbase       # 修改为金仓数据库
-      - DB_PORT=54321          # 金仓数据库端口
-      - DB_USER=system         # 金仓默认用户
-      - DB_PASSWORD=12345678ab # 金仓默认密码
-      - DB_NAME=windpower      # 数据库名
-      - MINIO_ENDPOINT=minio   
-      - MINIO_PORT=9000
+      - DB_HOST=kingbase       # 淇敼涓洪噾浠撴暟鎹簱
+      - DB_PORT=54321          # 閲戜粨鏁版嵁搴撶鍙?
+      - DB_USER=system         # 閲戜粨榛樿鐢ㄦ埛
+      - DB_PASSWORD=12345678ab # 閲戜粨榛樿瀵嗙爜
+      - DB_NAME=windpower      # 鏁版嵁搴撳悕
     networks:
       - wind-power-network
     depends_on:
       kingbase:
-        condition: service_started  # 金仓数据库不支持健康检查，使用service_started
-      minio:
-        condition: service_healthy
+        condition: service_started  # 閲戜粨鏁版嵁搴撲笉鏀寔鍋ュ悍妫€鏌ワ紝浣跨敤service_started
     restart: on-failure
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
@@ -41,12 +37,12 @@ services:
   kingbase:
     image: kingbase_v009r001c002b0014_single_x86:v1
     container_name: wind-power-kingbase
-    privileged: true  # 金仓数据库需要特权模式
+    privileged: true  # 閲戜粨鏁版嵁搴撻渶瑕佺壒鏉冩ā寮?
     environment:
       - NEED_START=yes
       - DB_USER=system
       - DB_PASSWORD=12345678ab
-      - DB_MODE=oracle  # 金仓数据库推荐使用oracle模式
+      - DB_MODE=oracle  # 閲戜粨鏁版嵁搴撴帹鑽愪娇鐢╫racle妯″紡
       - ENCODING=UTF8
     volumes:
       - kingbase_data:/home/kingbase/userdata/
@@ -56,28 +52,6 @@ services:
     networks:
       - wind-power-network
     command: /usr/sbin/init
-
-  minio:
-    image: minio/minio:latest
-    container_name: wind-power-minio
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    volumes:
-      - minio_data:/data
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    restart: unless-stopped
-    networks:
-      - wind-power-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 20s
-      retries: 3
-      start_period: 10s
 
   pgadmin:
     image: dpage/pgadmin4:latest
@@ -103,10 +77,8 @@ services:
       start_period: 20s
 
 volumes:
-  kingbase_data:  # 修改为金仓数据卷
+  kingbase_data:  # 淇敼涓洪噾浠撴暟鎹嵎
     name: wind-power-kingbase-data
-  minio_data:
-    name: wind-power-minio-data
   pgadmin_data:
     name: wind-power-pgadmin-data
 

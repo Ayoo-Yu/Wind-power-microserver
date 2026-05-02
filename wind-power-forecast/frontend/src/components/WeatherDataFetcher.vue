@@ -321,7 +321,7 @@ export default {
       loadingEcmwf.value = true
       try {
         const today = new Date().toISOString().slice(0, 10)
-        const farmCode = connectionForm.farm_code || farms.value[0]?.farm_code || 'DEFAULT_FARM'
+        const farmCode = connectionForm.farm_code || farms.value[0]?.farm_code || ''
         const [availRes, latestRes] = await Promise.all([
           getEcmwfAvailability({ farm_code: farmCode, date: today }),
           getEcmwfLatest({ farm_code: farmCode, data_type: 'DQ' }),

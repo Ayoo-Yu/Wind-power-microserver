@@ -540,7 +540,7 @@ export default {
         points.value = []
         previewMeta.value = { loadedAt: '', sourceType: '' }
         errorMessage.value = error.response?.data?.error || '加载预览数据失败'
-        ElMessage.error(errorMessage.value)
+        console.warn(errorMessage.value)
       } finally {
         loading.value = false
       }
@@ -575,7 +575,7 @@ export default {
         ElMessage.success(response.data?.message || '版本保存成功')
       } catch (error) {
         console.error('save manual version failed:', error)
-        ElMessage.error(error.response?.data?.error || '版本保存失败')
+        console.warn('版本保存失败:', error)
       } finally {
         versionSaving.value = false
       }
@@ -601,7 +601,7 @@ export default {
         ElMessage.success(`已提交 ${station.value} ${targetDate.value} 的人工上报`)
       } catch (error) {
         console.error('submit manual report failed:', error)
-        ElMessage.error(error.response?.data?.error || '人工上报失败')
+        console.warn('人工上报失败:', error)
       } finally {
         submitting.value = false
       }
@@ -624,7 +624,7 @@ export default {
         await loadVersions()
       } catch (error) {
         console.error('apply manual version failed:', error)
-        ElMessage.error(error.response?.data?.error || '版本应用失败')
+        console.warn('版本应用失败:', error)
       }
     }
 
@@ -663,7 +663,7 @@ export default {
         }
       } catch (error) {
         console.error('compare manual version failed:', error)
-        ElMessage.error(error.response?.data?.error || '版本比对失败')
+        console.warn('版本比对失败:', error)
       }
     }
 
@@ -714,7 +714,7 @@ export default {
       } catch (error) {
         console.error('init manual workspace failed:', error)
         errorMessage.value = error.response?.data?.error || '初始化人工修正工作台失败'
-        ElMessage.error(errorMessage.value)
+        console.warn(errorMessage.value)
       }
     })
 

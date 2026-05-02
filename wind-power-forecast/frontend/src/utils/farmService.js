@@ -1,4 +1,4 @@
-﻿// src/utils/farmService.js
+// src/utils/farmService.js
 import { getAutoPredictFarms, getReportFarms, getFarms } from '../api/farmApi'
 /**
  * 场站管理服务
@@ -7,10 +7,8 @@ import { getAutoPredictFarms, getReportFarms, getFarms } from '../api/farmApi'
 
 class FarmService {
   constructor() {
-    this.currentFarm = localStorage.getItem('selectedFarm') || 'DEFAULT_FARM'
-    this.availableFarms = [
-      { code: 'DEFAULT_FARM', name: '全部风电场' }
-    ]
+    this.currentFarm = localStorage.getItem('selectedFarm') || ''
+    this.availableFarms = []
     this.farmsLoaded = false
     this.listeners = []
   }
@@ -37,8 +35,6 @@ class FarmService {
     if (this.currentFarm !== normalizedCode) {
       this.currentFarm = normalizedCode
       localStorage.setItem('selectedFarm', normalizedCode)
-
-      // 通知所有监听器
       this.notifyListeners(normalizedCode)
     }
   }
@@ -66,7 +62,7 @@ class FarmService {
     if (!scopeCodes) return farms
     const whitelist = new Set(scopeCodes.map(item => String(item).toLowerCase()))
     const filtered = farms.filter(farm => whitelist.has(String(farm.code).toLowerCase()))
-    return filtered.length > 0 ? filtered : [{ code: 'DEFAULT_FARM', name: '全部风电场' }]
+    return filtered.length > 0 ? filtered : farms
   }
 
   /**
@@ -74,20 +70,15 @@ class FarmService {
    */
   setAvailableFarms(farms) {
     if (!Array.isArray(farms) || farms.length === 0) {
-      this.availableFarms = [{ code: 'DEFAULT_FARM', name: '全部风电场' }]
+      this.availableFarms = []
       this.farmsLoaded = false
     } else {
-      const scoped = this.applyUserScope(farms)
-      // 在列表头部插入全局选项（避免与 applyUserScope 的回退重复）
-      const hasDefault = scoped.some(f => f.code === 'DEFAULT_FARM')
-      this.availableFarms = hasDefault
-        ? scoped
-        : [{ code: 'DEFAULT_FARM', name: '全部风电场' }, ...scoped]
+      this.availableFarms = this.applyUserScope(farms)
     }
 
     const exists = this.availableFarms.some(f => f.code === this.currentFarm)
     if (!exists) {
-      this.setCurrentFarm(this.availableFarms[0].code)
+      this.setCurrentFarm(this.availableFarms[0]?.code || '')
     }
   }
 
@@ -118,7 +109,8 @@ class FarmService {
           const farmName = typeof farm.farm_name === 'string' ? farm.farm_name.trim() : ''
           return {
             code,
-            name: farmName || code
+            name: farmName || code,
+            capacity: Number(farm.capacity) || 0
           }
         })
         .filter(Boolean)
@@ -170,7 +162,8 @@ class FarmService {
         mappedReportFarms.forEach((farm) => reportNameByCode.set(farm.code.toLowerCase(), farm.name))
         mappedFarms = mappedAutopredictFarms.map((farm) => ({
           code: farm.code,
-          name: reportNameByCode.get(farm.code.toLowerCase()) || farm.name
+          name: reportNameByCode.get(farm.code.toLowerCase()) || farm.name,
+          capacity: farm.capacity
         }))
       } else if (mappedReportFarms.length > 0) {
         mappedFarms = mappedReportFarms
@@ -184,12 +177,12 @@ class FarmService {
         this.setAvailableFarms(mappedFarms)
         this.farmsLoaded = true
       } else {
-        this.setAvailableFarms([{ code: 'DEFAULT_FARM', name: '全部风电场' }])
+        this.availableFarms = []
         this.farmsLoaded = false
       }
     } catch (error) {
-      console.error('加载场站列表失败，使用本地默认列表', error)
-      this.setAvailableFarms([{ code: 'DEFAULT_FARM', name: '全部风电场' }])
+      console.error('加载场站列表失败', error)
+      this.availableFarms = []
       this.farmsLoaded = false
     }
 
@@ -265,11 +258,10 @@ class FarmService {
   }
 
   /**
-   * 重置到默认场站
+   * 重置到第一个场站
    */
   resetToDefault() {
-    const defaultFarm = this.availableFarms.find(f => f.code === 'DEFAULT_FARM')
-    this.setCurrentFarm(defaultFarm ? 'DEFAULT_FARM' : this.availableFarms[0].code)
+    this.setCurrentFarm(this.availableFarms[0]?.code || '')
   }
 }
 
@@ -286,4 +278,3 @@ export class FarmInfo {
     this.name = name
   }
 }
-

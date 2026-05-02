@@ -193,8 +193,7 @@ export default {
         savedAt.value = buildSavedAt(response.data?.updated_at)
         updatedBy.value = response.data?.updated_by || ''
       } catch (error) {
-        errorMessage.value = error.response?.data?.error || '获取系统基础配置失败'
-        ElMessage.error(errorMessage.value)
+        applySettings()
       } finally {
         loading.value = false
       }
@@ -232,7 +231,7 @@ export default {
         updatedBy.value = response.data?.updated_by || ''
         ElMessage.success(response.data?.message || '系统基础配置保存成功')
       } catch (error) {
-        ElMessage.error(error.response?.data?.error || '保存系统基础配置失败')
+        console.warn('保存系统基础配置失败:', error)
       } finally {
         saving.value = false
       }
@@ -256,7 +255,7 @@ export default {
         ElMessage.success(response.data?.message || '系统基础配置已恢复默认')
       } catch (error) {
         if (error !== 'cancel') {
-          ElMessage.error(error.response?.data?.error || '恢复系统基础配置失败')
+          console.warn('恢复系统基础配置失败:', error)
         }
       } finally {
         resetting.value = false

@@ -5,10 +5,12 @@ def allowed_file(filename, allowed_extensions):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
 
 def save_uploaded_file(file, file_id, upload_folder):
+    os.makedirs(upload_folder, exist_ok=True)
     filename_wo_ext, ext = os.path.splitext(secure_filename(file.filename))
     new_upload_filename = f"{filename_wo_ext}_{file_id}{ext}"
     upload_path = os.path.join(upload_folder, new_upload_filename)
     file.save(upload_path)
+    return upload_path
 
 def find_file_by_id(file_id, upload_folder):
     for f in os.listdir(upload_folder):

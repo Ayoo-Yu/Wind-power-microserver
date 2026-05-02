@@ -5,7 +5,8 @@ echo Press Ctrl+C to stop.
 echo.
 
 REM --- Configuration ---
-set PROJECT_DIR=D:\my-vue-project\wind-power-forecast
+set "PROJECT_DIR=%~dp0"
+set "PROJECT_DIR=%PROJECT_DIR:~0,-1%"
 set CONDA_ENV_NAME=env
 set DOCKER_CONTAINER_NAME=wind-power-kingbase
 set PYTHON_SCRIPT=db_connection_check.py

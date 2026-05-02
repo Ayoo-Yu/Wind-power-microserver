@@ -48,38 +48,68 @@ function render() {
   const availableCap = props.points.map(item => item.availableCap)
   const nowIndex = resolveNowIndex(labels)
 
+  const tickInterval = Math.max(0, Math.floor(labels.length / 12))
+
   chart.setOption(
     {
-      tooltip: { trigger: 'axis' },
-      legend: {
-        data: ['实绩功率', '短期预测', '超短期预测', '可用容量上限'],
-        right: 0,
-        textStyle: { color: '#d7ecff' }
+      tooltip: {
+        trigger: 'axis',
+        formatter: (params) => {
+          if (!params?.length) return ''
+          const time = params[0].axisValue
+          let html = `<div style="font-size:12px;color:#9fc4df;margin-bottom:4px">${time}</div>`
+          params.forEach(p => {
+            const val = p.value != null ? Number(p.value).toFixed(1) + ' MW' : '--'
+            html += `<div style="display:flex;justify-content:space-between;gap:16px;font-size:12px"><span>${p.marker} ${p.seriesName}</span><span style="font-weight:600;color:#dff3ff">${val}</span></div>`
+          })
+          return html
+        }
       },
-      grid: { top: 30, right: 20, bottom: 42, left: 58 },
+      legend: {
+        data: [
+          { name: '实绩功率', icon: 'path://M0,4L12,4', itemStyle: { color: '#2dd4bf' } },
+          { name: '短期预测', icon: 'path://M0,4L4,4L6,1L8,7L10,4L12,4', itemStyle: { color: '#60a5fa' } },
+          { name: '超短期预测', icon: 'path://M0,4L3,4L4,1L5,7L6,4L9,4L10,1L11,7L12,4', itemStyle: { color: '#fbbf24' } },
+          { name: '可用容量上限', icon: 'path://M0,4L12,4', itemStyle: { color: '#a78bfa' } }
+        ],
+        top: 0,
+        left: 'center',
+        itemWidth: 16,
+        itemHeight: 8,
+        textStyle: { color: '#9fc4df', fontSize: 11 }
+      },
+      grid: { top: 34, right: 28, bottom: 38, left: 52 },
       xAxis: {
         type: 'category',
         data: labels,
-        axisLabel: { color: '#9fb6cc', hideOverlap: true },
-        axisLine: { lineStyle: { color: 'rgba(159,182,204,.35)' } },
+        axisLabel: {
+          color: '#7a96aa',
+          fontSize: 11,
+          interval: tickInterval,
+          formatter: (val) => {
+            const m = String(val).match(/^(\d{2}):00$/)
+            return m ? val : ''
+          }
+        },
+        axisLine: { lineStyle: { color: 'rgba(159,182,204,.18)' } },
         splitLine: { show: false }
       },
       yAxis: {
         type: 'value',
-        name: '功率 (MW)',
-        nameTextStyle: { color: '#8eb3cc' },
-        axisLabel: { color: '#9fb6cc' },
-        splitLine: { lineStyle: { color: 'rgba(159,182,204,.2)', type: 'dashed' } }
+        name: 'MW',
+        nameTextStyle: { color: '#7a96aa', fontSize: 11 },
+        axisLabel: { color: '#7a96aa', fontSize: 11 },
+        splitLine: { lineStyle: { color: 'rgba(159,182,204,.08)', type: 'dashed' } }
       },
       dataZoom: [
         { type: 'inside' },
         {
           type: 'slider',
-          height: 16,
-          bottom: 10,
-          borderColor: 'rgba(159,182,204,.25)',
+          height: 14,
+          bottom: 6,
+          borderColor: 'rgba(159,182,204,.2)',
           backgroundColor: 'rgba(9,20,32,.6)',
-          fillerColor: 'rgba(18,215,255,.2)'
+          fillerColor: 'rgba(18,215,255,.15)'
         }
       ],
       series: [
@@ -88,7 +118,7 @@ function render() {
           type: 'line',
           smooth: true,
           showSymbol: false,
-          lineStyle: { width: 2.2, color: '#2dd36f', type: 'solid' },
+          lineStyle: { width: 2.2, color: '#2dd4bf', type: 'solid' },
           data: actual
         },
         {
@@ -96,7 +126,7 @@ function render() {
           type: 'line',
           smooth: true,
           showSymbol: false,
-          lineStyle: { width: 2, color: '#12d7ff', type: 'dashed' },
+          lineStyle: { width: 2, color: '#60a5fa', type: 'dashed' },
           data: shortTerm
         },
         {
@@ -104,17 +134,26 @@ function render() {
           type: 'line',
           smooth: true,
           showSymbol: false,
-          lineStyle: { width: 2, color: '#f6b73c', type: [8, 4, 2, 4] },
+          lineStyle: { width: 2, color: '#fbbf24', type: [8, 4, 2, 4] },
           data: ultraShort,
           markLine: {
             symbol: 'none',
-            lineStyle: { color: '#ff5d73', width: 1.5, type: 'solid' },
+            lineStyle: { color: 'rgba(220,235,250,0.45)', width: 1.5, type: 'dashed' },
             label: {
               show: true,
-              formatter: '当前',
-              color: '#ffb8c2',
-              backgroundColor: 'rgba(255,93,115,.15)',
-              padding: [2, 6, 2, 6]
+              position: 'start',
+              rotate: 0,
+              formatter: () => {
+                const d = new Date()
+                const hh = String(d.getHours()).padStart(2, '0')
+                const mm = String(d.getMinutes()).padStart(2, '0')
+                return `当前 ${hh}:${mm}`
+              },
+              color: '#c8dce8',
+              fontSize: 11,
+              backgroundColor: 'rgba(18,24,39,0.85)',
+              padding: [3, 8, 3, 8],
+              borderRadius: 3
             },
             data: [{ xAxis: nowIndex }]
           }
@@ -124,7 +163,8 @@ function render() {
           type: 'line',
           smooth: true,
           showSymbol: false,
-          lineStyle: { width: 1.8, color: '#d7e4ef', type: 'solid' },
+          lineStyle: { width: 1.5, color: '#a78bfa', type: 'solid' },
+          areaStyle: { color: 'rgba(167,139,250,0.06)' },
           data: availableCap
         }
       ]
@@ -154,6 +194,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .chart-host {
   width: 100%;
-  height: 360px;
+  flex: 1;
+  min-height: 180px;
 }
 </style>

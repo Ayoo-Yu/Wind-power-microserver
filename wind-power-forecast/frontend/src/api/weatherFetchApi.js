@@ -145,7 +145,7 @@ export async function uploadManualWeatherFile(formData) {
 
     const fallbackData = new FormData()
     fallbackData.append('file', file)
-    fallbackData.append('farm_code', formData.get('farm_code') || 'DEFAULT_FARM')
+    fallbackData.append('farm_code', formData.get('farm_code') || '')
     fallbackData.append('table_name', 'weather_data')
     return axiosInstance.post('/operational/api/upload_operational_csv', fallbackData, { headers })
   }

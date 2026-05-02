@@ -57,7 +57,6 @@
           <el-checkbox label="超短期预测区间" />
           <el-checkbox label="中期预测区间" />
         </el-checkbox-group>
-        <el-switch v-model="showCapacityLine" active-text="显示可用容量线" />
         <el-switch v-model="showCurtailmentTag" active-text="显示限电标识" />
       </div>
 
@@ -78,14 +77,22 @@
     </el-card>
 
     <template v-if="analysisTab === 'single'">
-      <el-tabs v-model="singleViewTab" class="single-view-tabs">
-        <el-tab-pane label="曲线分析" name="curve" />
-        <el-tab-pane label="风机出力特性（散点图）" name="scatter" />
-      </el-tabs>
-
-      <template v-if="singleViewTab === 'curve'">
+      <template>
         <el-card class="chart-card" v-if="chartData">
           <template #header><div class="card-header">主曲线（双Y轴）</div></template>
+          <div class="series-legend">
+            <button
+              v-for="item in curveLegendItems"
+              :key="item.name"
+              type="button"
+              class="legend-toggle"
+              :class="{ inactive: !isCurveLegendActive(item.name) }"
+              @click="toggleSelectedType(item.name)"
+            >
+              <span class="legend-swatch" :style="{ backgroundColor: item.color }"></span>
+              <span>{{ item.name }}</span>
+            </button>
+          </div>
           <div class="chart-wrapper" ref="mainChartEl" />
         </el-card>
         <el-card class="chart-card" v-if="chartData">
@@ -94,12 +101,6 @@
         </el-card>
       </template>
 
-      <template v-else>
-        <el-card class="chart-card" v-if="chartData">
-          <template #header><div class="card-header">风机出力特性（散点图）</div></template>
-          <div class="chart-wrapper" ref="scatterChartEl" />
-        </el-card>
-      </template>
     </template>
 
     <template v-else>
@@ -147,7 +148,6 @@ export default {
   data() {
     return {
       analysisTab: 'single',
-      singleViewTab: 'curve',
       timeRange: [],
       loading: false,
       chartData: null,
@@ -155,12 +155,10 @@ export default {
       singleFarmCode: '',
       fleetCompareFarmCodes: [],
       selectedTypes: ['实测值', '超短期预测', '短期预测', '中期预测', '短期风速预测', '中期风速预测'],
-      showCapacityLine: true,
       showCurtailmentTag: true,
       installedCapacity: 779.0,
       mainChart: null,
       errorChart: null,
-      scatterChart: null,
       fleetBarChart: null,
       _disposed: false,
       exportData: { comparison: null, metrics: null },
@@ -202,6 +200,16 @@ export default {
         { label: '超短期平均准确率', value: this.formatPct(avgUltra) },
         { label: 'RMSE/不合格点', value: `${this.formatNum(avgRmse)} / ${totalUnqualified}` }
       ]
+    },
+    curveLegendItems() {
+      return [
+        { name: '实测值', color: '#fb7185' },
+        { name: '超短期预测', color: '#22d3ee' },
+        { name: '短期预测', color: '#60a5fa' },
+        { name: '中期预测', color: '#4ade80' },
+        { name: '短期风速预测', color: '#fbbf24' },
+        { name: '中期风速预测', color: '#c084fc' }
+      ]
     }
   },
   async mounted() {
@@ -209,7 +217,11 @@ export default {
     const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
     this.timeRange = [`${fmt(now)} 00:00:00`, `${fmt(now)} 23:59:59`]
     await this.loadFleetCompareFarms()
-    this.singleFarmCode = farmService.getCurrentFarm() || this.fleetCompareFarms[0]?.code || ''
+    const currentFarm = farmService.getCurrentFarm()
+    this.singleFarmCode = this.fleetCompareFarms.some(f => f.code === currentFarm)
+      ? currentFarm
+      : (this.fleetCompareFarms[0]?.code || '')
+    this.updateInstalledCapacity(this.singleFarmCode)
     this.fleetCompareFarmCodes = this.fleetCompareFarms.map(v => v.code)
     this.applyRouteQuery()
     farmService.addListener(this.handleFarmChanged)
@@ -225,9 +237,15 @@ export default {
   methods: {
     handleFarmChanged(code) {
       if (this.analysisTab === 'single') {
-        this.singleFarmCode = code
+        const validCode = this.fleetCompareFarms.some(f => f.code === code) ? code : (this.fleetCompareFarms[0]?.code || '')
+        this.singleFarmCode = validCode
+        this.updateInstalledCapacity(validCode)
         this.fetchComparisonData()
       }
+    },
+    updateInstalledCapacity(farmCode) {
+      const farm = this.fleetCompareFarms.find(f => f.code === farmCode)
+      if (farm && farm.capacity > 0) this.installedCapacity = farm.capacity
     },
     applyRouteQuery() {
       const query = this.$route?.query || {}
@@ -245,7 +263,6 @@ export default {
         this.fleetCompareFarmCodes = farmCodes.filter(code => this.fleetCompareFarms.some(v => v.code === code))
       }
       if (start && end) this.timeRange = [start, end]
-      if (view === 'curve' || view === 'scatter') this.singleViewTab = view
 
       if (predictionType.includes('super')) {
         this.selectedTypes = ['实测值', '超短期预测']
@@ -262,7 +279,6 @@ export default {
 
       if (this.analysisTab === 'single') {
         query.farm_code = this.singleFarmCode || undefined
-        query.view = this.singleViewTab
         query.farm_codes = undefined
       } else {
         query.farm_code = undefined
@@ -280,8 +296,8 @@ export default {
     async loadFleetCompareFarms() {
       const farms = await farmService.loadAvailableFarms(true)
       this.fleetCompareFarms = (Array.isArray(farms) ? farms : [])
-        .filter(f => f && f.code && f.code !== 'DEFAULT_FARM')
-        .map(f => ({ code: f.code, name: f.name || f.code }))
+        .filter(f => f && f.code)
+        .map(f => ({ code: f.code, name: f.name || f.code, capacity: Number(f.capacity) || 0 }))
     },
     formatPct(value) {
       if (!Number.isFinite(Number(value))) return '--'
@@ -296,6 +312,17 @@ export default {
       if (!arr.length) return null
       return arr.reduce((s, v) => s + v, 0) / arr.length
     },
+    toggleSelectedType(type) {
+      if (!type) return
+      if (this.selectedTypes.includes(type)) {
+        this.selectedTypes = this.selectedTypes.filter(item => item !== type)
+      } else {
+        this.selectedTypes = [...this.selectedTypes, type]
+      }
+    },
+    isCurveLegendActive(type) {
+      return this.selectedTypes.includes(type)
+    },
     getWindDirectionArrow(deg) {
       const d = Number(deg)
       if (!Number.isFinite(d)) return ''
@@ -305,7 +332,7 @@ export default {
     },
     resizeCharts() {
       if (this._disposed) return
-      [this.mainChart, this.errorChart, this.scatterChart, this.fleetBarChart].forEach((chart) => chart && chart.resize())
+      [this.mainChart, this.errorChart, this.fleetBarChart].forEach((chart) => chart && chart.resize())
     },
     setQuickTimeRange(period) {
       const end = new Date()
@@ -320,10 +347,9 @@ export default {
       this.fetchComparisonData()
     },
     destroyAllCharts() {
-      [this.mainChart, this.errorChart, this.scatterChart, this.fleetBarChart].forEach((chart) => { if (chart) chart.dispose() })
+      [this.mainChart, this.errorChart, this.fleetBarChart].forEach((chart) => { if (chart) chart.dispose() })
       this.mainChart = null
       this.errorChart = null
-      this.scatterChart = null
       this.fleetBarChart = null
     },
     ensureChartInstance(chartKey, refKey) {
@@ -346,16 +372,68 @@ export default {
     getSeries(apiData, names = []) {
       const entries = Object.entries(apiData || {})
       const targetNorms = names.map(this.normalizeTypeName)
+      const exactMatch = entries.find(([k]) => targetNorms.includes(this.normalizeTypeName(k)))
+      if (exactMatch) return Array.isArray(exactMatch[1]) ? exactMatch[1] : []
       const match = entries.find(([k]) => {
         const nk = this.normalizeTypeName(k)
         return targetNorms.some(t => nk.includes(t))
       })
-      return match ? match[1] : []
+      return match && Array.isArray(match[1]) ? match[1] : []
     },
-    alignedSeries(baseSeries, targetSeries, valueKey = 'power') {
-      const map = new Map((targetSeries || []).map(v => [new Date(v.timestamp).toISOString(), Number(v[valueKey])]))
+    toFiniteOrNull(value) {
+      const n = Number(value)
+      return Number.isFinite(n) ? n : null
+    },
+    hasSeriesValue(data) {
+      return Array.isArray(data) && data.some((v) => {
+        if (Array.isArray(v)) return v.some(item => Number.isFinite(Number(item)))
+        return Number.isFinite(Number(v))
+      })
+    },
+    sanitizeSeriesData(data) {
+      return Array.isArray(data) ? data.map(this.toFiniteOrNull) : []
+    },
+    buildTimeline(...seriesList) {
+      const map = new Map()
+      seriesList.flat().forEach((item) => {
+        const ts = item?.timestamp
+        const time = new Date(ts).getTime()
+        if (Number.isFinite(time) && !map.has(time)) map.set(time, ts)
+      })
+      return Array.from(map.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([, timestamp]) => ({ timestamp }))
+    },
+    formatChartLabel(timestamp) {
+      const d = new Date(timestamp)
+      if (!Number.isFinite(d.getTime())) return ''
+      return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    },
+    alignedSeries(baseSeries, targetSeries, valueKey = 'power', toleranceMs = 0) {
+      const target = targetSeries || []
+      if (!target.length) return (baseSeries || []).map(() => null)
+      if (toleranceMs > 0) {
+        const sorted = target.map(v => ({ ts: new Date(v.timestamp).getTime(), val: this.toFiniteOrNull(v[valueKey]) })).filter(v => Number.isFinite(v.ts) && Number.isFinite(v.val)).sort((a, b) => a.ts - b.ts)
+        return (baseSeries || []).map(v => {
+          const t = new Date(v.timestamp).getTime()
+          if (!Number.isFinite(t)) return null
+          let best = null, bestDist = Infinity
+          for (const item of sorted) {
+            const dist = Math.abs(item.ts - t)
+            if (dist < bestDist) { bestDist = dist; best = item }
+            if (item.ts > t + toleranceMs) break
+          }
+          return (best && bestDist <= toleranceMs) ? best.val : null
+        })
+      }
+      const map = new Map(target.map(v => {
+        const t = new Date(v.timestamp)
+        return Number.isFinite(t.getTime()) ? [t.toISOString(), this.toFiniteOrNull(v[valueKey])] : null
+      }).filter(Boolean))
       return (baseSeries || []).map(v => {
-        const key = new Date(v.timestamp).toISOString()
+        const t = new Date(v.timestamp)
+        if (!Number.isFinite(t.getTime())) return null
+        const key = t.toISOString()
         const val = map.get(key)
         return Number.isFinite(val) ? val : null
       })
@@ -416,18 +494,27 @@ export default {
         } else {
           await this.fetchFleetCompareData()
         }
+      } catch (error) {
+        console.warn('查询功率对比数据失败:', error?.message || error)
       } finally {
         this.loading = false
       }
     },
     async fetchSingleStationData() {
-      const farmCode = this.singleFarmCode || farmService.getCurrentFarm()
+      const rawCode = this.singleFarmCode || farmService.getCurrentFarm()
+      const farmCode = this.fleetCompareFarms.some(f => f.code === rawCode) ? rawCode : (this.fleetCompareFarms[0]?.code || '')
       if (!farmCode) {
         this.$message.warning('请先选择场站')
         return
       }
       farmService.setCurrentFarm(farmCode)
-      const payload = { start: this.timeRange[0], end: this.timeRange[1], types: this.selectedTypes, farm_code: farmCode, supershort_horizon: 'average' }
+      this.updateInstalledCapacity(farmCode)
+      const requestTypes = [...this.selectedTypes]
+      ;['实测值', '超短期预测', '短期预测', '中期预测', '短期风速预测', '中期风速预测'].forEach((type) => {
+        if (!requestTypes.includes(type)) requestTypes.push(type)
+      })
+      if (!requestTypes.includes('可用容量')) requestTypes.push('可用容量')
+      const payload = { start: this.timeRange[0], end: this.timeRange[1], types: requestTypes, farm_code: farmCode, supershort_horizon: 'average' }
       const response = await getPowerCompareData(payload)
       const apiData = response?.data?.data || response?.data || {}
       this.chartData = apiData
@@ -450,33 +537,46 @@ export default {
       const supershortLowerSeries = this.getSeries(apiData, ['超短期预测下限', 'supershort_lower'])
       const supershortUpperSeries = this.getSeries(apiData, ['超短期预测上限', 'supershort_upper'])
 
-      const sortedActual = [...actual].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
-      const labels = sortedActual.map(v => {
-        const d = new Date(v.timestamp)
-        return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-      })
-      const actualValues = sortedActual.map(v => Number(v.power))
-      const superValues = this.alignedSeries(sortedActual, supershort)
-      const shortValues = this.alignedSeries(sortedActual, short)
-      const midValues = this.alignedSeries(sortedActual, mid)
-      const shortWindValues = this.alignedSeries(sortedActual, shortWind, 'wind_speed')
-      const midWindValues = this.alignedSeries(sortedActual, midWind, 'wind_speed')
-      const windDirectionValues = this.alignedSeries(sortedActual, windDirectionSeries, 'wind_direction')
-      const capacityValuesRaw = this.alignedSeries(sortedActual, capacitySeries, 'available_capacity')
+      const sortedActual = [...actual]
+        .filter(v => Number.isFinite(new Date(v.timestamp).getTime()))
+        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+      const sortedTimeline = this.buildTimeline(
+        sortedActual,
+        supershort,
+        short,
+        mid,
+        shortWind,
+        midWind,
+        capacitySeries,
+        curtailmentSeries,
+        windDirectionSeries
+      )
+      const labels = sortedTimeline.map(v => this.formatChartLabel(v.timestamp))
+      const actualValues = this.alignedSeries(sortedTimeline, sortedActual)
+      const superValues = this.alignedSeries(sortedTimeline, supershort)
+      const shortValues = this.alignedSeries(sortedTimeline, short)
+      const midValues = this.alignedSeries(sortedTimeline, mid)
+      const shortWindValues = this.alignedSeries(sortedTimeline, shortWind, 'wind_speed')
+      const midWindValues = this.alignedSeries(sortedTimeline, midWind, 'wind_speed')
+      const windDirectionValues = this.alignedSeries(sortedTimeline, windDirectionSeries, 'wind_direction')
+      const capacityValuesRaw = this.alignedSeries(sortedTimeline, capacitySeries, 'available_capacity')
 
-      const installed = Math.max(this.installedCapacity, ...actualValues.filter(Number.isFinite), ...shortValues.filter(Number.isFinite), ...superValues.filter(Number.isFinite), ...capacityValuesRaw.filter(Number.isFinite), 0)
-      this.installedCapacity = installed > 0 ? Number((installed * 1.1).toFixed(2)) : this.installedCapacity
+      const finiteCaps = capacityValuesRaw.filter(Number.isFinite)
+      if (finiteCaps.length) {
+        const maxCap = Math.max(...finiteCaps)
+        if (maxCap > 0) this.installedCapacity = Number((maxCap * 1.05).toFixed(2))
+      }
 
       const capacityValues = capacityValuesRaw.some(Number.isFinite) ? capacityValuesRaw : labels.map(() => this.installedCapacity)
-      const curtailmentValues = this.alignedSeries(sortedActual, curtailmentSeries, 'value')
+      const curtailmentValues = this.alignedSeries(sortedTimeline, curtailmentSeries, 'value')
 
       // 对齐预测区间数据
-      const shortLowerValues = this.alignedSeries(sortedActual, shortLowerSeries)
-      const shortUpperValues = this.alignedSeries(sortedActual, shortUpperSeries)
-      const midLowerValues = this.alignedSeries(sortedActual, midLowerSeries)
-      const midUpperValues = this.alignedSeries(sortedActual, midUpperSeries)
-      const supershortLowerValues = this.alignedSeries(sortedActual, supershortLowerSeries)
-      const supershortUpperValues = this.alignedSeries(sortedActual, supershortUpperSeries)
+      const shortLowerValues = this.alignedSeries(sortedTimeline, shortLowerSeries)
+      const shortUpperValues = this.alignedSeries(sortedTimeline, shortUpperSeries)
+      const midLowerValues = this.alignedSeries(sortedTimeline, midLowerSeries)
+      const midUpperValues = this.alignedSeries(sortedTimeline, midUpperSeries)
+      const supershortLowerValues = this.alignedSeries(sortedTimeline, supershortLowerSeries)
+      const supershortUpperValues = this.alignedSeries(sortedTimeline, supershortUpperSeries)
 
       const shortDaily = this.calcDailyStats(sortedActual, short, 0.6)
       const superDaily = this.calcDailyStats(sortedActual, supershort, 0.65)
@@ -506,6 +606,7 @@ export default {
         capacityValues,
         curtailmentValues,
         sortedActual,
+        sortedTimeline,
         shortLowerValues,
         shortUpperValues,
         midLowerValues,
@@ -520,8 +621,8 @@ export default {
           '超短期预测': superValues,
           '短期预测': shortValues,
           '中期预测': midValues,
-          '短期风速': shortWindValues,
-          '中期风速': midWindValues,
+          '短期风速预测': shortWindValues,
+          '中期风速预测': midWindValues,
           '风向(°)': windDirectionValues,
           '可用容量': capacityValues
         }
@@ -548,126 +649,83 @@ export default {
       }
       return areas
     },
+    buildPointData(data) {
+      return this.sanitizeSeriesData(data)
+        .map((value, index) => (Number.isFinite(value) ? [index, value] : null))
+        .filter(Boolean)
+    },
+    buildSegmentData(data) {
+      const cleanData = this.sanitizeSeriesData(data)
+      const segments = []
+      let previous = null
+      cleanData.forEach((value, index) => {
+        if (!Number.isFinite(value)) {
+          previous = null
+          return
+        }
+        if (previous) segments.push([previous[0], previous[1], index, value])
+        previous = [index, value]
+      })
+      return segments
+    },
+    pushCustomCurve(series, name, data, color, yAxisIndex, lineType = 'solid') {
+      const points = this.buildPointData(data)
+      const segments = this.buildSegmentData(data)
+      if (!points.length) return
+      series.push({
+        name: `${name}_line`,
+        type: 'custom',
+        coordinateSystem: 'cartesian2d',
+        yAxisIndex,
+        encode: { x: [0, 2], y: [1, 3] },
+        silent: true,
+        data: segments,
+        renderItem: (params, api) => {
+          if (!api.coord) return null
+          const p1 = api.coord([api.value(0), api.value(1)])
+          const p2 = api.coord([api.value(2), api.value(3)])
+          const rect = { x: params.coordSys.x, y: params.coordSys.y, width: params.coordSys.width, height: params.coordSys.height }
+          const clipped = echarts.graphic.clipPointsByRect([p1, p2], rect)
+          if (clipped.length < 2) return null
+          return {
+            type: 'line',
+            shape: { x1: clipped[0][0], y1: clipped[0][1], x2: clipped[1][0], y2: clipped[1][1] },
+            style: api.style({ stroke: color, lineWidth: yAxisIndex === YAXIS_WINDSPEED ? 1.6 : 1.7, lineDash: lineType === 'dashed' ? [6, 4] : null })
+          }
+        },
+        z: 2
+      })
+      series.push({
+        name,
+        type: 'scatter',
+        coordinateSystem: 'cartesian2d',
+        yAxisIndex,
+        encode: { x: 0, y: 1 },
+        data: points,
+        symbolSize: yAxisIndex === YAXIS_WINDSPEED ? 6 : 5,
+        itemStyle: { color },
+        emphasis: { scale: true, focus: 'series' },
+        z: 3
+      })
+    },
     getMainSeriesFromState() {
       const s = this.singleSeriesState
       if (!s) return []
       const series = []
       const pushPower = (name, data, color) => {
-        series.push({ name, type: 'line', data, smooth: false, showSymbol: false, lineStyle: { width: 1.7, color }, itemStyle: { color }, yAxisIndex: YAXIS_POWER, connectNulls: true })
+        this.pushCustomCurve(series, name, data, color, YAXIS_POWER)
       }
       const pushWind = (name, data, color) => {
-        series.push({ name, type: 'line', data, smooth: true, showSymbol: false, lineStyle: { width: 1.4, color, type: 'dashed' }, itemStyle: { color }, yAxisIndex: YAXIS_WINDSPEED, connectNulls: true })
+        this.pushCustomCurve(series, name, data, color, YAXIS_WINDSPEED, 'dashed')
       }
 
       if (this.selectedTypes.includes('实测值')) pushPower('实测值', s.actualValues, '#fb7185')
       if (this.selectedTypes.includes('超短期预测')) pushPower('超短期预测', s.superValues, '#22d3ee')
       if (this.selectedTypes.includes('短期预测')) pushPower('短期预测', s.shortValues, '#60a5fa')
       if (this.selectedTypes.includes('中期预测')) pushPower('中期预测', s.midValues, '#4ade80')
-      if (this.selectedTypes.includes('短期风速预测')) pushWind('短期风速', s.shortWindValues, '#fbbf24')
-      if (this.selectedTypes.includes('中期风速预测')) pushWind('中期风速', s.midWindValues, '#c084fc')
-      if (this.showCapacityLine) pushPower('可用容量', s.capacityValues, '#f59e0b')
-
-      // 短期预测区间色带
-      if (this.selectedTypes.includes('短期预测区间') && s.shortLowerValues && s.shortUpperValues && s.shortLowerValues.some(v => v != null)) {
-        series.push({
-          name: '短期预测区间',
-          type: 'line',
-          smooth: false,
-          showSymbol: false,
-          yAxisIndex: YAXIS_POWER,
-          data: s.shortUpperValues,
-          lineStyle: { opacity: 0 },
-          areaStyle: { color: 'rgba(96, 165, 250, 0.15)' },
-          stack: 'short-interval',
-          z: 1,
-          connectNulls: true
-        })
-        series.push({
-          name: '短期预测区间_下',
-          type: 'line',
-          smooth: false,
-          showSymbol: false,
-          yAxisIndex: YAXIS_POWER,
-          data: s.shortLowerValues.map((v, i) => {
-            const upper = s.shortUpperValues[i]
-            if (v == null || upper == null) return null
-            return upper - v
-          }),
-          lineStyle: { opacity: 0 },
-          areaStyle: { color: 'rgba(96, 165, 250, 0.15)' },
-          stack: 'short-interval',
-          z: 1,
-          connectNulls: true
-        })
-      }
-
-      // 超短期预测区间色带
-      if (this.selectedTypes.includes('超短期预测区间') && s.supershortLowerValues && s.supershortUpperValues && s.supershortLowerValues.some(v => v != null)) {
-        series.push({
-          name: '超短期预测区间',
-          type: 'line',
-          smooth: false,
-          showSymbol: false,
-          yAxisIndex: YAXIS_POWER,
-          data: s.supershortUpperValues,
-          lineStyle: { opacity: 0 },
-          areaStyle: { color: 'rgba(34, 211, 238, 0.15)' },
-          stack: 'supershort-interval',
-          z: 1,
-          connectNulls: true
-        })
-        series.push({
-          name: '超短期预测区间_下',
-          type: 'line',
-          smooth: false,
-          showSymbol: false,
-          yAxisIndex: YAXIS_POWER,
-          data: s.supershortLowerValues.map((v, i) => {
-            const upper = s.supershortUpperValues[i]
-            if (v == null || upper == null) return null
-            return upper - v
-          }),
-          lineStyle: { opacity: 0 },
-          areaStyle: { color: 'rgba(34, 211, 238, 0.15)' },
-          stack: 'supershort-interval',
-          z: 1,
-          connectNulls: true
-        })
-      }
-
-      // 中期预测区间色带
-      if (this.selectedTypes.includes('中期预测区间') && s.midLowerValues && s.midUpperValues && s.midLowerValues.some(v => v != null)) {
-        series.push({
-          name: '中期预测区间',
-          type: 'line',
-          smooth: false,
-          showSymbol: false,
-          yAxisIndex: YAXIS_POWER,
-          data: s.midUpperValues,
-          lineStyle: { opacity: 0 },
-          areaStyle: { color: 'rgba(74, 222, 128, 0.15)' },
-          stack: 'mid-interval',
-          z: 1,
-          connectNulls: true
-        })
-        series.push({
-          name: '中期预测区间_下',
-          type: 'line',
-          smooth: false,
-          showSymbol: false,
-          yAxisIndex: YAXIS_POWER,
-          data: s.midLowerValues.map((v, i) => {
-            const upper = s.midUpperValues[i]
-            if (v == null || upper == null) return null
-            return upper - v
-          }),
-          lineStyle: { opacity: 0 },
-          areaStyle: { color: 'rgba(74, 222, 128, 0.15)' },
-          stack: 'mid-interval',
-          z: 1,
-          connectNulls: true
-        })
-      }
+      if (this.selectedTypes.includes('短期风速预测')) pushWind('短期风速预测', s.shortWindValues, '#fbbf24')
+      if (this.selectedTypes.includes('中期风速预测')) pushWind('中期风速预测', s.midWindValues, '#c084fc')
+      // 可用容量仅用于 installedCapacity 计算，不在图表中显示
 
       const markAreas = this.buildCurtailmentMarkAreas(s.labels, s.curtailmentValues)
       if (markAreas.length && series.length) {
@@ -682,12 +740,8 @@ export default {
     },
     renderSingleCharts() {
       if (this._disposed || !this.singleSeriesState) return
-      if (this.singleViewTab === 'curve') {
-        this.renderMainChart()
-        this.renderErrorChart()
-      } else {
-        this.renderScatterChart()
-      }
+      this.renderMainChart()
+      this.renderErrorChart()
     },
     renderMainChart() {
       if (this._disposed) return
@@ -695,26 +749,42 @@ export default {
       if (!state || !state.labels?.length || !this.$refs.mainChartEl) return
       this.mainChart = this.ensureChartInstance('mainChart', 'mainChartEl')
       if (!this.mainChart) return
-      const series = this.getMainSeriesFromState()
+      const rawSeries = this.getMainSeriesFromState()
+      const series = rawSeries.filter(s => s && s.type && Array.isArray(s.data) && this.hasSeriesValue(s.data))
+      if (!series.length) { this.mainChart.clear(); return }
+      const visibleSeriesNames = new Set(series.map(item => item.name))
+      const tooltipRows = [
+        { name: '实测值', values: state.actualValues, unit: 'MW' },
+        { name: '超短期预测', values: state.superValues, unit: 'MW' },
+        { name: '短期预测', values: state.shortValues, unit: 'MW' },
+        { name: '中期预测', values: state.midValues, unit: 'MW' },
+        { name: '短期风速预测', values: state.shortWindValues, unit: 'm/s' },
+        { name: '中期风速预测', values: state.midWindValues, unit: 'm/s' }
+      ]
 
+      this.mainChart.clear()
       this.mainChart.setOption({
         backgroundColor: 'transparent',
-        grid: { left: 54, right: 54, top: 36, bottom: 78 },
-        legend: { top: 4, textStyle: { color: '#d9e9ff' } },
+        grid: { left: 58, right: 58, top: 52, bottom: 34 },
+        legend: { show: false },
         tooltip: {
-          trigger: 'axis',
-          axisPointer: { type: 'cross' },
-          formatter: (params) => {
-            const idx = params?.[0]?.dataIndex ?? 0
+          trigger: 'item',
+          triggerOn: 'mousemove|click',
+          confine: true,
+          appendToBody: true,
+          renderMode: 'html',
+          formatter: (param) => {
+            const idx = Array.isArray(param?.value) ? Number(param.value[0]) : (param?.dataIndex ?? 0)
             const actual = state.actualValues[idx]
             const lines = [`时间: ${state.labels[idx] || '--'}`]
-            params.forEach((p) => {
-              const unit = p.seriesName.includes('风速') ? 'm/s' : 'MW'
-              const val = Number.isFinite(p.data) ? Number(p.data).toFixed(2) : '--'
-              lines.push(`${p.marker}${p.seriesName}: ${val}${Number.isFinite(p.data) ? unit : ''}`)
-              if (Number.isFinite(actual) && (p.seriesName === '短期预测' || p.seriesName === '超短期预测') && Number.isFinite(p.data)) {
-                const dev = ((Number(p.data) - actual) / Math.max(Math.abs(actual), 1e-6)) * 100
-                lines.push(`${p.seriesName}瞬时误差率: ${dev >= 0 ? '+' : ''}${dev.toFixed(1)}%${Math.abs(dev) > 20 ? ' ⚠️' : ''}`)
+            tooltipRows.forEach((row) => {
+              if (!visibleSeriesNames.has(row.name)) return
+              const rawValue = this.toFiniteOrNull(row.values[idx])
+              if (!Number.isFinite(rawValue)) return
+              lines.push(`${row.name}: ${rawValue.toFixed(2)}${row.unit}`)
+              if (Number.isFinite(actual) && (row.name === '短期预测' || row.name === '超短期预测')) {
+                const dev = ((rawValue - actual) / Math.max(Math.abs(actual), 1e-6)) * 100
+                lines.push(`${row.name}瞬时误差率: ${dev >= 0 ? '+' : ''}${dev.toFixed(1)}%${Math.abs(dev) > 20 ? ' ⚠️' : ''}`)
               }
             })
             const windDirection = state.windDirectionValues[idx]
@@ -722,17 +792,34 @@ export default {
             return lines.join('<br/>')
           }
         },
-        xAxis: { type: 'category', data: state.labels, axisLabel: { color: '#9fb6cc' }, axisLine: { lineStyle: { color: '#6b8aa3' } } },
+        xAxis: {
+          type: 'category',
+          data: state.labels,
+          axisLabel: { color: '#9fb6cc', margin: 10, hideOverlap: true },
+          axisLine: { lineStyle: { color: '#6b8aa3' } }
+        },
         yAxis: [
-          { type: 'value', name: '功率(MW)', axisLabel: { color: '#9fb6cc' }, nameTextStyle: { color: '#9fb6cc' }, splitLine: { lineStyle: { color: 'rgba(159, 182, 204, 0.12)' } } },
-          { type: 'value', name: '风速(m/s)', axisLabel: { color: '#9fb6cc' }, nameTextStyle: { color: '#9fb6cc' }, splitLine: { show: false } }
-        ],
-        dataZoom: [
-          { type: 'inside', xAxisIndex: [0], filterMode: 'none' },
-          { type: 'slider', xAxisIndex: [0], bottom: 22, height: 18, borderColor: '#37536b', fillerColor: 'rgba(74, 222, 128, 0.2)', textStyle: { color: '#9fb6cc' } }
+          {
+            type: 'value',
+            name: '功率(MW)',
+            nameLocation: 'end',
+            nameGap: 16,
+            axisLabel: { color: '#9fb6cc' },
+            nameTextStyle: { color: '#9fb6cc', align: 'left', padding: [0, 0, 0, -42] },
+            splitLine: { lineStyle: { color: 'rgba(159, 182, 204, 0.12)' } }
+          },
+          {
+            type: 'value',
+            name: '风速(m/s)',
+            nameLocation: 'end',
+            nameGap: 16,
+            axisLabel: { color: '#9fb6cc' },
+            nameTextStyle: { color: '#9fb6cc', align: 'right', padding: [0, -42, 0, 0] },
+            splitLine: { show: false }
+          }
         ],
         series
-      }, true)
+      })
     },
     renderErrorChart() {
       if (this._disposed) return
@@ -740,10 +827,13 @@ export default {
       if (!state || !state.labels?.length || !this.$refs.errorChartEl) return
       this.errorChart = this.ensureChartInstance('errorChart', 'errorChartEl')
       if (!this.errorChart) return
-      const toErr = (arr) => arr.map((v, i) => (Number.isFinite(v) && Number.isFinite(state.actualValues[i]) ? Number(v) - Number(state.actualValues[i]) : null))
+      const toErr = (arr) => arr.map((v, i) => (Number.isFinite(v) && Number.isFinite(state.actualValues[i]) ? Number(v) - Number(state.actualValues[i]) : '-'))
       const shortErr = toErr(state.shortValues)
       const superErr = toErr(state.superValues)
+      const hasValidErr = shortErr.some(v => v !== '-') || superErr.some(v => v !== '-')
+      if (!hasValidErr) { this.errorChart.clear(); return }
 
+      this.errorChart.clear()
       this.errorChart.setOption({
         backgroundColor: 'transparent',
         grid: { left: 54, right: 26, top: 30, bottom: 64 },
@@ -751,43 +841,16 @@ export default {
         tooltip: { trigger: 'axis' },
         xAxis: { type: 'category', data: state.labels, axisLabel: { color: '#9fb6cc' }, axisLine: { lineStyle: { color: '#6b8aa3' } } },
         yAxis: { type: 'value', name: '误差(MW)', axisLabel: { color: '#9fb6cc' }, nameTextStyle: { color: '#9fb6cc' }, splitLine: { lineStyle: { color: 'rgba(159, 182, 204, 0.12)' } } },
-        dataZoom: [
-          { type: 'inside', xAxisIndex: [0], filterMode: 'none' },
-          { type: 'slider', xAxisIndex: [0], bottom: 12, height: 18, borderColor: '#37536b', fillerColor: 'rgba(96, 165, 250, 0.2)', textStyle: { color: '#9fb6cc' } }
-        ],
         series: [
           { name: '短期误差', type: 'bar', data: shortErr, itemStyle: { color: 'rgba(96, 165, 250, 0.7)' } },
-          { name: '超短期误差', type: 'line', data: superErr, smooth: true, showSymbol: false, lineStyle: { color: '#22d3ee', width: 1.6 } },
-          { name: '0轴', type: 'line', data: state.labels.map(() => 0), showSymbol: false, lineStyle: { color: '#f1f5f9', type: 'dashed' } }
+          { name: '超短期误差', type: 'scatter', data: superErr.map((value, index) => (value === '-' ? null : [index, value])).filter(Boolean), symbolSize: 5, itemStyle: { color: '#22d3ee' } }
         ]
-      }, true)
-    },
-    renderScatterChart() {
-      if (this._disposed) return
-      const state = this.singleSeriesState
-      if (!state || !state.labels?.length || !this.$refs.scatterChartEl) return
-      this.scatterChart = this.ensureChartInstance('scatterChart', 'scatterChartEl')
-      if (!this.scatterChart) return
-      const points = []
-      state.sortedActual.forEach((_, i) => {
-        const ws = Number.isFinite(state.shortWindValues[i]) ? state.shortWindValues[i] : state.midWindValues[i]
-        const power = state.actualValues[i]
-        if (Number.isFinite(ws) && Number.isFinite(power)) points.push([ws, power])
       })
-
-      this.scatterChart.setOption({
-        backgroundColor: 'transparent',
-        grid: { left: 54, right: 24, top: 30, bottom: 42 },
-        tooltip: { trigger: 'item', formatter: (p) => `风速: ${Number(p.value[0]).toFixed(2)} m/s<br/>功率: ${Number(p.value[1]).toFixed(2)} MW` },
-        xAxis: { type: 'value', name: '实测风速(m/s)', axisLabel: { color: '#9fb6cc' }, nameTextStyle: { color: '#9fb6cc' }, splitLine: { lineStyle: { color: 'rgba(159, 182, 204, 0.12)' } } },
-        yAxis: { type: 'value', name: '实测功率(MW)', axisLabel: { color: '#9fb6cc' }, nameTextStyle: { color: '#9fb6cc' }, splitLine: { lineStyle: { color: 'rgba(159, 182, 204, 0.12)' } } },
-        series: [{ name: '实测风速-实测功率', type: 'scatter', symbolSize: 6, data: points, itemStyle: { color: 'rgba(45, 212, 191, 0.55)' } }]
-      }, true)
     },
     async fetchFleetCompareData() {
       const validFarmCodeSet = new Set(this.fleetCompareFarms.map(item => item.code))
       const farmCodes = Array.isArray(this.fleetCompareFarmCodes)
-        ? this.fleetCompareFarmCodes.filter(code => code && code !== 'DEFAULT_FARM' && validFarmCodeSet.has(code))
+        ? this.fleetCompareFarmCodes.filter(code => code && validFarmCodeSet.has(code))
         : []
       if (!farmCodes.length) {
         this.$message.warning('请至少选择一个场站')
@@ -832,6 +895,7 @@ export default {
       if (!this.fleetCompareRows?.length || !this.$refs.fleetBarChartEl) return
       this.fleetBarChart = this.ensureChartInstance('fleetBarChart', 'fleetBarChartEl')
       if (!this.fleetBarChart) return
+      this.fleetBarChart.clear()
       this.fleetBarChart.setOption({
         backgroundColor: 'transparent',
         grid: { left: 54, right: 24, top: 36, bottom: 84 },
@@ -839,15 +903,11 @@ export default {
         tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
         xAxis: { type: 'category', data: this.fleetCompareRows.map(v => v.farm_name || v.farm_code), axisLabel: { color: '#9fb6cc' } },
         yAxis: { type: 'value', min: 0, max: 100, axisLabel: { color: '#9fb6cc' }, splitLine: { lineStyle: { color: 'rgba(159, 182, 204, 0.12)' } } },
-        dataZoom: [
-          { type: 'inside', xAxisIndex: [0], filterMode: 'none' },
-          { type: 'slider', xAxisIndex: [0], bottom: 18, height: 18, borderColor: '#37536b', fillerColor: 'rgba(45, 212, 191, 0.2)', textStyle: { color: '#9fb6cc' } }
-        ],
         series: [
-          { name: '短期准确率(%)', type: 'bar', data: this.fleetCompareRows.map(v => v.short_acc), itemStyle: { color: 'rgba(96, 165, 250, 0.75)' } },
-          { name: '超短期准确率(%)', type: 'bar', data: this.fleetCompareRows.map(v => v.supershort_acc), itemStyle: { color: 'rgba(34, 211, 238, 0.75)' } }
+          { name: '短期准确率(%)', type: 'bar', data: this.fleetCompareRows.map(v => v.short_acc ?? '-'), itemStyle: { color: 'rgba(96, 165, 250, 0.75)' } },
+          { name: '超短期准确率(%)', type: 'bar', data: this.fleetCompareRows.map(v => v.supershort_acc ?? '-'), itemStyle: { color: 'rgba(34, 211, 238, 0.75)' } }
         ]
-      }, true)
+      })
     },
     handleExportCommand(command) {
       if (command === 'raw_csv') this.downloadRawCSV()
@@ -884,7 +944,7 @@ export default {
     },
     downloadChartPNG() {
       const chart = this.analysisTab === 'single'
-        ? (this.singleViewTab === 'curve' ? this.mainChart : this.scatterChart)
+        ? this.mainChart
         : this.fleetBarChart
       if (!chart) return this.$message.warning('暂无可导出的图表')
       const link = document.createElement('a')
@@ -910,26 +970,11 @@ export default {
       this.syncRouteQuery()
       this.fetchComparisonData()
     },
-    singleViewTab() {
-      this.syncRouteQuery()
-      if (this.singleViewTab === 'curve' && this.scatterChart) {
-        this.scatterChart.dispose()
-        this.scatterChart = null
-      }
-      if (this.singleViewTab === 'scatter') {
-        if (this.mainChart) {
-          this.mainChart.dispose()
-          this.mainChart = null
-        }
-        if (this.errorChart) {
-          this.errorChart.dispose()
-          this.errorChart = null
-        }
-      }
-      this.$nextTick(() => this.renderSingleCharts())
-    },
     singleFarmCode(newCode) {
-      if (this.analysisTab === 'single' && newCode) farmService.setCurrentFarm(newCode)
+      if (this.analysisTab === 'single' && newCode) {
+        farmService.setCurrentFarm(newCode)
+        this.updateInstalledCapacity(newCode)
+      }
       this.syncRouteQuery()
     },
     fleetCompareFarmCodes() {
@@ -939,9 +984,6 @@ export default {
       this.syncRouteQuery()
     },
     selectedTypes() {
-      if (this.analysisTab === 'single' && this.singleSeriesState) this.$nextTick(() => this.renderSingleCharts())
-    },
-    showCapacityLine() {
       if (this.analysisTab === 'single' && this.singleSeriesState) this.$nextTick(() => this.renderSingleCharts())
     },
     showCurtailmentTag() {
@@ -969,7 +1011,11 @@ export default {
 .query-btn { min-width: 92px; }
 .card-header { color: #d8edff; font-weight: 600; }
 .chart-card { margin-bottom: 12px; }
-.chart-wrapper { height: 54vh; }
+.series-legend { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+.legend-toggle { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid rgba(159, 182, 204, 0.32); background: rgba(10, 28, 45, 0.82); color: #d9e9ff; font-size: 12px; cursor: pointer; }
+.legend-toggle.inactive { opacity: 0.42; }
+.legend-swatch { width: 18px; height: 3px; border-radius: 2px; }
+.chart-wrapper { height: 48vh; min-height: 390px; }
 .chart-wrapper.small { height: 30vh; }
 .empty-data-content { text-align: center; color: #a9c9de; }
 @media (max-width: 980px) {

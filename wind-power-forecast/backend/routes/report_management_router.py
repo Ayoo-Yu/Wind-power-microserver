@@ -455,11 +455,11 @@ def preview_report():
             current_time = datetime.now(beijing_tz)
             
             if config.report_type == 'actual':
-                data_list = get_actual_power_data(db, current_time)
+                data_list = get_actual_power_data(db, current_time, farm.farm_code)
             elif config.report_type == 'forecast_short':
-                data_list = get_forecast_short_data(db, current_time)
+                data_list = get_forecast_short_data(db, current_time, farm.farm_code)
             elif config.report_type == 'forecast_long':
-                data_list = get_forecast_long_data(db, current_time)
+                data_list = get_forecast_long_data(db, current_time, farm.farm_code)
             elif config.report_type == 'wind_speed':
                 data_list = get_wind_speed_data(db, current_time, farm.farm_code)
             elif config.report_type == 'turbine_power':
@@ -535,11 +535,11 @@ def manual_report():
                 current_time = datetime.now(beijing_tz)
                 
                 if config.report_type == 'actual':
-                    data_to_send = get_actual_power_data(db, current_time)
+                    data_to_send = get_actual_power_data(db, current_time, farm.farm_code)
                 elif config.report_type == 'forecast_short':
-                    data_to_send = get_forecast_short_data(db, current_time)
+                    data_to_send = get_forecast_short_data(db, current_time, farm.farm_code)
                 elif config.report_type == 'forecast_long':
-                    data_to_send = get_forecast_long_data(db, current_time)
+                    data_to_send = get_forecast_long_data(db, current_time, farm.farm_code)
                 elif config.report_type == 'wind_speed':
                     data_to_send = get_wind_speed_data(db, current_time, farm.farm_code)
                 elif config.report_type == 'turbine_power':
@@ -764,11 +764,11 @@ def execute_report(db: Session, config: ReportConfig):
     try:
         # 根据上报类型获取数据，传入当前上报时间
         if config.report_type == 'actual':
-            data = get_actual_power_data(db, start_time)
+            data = get_actual_power_data(db, start_time, farm.farm_code)
         elif config.report_type == 'forecast_short':
-            data = get_forecast_short_data(db, start_time)
+            data = get_forecast_short_data(db, start_time, farm.farm_code)
         elif config.report_type == 'forecast_long':
-            data = get_forecast_long_data(db, start_time)
+            data = get_forecast_long_data(db, start_time, farm.farm_code)
         elif config.report_type == 'wind_speed':
             data = get_wind_speed_data(db, start_time, farm.farm_code)
         elif config.report_type == 'turbine_power':
@@ -879,7 +879,7 @@ def execute_report(db: Session, config: ReportConfig):
             'execution_time': execution_time
         }
 
-def get_actual_power_data(db: Session, report_time: datetime = None):
+def get_actual_power_data(db: Session, report_time: datetime = None, farm_code: str = None):
     """获取实际功率数据（对应时刻的数据）"""
     if report_time is None:
         report_time = datetime.now()
@@ -899,6 +899,7 @@ def get_actual_power_data(db: Session, report_time: datetime = None):
     
     actual_data = db.query(ActualPower)\
                    .filter(and_(
+                       ActualPower.farm_code == farm_code,
                        ActualPower.timestamp >= time_window_start,
                        ActualPower.timestamp <= time_window_end
                    ))\
@@ -916,6 +917,7 @@ def get_actual_power_data(db: Session, report_time: datetime = None):
     else:
         # 如果还是找不到，尝试查询任意时间的数据
         any_data = db.query(ActualPower)\
+                    .filter(ActualPower.farm_code == farm_code)\
                     .order_by(ActualPower.timestamp.desc())\
                     .limit(3).all()
         
@@ -926,7 +928,7 @@ def get_actual_power_data(db: Session, report_time: datetime = None):
             logging.warning(f"数据库中完全没有实际功率数据")
         return []
 
-def get_forecast_short_data(db: Session, report_time: datetime = None):
+def get_forecast_short_data(db: Session, report_time: datetime = None, farm_code: str = None):
     """获取超短期预测数据（对应时刻的数据）"""
     if report_time is None:
         report_time = datetime.now()
@@ -945,6 +947,7 @@ def get_forecast_short_data(db: Session, report_time: datetime = None):
     
     forecast_data = db.query(SupershortlPower)\
                      .filter(and_(
+                         SupershortlPower.farm_code == farm_code,
                          SupershortlPower.timestamp >= time_window_start,
                          SupershortlPower.timestamp <= time_window_end
                      ))\
@@ -965,6 +968,7 @@ def get_forecast_short_data(db: Session, report_time: datetime = None):
     else:
         # 如果还是找不到，尝试查询任意时间的数据
         any_data = db.query(SupershortlPower)\
+                    .filter(SupershortlPower.farm_code == farm_code)\
                     .order_by(SupershortlPower.timestamp.desc())\
                     .limit(3).all()
         
@@ -975,7 +979,7 @@ def get_forecast_short_data(db: Session, report_time: datetime = None):
             logging.warning(f"数据库中完全没有超短期预测数据")
         return []
 
-def get_forecast_long_data(db: Session, report_time: datetime = None):
+def get_forecast_long_data(db: Session, report_time: datetime = None, farm_code: str = None):
     """获取未来10天预测数据（短期1天+中期9天）"""
     if report_time is None:
         report_time = datetime.now()
@@ -994,6 +998,7 @@ def get_forecast_long_data(db: Session, report_time: datetime = None):
     # 获取短期预测（明天一天）
     short_forecasts = db.query(ShortlPower)\
                        .filter(and_(
+                           ShortlPower.farm_code == farm_code,
                            ShortlPower.timestamp >= tomorrow,
                            ShortlPower.timestamp < tomorrow + timedelta(days=1)
                        ))\
@@ -1012,6 +1017,7 @@ def get_forecast_long_data(db: Session, report_time: datetime = None):
     mid_start = tomorrow + timedelta(days=1)
     mid_forecasts = db.query(MidPower)\
                      .filter(and_(
+                         MidPower.farm_code == farm_code,
                          MidPower.timestamp >= mid_start,
                          MidPower.timestamp < ten_days_later
                      ))\
@@ -1029,8 +1035,8 @@ def get_forecast_long_data(db: Session, report_time: datetime = None):
     # 如果数据不足，记录调试信息
     if len(data) == 0:
         # 检查是否有任意时间的预测数据
-        any_short = db.query(ShortlPower).order_by(ShortlPower.timestamp.desc()).limit(3).all()
-        any_mid = db.query(MidPower).order_by(MidPower.timestamp.desc()).limit(3).all()
+        any_short = db.query(ShortlPower).filter(ShortlPower.farm_code == farm_code).order_by(ShortlPower.timestamp.desc()).limit(3).all()
+        any_mid = db.query(MidPower).filter(MidPower.farm_code == farm_code).order_by(MidPower.timestamp.desc()).limit(3).all()
         
         if any_short:
             logging.warning(f"未找到指定时间范围的短期预测数据，但数据库中有其他时间的短期数据")

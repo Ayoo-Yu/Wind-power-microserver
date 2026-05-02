@@ -4,10 +4,6 @@ import farmService from '../utils/farmService'
 function resolveFarmCode(farmCode) {
   const directCode = typeof farmCode === 'string' ? farmCode.trim() : ''
   if (directCode) {
-    if (directCode === 'DEFAULT_FARM') {
-      const fallbackFarm = getFallbackFarmCode()
-      return fallbackFarm || 'DEFAULT_FARM'
-    }
     return directCode
   }
 
@@ -19,7 +15,7 @@ function resolveFarmCode(farmCode) {
   }
 
   const fallbackFarm = getFallbackFarmCode()
-  return fallbackFarm || 'DEFAULT_FARM'
+  return fallbackFarm || ''
 }
 
 function isInvalidFarmError(error) {
@@ -31,19 +27,14 @@ function isInvalidFarmError(error) {
 function getFallbackFarmCode() {
   const farms = farmService.getAvailableFarms()
   if (Array.isArray(farms) && farms.length > 0) {
-    const firstRealFarm = farms.find(f => f && typeof f.code === 'string' && f.code.trim() && f.code !== 'DEFAULT_FARM')
+    const firstRealFarm = farms.find(f => f && typeof f.code === 'string' && f.code.trim())
     if (firstRealFarm) {
       return firstRealFarm.code
     }
 
-    const hasDefault = farms.some(f => f.code === 'DEFAULT_FARM')
-    if (hasDefault) {
-      return 'DEFAULT_FARM'
-    }
-
-    return farms[0]?.code || 'DEFAULT_FARM'
+    return farms[0]?.code || ''
   }
-  return 'DEFAULT_FARM'
+  return ''
 }
 
 function shouldFallbackToLegacy(error) {
