@@ -224,8 +224,8 @@ def start_connection(conn_id: int):
             return jsonify({'success': False, 'error': 'Connection not found'}), 404
         if conn.status == 'running':
             return jsonify({'success': False, 'error': 'Connection is already running'}), 409
-        if not conn.is_enabled:
-            return jsonify({'success': False, 'error': 'Connection is disabled. Enable it first.'}), 409
+        conn.is_enabled = True
+        db.commit()
 
     try:
         from services.scada_manager import get_scada_manager
@@ -243,6 +243,11 @@ def stop_connection(conn_id: int):
         from services.scada_manager import get_scada_manager
         manager = get_scada_manager()
         manager.stop_connection(conn_id)
+        with db_session() as db:
+            conn = db.query(ScadaConnection).filter(ScadaConnection.id == conn_id).first()
+            if conn:
+                conn.is_enabled = False
+                db.commit()
         return jsonify({'success': True, 'message': 'Connection stopped'})
     except Exception as e:
         logger.error(f"Failed to stop SCADA connection {conn_id}: {e}")

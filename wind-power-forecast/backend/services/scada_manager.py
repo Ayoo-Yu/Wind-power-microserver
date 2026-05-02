@@ -2,6 +2,7 @@
 SCADA Connection Manager - manages worker subprocesses for each SCADA connection.
 Each connection runs as an isolated subprocess (scada_worker.py).
 """
+import atexit
 import json
 import logging
 import subprocess
@@ -21,6 +22,44 @@ logger = logging.getLogger(__name__)
 _manager_instance: Optional['ScadaManager'] = None
 _manager_lock = threading.Lock()
 _start_lock = threading.Lock()
+
+
+def _kill_orphan_workers():
+    """Kill any leftover scada_worker.py processes from previous backend runs."""
+    try:
+        if sys.platform == 'win32':
+            result = subprocess.run(
+                ['wmic', 'process', 'where',
+                 f"commandline like '%scada_worker.py%' and name='python.exe'",
+                 'get', 'processid', '/value'],
+                capture_output=True, text=True, timeout=10,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+            for line in result.stdout.strip().split('\n'):
+                line = line.strip()
+                if line.startswith('ProcessId='):
+                    pid = int(line.split('=')[1])
+                    if pid != os.getpid():
+                        try:
+                            os.kill(pid, 9)
+                            logger.info(f"Killed orphan worker PID={pid}")
+                        except (OSError, ProcessLookupError):
+                            pass
+        else:
+            result = subprocess.run(
+                ['pgrep', '-f', 'scada_worker.py'],
+                capture_output=True, text=True, timeout=10,
+            )
+            for line in result.stdout.strip().split('\n'):
+                pid = int(line.strip())
+                if pid != os.getpid():
+                    try:
+                        os.kill(pid, 9)
+                        logger.info(f"Killed orphan worker PID={pid}")
+                    except (OSError, ProcessLookupError):
+                        pass
+    except Exception as e:
+        logger.warning(f"Orphan worker cleanup failed: {e}")
 
 
 class ScadaManager:
@@ -66,7 +105,6 @@ class ScadaManager:
             'worker_secret': self._worker_secret,
             'capacity': farm.capacity if farm and farm.capacity else 200,
         }
-        # Assign farm_index based on alphabetical order for simulation consistency
         with db_session() as db:
             farms = db.query(WindFarm).filter(WindFarm.is_active.is_(True)).order_by(WindFarm.farm_code).all()
             for i, f in enumerate(farms):
@@ -156,14 +194,10 @@ class ScadaManager:
                         logger.error(f"Failed to auto-start connection {conn.id}: {e}")
 
     def recover_on_startup(self):
-        """Auto-restart workers for connections that were running before backend restart.
+        """Kill orphans, reset stale statuses, restart enabled connections."""
+        _kill_orphan_workers()
 
-        Called once at backend startup. Resets stale 'running' statuses, then
-        re-spawns workers for all enabled connections that were previously active.
-        """
-        recovered = 0
         with db_session() as db:
-            # Find connections that were running before crash (status still says 'running')
             stale = db.query(ScadaConnection).filter(
                 ScadaConnection.status == 'running'
             ).all()
@@ -175,11 +209,11 @@ class ScadaManager:
 
             db.commit()
 
-            # Now start all enabled connections
             enabled = db.query(ScadaConnection).filter(
                 ScadaConnection.is_enabled.is_(True)
             ).all()
 
+        recovered = 0
         for conn in enabled:
             try:
                 self.start_connection(conn.id)
@@ -212,7 +246,6 @@ class ScadaManager:
         """Periodically check worker health and restart dead workers."""
         while self._running:
             try:
-                # Collect dead connections with their exit codes
                 dead_connections: list[tuple[int, int]] = []
                 for conn_id, proc in list(self._processes.items()):
                     if proc.poll() is not None:
@@ -278,4 +311,16 @@ def get_scada_manager() -> ScadaManager:
     with _manager_lock:
         if _manager_instance is None:
             _manager_instance = ScadaManager()
+            atexit.register(_cleanup_on_exit)
         return _manager_instance
+
+
+def _cleanup_on_exit():
+    """atexit handler: stop all workers when backend process exits."""
+    global _manager_instance
+    if _manager_instance:
+        try:
+            _manager_instance.stop_all()
+            logger.info("SCADA manager cleanup: all workers stopped")
+        except Exception as e:
+            logger.error(f"SCADA cleanup error: {e}")

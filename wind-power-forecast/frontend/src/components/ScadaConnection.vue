@@ -70,7 +70,6 @@
               size="small"
               @click="handleStart(conn)"
               :loading="actionLoading[conn.id]"
-              :disabled="!conn.is_enabled"
             >启动</el-button>
             <el-button
               v-if="conn.status === 'running'"
