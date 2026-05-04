@@ -3,12 +3,17 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.executors.pool import ThreadPoolExecutor
 import logging
-from datetime import datetime
+import os
+import sys
+from datetime import datetime, date
 from typing import Dict, Any
 from db_session import db_session
 from db_models.weather_fetch import WeatherTask, WeatherConnection, WeatherLog
 from services.task_executor import execute_weather_task
 from services.partition_maintenance_service import ensure_future_partitions
+
+# Make scripts/ importable for etext_pipeline
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +41,8 @@ class WeatherSchedulerService:
         )
         
         self.is_running = False
-    
+        self._etext_last_success_date = None
+
     def start(self):
         """启动调度器"""
         if not self.is_running:
@@ -48,6 +54,8 @@ class WeatherSchedulerService:
                 # 加载所有启用的任务
                 self.load_all_tasks()
                 self.add_partition_maintenance_job()
+                self.add_etext_pipeline_job()
+                self.add_forecast_jobs()
                 self._execute_partition_maintenance()
                 
             except Exception as e:
@@ -77,6 +85,184 @@ class WeatherSchedulerService:
             logger.info("Partition maintenance result: %s", result)
         except Exception as e:
             logger.error(f"Partition maintenance failed: {e}", exc_info=True)
+
+    # --- E text pipeline ---
+
+    def add_etext_pipeline_job(self):
+        """Schedule E text pipeline from config file."""
+        try:
+            from services.etext_config import read_config
+            cfg = read_config()
+        except Exception:
+            cfg = {"enabled": True, "schedule_hour": 8, "schedule_minutes": [40, 45, 50, 55]}
+
+        if not cfg.get("enabled", True):
+            logger.info("E text pipeline disabled in config, skipping")
+            return
+
+        self._register_etext_job(cfg)
+
+    def _register_etext_job(self, cfg):
+        """Register or update the APScheduler job from config dict."""
+        job_id = "etext_pipeline_daily"
+        if self.scheduler.get_job(job_id):
+            self.scheduler.remove_job(job_id)
+
+        minutes_str = ",".join(str(m) for m in cfg.get("schedule_minutes", [40, 45, 50, 55]))
+        trigger = CronTrigger(hour=cfg.get("schedule_hour", 8), minute=minutes_str)
+        self.scheduler.add_job(
+            func=self._execute_etext_pipeline,
+            trigger=trigger,
+            id=job_id,
+            name="E text pipeline",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+        logger.info(
+            "E text pipeline job scheduled (hour=%s, minutes=%s)",
+            cfg.get("schedule_hour", 8), minutes_str,
+        )
+
+    def update_etext_pipeline_schedule(self, cfg):
+        """Called by API to reschedule or disable the pipeline."""
+        job_id = "etext_pipeline_daily"
+        if not cfg.get("enabled", True):
+            if self.scheduler.get_job(job_id):
+                self.scheduler.remove_job(job_id)
+            logger.info("E text pipeline job removed (disabled)")
+            return
+        self._register_etext_job(cfg)
+
+    def _execute_etext_pipeline(self):
+        """Run E text pipeline, skip if already succeeded today."""
+        today = date.today()
+        if self._etext_last_success_date == today:
+            logger.info("E text pipeline already succeeded today, skipping")
+            return
+
+        try:
+            from etext_pipeline import run_pipeline
+            from services.etext_config import read_config
+
+            cfg = read_config()
+            incoming_dir = cfg.get("incoming_dir") or None
+            results = run_pipeline(incoming_dir=incoming_dir)
+
+            if results:
+                self._etext_last_success_date = today
+                total_ins = sum(r.get("inserted", 0) for r in results)
+                total_upd = sum(r.get("updated", 0) for r in results)
+                logger.info(
+                    "E text pipeline completed: %d tables, ins=%d upd=%d",
+                    len(results), total_ins, total_upd,
+                )
+            else:
+                logger.info("E text pipeline: no new files found")
+
+        except Exception as e:
+            logger.error("E text pipeline failed: %s", e, exc_info=True)
+
+    # --- Forecast jobs ---
+
+    def add_forecast_jobs(self):
+        """Register monthly training, daily calibration, and daily prediction jobs."""
+        # Monthly model training: 1st of each month at 02:00
+        self.scheduler.add_job(
+            func=self._execute_monthly_training,
+            trigger=CronTrigger(day=1, hour=2, minute=0),
+            id="forecast_monthly_train",
+            name="Monthly model training (all farms)",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+
+        # Daily calibration update: 03:03
+        self.scheduler.add_job(
+            func=self._execute_daily_calibration,
+            trigger=CronTrigger(hour=3, minute=3),
+            id="forecast_daily_calibration",
+            name="Daily calibration update (all farms)",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+
+        # Daily short-term + mid-term prediction: 08:50
+        self.scheduler.add_job(
+            func=self._execute_daily_prediction,
+            trigger=CronTrigger(hour=8, minute=50),
+            id="forecast_daily_predict",
+            name="Daily short+mid prediction (all farms)",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+
+        logger.info("Forecast jobs scheduled: monthly_train, daily_calibration, daily_predict")
+
+    def _execute_monthly_training(self):
+        """Train models for all farms, both short and mid."""
+        try:
+            from farm_registry.farms_config import get_farm_codes
+            from services.forecast_service import run_monthly_training
+            from services.model_manager import ModelManager
+            from db_session import db_session
+
+            mgr = ModelManager()
+            for farm_code in get_farm_codes():
+                for ftype in ("short", "mid"):
+                    try:
+                        with db_session() as session:
+                            result = run_monthly_training(farm_code, ftype, mgr, session)
+                            logger.info("Training result %s/%s: %s", farm_code, ftype, result)
+                    except Exception as e:
+                        logger.error("Training failed %s/%s: %s", farm_code, ftype, e, exc_info=True)
+        except Exception as e:
+            logger.error("Monthly training job failed: %s", e, exc_info=True)
+
+    def _execute_daily_calibration(self):
+        """Update calibrator params for all farms."""
+        try:
+            from farm_registry.farms_config import get_farm_codes
+            from services.forecast_service import run_daily_calibration
+            from services.calibration_manager import CalibrationManager
+            from db_session import db_session
+
+            mgr = CalibrationManager()
+            for farm_code in get_farm_codes():
+                for ftype in ("short", "mid"):
+                    try:
+                        with db_session() as session:
+                            result = run_daily_calibration(farm_code, ftype, mgr, session)
+                            logger.info("Calibration result %s/%s: %s", farm_code, ftype, result)
+                    except Exception as e:
+                        logger.error("Calibration failed %s/%s: %s", farm_code, ftype, e, exc_info=True)
+        except Exception as e:
+            logger.error("Daily calibration job failed: %s", e, exc_info=True)
+
+    def _execute_daily_prediction(self):
+        """Run daily short-term and mid-term predictions for all farms."""
+        try:
+            from farm_registry.farms_config import get_farm_codes
+            from services.forecast_service import run_daily_prediction
+            from services.model_manager import ModelManager
+            from services.calibration_manager import CalibrationManager
+            from db_session import db_session
+
+            model_mgr = ModelManager()
+            cal_mgr = CalibrationManager()
+            for farm_code in get_farm_codes():
+                for ftype in ("short", "mid"):
+                    try:
+                        with db_session() as session:
+                            result = run_daily_prediction(farm_code, ftype, model_mgr, cal_mgr, session)
+                            logger.info("Prediction result %s/%s: %s", farm_code, ftype, result)
+                    except Exception as e:
+                        logger.error("Prediction failed %s/%s: %s", farm_code, ftype, e, exc_info=True)
+        except Exception as e:
+            logger.error("Daily prediction job failed: %s", e, exc_info=True)
 
     def stop(self):
         """停止调度器"""
