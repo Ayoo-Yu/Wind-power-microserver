@@ -55,7 +55,6 @@ class WeatherSchedulerService:
                 self.load_all_tasks()
                 self.add_partition_maintenance_job()
                 self.add_etext_pipeline_job()
-                self.add_forecast_jobs()
                 self._execute_partition_maintenance()
                 
             except Exception as e:
@@ -162,107 +161,6 @@ class WeatherSchedulerService:
 
         except Exception as e:
             logger.error("E text pipeline failed: %s", e, exc_info=True)
-
-    # --- Forecast jobs ---
-
-    def add_forecast_jobs(self):
-        """Register monthly training, daily calibration, and daily prediction jobs."""
-        # Monthly model training: 1st of each month at 02:00
-        self.scheduler.add_job(
-            func=self._execute_monthly_training,
-            trigger=CronTrigger(day=1, hour=2, minute=0),
-            id="forecast_monthly_train",
-            name="Monthly model training (all farms)",
-            replace_existing=True,
-            max_instances=1,
-            coalesce=True,
-        )
-
-        # Daily calibration update: 03:03
-        self.scheduler.add_job(
-            func=self._execute_daily_calibration,
-            trigger=CronTrigger(hour=3, minute=3),
-            id="forecast_daily_calibration",
-            name="Daily calibration update (all farms)",
-            replace_existing=True,
-            max_instances=1,
-            coalesce=True,
-        )
-
-        # Daily short-term + mid-term prediction: 08:50
-        self.scheduler.add_job(
-            func=self._execute_daily_prediction,
-            trigger=CronTrigger(hour=8, minute=50),
-            id="forecast_daily_predict",
-            name="Daily short+mid prediction (all farms)",
-            replace_existing=True,
-            max_instances=1,
-            coalesce=True,
-        )
-
-        logger.info("Forecast jobs scheduled: monthly_train, daily_calibration, daily_predict")
-
-    def _execute_monthly_training(self):
-        """Train models for all farms, both short and mid."""
-        try:
-            from farm_registry.farms_config import get_farm_codes
-            from services.forecast_service import run_monthly_training
-            from services.model_manager import ModelManager
-            from db_session import db_session
-
-            mgr = ModelManager()
-            for farm_code in get_farm_codes():
-                for ftype in ("short", "mid"):
-                    try:
-                        with db_session() as session:
-                            result = run_monthly_training(farm_code, ftype, mgr, session)
-                            logger.info("Training result %s/%s: %s", farm_code, ftype, result)
-                    except Exception as e:
-                        logger.error("Training failed %s/%s: %s", farm_code, ftype, e, exc_info=True)
-        except Exception as e:
-            logger.error("Monthly training job failed: %s", e, exc_info=True)
-
-    def _execute_daily_calibration(self):
-        """Update calibrator params for all farms."""
-        try:
-            from farm_registry.farms_config import get_farm_codes
-            from services.forecast_service import run_daily_calibration
-            from services.calibration_manager import CalibrationManager
-            from db_session import db_session
-
-            mgr = CalibrationManager()
-            for farm_code in get_farm_codes():
-                for ftype in ("short", "mid"):
-                    try:
-                        with db_session() as session:
-                            result = run_daily_calibration(farm_code, ftype, mgr, session)
-                            logger.info("Calibration result %s/%s: %s", farm_code, ftype, result)
-                    except Exception as e:
-                        logger.error("Calibration failed %s/%s: %s", farm_code, ftype, e, exc_info=True)
-        except Exception as e:
-            logger.error("Daily calibration job failed: %s", e, exc_info=True)
-
-    def _execute_daily_prediction(self):
-        """Run daily short-term and mid-term predictions for all farms."""
-        try:
-            from farm_registry.farms_config import get_farm_codes
-            from services.forecast_service import run_daily_prediction
-            from services.model_manager import ModelManager
-            from services.calibration_manager import CalibrationManager
-            from db_session import db_session
-
-            model_mgr = ModelManager()
-            cal_mgr = CalibrationManager()
-            for farm_code in get_farm_codes():
-                for ftype in ("short", "mid"):
-                    try:
-                        with db_session() as session:
-                            result = run_daily_prediction(farm_code, ftype, model_mgr, cal_mgr, session)
-                            logger.info("Prediction result %s/%s: %s", farm_code, ftype, result)
-                    except Exception as e:
-                        logger.error("Prediction failed %s/%s: %s", farm_code, ftype, e, exc_info=True)
-        except Exception as e:
-            logger.error("Daily prediction job failed: %s", e, exc_info=True)
 
     def stop(self):
         """停止调度器"""

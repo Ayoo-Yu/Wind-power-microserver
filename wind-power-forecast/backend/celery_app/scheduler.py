@@ -12,8 +12,8 @@ from db_models import PredictionTask
 logger = logging.getLogger(__name__)
 
 DEFAULT_SCHEDULES = {
-    "short": {"train": "03:00", "predict": "08:00"},
-    "medium": {"train": "02:00", "predict": "08:30"},
+    "short": {"train": "03:00", "predict": "08:50", "calibrate": "03:03"},
+    "medium": {"train": "02:00", "predict": "08:50", "calibrate": "03:03"},
     "supershort": {"train": "04:30", "predict_cron": "14,29,44,59"},
 }
 
@@ -62,6 +62,16 @@ def build_beat_schedule():
                     "task": "celery_app.tasks.run_prediction",
                     "args": (fc, tt),
                     "schedule": crontab(minute=pm, hour=ph),
+                }
+
+                ch, cm = _parse_hhmm(
+                    getattr(t, "calibrate_schedule", None),
+                    DEFAULT_SCHEDULES[tt].get("calibrate", "03:03"),
+                )
+                schedule[f"{fc}_{tt}_calibrate"] = {
+                    "task": "celery_app.tasks.run_calibration",
+                    "args": (fc, tt),
+                    "schedule": crontab(minute=cm, hour=ch),
                 }
     return schedule
 
