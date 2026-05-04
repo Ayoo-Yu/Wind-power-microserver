@@ -13,15 +13,6 @@ logger = logging.getLogger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-SCRIPT_PATHS = {
-    "short": os.path.join(BASE_DIR, "auto_scripts", "scripts", "short", "auto_pre_train.py"),
-    "medium": os.path.join(BASE_DIR, "auto_scripts", "scripts", "middle", "auto_pre_train.py"),
-    "supershort_predict": os.path.join(BASE_DIR, "auto_scripts", "scripts", "supershort", "predict_supershort.py"),
-    "supershort_train": os.path.join(BASE_DIR, "auto_scripts", "scripts", "supershort", "train_supershort.py"),
-}
-
-PYTHON_BIN = sys.executable
-
 _FARM_CODE_RE = re.compile(r'^[A-Za-z0-9_-]{1,50}$')
 
 
@@ -95,26 +86,28 @@ def _update_task_running(task_id, action):
         task.updated_at = _utc_now()
 
 
+def _map_task_type(task_type: str) -> str:
+    """Map Celery task_type to forecast_service type. 'medium' -> 'mid'."""
+    return "mid" if task_type == "medium" else task_type
+
+
 @celery_app.task(bind=True, max_retries=2, soft_time_limit=1800)
 def train_model(self, farm_code, task_type):
     _validate_farm_code(farm_code)
     task_id = _get_task_id(farm_code, task_type)
     run_id = _create_run_record(task_id, "train", self.request.id) if task_id else None
-    script = SCRIPT_PATHS.get(task_type)
-    if not script or not os.path.exists(script):
-        msg = f"训练脚本不存在: {script}"
-        _finish_run_and_update_task(run_id, task_id, "train", "failed", msg)
-        return {"status": "failed", "error": msg}
     try:
         _update_task_running(task_id, "train")
-        env = os.environ.copy()
-        env["FARM_CODE"] = farm_code
-        result = subprocess.run(
-            [PYTHON_BIN, script, "--mode", "train", "--farm_code", farm_code],
-            capture_output=True, text=True, timeout=1700, env=env,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(result.stderr[-2000:] if result.stderr else "训练进程非零退出")
+        from services.forecast_service import run_monthly_training
+        from services.model_manager import ModelManager
+
+        ftype = _map_task_type(task_type)
+        mgr = ModelManager()
+        with db_session() as session:
+            result = run_monthly_training(farm_code, ftype, mgr, session)
+
+        if result.get("status") != "ok":
+            raise RuntimeError(result.get("message", "training failed"))
         _finish_run_and_update_task(run_id, task_id, "train", "success")
         return {"status": "success", "farm_code": farm_code, "task_type": task_type}
     except Exception as exc:
@@ -127,21 +120,20 @@ def run_prediction(self, farm_code, task_type):
     _validate_farm_code(farm_code)
     task_id = _get_task_id(farm_code, task_type)
     run_id = _create_run_record(task_id, "predict", self.request.id) if task_id else None
-    script = SCRIPT_PATHS.get(task_type)
-    if not script or not os.path.exists(script):
-        msg = f"预测脚本不存在: {script}"
-        _finish_run_and_update_task(run_id, task_id, "predict", "failed", msg)
-        return {"status": "failed", "error": msg}
     try:
         _update_task_running(task_id, "predict")
-        env = os.environ.copy()
-        env["FARM_CODE"] = farm_code
-        result = subprocess.run(
-            [PYTHON_BIN, script, "--mode", "predict", "--farm_code", farm_code],
-            capture_output=True, text=True, timeout=550, env=env,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(result.stderr[-2000:] if result.stderr else "预测进程非零退出")
+        from services.forecast_service import run_daily_prediction
+        from services.model_manager import ModelManager
+        from services.calibration_manager import CalibrationManager
+
+        ftype = _map_task_type(task_type)
+        model_mgr = ModelManager()
+        cal_mgr = CalibrationManager()
+        with db_session() as session:
+            result = run_daily_prediction(farm_code, ftype, model_mgr, cal_mgr, session)
+
+        if result.get("status") != "ok":
+            raise RuntimeError(result.get("message", "prediction failed"))
         _finish_run_and_update_task(run_id, task_id, "predict", "success")
         return {"status": "success", "farm_code": farm_code, "task_type": task_type}
     except Exception as exc:
@@ -150,12 +142,35 @@ def run_prediction(self, farm_code, task_type):
 
 
 @celery_app.task(bind=True, max_retries=1, soft_time_limit=300)
+def run_calibration(self, farm_code, task_type):
+    _validate_farm_code(farm_code)
+    task_id = _get_task_id(farm_code, task_type)
+    run_id = _create_run_record(task_id, "calibrate", self.request.id) if task_id else None
+    try:
+        _update_task_running(task_id, "calibrate")
+        from services.forecast_service import run_daily_calibration
+        from services.calibration_manager import CalibrationManager
+
+        ftype = _map_task_type(task_type)
+        cal_mgr = CalibrationManager()
+        with db_session() as session:
+            result = run_daily_calibration(farm_code, ftype, cal_mgr, session)
+
+        status = "success" if result.get("status") == "ok" else "skipped"
+        _finish_run_and_update_task(run_id, task_id, "calibrate", status)
+        return {"status": status, "farm_code": farm_code, "task_type": task_type, **result}
+    except Exception as exc:
+        _finish_run_and_update_task(run_id, task_id, "calibrate", "failed", str(exc))
+        raise self.retry(exc=exc, countdown=30)
+
+
+@celery_app.task(bind=True, max_retries=1, soft_time_limit=300)
 def run_supershort_predict(self, farm_code):
     _validate_farm_code(farm_code)
     task_id = _get_task_id(farm_code, "supershort")
     run_id = _create_run_record(task_id, "predict", self.request.id) if task_id else None
-    script = SCRIPT_PATHS.get("supershort_predict")
-    if not script or not os.path.exists(script):
+    script = os.path.join(BASE_DIR, "auto_scripts", "scripts", "supershort", "predict_supershort.py")
+    if not os.path.exists(script):
         msg = f"超短期预测脚本不存在: {script}"
         _finish_run_and_update_task(run_id, task_id, "predict", "failed", msg)
         return {"status": "failed", "error": msg}
@@ -164,7 +179,7 @@ def run_supershort_predict(self, farm_code):
         env = os.environ.copy()
         env["FARM_CODE"] = farm_code
         result = subprocess.run(
-            [PYTHON_BIN, script, "--farm_code", farm_code],
+            [sys.executable, script, "--farm_code", farm_code],
             capture_output=True, text=True, timeout=280, env=env,
         )
         if result.returncode != 0:
@@ -188,7 +203,7 @@ def merge_predictions(farm_code, date_str):
         env["TARGET_DATE"] = date_str
         if os.path.exists(merge_script):
             subprocess.run(
-                [PYTHON_BIN, merge_script, "--farm_code", farm_code, "--date", date_str],
+                [sys.executable, merge_script, "--farm_code", farm_code, "--date", date_str],
                 capture_output=True, text=True, timeout=300, env=env,
             )
         _finish_run_and_update_task(run_id, task_id, "merge", "success")
