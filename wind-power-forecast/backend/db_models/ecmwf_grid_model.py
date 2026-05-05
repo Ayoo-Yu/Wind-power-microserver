@@ -89,10 +89,34 @@ def ensure_ecmwf_grid_month_partitions(connection, farm_code: str, forecast_sour
     return created
 
 
+def _constraint_exists(connection, table_name: str, constraint_name: str) -> bool:
+    return bool(
+        connection.execute(
+            text(
+                "SELECT EXISTS ("
+                "SELECT 1 FROM pg_constraint c "
+                "JOIN pg_class t ON t.oid = c.conrelid "
+                "WHERE t.relname = :table_name AND c.conname = :constraint_name)"
+            ),
+            {"table_name": table_name, "constraint_name": constraint_name},
+        ).scalar()
+    )
+
+
 def ensure_ecmwf_grid_table(connection, farm_code: str) -> str:
-    """Ensure the per-farm grid table exists and return its table name."""
+    """Ensure the per-farm grid table exists with the required UNIQUE constraint."""
     table = ecmwf_grid_table_name(farm_code)
+    uq_name = f"uq_{table}_source_time_lat_lon"
+
     if _table_exists(connection, table):
+        if not _constraint_exists(connection, table, uq_name):
+            connection.execute(
+                text(
+                    f"ALTER TABLE {_q(table)} "
+                    f"ADD CONSTRAINT {_q(uq_name)} "
+                    f"UNIQUE (forecast_source, forecast_time, latitude, longitude)"
+                )
+            )
         return table
 
     connection.execute(
@@ -104,7 +128,7 @@ def ensure_ecmwf_grid_table(connection, farm_code: str) -> str:
             f"  latitude DOUBLE PRECISION NOT NULL,"
             f"  longitude DOUBLE PRECISION NOT NULL,"
             f"  features JSONB NOT NULL,"
-            f"  CONSTRAINT {_q(f'uq_{table}_source_time_lat_lon')} "
+            f"  CONSTRAINT {_q(uq_name)} "
             f"    UNIQUE (forecast_source, forecast_time, latitude, longitude)"
             f") PARTITION BY RANGE (forecast_source)"
         )

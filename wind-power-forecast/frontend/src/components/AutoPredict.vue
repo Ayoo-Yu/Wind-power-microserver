@@ -89,19 +89,31 @@
             <span class="biz-status" :class="`biz-${row.nwpState.level}`">{{ row.nwpState.text }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="超短期预测 (4h/15min)" min-width="190">
+        <el-table-column label="超短期预测 (4h/15min)" min-width="210">
           <template #default="{ row }">
             <span class="biz-status" :class="`biz-${row.supershortState.level}`">{{ row.supershortState.text }}</span>
+            <div class="model-tags" v-if="row.supershortModel">
+              <span class="model-tag" :class="row.supershortModel.model_exists ? 'tag-ok' : 'tag-missing'" :title="row.supershortModel.model_exists ? '模型: ' + row.supershortModel.model_date : '无模型文件'">{{ row.supershortModel.model_exists ? 'M' : 'M-' }}</span>
+              <span class="model-tag" :class="row.supershortModel.calib_exists ? 'tag-ok' : 'tag-missing'" :title="row.supershortModel.calib_exists ? '校准: ' + row.supershortModel.calib_date : '未校准'">{{ row.supershortModel.calib_exists ? 'C' : 'C-' }}</span>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column label="短期预测 (72h/日)" min-width="170">
+        <el-table-column label="短期预测 (T+1日/96点)" min-width="190">
           <template #default="{ row }">
             <span class="biz-status" :class="`biz-${row.shortState.level}`">{{ row.shortState.text }}</span>
+            <div class="model-tags" v-if="row.shortModel">
+              <span class="model-tag" :class="row.shortModel.model_exists ? 'tag-ok' : 'tag-missing'" :title="row.shortModel.model_exists ? '模型: ' + row.shortModel.model_date : '无模型文件'">{{ row.shortModel.model_exists ? 'M' : 'M-' }}</span>
+              <span class="model-tag" :class="row.shortModel.calib_exists ? 'tag-ok' : 'tag-missing'" :title="row.shortModel.calib_exists ? '校准: ' + row.shortModel.calib_date : '未校准'">{{ row.shortModel.calib_exists ? 'C' : 'C-' }}</span>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column label="中期预测" min-width="130">
+        <el-table-column label="中期预测 (T+3日/96点)" min-width="150">
           <template #default="{ row }">
             <span class="biz-status" :class="`biz-${row.mediumState.level}`">{{ row.mediumState.text }}</span>
+            <div class="model-tags" v-if="row.mediumModel">
+              <span class="model-tag" :class="row.mediumModel.model_exists ? 'tag-ok' : 'tag-missing'" :title="row.mediumModel.model_exists ? '模型: ' + row.mediumModel.model_date : '无模型文件'">{{ row.mediumModel.model_exists ? 'M' : 'M-' }}</span>
+              <span class="model-tag" :class="row.mediumModel.calib_exists ? 'tag-ok' : 'tag-missing'" :title="row.mediumModel.calib_exists ? '校准: ' + row.mediumModel.calib_date : '未校准'">{{ row.mediumModel.calib_exists ? 'C' : 'C-' }}</span>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="220" fixed="right">
@@ -140,8 +152,10 @@
                   </el-button>
                   <template #dropdown>
                     <el-dropdown-menu>
-                      <el-dropdown-item command="logs">查看日志</el-dropdown-item>
-                      <el-dropdown-item command="delete" divided>删除任务</el-dropdown-item>
+                      <el-dropdown-item command="predict">手动补测</el-dropdown-item>
+                      <el-dropdown-item command="train">手动补训练</el-dropdown-item>
+                      <el-dropdown-item command="logs" divided>查看日志</el-dropdown-item>
+                      <el-dropdown-item command="delete">删除任务</el-dropdown-item>
                     </el-dropdown-menu>
                   </template>
                 </el-dropdown>
@@ -192,6 +206,71 @@
             </div>
             <div class="degraded-alert" v-if="getPredictMetrics(item.name).aggregate.degraded > 0">
               降级预测中：{{ getPredictMetrics(item.name).aggregate.degraded }} 个场站（建议人工复核）
+            </div>
+
+            <div class="trigger-progress" v-if="triggerProgress[item.name]">
+              <div class="trigger-progress-header">
+                <span class="trigger-progress-farm">{{ triggerProgress[item.name].farmDisplay }}</span>
+                <span class="trigger-progress-action">{{ triggerProgress[item.name].typeLabel }}{{ triggerProgress[item.name].action }}</span>
+              </div>
+              <template v-if="triggerProgress[item.name].status === 'running'">
+                <el-progress :percentage="100" :indeterminate="true" :stroke-width="6" :show-text="false" status="success" />
+                <div class="trigger-progress-status">
+                  <el-icon class="is-loading"><Loading /></el-icon>
+                  执行中... {{ triggerProgress[item.name].elapsed ? Math.floor(triggerProgress[item.name].elapsed) + 's' : '' }}
+                </div>
+              </template>
+              <template v-else-if="triggerProgress[item.name].status === 'success'">
+                <div class="trigger-progress-result trigger-success">
+                  <el-icon><CircleCheck /></el-icon>
+                  执行成功，耗时 {{ triggerProgress[item.name].duration }}
+                  <el-button text size="small" @click="triggerProgress[item.name] = undefined">关闭</el-button>
+                </div>
+                <div class="trigger-detail" v-if="triggerProgress[item.name].result">
+                  <template v-if="triggerProgress[item.name].result.meta">
+                    <div class="detail-row"><span>训练样本</span><strong>{{ triggerProgress[item.name].result.meta.n_samples ?? '-' }}</strong></div>
+                    <div class="detail-row"><span>验证样本</span><strong>{{ triggerProgress[item.name].result.meta.n_val_samples ?? '-' }}</strong></div>
+                    <div class="detail-row"><span>测试样本</span><strong>{{ triggerProgress[item.name].result.meta.n_test_samples ?? '-' }}</strong></div>
+                    <div class="detail-row"><span>特征数</span><strong>{{ triggerProgress[item.name].result.meta.n_features ?? '-' }}</strong></div>
+                    <template v-if="triggerProgress[item.name].result.meta.cal_accuracy">
+                      <div class="detail-row"><span>准确率</span><strong>{{ (triggerProgress[item.name].result.meta.cal_accuracy.accuracy_percent ?? 0).toFixed(1) }}%</strong></div>
+                      <div class="detail-row"><span>RMSE</span><strong>{{ (triggerProgress[item.name].result.meta.cal_accuracy.weighted_rmse ?? 0).toFixed(2) }}</strong></div>
+                      <div class="detail-row"><span>MAE</span><strong>{{ (triggerProgress[item.name].result.meta.cal_accuracy.mae ?? 0).toFixed(2) }}</strong></div>
+                      <div class="detail-row"><span>R²</span><strong>{{ (triggerProgress[item.name].result.meta.cal_accuracy.r2 ?? 0).toFixed(3) }}</strong></div>
+                      <div class="detail-row"><span>偏差</span><strong>{{ (triggerProgress[item.name].result.meta.cal_accuracy.bias ?? 0).toFixed(2) }}</strong></div>
+                    </template>
+                    <div class="detail-row" v-if="triggerProgress[item.name].result.n_rows"><span>数据行数</span><strong>{{ triggerProgress[item.name].result.n_rows }}</strong></div>
+                    <div class="detail-row" v-if="triggerProgress[item.name].result.n_shifts"><span>Shift数</span><strong>{{ triggerProgress[item.name].result.n_shifts }}</strong></div>
+                    <div class="detail-row" v-if="triggerProgress[item.name].result.model_dir"><span>模型路径</span><strong class="detail-path">{{ triggerProgress[item.name].result.model_dir }}</strong></div>
+                  </template>
+                  <template v-else-if="triggerProgress[item.name].result.n_predictions != null">
+                    <div class="detail-row"><span>预测点数</span><strong>{{ triggerProgress[item.name].result.n_predictions }}</strong></div>
+                    <div class="detail-row" v-if="triggerProgress[item.name].result.target_date"><span>目标日期</span><strong>{{ triggerProgress[item.name].result.target_date }}</strong></div>
+                    <div class="detail-row" v-if="triggerProgress[item.name].result.anchor_time"><span>锚定时间</span><strong>{{ triggerProgress[item.name].result.anchor_time }}</strong></div>
+                  </template>
+                  <template v-else-if="triggerProgress[item.name].result.alpha != null">
+                    <div class="detail-row"><span>校准 alpha</span><strong>{{ (triggerProgress[item.name].result.alpha ?? 0).toFixed(4) }}</strong></div>
+                    <div class="detail-row"><span>校准 beta</span><strong>{{ (triggerProgress[item.name].result.beta ?? 0).toFixed(3) }}</strong></div>
+                    <div class="detail-row"><span>校准点数</span><strong>{{ triggerProgress[item.name].result.n_points ?? '-' }}</strong></div>
+                    <div class="detail-row" v-if="triggerProgress[item.name].result.calib_dir"><span>参数路径</span><strong class="detail-path">{{ triggerProgress[item.name].result.calib_dir }}</strong></div>
+                  </template>
+                </div>
+              </template>
+              <template v-else-if="triggerProgress[item.name].status === 'failed'">
+                <div class="trigger-progress-result trigger-failed">
+                  <el-icon><CircleClose /></el-icon>
+                  执行失败
+                  <span v-if="triggerProgress[item.name].error" class="trigger-error-msg">{{ triggerProgress[item.name].error.slice(0, 120) }}</span>
+                  <el-button text size="small" @click="triggerProgress[item.name] = undefined">关闭</el-button>
+                </div>
+              </template>
+              <template v-else-if="triggerProgress[item.name].status === 'timeout'">
+                <div class="trigger-progress-result trigger-timeout">
+                  <el-icon><Warning /></el-icon>
+                  等待超时，请查看日志确认结果
+                  <el-button text size="small" @click="triggerProgress[item.name] = undefined">关闭</el-button>
+                </div>
+              </template>
             </div>
 
             <div class="card-footer">
@@ -346,10 +425,10 @@
 <script setup>
 import { ref, reactive, computed, inject, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { MoreFilled, DataAnalysis, Clock, AlarmClock, Grid, Timer } from '@element-plus/icons-vue'
+import { MoreFilled, DataAnalysis, Clock, AlarmClock, Grid, Timer, Loading, CircleCheck, CircleClose, Warning } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import farmService from '../utils/farmService'
-import { getAutoPredictStatus, getAutoPredictStatusAll, getAutoPredictOverview, controlAutoPredict, controlAutoPredictMatrix, getAutoPredictLogs } from '../api/autopredictApi'
+import { getAutoPredictStatus, getAutoPredictStatusAll, getAutoPredictOverview, controlAutoPredict, controlAutoPredictMatrix, getAutoPredictLogs, triggerAutoPredict, getAutoPredictRuns, getAutoPredictRunByTaskId } from '../api/autopredictApi'
 import { getStoredUser, hasPermission } from '../utils/permission'
 import StatusDot from './common/StatusDot.vue'
 import SparklineMini from './common/SparklineMini.vue'
@@ -367,8 +446,8 @@ const predictionTypeLabelMap = {
 
 const predictionCycleMap = {
   supershort: { intervalMinutes: 15, anchorMinuteOfDay: 0, label: '每15分钟滚动执行' },
-  short: { intervalMinutes: 1440, anchorMinuteOfDay: 10, label: '每天 00:10 定时执行' },
-  medium: { intervalMinutes: 720, anchorMinuteOfDay: 30, label: '每12小时执行（00:30/12:30）' }
+  short: { intervalMinutes: 1440, anchorMinuteOfDay: 530, label: '每天 08:50 定时执行' },
+  medium: { intervalMinutes: 1440, anchorMinuteOfDay: 530, label: '每天 08:50 定时执行' }
 }
 
 const predictions = reactive([
@@ -588,6 +667,7 @@ const fleetMatrixRows = computed(() => {
     .filter((farm) => !applyFilter || filterCodes.includes(farm.farm_code))
     .map((farm) => {
       const status = farm.status || {}
+      const modelInfo = farm.model_info || {}
 
       const nwpState = normalizeBizState(
         status.supershort?.enabled ? status.supershort : null
@@ -606,6 +686,9 @@ const fleetMatrixRows = computed(() => {
         supershortState,
         shortState,
         mediumState,
+        supershortModel: modelInfo.supershort || {},
+        shortModel: modelInfo.short || {},
+        mediumModel: modelInfo.medium || {},
       }
     })
 })
@@ -648,6 +731,24 @@ const aggregateByTypeMap = computed(() => {
   return base
 })
 
+// Aggregate last run info across all farms per prediction type
+const lastRunsByType = computed(() => {
+  const result = { supershort: null, short: null, medium: null }
+  const rows = Array.isArray(fleetStatus.value) ? fleetStatus.value : []
+  for (const farm of rows) {
+    const lastRuns = farm.last_runs || {}
+    for (const type of ['supershort', 'short', 'medium']) {
+      const run = lastRuns[type]
+      if (run && run.finished_at) {
+        if (!result[type] || run.finished_at > (result[type].finished_at || '')) {
+          result[type] = run
+        }
+      }
+    }
+  }
+  return result
+})
+
 const failedStationsMap = computed(() => {
   const map = { supershort: [], short: [], medium: [] }
   fleetMatrixRows.value.forEach((row) => {
@@ -674,11 +775,16 @@ const getPredictMetrics = (predictionName) => {
   const cycleSeconds = cycle.intervalMinutes * 60
   const progress = cycleSeconds > 0 ? Math.min(100, Math.max(0, Number((((cycleSeconds - countdownSeconds) / cycleSeconds) * 100).toFixed(2)))) : 0
   const aggregate = aggregateByTypeMap.value[predictionName] || { success: 0, failed: 0, disabled: 0, degraded: 0 }
-  const base = statusUpdatedAt.value ? new Date(statusUpdatedAt.value) : now
+
+  const lastRun = lastRunsByType.value[predictionName]
+  const lastRunTime = lastRun?.finished_at
+    ? new Date(lastRun.finished_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : '未执行'
+  const lastRunDuration = lastRun?.duration_sec != null ? `${lastRun.duration_sec}s` : '-'
 
   return {
-    lastRun: formatHms(base),
-    duration: `${(0.8 + (predictionName.length % 4) * 0.35).toFixed(1)}s`,
+    lastRun: lastRunTime,
+    duration: lastRunDuration,
     nextRun: formatHms(nextRunDate),
     countdownText: formatCountdown(countdownSeconds),
     countdownProgress: progress,
@@ -687,7 +793,35 @@ const getPredictMetrics = (predictionName) => {
   }
 }
 
+const triggerBusyMap = reactive({})
+
+const triggerProgress = reactive({})
+
+const getFarmDisplayName = () => {
+  const code = currentFarm.value || farmService.getCurrentFarm()
+  const farms = farmService.getAvailableFarms()
+  const found = farms.find(f => f.code === code)
+  return found ? `${found.name} (${code})` : code
+}
+
+const typeLabelMap = { supershort: '超短期', short: '短期', medium: '中期' }
+
 const handleCardCommand = (command, item) => {
+  if (command === 'predict' || command === 'train') {
+    if (!canManagePredictions.value) {
+      ElMessage.warning('当前账号没有执行预测控制的权限')
+      return
+    }
+    const actionLabel = command === 'train' ? '训练' : '预测'
+    const farmDisplay = getFarmDisplayName()
+    showConfirmDialog(
+      'manualTrigger',
+      `确认手动补${actionLabel}`,
+      `即将对 ${farmDisplay} 执行 ${typeLabelMap[item.name] || item.name}${actionLabel}，是否继续？`,
+      { predictionType: item.name, action: command },
+    )
+    return
+  }
   if (command === 'logs') {
     fetchLogs(item.name)
     return
@@ -698,6 +832,82 @@ const handleCardCommand = (command, item) => {
       return
     }
     showConfirmDialog('deleteTask', '删除预测任务', `确定要删除 ${item.title} 吗？`, item.name)
+  }
+}
+
+const pollTriggerProgress = (predictionType, celeryTaskId) => {
+  const key = predictionType
+  let elapsed = 0
+  const maxWait = 600
+  const interval = 3000
+
+  const timer = setInterval(async () => {
+    elapsed += interval / 1000
+    if (elapsed > maxWait) {
+      clearInterval(timer)
+      if (triggerProgress[key]?.status === 'running') {
+        triggerProgress[key] = { ...triggerProgress[key], status: 'timeout' }
+      }
+      return
+    }
+
+    try {
+      let run = null
+      if (celeryTaskId) {
+        const res = await getAutoPredictRunByTaskId(celeryTaskId)
+        const items = res?.data?.data?.items || res?.data?.items || []
+        run = items[0]
+      } else {
+        const farmCode = currentFarm.value || farmService.getCurrentFarm()
+        const res = await getAutoPredictRuns(farmCode, predictionType, 1)
+        const items = res?.data?.data?.items || res?.data?.items || []
+        run = items[0]
+      }
+      if (run && run.status !== 'running') {
+        clearInterval(timer)
+        triggerProgress[key] = {
+          ...triggerProgress[key],
+          status: run.status,
+          duration: run.duration_sec ? `${run.duration_sec}s` : '-',
+          error: run.error_message || '',
+          finishedAt: run.finished_at,
+          result: run.result || null,
+        }
+        fetchStatus()
+        fetchFleetStatus()
+      } else {
+        triggerProgress[key] = { ...triggerProgress[key], elapsed }
+      }
+    } catch {
+      // ignore poll errors
+    }
+  }, interval)
+}
+
+const handleManualTrigger = async (predictionType, action) => {
+  const key = predictionType
+  if (triggerBusyMap[key]) return
+  const actionLabel = action === 'train' ? '训练' : '预测'
+  try {
+    triggerBusyMap[key] = true
+    const farmCode = currentFarm.value || farmService.getCurrentFarm()
+    const res = await triggerAutoPredict(farmCode, predictionType, action)
+    const data = res?.data?.data || res?.data || {}
+    const taskId = data.celery_task_id || ''
+    triggerProgress[key] = {
+      status: 'running',
+      action: actionLabel,
+      typeLabel: typeLabelMap[predictionType] || predictionType,
+      farmDisplay: getFarmDisplayName(),
+      taskId: taskId ? taskId.slice(0, 8) + '...' : '',
+      elapsed: 0,
+    }
+    pollTriggerProgress(predictionType, taskId)
+  } catch (err) {
+    const msg = err?.response?.data?.message || err?.response?.data?.error || err.message || '未知错误'
+    ElMessage.error(`${typeLabelMap[predictionType] || predictionType}${actionLabel}触发失败: ${msg}`)
+  } finally {
+    triggerBusyMap[key] = false
   }
 }
 
@@ -883,7 +1093,9 @@ const executeConfirmedAction = () => {
     case 'deleteTask':
       handleControl(confirmDialog.params, 'delete')
       break
-    // Removed cases for saveSettings, resurrectConfig, clearSavedConfig
+    case 'manualTrigger':
+      handleManualTrigger(confirmDialog.params.predictionType, confirmDialog.params.action)
+      break
     default:
       console.warn('未知操作:', confirmDialog.action)
   }
@@ -1309,6 +1521,34 @@ const handleLogTypeChange = () => {
   background: rgba(59, 66, 72, 0.38);
 }
 
+.model-tags {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.model-tag {
+  display: inline-block;
+  width: 20px;
+  height: 18px;
+  line-height: 18px;
+  text-align: center;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: default;
+}
+.model-tag.tag-ok {
+  color: #7ef3b7;
+  background: rgba(26, 79, 59, 0.5);
+  border: 1px solid rgba(126, 243, 183, 0.3);
+}
+.model-tag.tag-missing {
+  color: #ff8f9f;
+  background: rgba(88, 20, 33, 0.45);
+  border: 1px solid rgba(255, 143, 159, 0.35);
+}
+
 .hero-section {
   text-align: left;
   padding: 8px 2px 0;
@@ -1561,6 +1801,82 @@ const handleLogTypeChange = () => {
   margin-top: 8px;
   font-size: 12px;
   color: #ffbf72;
+}
+
+.trigger-progress {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.trigger-progress-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+.trigger-progress-farm {
+  color: #409eff;
+  font-weight: 600;
+}
+.trigger-progress-action {
+  color: rgba(255, 255, 255, 0.7);
+}
+.trigger-progress-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+.trigger-progress-result {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.trigger-success {
+  color: #67c23a;
+}
+.trigger-failed {
+  color: #f56c6c;
+}
+.trigger-timeout {
+  color: #e6a23c;
+}
+.trigger-error-msg {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trigger-detail {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.detail-row span {
+  color: rgba(255, 255, 255, 0.5);
+}
+.detail-row strong {
+  color: rgba(255, 255, 255, 0.85);
+  font-variant-numeric: tabular-nums;
+}
+.detail-row .detail-path {
+  font-family: monospace;
+  font-size: 11px;
+  word-break: break-all;
+  color: rgba(100, 200, 255, 0.9);
 }
 
 .card-footer {

@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_SCHEDULES = {
     "short": {"train": "03:00", "predict": "08:50", "calibrate": "03:03"},
     "medium": {"train": "02:00", "predict": "08:50", "calibrate": "03:03"},
-    "supershort": {"train": "04:30", "predict_cron": "14,29,44,59"},
+    "supershort": {"train": "04:30", "predict_cron": "14,29,44,59", "calibrate": "04:33"},
 }
 
 SCHEDULE_RELOAD_INTERVAL_SEC = int(os.environ.get("CELERY_BEAT_RELOAD_INTERVAL_SEC", "60"))
@@ -48,6 +48,15 @@ def build_beat_schedule():
                     "task": "celery_app.tasks.train_model",
                     "args": (fc, "supershort"),
                     "schedule": crontab(minute=m, hour=h),
+                }
+                ch, cm = _parse_hhmm(
+                    getattr(t, "calibrate_schedule", None),
+                    DEFAULT_SCHEDULES["supershort"].get("calibrate", "04:33"),
+                )
+                schedule[f"{fc}_supershort_calibrate"] = {
+                    "task": "celery_app.tasks.run_calibration",
+                    "args": (fc, "supershort"),
+                    "schedule": crontab(minute=cm, hour=ch),
                 }
             else:
                 h, m = _parse_hhmm(t.train_schedule, DEFAULT_SCHEDULES[tt]["train"])

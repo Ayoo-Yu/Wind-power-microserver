@@ -235,3 +235,30 @@ export function clearAutoPredictPm2Config() {
 export function resurrectAutoPredictPm2Config() {
   return autopredictPost('resurrect', {}, 'resurrect')
 }
+
+export function triggerAutoPredict(farmCode, predictionType, action = 'predict') {
+  const payload = {
+    farm_code: resolveFarmCode(farmCode),
+    type: predictionType,
+    action,
+  }
+  return autopredictPost('trigger', payload, 'trigger')
+}
+
+export function getAutoPredictRuns(farmCode, predictionType, limit = 5, action = null) {
+  const params = {
+    farm_code: resolveFarmCode(farmCode),
+    type: predictionType,
+    limit,
+  }
+  if (action) params.action = action
+  return autopredictGet('runs', 'runs', params)
+}
+
+export function getAutoPredictRunByTaskId(celeryTaskId) {
+  const params = {
+    celery_task_id: celeryTaskId,
+    limit: 1,
+  }
+  return autopredictGet('runs', 'runs', params)
+}

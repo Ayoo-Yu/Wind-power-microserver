@@ -13,7 +13,8 @@ from services.task_executor import execute_weather_task
 from services.partition_maintenance_service import ensure_future_partitions
 
 # Make scripts/ importable for etext_pipeline
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+# scheduler_service.py is in backend/services/, so ../../scripts reaches wind-power-forecast/scripts/
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts")))
 
 logger = logging.getLogger(__name__)
 

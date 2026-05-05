@@ -55,3 +55,44 @@ class CalibrationManager:
             return raw_pred
         calibrated = params["alpha"] * raw_pred + params["beta"]
         return np.clip(calibrated, 0, cap)
+
+    # ---- Per-shift methods for ultra-short-term (16 independent calibrators) ----
+
+    def _shifts_path(self, farm_code: str) -> str:
+        return os.path.join(self.base_dir, farm_code, "supershort", "params.json")
+
+    def load_shifts(self, farm_code: str) -> Optional[dict]:
+        """Load per-shift calibration params. Returns {shift_num: {alpha, beta, last_updated}} or None."""
+        p = self._shifts_path(farm_code)
+        if not os.path.exists(p):
+            return None
+        with open(p, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("shifts")
+
+    def save_shifts(self, farm_code: str, shift_params: dict) -> None:
+        """Save per-shift calibration params. shift_params = {1: {alpha, beta}, ..., 16: {alpha, beta}}."""
+        p = self._shifts_path(farm_code)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        now_iso = datetime.now().isoformat()
+        shifts_out = {}
+        for s, params in sorted(shift_params.items()):
+            entry = {"alpha": params["alpha"], "beta": params["beta"], "last_updated": now_iso}
+            shifts_out[str(s)] = entry
+        data = {"shifts": shifts_out}
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        logger.info(
+            "Saved per-shift calibration for %s/supershort: %d shifts",
+            farm_code, len(shifts_out),
+        )
+
+    def apply_shift(self, farm_code: str, shift: int, raw_pred: float, cap: float) -> float:
+        """Apply calibration for a single shift. Returns calibrated value."""
+        shifts = self.load_shifts(farm_code)
+        if shifts is None:
+            return raw_pred
+        params = shifts.get(str(shift))
+        if params is None:
+            return raw_pred
+        return float(np.clip(params["alpha"] * raw_pred + params["beta"], 0, cap))

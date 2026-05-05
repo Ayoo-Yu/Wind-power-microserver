@@ -90,7 +90,7 @@
         <el-table-column label="纬度" min-width="100">
           <template #default="{ row }">{{ formatCoord(row.latitude) }}</template>
         </el-table-column>
-        <el-table-column label="预测模型" min-width="170">
+        <el-table-column label="预测模型(超短期/短中期)" min-width="200">
           <template #default="{ row }">
             {{ row.supershort_model || '-' }} / {{ row.short_model || '-' }}
           </template>
@@ -235,18 +235,18 @@
               <el-col :span="12">
                 <el-form-item label="超短期预测算法">
                   <el-select v-model="formData.supershort_model" placeholder="请选择" style="width: 100%">
-                    <el-option label="BP神经网络" value="BP神经网络" />
                     <el-option label="LightGBM" value="LightGBM" />
                     <el-option label="历史相似日" value="历史相似日" />
                   </el-select>
                 </el-form-item>
               </el-col>
               <el-col :span="12">
-                <el-form-item label="短期预测算法">
+                <el-form-item label="短期/中期预测算法">
                   <el-select v-model="formData.short_model" placeholder="请选择" style="width: 100%">
-                    <el-option label="BP神经网络" value="BP神经网络" />
-                    <el-option label="LightGBM" value="LightGBM" />
-                    <el-option label="历史相似日" value="历史相似日" />
+                    <el-option label="集成模型(LightGBM+XGBoost+CatBoost)" value="集成模型(LightGBM+XGBoost+CatBoost)" />
+                    <el-option label="LightGBM-DART" value="LightGBM-DART" />
+                    <el-option label="XGBoost" value="XGBoost" />
+                    <el-option label="CatBoost" value="CatBoost" />
                   </el-select>
                 </el-form-item>
               </el-col>

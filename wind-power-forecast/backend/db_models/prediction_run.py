@@ -15,4 +15,5 @@ class PredictionRun(Base):
     finished_at = Column(DateTime)
     duration_sec = Column(Integer)
     error_message = Column(Text)
+    result_json = Column(Text)
     created_at = Column(DateTime, default=datetime.now)

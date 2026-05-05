@@ -1,9 +1,9 @@
 import os
 import re
 import sys
-import subprocess
+import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from . import celery_app
 from db_session import db_session
@@ -16,8 +16,11 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _FARM_CODE_RE = re.compile(r'^[A-Za-z0-9_-]{1,50}$')
 
 
+_BJ_TZ = timezone(timedelta(hours=8))
+
+
 def _utc_now():
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(_BJ_TZ).replace(tzinfo=None)
 
 
 def _validate_farm_code(farm_code):
@@ -47,7 +50,7 @@ def _create_run_record(task_id, action, celery_task_id):
         return run.id
 
 
-def _finish_run_and_update_task(run_id, task_id, action, status, error_message=None):
+def _finish_run_and_update_task(run_id, task_id, action, status, error_message=None, result_data=None):
     with db_session() as session:
         if run_id:
             run = session.query(PredictionRun).get(run_id)
@@ -57,6 +60,8 @@ def _finish_run_and_update_task(run_id, task_id, action, status, error_message=N
                 if run.started_at:
                     run.duration_sec = int((run.finished_at - run.started_at).total_seconds())
                 run.error_message = error_message
+                if result_data is not None:
+                    run.result_json = json.dumps(result_data, default=str, ensure_ascii=False)
         if task_id:
             task = session.query(PredictionTask).get(task_id)
             if task:
@@ -98,17 +103,22 @@ def train_model(self, farm_code, task_type):
     run_id = _create_run_record(task_id, "train", self.request.id) if task_id else None
     try:
         _update_task_running(task_id, "train")
-        from services.forecast_service import run_monthly_training
         from services.model_manager import ModelManager
-
-        ftype = _map_task_type(task_type)
         mgr = ModelManager()
-        with db_session() as session:
-            result = run_monthly_training(farm_code, ftype, mgr, session)
+
+        if task_type == "supershort":
+            from services.forecast_service import run_ultrashort_monthly_training
+            with db_session() as session:
+                result = run_ultrashort_monthly_training(farm_code, mgr, session)
+        else:
+            from services.forecast_service import run_monthly_training
+            ftype = _map_task_type(task_type)
+            with db_session() as session:
+                result = run_monthly_training(farm_code, ftype, mgr, session)
 
         if result.get("status") != "ok":
             raise RuntimeError(result.get("message", "training failed"))
-        _finish_run_and_update_task(run_id, task_id, "train", "success")
+        _finish_run_and_update_task(run_id, task_id, "train", "success", result_data=result)
         return {"status": "success", "farm_code": farm_code, "task_type": task_type}
     except Exception as exc:
         _finish_run_and_update_task(run_id, task_id, "train", "failed", str(exc))
@@ -134,7 +144,7 @@ def run_prediction(self, farm_code, task_type):
 
         if result.get("status") != "ok":
             raise RuntimeError(result.get("message", "prediction failed"))
-        _finish_run_and_update_task(run_id, task_id, "predict", "success")
+        _finish_run_and_update_task(run_id, task_id, "predict", "success", result_data=result)
         return {"status": "success", "farm_code": farm_code, "task_type": task_type}
     except Exception as exc:
         _finish_run_and_update_task(run_id, task_id, "predict", "failed", str(exc))
@@ -148,16 +158,21 @@ def run_calibration(self, farm_code, task_type):
     run_id = _create_run_record(task_id, "calibrate", self.request.id) if task_id else None
     try:
         _update_task_running(task_id, "calibrate")
-        from services.forecast_service import run_daily_calibration
         from services.calibration_manager import CalibrationManager
-
-        ftype = _map_task_type(task_type)
         cal_mgr = CalibrationManager()
-        with db_session() as session:
-            result = run_daily_calibration(farm_code, ftype, cal_mgr, session)
+
+        if task_type == "supershort":
+            from services.forecast_service import run_ultrashort_calibration
+            with db_session() as session:
+                result = run_ultrashort_calibration(farm_code, cal_mgr, session)
+        else:
+            from services.forecast_service import run_daily_calibration
+            ftype = _map_task_type(task_type)
+            with db_session() as session:
+                result = run_daily_calibration(farm_code, ftype, cal_mgr, session)
 
         status = "success" if result.get("status") == "ok" else "skipped"
-        _finish_run_and_update_task(run_id, task_id, "calibrate", status)
+        _finish_run_and_update_task(run_id, task_id, "calibrate", status, result_data=result)
         return {"status": status, "farm_code": farm_code, "task_type": task_type, **result}
     except Exception as exc:
         _finish_run_and_update_task(run_id, task_id, "calibrate", "failed", str(exc))
@@ -169,22 +184,20 @@ def run_supershort_predict(self, farm_code):
     _validate_farm_code(farm_code)
     task_id = _get_task_id(farm_code, "supershort")
     run_id = _create_run_record(task_id, "predict", self.request.id) if task_id else None
-    script = os.path.join(BASE_DIR, "auto_scripts", "scripts", "supershort", "predict_supershort.py")
-    if not os.path.exists(script):
-        msg = f"超短期预测脚本不存在: {script}"
-        _finish_run_and_update_task(run_id, task_id, "predict", "failed", msg)
-        return {"status": "failed", "error": msg}
     try:
         _update_task_running(task_id, "predict")
-        env = os.environ.copy()
-        env["FARM_CODE"] = farm_code
-        result = subprocess.run(
-            [sys.executable, script, "--farm_code", farm_code],
-            capture_output=True, text=True, timeout=280, env=env,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(result.stderr[-2000:] if result.stderr else "超短期预测进程非零退出")
-        _finish_run_and_update_task(run_id, task_id, "predict", "success")
+        from services.forecast_service import run_ultrashort_prediction
+        from services.model_manager import ModelManager
+        from services.calibration_manager import CalibrationManager
+
+        model_mgr = ModelManager()
+        cal_mgr = CalibrationManager()
+        with db_session() as session:
+            result = run_ultrashort_prediction(farm_code, model_mgr, cal_mgr, session)
+
+        if result.get("status") != "ok":
+            raise RuntimeError(result.get("message", "supershort prediction failed"))
+        _finish_run_and_update_task(run_id, task_id, "predict", "success", result_data=result)
         return {"status": "success", "farm_code": farm_code}
     except Exception as exc:
         _finish_run_and_update_task(run_id, task_id, "predict", "failed", str(exc))
@@ -193,6 +206,7 @@ def run_supershort_predict(self, farm_code):
 
 @celery_app.task
 def merge_predictions(farm_code, date_str):
+    import subprocess
     _validate_farm_code(farm_code)
     task_id = _get_task_id(farm_code, "medium")
     run_id = _create_run_record(task_id, "merge", None) if task_id else None

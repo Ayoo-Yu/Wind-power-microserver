@@ -13,6 +13,7 @@ FARMS: Dict[str, dict] = {
         "capacity_mw": 47.5,
         "short_table": "train_pre_short_dplz",
         "mid_table": "train_pre_middle_dplz",
+        "supershort_table": "train_pre_short_dplz",
         "calibrate_enabled": True,
     },
     "sds": {
@@ -21,6 +22,7 @@ FARMS: Dict[str, dict] = {
         "capacity_mw": 193.5,
         "short_table": "train_pre_short_sds",
         "mid_table": "train_pre_middle_sds",
+        "supershort_table": "train_pre_short_sds",
         "calibrate_enabled": True,
     },
     "zyx": {
@@ -29,6 +31,7 @@ FARMS: Dict[str, dict] = {
         "capacity_mw": 453.5,
         "short_table": "train_pre_short_zyx",
         "mid_table": "train_pre_middle_zyx",
+        "supershort_table": "train_pre_short_zyx",
         "calibrate_enabled": False,
     },
     "cf": {
@@ -37,6 +40,7 @@ FARMS: Dict[str, dict] = {
         "capacity_mw": 48.0,
         "short_table": "train_pre_short_cf",
         "mid_table": "train_pre_middle_cf",
+        "supershort_table": "train_pre_short_cf",
         "calibrate_enabled": True,
     },
     "bnj": {
@@ -45,6 +49,7 @@ FARMS: Dict[str, dict] = {
         "capacity_mw": 32.0,
         "short_table": "train_pre_short_bnj",
         "mid_table": "train_pre_middle_bnj",
+        "supershort_table": "train_pre_short_bnj",
         "calibrate_enabled": True,
     },
 }
@@ -55,9 +60,13 @@ def get_all_farms() -> List[dict]:
 
 
 def get_farm(farm_code: str) -> dict:
-    if farm_code not in FARMS:
-        raise KeyError(f"Unknown farm code: {farm_code}")
-    return FARMS[farm_code]
+    if farm_code in FARMS:
+        return FARMS[farm_code]
+    lower = farm_code.lower()
+    for key, farm in FARMS.items():
+        if key.lower() == lower:
+            return farm
+    raise KeyError(f"Unknown farm code: {farm_code}")
 
 
 def get_farm_codes() -> List[str]:

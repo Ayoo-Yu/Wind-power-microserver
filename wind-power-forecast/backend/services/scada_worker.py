@@ -30,6 +30,50 @@ logger = logging.getLogger('SCADA-Worker')
 
 running = True
 
+# Minutes before each 15-min boundary to accept data (inclusive)
+WINDOW_BEFORE_MINUTES = 2
+
+
+def round_to_quarter_hour(now: datetime) -> datetime | None:
+    """
+    If *now* falls within the acceptance window [T-WINDOW, T] where T is
+    the next (or current) 15-minute boundary, return T (naive, second=0).
+    Otherwise return None (data should be dropped).
+
+    Window examples (WINDOW_BEFORE_MINUTES=2):
+      18:28 → 18:30   (2 min before)
+      18:29 → 18:30   (1 min before)
+      18:30 → 18:30   (exactly on boundary)
+      18:31 → None    (outside window)
+      18:14 → 18:15   (1 min before)
+      18:00 → 18:00   (exactly on boundary)
+    """
+    now_bj = now.astimezone(BEIJING_TZ)
+    minute = now_bj.minute
+    remainder = minute % 15
+
+    if remainder == 0:
+        # Exactly on a 15-min boundary
+        return now_bj.replace(second=0, microsecond=0, tzinfo=None)
+    elif remainder >= 15 - WINDOW_BEFORE_MINUTES:
+        # Within WINDOW_BEFORE_MINUTES of the next boundary
+        target_minute = (minute // 15 + 1) * 15
+        hour = now_bj.hour
+        if target_minute >= 60:
+            hour += 1
+            target_minute -= 60
+        # Handle midnight rollover
+        if hour >= 24:
+            return now_bj.replace(
+                hour=0, minute=0, second=0, microsecond=0, tzinfo=None,
+            ) + timedelta(days=1)
+        return now_bj.replace(
+            hour=hour, minute=target_minute,
+            second=0, microsecond=0, tzinfo=None,
+        )
+    else:
+        return None
+
 
 def signal_handler(signum, frame):
     global running
@@ -135,13 +179,23 @@ def run_http_poll(config: dict):
 
             power = round(factor * capacity, 2)
 
-            status = post_power(backend_url, farm_code, timestamp_str, power)
-            if 200 <= status < 300:
-                logger.info(f"[{farm_code}] {power:7.2f} MW  (cycle {cycle})")
-                update_status(config, 'running', f'Cycle {cycle}: {power:.2f} MW', power)
+            rounded = round_to_quarter_hour(now)
+            if rounded is None:
+                logger.debug(
+                    f"[{farm_code}] {power:.2f} MW skipped "
+                    f"(outside {WINDOW_BEFORE_MINUTES}-min window, now={now.strftime('%H:%M:%S')})"
+                )
             else:
-                logger.warning(f"[{farm_code}] POST failed status={status}")
-                update_status(config, 'running', f'POST failed: status={status}', power)
+                ts_str = rounded.strftime('%Y-%m-%dT%H:%M:%S')
+                status = post_power(backend_url, farm_code, ts_str, power)
+                if 200 <= status < 300:
+                    logger.info(
+                        f"[{farm_code}] {power:7.2f} MW → {rounded.strftime('%H:%M')}  (cycle {cycle})"
+                    )
+                    update_status(config, 'running', f'Cycle {cycle}: {power:.2f} MW', power)
+                else:
+                    logger.warning(f"[{farm_code}] POST failed status={status}")
+                    update_status(config, 'running', f'POST failed: status={status}', power)
 
         except Exception as e:
             logger.error(f"Error in polling cycle: {e}")
@@ -181,10 +235,18 @@ def run_c104(config: dict):
         value = point.value
         if value is not None:
             power = float(value)
-            logger.info(f"IOA={point.io_address}: {power} MW")
             now = datetime.now(BEIJING_TZ)
-            post_power(backend_url, farm_code, now.strftime('%Y-%m-%dT%H:%M:%S'), power)
-            update_status(config, 'running', f'IOA={point.io_address}: {power:.2f} MW', power)
+            rounded = round_to_quarter_hour(now)
+            if rounded is None:
+                logger.debug(
+                    f"IOA={point.io_address}: {power} MW skipped "
+                    f"(outside {WINDOW_BEFORE_MINUTES}-min window)"
+                )
+            else:
+                ts_str = rounded.strftime('%Y-%m-%dT%H:%M:%S')
+                post_power(backend_url, farm_code, ts_str, power)
+                logger.info(f"IOA={point.io_address}: {power} MW → {rounded.strftime('%H:%M')}")
+                update_status(config, 'running', f'IOA={point.io_address}: {power:.2f} MW', power)
         return c104.ResponseState.SUCCESS
 
     def on_state_change(connection: c104.Connection,

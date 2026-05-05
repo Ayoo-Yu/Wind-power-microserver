@@ -134,13 +134,22 @@
                   </el-select>
                 </el-form-item>
               </el-col>
+              <el-col :span="8">
+                <el-form-item label="数据类型">
+                  <el-select v-model="ecmwfForm.dataType" style="width: 100%">
+                    <el-option label="超短期预测" value="train_pre_supershort" />
+                    <el-option label="短期预测" value="train_pre_short" />
+                    <el-option label="中期预测" value="train_pre_middle" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
             </el-row>
           </el-form>
           <el-alert type="info" :closable="false" show-icon class="format-hint">
             <template #title>CSV 格式说明</template>
-            <p>上传 ECMWF 格点网格数据，包含预测源时间、预测时刻、格点坐标和气象特征。</p>
-            <p>CSV 列名示例：<code>Timestamp,100u_23.8_103.2,10u_23.8_103.2,2t_23.8_103.2,...,ws100_24.2_103.4</code></p>
-            <p>使用 GRIB 转换脚本生成：<code>python scripts/grib_to_csv.py &lt;grib文件&gt; -o output.csv</code></p>
+            <p>上传气象预测宽表数据，CSV 列名需与目标表列名一致。</p>
+            <p>必须包含 <strong>Timestamp</strong> 列，其余为气象特征列，如：<code>100u_23.8_103.2, 10u_23.8_103.2, 2t_23.8_103.2, ...</code></p>
+            <p>数据将导入 <strong>{{ ecmwfForm.dataType === 'train_pre_supershort' ? '超短期预测' : ecmwfForm.dataType === 'train_pre_short' ? '短期预测' : '中期预测' }} ({{ ecmwfForm.dataType }}_{{ ecmwfForm.farmCode ? ecmwfForm.farmCode.toLowerCase() : '?' }})</strong> 表。</p>
           </el-alert>
         </el-card>
 
@@ -216,6 +225,50 @@
           </div>
         </el-card>
       </el-tab-pane>
+
+      <el-tab-pane label="E文本管道" name="etext">
+        <el-card shadow="hover">
+          <template #header>
+            <div class="card-header">
+              <span class="card-title">E文本自动处理管道</span>
+              <el-button type="primary" size="small" :loading="etextTriggering" @click="doTriggerEtext">立即执行</el-button>
+            </div>
+          </template>
+
+          <el-form label-width="120px" size="small">
+            <el-form-item label="启用">
+              <el-switch v-model="etextConfig.enabled" />
+            </el-form-item>
+            <el-form-item label="目标目录">
+              <el-input v-model="etextConfig.incoming_dir" placeholder="E文本文件存放目录（如 D:\data\etext\incoming）" />
+            </el-form-item>
+            <el-form-item label="扫描时间">
+              <el-row :gutter="8" align="middle">
+                <el-col :span="6">
+                  <el-input-number v-model="etextConfig.schedule_hour" :min="0" :max="23" controls-position="right" />
+                </el-col>
+                <el-col :span="1" style="text-align:center;color:#aaa">:</el-col>
+                <el-col :span="17">
+                  <el-select v-model="etextConfig.schedule_minutes" multiple placeholder="选择分钟" style="width:100%">
+                    <el-option v-for="m in 60" :key="m - 1" :label="String(m - 1).padStart(2, '0') + ' 分'" :value="m - 1" />
+                  </el-select>
+                </el-col>
+              </el-row>
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" :loading="etextLoading" @click="saveEtextConfig">保存配置</el-button>
+            </el-form-item>
+          </el-form>
+
+          <el-descriptions v-if="etextJob" :column="1" border size="small" style="margin-top:12px">
+            <el-descriptions-item label="下次执行">{{ etextJob.next_run_time || '未调度' }}</el-descriptions-item>
+            <el-descriptions-item label="调度规则">{{ etextJob.trigger }}</el-descriptions-item>
+          </el-descriptions>
+          <el-alert v-else type="info" :closable="false" show-icon style="margin-top:12px">
+            <template #title>调度器未运行或任务未注册</template>
+          </el-alert>
+        </el-card>
+      </el-tab-pane>
     </el-tabs>
 
     <el-card v-if="uploading && batchJobs.length" class="card-shell" shadow="hover">
@@ -256,7 +309,7 @@
         </div>
       </template>
       <el-descriptions :column="4" border>
-        <el-descriptions-item label="类型">{{ lastResult.type === 'actual' ? '实测数据' : '气象预测' }}</el-descriptions-item>
+        <el-descriptions-item label="类型">{{ lastResult.type === 'actual' ? '实测数据' : formatDataType(lastResult.dataType) }}</el-descriptions-item>
         <el-descriptions-item label="场站">{{ lastResult.farmCode }}</el-descriptions-item>
         <el-descriptions-item v-if="lastResult.strategy" label="策略">{{ lastResult.strategy === 'fill_only' ? '仅补齐' : '覆盖' }}</el-descriptions-item>
         <el-descriptions-item v-if="lastResult.inserted !== undefined" label="新增">{{ lastResult.inserted }} 条</el-descriptions-item>
@@ -278,7 +331,7 @@
       <el-table :data="history" style="width: 100%" size="small">
         <el-table-column prop="time" label="时间" width="180" />
         <el-table-column label="类型" width="100">
-          <template #default="scope">{{ scope.row.type === 'actual' ? '实测' : '气象' }}</template>
+          <template #default="scope">{{ scope.row.type === 'actual' ? '实测' : formatDataType(scope.row.dataType, true) }}</template>
         </el-table-column>
         <el-table-column prop="farmCode" label="场站" width="120" />
         <el-table-column prop="fileName" label="文件" min-width="180" show-overflow-tooltip />
@@ -302,7 +355,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled, Document, Close } from '@element-plus/icons-vue'
-import { uploadActualPowerAsync, getImportJob, uploadEcmwfGridAsync } from '../api/dataImportApi'
+import { uploadActualPowerAsync, getImportJob, uploadEcmwfGridAsync, uploadFeatureCsv, getEtextPipelineConfig, updateEtextPipelineConfig, triggerEtextPipeline, getEtextTriggerStatus } from '../api/dataImportApi'
 import farmService from '../utils/farmService'
 
 const activeTab = ref('actual')
@@ -319,7 +372,23 @@ const ecmwfInputRef = ref(null)
 let abortCtrl = null
 
 const actualForm = ref({ farmCode: '', strategy: 'fill_only' })
-const ecmwfForm = ref({ farmCode: '' })
+const ecmwfForm = ref({ farmCode: '', dataType: 'train_pre_short' })
+
+// E text pipeline config
+const etextConfig = ref({ incoming_dir: '', schedule_hour: 8, schedule_minutes: [40, 45, 50, 55], enabled: true })
+const etextJob = ref(null)
+const etextLoading = ref(false)
+const etextTriggering = ref(false)
+
+const DATA_TYPE_LABELS = {
+  train_pre_supershort: { full: '气象预测-超短期', short: '气象-超短' },
+  train_pre_short: { full: '气象预测-短期', short: '气象-短期' },
+  train_pre_middle: { full: '气象预测-中期', short: '气象-中期' },
+}
+function formatDataType(dataType, brief = false) {
+  const key = brief ? 'short' : 'full'
+  return DATA_TYPE_LABELS[dataType]?.[key] ?? '气象预测'
+}
 const actualFiles = ref([])
 const ecmwfFiles = ref([])
 const batchJobs = ref([])
@@ -698,33 +767,64 @@ async function uploadOneFile(tab, file, entry, signal) {
   entry.status = 'Uploading'
   const onUploadProgress = (e) => {
     if (!e.total) return
-    entry.progress = Math.min(Math.round((e.loaded / e.total) * 20), 20)
+    entry.progress = Math.min(Math.round((e.loaded / e.total) * 50), 50)
     entry.uploadedBytes = e.loaded
     entry.totalBytes = e.total
     refreshBatchSummary()
   }
 
-  const res = tab === 'actual'
-    ? await uploadActualPowerAsync({
+  if (tab === 'actual') {
+    const res = await uploadActualPowerAsync({
       file,
       farmCode: actualForm.value.farmCode,
       strategy: actualForm.value.strategy,
       onUploadProgress,
       signal
     })
-    : await uploadEcmwfGridAsync({ file, farmCode: ecmwfForm.value.farmCode, onUploadProgress, signal })
+    entry.jobId = res.data.job_id
+    entry.status = 'Queued'
+    entry.progress = Math.max(entry.progress || 0, 50)
+    refreshBatchSummary()
+    const doneJob = await pollBatchJob(entry, signal)
+    const result = buildResultFromJob(tab, doneJob)
+    entry.done = true
+    entry.ok = result.success
+    entry.status = result.success ? 'Done' : 'Warning'
+    refreshBatchSummary()
+    pushImportHistory(tab, file, result)
+    return result
+  }
 
-  entry.jobId = res.data.job_id
-  entry.status = 'Queued'
-  entry.progress = Math.max(entry.progress || 0, 20)
-  refreshBatchSummary()
-
-  const doneJob = await pollBatchJob(entry, signal)
-  const result = buildResultFromJob(tab, doneJob)
+  // ecmwf tab: synchronous upload via /api/upload_feature_csv
+  const tableName = `${ecmwfForm.value.dataType}_${ecmwfForm.value.farmCode.toLowerCase()}`
+  const res = await uploadFeatureCsv({
+    file,
+    farmCode: ecmwfForm.value.farmCode,
+    tableName,
+    onUploadProgress,
+    signal
+  })
+  const data = res.data
+  const hasErrors = data.error_count > 0 || data.errors?.length > 0
+  entry.progress = 100
   entry.done = true
-  entry.ok = result.success
-  entry.status = result.success ? 'Done' : 'Warning'
+  entry.ok = !hasErrors
+  entry.status = hasErrors ? 'Warning' : 'Done'
+  entry.inserted = data.inserted_count || 0
+  entry.updated = data.updated_count || 0
+  entry.errors = data.error_count || (data.errors?.length) || 0
+  entry.processedRows = (data.inserted_count || 0) + (data.updated_count || 0) + (data.error_count || 0)
   refreshBatchSummary()
+
+  const result = {
+    success: !hasErrors,
+    type: 'ecmwf',
+    farmCode: ecmwfForm.value.farmCode,
+    inserted: data.inserted_count || 0,
+    updated: data.updated_count || 0,
+    errors: entry.errors,
+    processed: entry.processedRows
+  }
   pushImportHistory(tab, file, result)
   return result
 }
@@ -777,6 +877,7 @@ async function doBatchUpload(tab) {
       success: errors === 0,
       type: tab,
       farmCode: tab === 'actual' ? actualForm.value.farmCode : ecmwfForm.value.farmCode,
+      dataType: tab === 'ecmwf' ? ecmwfForm.value.dataType : undefined,
       inserted: results.reduce((sum, result) => sum + toCount(result.inserted), 0),
       updated: results.reduce((sum, result) => sum + toCount(result.updated), 0),
       skipped: results.reduce((sum, result) => sum + toCount(result.skipped), 0),
@@ -800,6 +901,73 @@ async function doBatchUpload(tab) {
   }
 }
 
+async function loadEtextConfig() {
+  etextLoading.value = true
+  try {
+    const res = await getEtextPipelineConfig()
+    etextConfig.value = res.data.config
+    etextJob.value = res.data.job
+  } catch { /* pipeline not configured yet */ }
+  etextLoading.value = false
+}
+
+async function saveEtextConfig() {
+  etextLoading.value = true
+  try {
+    const res = await updateEtextPipelineConfig(etextConfig.value)
+    etextConfig.value = res.data.config
+    etextJob.value = null
+    await loadEtextConfig()
+    ElMessage.success('E文本管道配置已保存')
+  } catch (e) {
+    ElMessage.error('保存失败: ' + (e.response?.data?.error || e.message))
+  }
+  etextLoading.value = false
+}
+
+async function doTriggerEtext() {
+  etextTriggering.value = true
+  try {
+    const startRes = await triggerEtextPipeline()
+    const jobId = startRes.data.job_id
+    ElMessage.info('已提交，正在后台处理...')
+
+    let pollErrors = 0
+    for (let i = 0; i < 120; i++) {
+      await new Promise(r => setTimeout(r, 3000))
+      let pollRes
+      try {
+        pollRes = await getEtextTriggerStatus(jobId)
+        pollErrors = 0
+      } catch (pollErr) {
+        pollErrors++
+        if (pollErrors >= 5) throw pollErr
+        continue
+      }
+      const d = pollRes.data
+      if (d.status === 'done') {
+        if (d.message) {
+          ElMessage.warning(d.message)
+        } else {
+          ElMessage.success(`处理完成: ${d.tables} 表, 新增 ${d.inserted}, 更新 ${d.updated}`)
+        }
+        await loadEtextConfig()
+        etextTriggering.value = false
+        return
+      }
+      if (d.status === 'failed') {
+        ElMessage.error('执行失败: ' + (d.error || '未知错误'))
+        etextTriggering.value = false
+        return
+      }
+    }
+    ElMessage.warning('处理超时，请稍后查看结果')
+  } catch (e) {
+    ElMessage.error('执行失败: ' + (e.response?.data?.error || e.message))
+  }
+  etextTriggering.value = false
+}
+
 onMounted(async () => {
   await farmService.loadAvailableFarms(true)
   farms.value = farmService.getAvailableFarms()
@@ -810,6 +978,7 @@ onMounted(async () => {
   if (first && !ecmwfForm.value.farmCode) {
     ecmwfForm.value.farmCode = first.code
   }
+  loadEtextConfig()
 })
 </script>
 

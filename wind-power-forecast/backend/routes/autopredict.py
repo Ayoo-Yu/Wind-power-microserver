@@ -9,7 +9,6 @@ import json
 import datetime
 import glob
 import os
-import hmac
 import uuid
 import threading
 import logging
@@ -19,6 +18,8 @@ from flask import Blueprint, request, jsonify, current_app
 from sqlalchemy import text as _text, desc, func, case as db_case
 from datetime import datetime as _dt
 import re as _re
+
+from flask_jwt_extended import jwt_required
 
 from database_config import Base, get_db
 from db_session import db_session
@@ -175,6 +176,74 @@ def _task_to_status_dict(task: PredictionTask) -> dict:
     }
 
 
+def _check_model_status(farm_code: str, task_type: str) -> dict:
+    """Check whether model and calibrator files exist on disk for a given farm/type.
+
+    Returns dict with model_exists, model_date, calib_exists, calib_date.
+    Note: DB stores 'medium' but filesystem uses 'mid' (same mapping as forecast_service).
+    """
+    from services.model_manager import ModelManager
+    from services.calibration_manager import CalibrationManager
+
+    # Map task_type to the directory name used on disk
+    forecast_type = 'mid' if task_type == 'medium' else task_type
+
+    result = {
+        'model_exists': False,
+        'model_date': None,
+        'calib_exists': False,
+        'calib_date': None,
+    }
+
+    try:
+        if task_type == 'supershort':
+            from services.ultrashort_model_manager import UltrashortModelManager
+            usmm = UltrashortModelManager()
+            meta = usmm.load_meta(farm_code)
+            if meta:
+                result['model_exists'] = True
+                result['model_date'] = meta.get('train_date')
+            model_dir = usmm._base(farm_code)
+            if os.path.isdir(model_dir):
+                meta_path = os.path.join(model_dir, 'meta.json')
+                if os.path.exists(meta_path) and not result['model_date']:
+                    result['model_date'] = datetime.datetime.fromtimestamp(
+                        os.path.getmtime(meta_path)
+                    ).strftime('%Y-%m-%d %H:%M')
+        else:
+            mm = ModelManager()
+            loaded = mm.load(farm_code, forecast_type)
+            if loaded:
+                result['model_exists'] = True
+                meta = loaded.get('meta', {})
+                result['model_date'] = meta.get('train_date')
+            model_dir = mm._dir(farm_code, forecast_type)
+            if os.path.isdir(model_dir) and not result['model_date']:
+                meta_path = os.path.join(model_dir, 'meta.json')
+                if os.path.exists(meta_path):
+                    result['model_date'] = datetime.datetime.fromtimestamp(
+                        os.path.getmtime(meta_path)
+                    ).strftime('%Y-%m-%d %H:%M')
+
+        calib = CalibrationManager()
+        if task_type == 'supershort':
+            calib_data = calib.load_shifts(farm_code)
+            if calib_data:
+                result['calib_exists'] = True
+                # Get the latest last_updated from any shift
+                dates = [v.get('last_updated', '') for v in calib_data.values()]
+                result['calib_date'] = max(dates) if dates else None
+        else:
+            calib_data = calib.load(farm_code, forecast_type)
+            if calib_data:
+                result['calib_exists'] = True
+                result['calib_date'] = calib_data.get('last_updated')
+    except Exception:
+        pass
+
+    return result
+
+
 @autopredict_bp.route('/status', methods=['GET'])
 @autopredict_bp.route('/v1/autopredict/status', methods=['GET'])
 def get_status():
@@ -249,7 +318,7 @@ def _get_farm_name(session, farm_code: str) -> str:
 @autopredict_bp.route('/overview', methods=['GET'])
 @autopredict_bp.route('/v1/autopredict/overview', methods=['GET'])
 def get_fleet_overview():
-    """Fleet overview with running task counts (DB-backed)."""
+    """Fleet overview with running task counts, model/calibrator status, and real execution times."""
     try:
         farms = get_active_farms()
         items = []
@@ -262,17 +331,41 @@ def get_fleet_overview():
 
                 tasks = session.query(PredictionTask).filter_by(farm_code=farm_code).all()
                 status = {}
+                model_info = {}
                 running_count = 0
                 for t in tasks:
                     status[t.task_type] = _task_to_status_dict(t)
-                    # A task is considered "running" if enabled and last status is not failed.
                     if t.enabled:
                         running_count += 1
+
+                    model_info[t.task_type] = _check_model_status(farm_code, t.task_type)
+
+                # Query real last execution time from prediction_runs
+                last_runs = {}
+                for task_type in ('supershort', 'short', 'medium'):
+                    latest = (
+                        session.query(PredictionRun)
+                        .join(PredictionTask, PredictionRun.task_id == PredictionTask.id)
+                        .filter(PredictionTask.farm_code == farm_code)
+                        .filter(PredictionTask.task_type == task_type)
+                        .filter(PredictionRun.status.in_(['success', 'failed']))
+                        .order_by(desc(PredictionRun.finished_at))
+                        .first()
+                    )
+                    if latest:
+                        last_runs[task_type] = {
+                            'finished_at': latest.finished_at.isoformat() if latest.finished_at else None,
+                            'duration_sec': latest.duration_sec,
+                            'status': latest.status,
+                            'action': latest.action,
+                        }
 
                 items.append({
                     'farm_code': farm_code,
                     'farm_name': farm_name,
                     'status': status,
+                    'model_info': model_info,
+                    'last_runs': last_runs,
                     'running_count': running_count,
                 })
 
@@ -642,6 +735,85 @@ def _get_celery_worker_status() -> dict:
         return {'celery': f'unavailable ({e})'}
 
 
+def _build_db_log_text(prediction_type: str, log_type: str, date_str: str) -> str | None:
+    """Build a readable log text from recent PredictionRun records.
+
+    Used as fallback when no log files exist on disk (Celery tasks don't write files).
+    """
+    action_map = {'train': 'train', 'predict': 'predict', 'main': 'train'}
+    action = action_map.get(log_type, 'train')
+
+    with db_session() as session:
+        query = (
+            session.query(PredictionRun, PredictionTask)
+            .join(PredictionTask, PredictionRun.task_id == PredictionTask.id)
+            .filter(PredictionTask.task_type == prediction_type)
+            .filter(PredictionRun.action == action)
+            .order_by(desc(PredictionRun.created_at))
+        )
+        rows = query.limit(5).all()
+
+        if not rows:
+            return None
+
+        lines = [
+            f"[数据库执行记录] 预测类型: {prediction_type}  操作: {action}",
+            f"查询日期: {date_str}  (最近 {len(rows)} 条记录)",
+            "=" * 60,
+        ]
+
+        for run, task in rows:
+            started = run.started_at.strftime('%Y-%m-%d %H:%M:%S') if run.started_at else '-'
+            finished = run.finished_at.strftime('%Y-%m-%d %H:%M:%S') if run.finished_at else '-'
+            duration = f"{run.duration_sec}s" if run.duration_sec else '-'
+            lines.append("")
+            lines.append(f"--- 执行记录 #{run.id} ---")
+            lines.append(f"场站: {task.farm_code}  类型: {task.task_type}  操作: {run.action}")
+            lines.append(f"状态: {run.status}  耗时: {duration}")
+            lines.append(f"开始: {started}  结束: {finished}")
+
+            if run.error_message:
+                lines.append(f"错误: {run.error_message}")
+
+            if run.result_json:
+                try:
+                    result = json.loads(run.result_json)
+                    lines.append("")
+                    lines.append("执行结果详情:")
+                    if result.get('meta'):
+                        meta = result['meta']
+                        lines.append(f"  训练样本: {meta.get('n_samples', '-')}")
+                        lines.append(f"  验证样本: {meta.get('n_val_samples', '-')}")
+                        lines.append(f"  测试样本: {meta.get('n_test_samples', '-')}")
+                        lines.append(f"  特征数: {meta.get('n_features', '-')}")
+                        if meta.get('cal_accuracy'):
+                            ca = meta['cal_accuracy']
+                            lines.append(f"  准确率: {ca.get('accuracy_percent', 0):.1f}%")
+                            lines.append(f"  RMSE: {ca.get('weighted_rmse', 0):.2f}")
+                            lines.append(f"  MAE: {ca.get('mae', 0):.2f}")
+                            lines.append(f"  R²: {ca.get('r2', 0):.3f}")
+                    if result.get('n_rows'):
+                        lines.append(f"  数据行数: {result['n_rows']}")
+                    if result.get('n_shifts'):
+                        lines.append(f"  Shift数: {result['n_shifts']}")
+                    if result.get('n_predictions') is not None:
+                        lines.append(f"  预测点数: {result['n_predictions']}")
+                    if result.get('target_date'):
+                        lines.append(f"  目标日期: {result['target_date']}")
+                    if result.get('alpha') is not None:
+                        lines.append(f"  校准 alpha: {result['alpha']:.4f}")
+                        lines.append(f"  校准 beta: {result['beta']:.3f}")
+                        lines.append(f"  校准点数: {result.get('n_points', '-')}")
+                    if result.get('model_dir'):
+                        lines.append(f"  模型路径: {result['model_dir']}")
+                    if result.get('calib_dir'):
+                        lines.append(f"  参数路径: {result['calib_dir']}")
+                except Exception:
+                    lines.append(f"  (结果JSON解析失败)")
+
+        return '\n'.join(lines)
+
+
 # ---------------------------------------------------------------------------
 # Logs -- file-based, no PM2
 # ---------------------------------------------------------------------------
@@ -679,8 +851,14 @@ def get_logs():
             log_files = glob.glob(os.path.join(log_dir, f"{date_str}*.log"))
 
         if not log_files:
+            # Fallback: query recent PredictionRun result from DB
+            db_log = _build_db_log_text(prediction_type, log_type, date_str)
+            if db_log:
+                record_task_history(prediction_type, 'logs', 'success', f'从数据库获取{log_type}执行记录')
+                return api_success(data={'logs': db_log}, message='获取执行记录成功', legacy={'logs': db_log})
+
             record_task_history(prediction_type, 'logs', 'failed', f'未找到{date_str}的{log_type}类型日志文件')
-            log_text = f'未找到{date_str}的{log_type}日志文件'
+            log_text = f'未找到{date_str}的{log_type}日志文件，也无对应执行记录'
             return api_success(
                 data={'logs': log_text},
                 message='日志文件不存在',
@@ -854,27 +1032,13 @@ def get_task_status():
 
 
 # ---------------------------------------------------------------------------
-# Internal auth helper
-# ---------------------------------------------------------------------------
-
-def _check_internal_auth():
-    """Verify internal API key for sensitive operations."""
-    api_key = request.headers.get('X-API-Key', '')
-    if not hmac.compare_digest(api_key, Config.SECRET_KEY or ''):
-        return api_error('未授权访问', code=1401, status_code=401)
-    return None
-
-
-# ---------------------------------------------------------------------------
 # Trigger -- dispatch Celery tasks
 # ---------------------------------------------------------------------------
 
 @autopredict_bp.route('/trigger', methods=['POST'])
 @autopredict_bp.route('/v1/autopredict/trigger', methods=['POST'])
+@jwt_required()
 def trigger_prediction():
-    auth_err = _check_internal_auth()
-    if auth_err:
-        return auth_err
     data = request.get_json(silent=True) or {}
     farm_code = resolve_farm_code(data.get('farm_code') or '')
     action = data.get('action', 'predict')
@@ -912,6 +1076,8 @@ def trigger_prediction():
 def get_runs():
     farm_code = request.args.get('farm_code')
     task_type = request.args.get('type')
+    action = request.args.get('action')
+    celery_task_id = request.args.get('celery_task_id')
     limit = min(int(request.args.get('limit', 50)), 200)
 
     try:
@@ -924,10 +1090,21 @@ def get_runs():
                 query = query.filter(PredictionTask.farm_code == farm_code)
             if task_type:
                 query = query.filter(PredictionTask.task_type == task_type)
+            if action:
+                query = query.filter(PredictionRun.action == action)
+            if celery_task_id:
+                query = query.filter(PredictionRun.celery_task_id == celery_task_id)
             rows = query.order_by(desc(PredictionRun.created_at)).limit(limit).all()
 
             items = []
             for run, task in rows:
+                result_data = None
+                if run.result_json:
+                    try:
+                        import json as _json
+                        result_data = _json.loads(run.result_json)
+                    except Exception:
+                        result_data = None
                 items.append({
                     "id": run.id,
                     "farm_code": task.farm_code,
@@ -938,6 +1115,7 @@ def get_runs():
                     "finished_at": run.finished_at.isoformat() if run.finished_at else None,
                     "duration_sec": run.duration_sec,
                     "error_message": run.error_message,
+                    "result": result_data,
                 })
 
             return api_success(data={"items": items, "count": len(items)})
@@ -951,10 +1129,8 @@ def get_runs():
 
 @autopredict_bp.route('/schedule_config', methods=['PUT'])
 @autopredict_bp.route('/v1/autopredict/schedule_config', methods=['PUT'])
+@jwt_required()
 def update_schedule_config():
-    auth_err = _check_internal_auth()
-    if auth_err:
-        return auth_err
     data = request.get_json(silent=True) or {}
     farm_code = data.get('farm_code')
     task_type = data.get('type')
@@ -1090,11 +1266,9 @@ def get_model_versions():
 
 
 @autopredict_bp.route('/model_versions/<int:version_id>/deactivate', methods=['POST'])
+@jwt_required()
 def deactivate_model_version(version_id):
     """Deactivate a specific model version."""
-    auth_err = _check_internal_auth()
-    if auth_err:
-        return auth_err
 
     from services.model_registry import ModelRegistry
     registry = ModelRegistry()

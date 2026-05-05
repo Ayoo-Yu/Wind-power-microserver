@@ -203,14 +203,25 @@ def update_farm(farm_code):
 
             # 更新字段
             update_fields = ['farm_name', 'capacity', 'location', 'is_active']
+            is_active_changed = False
+            new_active = None
             for field in update_fields:
                 if field in data:
-                    if field == 'capacity':
-                        setattr(farm, field, float(data[field]))
-                    else:
-                        setattr(farm, field, data[field])
+                    val = float(data[field]) if field == 'capacity' else data[field]
+                    if field == 'is_active' and getattr(farm, field) != val:
+                        is_active_changed = True
+                        new_active = bool(val)
+                    setattr(farm, field, val)
 
             farm.updated_at = datetime.utcnow()
+
+            # Sync prediction_tasks.enabled when is_active changes
+            if is_active_changed:
+                from db_models.prediction_task import PredictionTask
+                session.query(PredictionTask).filter(
+                    PredictionTask.farm_code == farm_code
+                ).update({"enabled": new_active, "updated_at": datetime.utcnow()})
+
             _upsert_farm_profile(session, farm_code, _extract_profile_payload(data))
             session.commit()
 
@@ -268,6 +279,13 @@ def toggle_farm(farm_code):
 
             farm.is_active = not farm.is_active
             farm.updated_at = datetime.utcnow()
+
+            # Sync prediction_tasks.enabled
+            from db_models.prediction_task import PredictionTask
+            session.query(PredictionTask).filter(
+                PredictionTask.farm_code == farm_code
+            ).update({"enabled": farm.is_active, "updated_at": datetime.utcnow()})
+
             session.commit()
 
             status = "启用" if farm.is_active else "停用"

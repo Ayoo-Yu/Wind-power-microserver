@@ -103,6 +103,7 @@ from routes.ecmwf_grid_router import ecmwf_grid_bp
 from routes.autopredict import autopredict_bp
 from routes.extreme_weather_router import extreme_weather_bp
 from routes.scada_connection import scada_connection_bp
+from routes.etext_pipeline_router import etext_pipeline_bp
 
 # app.register_blueprint(upload_bp, url_prefix='/')
 app.register_blueprint(download_bp, url_prefix='/')
@@ -134,6 +135,7 @@ app.register_blueprint(ecmwf_grid_bp)  # ECMWF格点数据API
 app.register_blueprint(autopredict_bp, url_prefix='/api')  # 自动预测调度API
 app.register_blueprint(extreme_weather_bp)  # 极端天气检测API
 app.register_blueprint(scada_connection_bp)  # SCADA connection management API
+app.register_blueprint(etext_pipeline_bp)  # E text pipeline config & trigger
 
 try:
     from services.scheduler_service import init_scheduler

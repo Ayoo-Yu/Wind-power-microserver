@@ -74,6 +74,23 @@ class SupershortlPower(Base):
     wp_pred16_upper = Column(Float, nullable=True)
     wp_pred17_lower = Column(Float, nullable=True)
     wp_pred17_upper = Column(Float, nullable=True)
+    # Raw (uncalibrated) prediction columns
+    wp_pred2_raw = Column(Float, nullable=True)
+    wp_pred3_raw = Column(Float, nullable=True)
+    wp_pred4_raw = Column(Float, nullable=True)
+    wp_pred5_raw = Column(Float, nullable=True)
+    wp_pred6_raw = Column(Float, nullable=True)
+    wp_pred7_raw = Column(Float, nullable=True)
+    wp_pred8_raw = Column(Float, nullable=True)
+    wp_pred9_raw = Column(Float, nullable=True)
+    wp_pred10_raw = Column(Float, nullable=True)
+    wp_pred11_raw = Column(Float, nullable=True)
+    wp_pred12_raw = Column(Float, nullable=True)
+    wp_pred13_raw = Column(Float, nullable=True)
+    wp_pred14_raw = Column(Float, nullable=True)
+    wp_pred15_raw = Column(Float, nullable=True)
+    wp_pred16_raw = Column(Float, nullable=True)
+    wp_pred17_raw = Column(Float, nullable=True)
 
 
 class ShortlPower(Base):
@@ -87,6 +104,7 @@ class ShortlPower(Base):
     timestamp = Column(DateTime, nullable=False, index=True)
     farm_code = Column(String(50), nullable=False, index=True)  # 场站编码
     wp_pred = Column(Float, nullable=False)
+    wp_pred_raw = Column(Float, nullable=True)
     wp_pred_lower = Column(Float, nullable=True)   # 90% 预测区间下限
     wp_pred_upper = Column(Float, nullable=True)   # 90% 预测区间上限
     created_at = Column(DateTime, default=datetime.now)
@@ -101,6 +119,7 @@ class MidPower(Base):
     timestamp = Column(DateTime, nullable=False, index=True)
     farm_code = Column(String(50), nullable=False, index=True)  # 场站编码
     wp_pred = Column(Float, nullable=False)
+    wp_pred_raw = Column(Float, nullable=True)
     wp_pred_lower = Column(Float, nullable=True)   # 90% 预测区间下限
     wp_pred_upper = Column(Float, nullable=True)   # 90% 预测区间上限
     created_at = Column(DateTime, default=datetime.now)

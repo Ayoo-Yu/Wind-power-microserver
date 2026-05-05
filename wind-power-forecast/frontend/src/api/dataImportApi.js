@@ -65,3 +65,41 @@ export function uploadEcmwfGridAsync({ file, farmCode, onUploadProgress, signal 
     signal
   })
 }
+
+// === 气象预测数据 (train_pre_short / train_pre_middle) ===
+
+export function uploadFeatureCsv({ file, farmCode, tableName, onUploadProgress, signal }) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('farm_code', farmCode)
+  formData.append('table_name', tableName)
+
+  return axiosInstance.post('/api/upload_feature_csv', formData, {
+    timeout: 600000,
+    headers: { 'Content-Type': 'multipart/form-data' },
+    onUploadProgress,
+    signal
+  })
+}
+
+// === E text Pipeline ===
+
+export function getEtextPipelineConfig() {
+  return axiosInstance.get('/api/etext_pipeline/config')
+}
+
+export function updateEtextPipelineConfig(config) {
+  return axiosInstance.put('/api/etext_pipeline/config', config)
+}
+
+export function triggerEtextPipeline() {
+  return axiosInstance.post('/api/etext_pipeline/trigger', null, {
+    timeout: 60000
+  })
+}
+
+export function getEtextTriggerStatus(jobId) {
+  return axiosInstance.get(`/api/etext_pipeline/trigger/${jobId}`, {
+    timeout: 10000
+  })
+}
