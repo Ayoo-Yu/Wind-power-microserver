@@ -15,6 +15,20 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
+
+def _table_exists(session: Session, table_name: str) -> bool:
+    """Check if a table exists in the database."""
+    result = session.execute(
+        text(
+            "SELECT EXISTS ("
+            "  SELECT 1 FROM information_schema.tables"
+            "  WHERE table_name = :name"
+            ")"
+        ),
+        {"name": table_name},
+    ).scalar()
+    return bool(result)
+
 VARIABLE_PATTERNS = {
     "hub_u": "100u",
     "hub_v": "100v",
@@ -190,18 +204,33 @@ def _try_ecmwf_grid(session: Session, farm_code: str) -> Optional[dict]:
 
 
 def _try_train_pre(session: Session, farm_code: str) -> Optional[dict]:
-    """Try to get weather from train_pre_short table (populated by E-text pipeline)."""
-    table = f"train_pre_short"
+    """Try to get weather from train_pre_short_{farm} table (populated by E-text pipeline).
 
-    # Get the latest row for this farm
-    row = session.execute(
-        text(
-            f'SELECT * FROM {table} '
+    E-text pipeline creates per-farm tables (e.g. train_pre_short_dplz),
+    not the shared train_pre_short table.
+    """
+    fc = farm_code.lower()
+
+    # Try per-farm table first (populated by E-text pipeline)
+    per_farm_table = f"train_pre_short_{fc}"
+    if not _table_exists(session, per_farm_table):
+        # Fallback to shared table with farm_code column
+        per_farm_table = "train_pre_short"
+
+    # Get the latest row
+    if per_farm_table == "train_pre_short":
+        query = text(
+            f'SELECT * FROM {per_farm_table} '
             f'WHERE farm_code = :fc '
             f'ORDER BY "Timestamp" DESC LIMIT 1'
-        ),
-        {"fc": farm_code.lower()},
-    ).fetchone()
+        )
+        row = session.execute(query, {"fc": fc}).fetchone()
+    else:
+        query = text(
+            f'SELECT * FROM {per_farm_table} '
+            f'ORDER BY "Timestamp" DESC LIMIT 1'
+        )
+        row = session.execute(query).fetchone()
 
     if not row:
         return None
@@ -234,7 +263,7 @@ def _try_train_pre(session: Session, farm_code: str) -> Optional[dict]:
     ts = row_dict.get("Timestamp") or row_dict.get("timestamp")
     update_time = ts.isoformat() if ts else None
 
-    return {"metrics": metrics, "updateTime": update_time, "source": "train_pre_short"}
+    return {"metrics": metrics, "updateTime": update_time, "source": f"train_pre_short ({per_farm_table})"}
 
 
 def get_weather_snapshot(session: Session, farm_code: str) -> dict:
