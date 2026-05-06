@@ -77,7 +77,8 @@ function statusSymbol(status) {
 .status-matrix th {
   font-size: 12px;
   color: #9fc4df;
-  background: rgba(7, 24, 39, 0.5);
+  background: rgba(18, 215, 255, 0.06);
+  border-bottom: 1px solid rgba(18, 215, 255, 0.12);
 }
 
 .farm-name {
@@ -129,9 +130,12 @@ function statusSymbol(status) {
 
 .legend {
   display: flex;
-  gap: 16px;
-  font-size: 12px;
+  gap: 14px;
+  font-size: 11px;
   color: #7ca0b8;
+  padding-top: 6px;
+  border-top: 1px solid rgba(136, 186, 217, 0.08);
+  margin-top: 4px;
 }
 
 .dot {
