@@ -13,54 +13,51 @@
       </el-button>
     </div>
 
+    <div class="kpi-section">
+      <KpiCards :items="cards" />
+    </div>
+
     <div class="dashboard-body">
-      <div class="col-left">
-        <div class="kpi-row">
-          <KpiCards :items="cards" />
+      <div class="panel-card panel-trend">
+        <div class="panel-title trend-legend">
+          日功率预测
+          <span class="legend-line" style="background:#2dd4bf"></span>实绩
+          <span class="legend-line ll-dash" style="background:#60a5fa"></span>短期
+          <span class="legend-line ll-dot" style="background:#fbbf24"></span>超短期
+          <span class="legend-line" style="background:#a78bfa"></span>容量
         </div>
+        <PowerTrendChart v-if="trendPoints.length" :points="trendPoints" />
+        <div v-else-if="!loading" class="empty-state">暂无功率预测数据</div>
+      </div>
+
+      <div class="col-right">
+        <div class="panel-card panel-weather">
+          <div class="panel-title">
+            气象概览
+            <span v-if="weatherUpdateTime" class="weather-update-hint">NWP更新: {{ weatherUpdateTime.slice(11, 16) }}</span>
+          </div>
+
+          <div v-if="weatherMetrics.length" class="weather-metrics-grid">
+            <div v-for="item in weatherMetrics" :key="item.label" class="weather-metric-item">
+              <div class="metric-icon" :class="`metric-${item.icon}`">
+                <i v-if="item.icon === 'wind'" class="wind-icon-sm"></i>
+                <i v-else-if="item.icon === 'compass'" class="compass-icon-sm"></i>
+                <i v-else-if="item.icon === 'temp'" class="temp-icon-sm"></i>
+                <i v-else class="drop-icon-sm"></i>
+              </div>
+              <div class="metric-info">
+                <div class="metric-label">{{ item.label }}</div>
+                <div class="metric-value">{{ item.value }} <small>{{ item.unit }}</small></div>
+              </div>
+            </div>
+          </div>
+          <div v-else-if="!loading" class="empty-state">暂无气象数据</div>
+        </div>
+
         <div class="panel-card panel-matrix">
           <div class="panel-title">多场站预测任务监控矩阵</div>
           <FleetMap v-if="topologyPoints.length" :points="topologyPoints" />
           <div v-else-if="!loading" class="empty-state">暂无监控数据</div>
-        </div>
-      </div>
-
-      <div class="col-right">
-        <div class="panel-card panel-trend">
-          <div class="panel-title trend-legend">
-            日功率预测
-            <span class="legend-line" style="background:#2dd4bf"></span>实绩
-            <span class="legend-line ll-dash" style="background:#60a5fa"></span>短期
-            <span class="legend-line ll-dot" style="background:#fbbf24"></span>超短期
-            <span class="legend-line" style="background:#a78bfa"></span>容量
-          </div>
-          <PowerTrendChart v-if="trendPoints.length" :points="trendPoints" />
-          <div v-else-if="!loading" class="empty-state">暂无功率预测数据</div>
-        </div>
-
-        <div class="right-bottom">
-          <div class="panel-card panel-weather">
-            <div class="panel-title">
-              气象概览
-              <span v-if="weatherUpdateTime" class="weather-update-hint">NWP更新: {{ weatherUpdateTime.slice(11, 16) }}</span>
-            </div>
-
-            <div v-if="weatherMetrics.length" class="weather-metrics-grid">
-              <div v-for="item in weatherMetrics" :key="item.label" class="weather-metric-item">
-                <div class="metric-icon" :class="`metric-${item.icon}`">
-                  <i v-if="item.icon === 'wind'" class="wind-icon-sm"></i>
-                  <i v-else-if="item.icon === 'compass'" class="compass-icon-sm"></i>
-                  <i v-else-if="item.icon === 'temp'" class="temp-icon-sm"></i>
-                  <i v-else class="drop-icon-sm"></i>
-                </div>
-                <div class="metric-info">
-                  <div class="metric-label">{{ item.label }}</div>
-                  <div class="metric-value">{{ item.value }} <small>{{ item.unit }}</small></div>
-                </div>
-              </div>
-            </div>
-            <div v-else-if="!loading" class="empty-state">暂无气象数据</div>
-          </div>
         </div>
       </div>
     </div>
@@ -158,6 +155,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
+/* ---- header ---- */
 .dashboard-head {
   display: flex;
   justify-content: space-between;
@@ -213,21 +211,19 @@ onBeforeUnmount(() => {
   background: rgba(18, 215, 255, 0.06) !important;
 }
 
-/* ---- 2-column body ---- */
+/* ---- KPI section ---- */
+.kpi-section {
+  flex-shrink: 0;
+  padding: 0 0 2px 0;
+}
+
+/* ---- main body: trend (left) + right sidebar ---- */
 .dashboard-body {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 1fr 2.2fr;
+  grid-template-columns: 2fr 1fr;
   gap: 12px;
-}
-
-.col-left {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-height: 0;
-  overflow-y: auto;
 }
 
 .col-right {
@@ -237,36 +233,29 @@ onBeforeUnmount(() => {
   min-height: 0;
 }
 
-.kpi-row {
-  /* KpiCards handles its own grid internally */
-}
-
-.panel-matrix {
-  flex-shrink: 0;
-}
-
 .panel-trend {
-  flex: 1.6;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: visible !important;
-}
-
-.right-bottom {
-  flex: 1;
-  min-height: 0;
 }
 
 .panel-weather {
+  flex: 2;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  justify-content: center;
 }
 
-/* ---- panel-card ---- */
+.panel-matrix {
+  flex: 3;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ---- panel-card base ---- */
 .panel-card {
   position: relative;
   padding: 14px;
@@ -292,6 +281,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
+/* ---- trend legend ---- */
 .legend-line {
   display: inline-block;
   width: 16px;
@@ -318,8 +308,10 @@ onBeforeUnmount(() => {
 
 .weather-metrics-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
+  flex: 1;
+  align-content: start;
 }
 
 .weather-metric-item {
@@ -331,6 +323,12 @@ onBeforeUnmount(() => {
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.025);
   overflow: hidden;
+}
+
+.weather-metric-item:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+  max-width: 50%;
+  justify-self: center;
 }
 
 .metric-icon {
@@ -354,7 +352,6 @@ onBeforeUnmount(() => {
   display: inline-block;
   position: relative;
 }
-
 .wind-icon-sm::before,
 .wind-icon-sm::after {
   content: '';
@@ -362,20 +359,8 @@ onBeforeUnmount(() => {
   background: #5de0ff;
   border-radius: 1px;
 }
-
-.wind-icon-sm::before {
-  width: 2px;
-  height: 14px;
-  left: 6px;
-  top: 0;
-}
-
-.wind-icon-sm::after {
-  width: 10px;
-  height: 2px;
-  left: 2px;
-  top: 4px;
-}
+.wind-icon-sm::before { width: 2px; height: 14px; left: 6px; top: 0; }
+.wind-icon-sm::after { width: 10px; height: 2px; left: 2px; top: 4px; }
 
 .compass-icon-sm {
   width: 12px;
@@ -385,7 +370,6 @@ onBeforeUnmount(() => {
   display: inline-block;
   position: relative;
 }
-
 .compass-icon-sm::after {
   content: '';
   position: absolute;
@@ -404,7 +388,6 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   display: inline-block;
 }
-
 .temp-icon-sm { background: #ff7d45; }
 .drop-icon-sm {
   display: inline-block !important;
@@ -420,42 +403,26 @@ onBeforeUnmount(() => {
   gap: 1px;
   min-width: 0;
 }
-
-.metric-label {
-  font-size: 11px;
-  color: #9fc4df;
-  white-space: nowrap;
-}
-
+.metric-label { font-size: 11px; color: #9fc4df; white-space: nowrap; }
 .metric-value {
   font-size: 16px;
   font-family: Consolas, Menlo, Monaco, monospace;
   color: #dff3ff;
   white-space: nowrap;
 }
+.metric-value small { font-size: 11px; color: #8fb2ca; margin-left: 2px; }
 
-.metric-value small {
-  font-size: 11px;
-  color: #8fb2ca;
-  margin-left: 2px;
-}
-
-/* ---- animations ---- */
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
-
+/* ---- empty & animation ---- */
 .empty-state {
   text-align: center;
   color: var(--text-muted);
   padding: 20px 16px;
   font-size: 13px;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
 
 /* ---- responsive ---- */
@@ -464,21 +431,10 @@ onBeforeUnmount(() => {
     grid-template-columns: 1fr;
     overflow-y: auto;
   }
-
-  .col-left,
-  .col-right {
-    overflow-y: visible;
-  }
-
   .panel-trend {
     flex: none;
     height: 320px;
   }
-
-  .right-bottom {
-    grid-template-columns: 1fr;
-  }
-
   .home-dashboard {
     height: auto;
     overflow: auto;
@@ -486,16 +442,11 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 720px) {
-  .kpi-row {
+  .weather-metrics-grid {
     grid-template-columns: 1fr;
   }
-
-  .weather-metrics-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .panel-weather {
-    justify-content: flex-start;
+  .weather-metric-item:last-child:nth-child(odd) {
+    max-width: 100%;
   }
 }
 </style>
