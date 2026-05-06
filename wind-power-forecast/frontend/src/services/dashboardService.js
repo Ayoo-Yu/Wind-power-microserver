@@ -273,7 +273,6 @@ export async function getDashboardOverview({ farmCode } = {}) {
 
   try {
     const logsResp = await getReportLogs({
-      farm_code: activeFarmCode,
       start_time: start,
       end_time: end,
       page: 1,
@@ -339,8 +338,8 @@ export async function getDashboardOverview({ farmCode } = {}) {
         label: '综合预测准确率',
         theme: 'cyan',
         value: {
-          shortTerm: Number(shortAcc.toFixed(1)),
-          ultraShort: Number(ultraAcc.toFixed(1))
+          shortTerm: Number(shortAcc.toFixed(2)),
+          ultraShort: Number(ultraAcc.toFixed(2))
         }
       },
       {
@@ -376,7 +375,7 @@ export async function getDashboardOverview({ farmCode } = {}) {
         ]
       }
     ],
-    topology: buildTaskMatrix(selectedFarms, logs, commMap)
+    topology: buildTaskMatrix(farms, logs, commMap)
   }
 }
 
@@ -567,6 +566,7 @@ export async function getDashboardWeatherSnapshot({ farmCode } = {}) {
     const v10 = avgColumns('10v_')
     const t2 = avgColumns('2t_')
     const d2 = avgColumns('2d_')
+    const sp = avgColumns('sp_')
 
     const windSpeed100 = u100 !== null && v100 !== null ? Math.sqrt(u100 ** 2 + v100 ** 2) : null
     const windSpeed10 = u10 !== null && v10 !== null ? Math.sqrt(u10 ** 2 + v10 ** 2) : null
@@ -582,12 +582,15 @@ export async function getDashboardWeatherSnapshot({ farmCode } = {}) {
       humidity = Math.max(0, Math.min(100, 100 - 5 * (tempC - dewC)))
     }
 
+    const pressureHpa = sp !== null ? sp / 100 : null
+
     const metrics = [
       { label: '轮毂高度风速', value: windSpeed100 !== null ? windSpeed100.toFixed(1) : '--', unit: 'm/s', icon: 'wind' },
       { label: '地面风速', value: windSpeed10 !== null ? windSpeed10.toFixed(1) : '--', unit: 'm/s', icon: 'wind' },
       { label: '主导风向', value: dirLabel, unit: windDir !== null ? `${Math.round(windDir)}°` : '', icon: 'compass' },
       { label: '气温', value: tempC !== null ? tempC.toFixed(1) : '--', unit: '°C', icon: 'temp' },
       { label: '湿度', value: humidity !== null ? humidity.toFixed(0) : '--', unit: '%', icon: 'drop' },
+      { label: '气压', value: pressureHpa !== null ? pressureHpa.toFixed(0) : '--', unit: 'hPa', icon: 'pressure' },
     ]
 
     const updateTime = latestRow.timestamp || null

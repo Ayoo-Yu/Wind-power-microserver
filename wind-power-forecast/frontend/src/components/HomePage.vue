@@ -43,6 +43,7 @@
                 <i v-if="item.icon === 'wind'" class="wind-icon-sm"></i>
                 <i v-else-if="item.icon === 'compass'" class="compass-icon-sm"></i>
                 <i v-else-if="item.icon === 'temp'" class="temp-icon-sm"></i>
+                <i v-else-if="item.icon === 'pressure'" class="pressure-icon-sm"></i>
                 <i v-else class="drop-icon-sm"></i>
               </div>
               <div class="metric-info">
@@ -80,6 +81,7 @@ const DEMO_WEATHER = [
   { label: '主导风向', value: '西北', unit: '315°', icon: 'compass' },
   { label: '气温', value: '18.5', unit: '°C', icon: 'temp' },
   { label: '湿度', value: '62', unit: '%', icon: 'drop' },
+  { label: '气压', value: '1013', unit: 'hPa', icon: 'pressure' },
 ]
 import KpiCards from '@/components/dashboard/KpiCards.vue'
 import FleetMap from '@/components/dashboard/FleetMap.vue'
@@ -387,6 +389,7 @@ onBeforeUnmount(() => {
 .metric-compass { background: rgba(45, 211, 111, 0.12); }
 .metric-temp { background: rgba(255, 125, 69, 0.12); }
 .metric-drop { background: rgba(100, 160, 255, 0.12); }
+.metric-pressure { background: rgba(167, 200, 220, 0.12); }
 
 .wind-icon-sm {
   width: 14px;
@@ -437,6 +440,34 @@ onBeforeUnmount(() => {
   height: 12px !important;
   background: radial-gradient(circle at 40% 35%, #8ec5ff, #5a9ef5);
   border-radius: 50%;
+}
+
+.pressure-icon-sm {
+  width: 14px;
+  height: 12px;
+  display: inline-block;
+  position: relative;
+}
+.pressure-icon-sm::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 3px;
+  width: 14px;
+  height: 2px;
+  background: #a7c8dc;
+  border-radius: 1px;
+}
+.pressure-icon-sm::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 7px;
+  width: 14px;
+  height: 6px;
+  border: 2px solid #a7c8dc;
+  border-top: none;
+  border-radius: 0 0 3px 3px;
 }
 
 .metric-info {

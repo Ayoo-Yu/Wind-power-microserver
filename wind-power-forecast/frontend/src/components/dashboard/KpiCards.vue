@@ -10,9 +10,7 @@
       <div class="kpi-label">{{ item.label }}</div>
 
       <div v-if="item.type === 'accuracy-split'" class="kpi-main">
-        <span class="kpi-number">{{ ((item.value?.shortTerm || 0) + (item.value?.ultraShort || 0)) / 2 > 0
-          ? ((item.value?.shortTerm || 0) + (item.value?.ultraShort || 0)) / 2
-          : '--' }}</span>
+        <span class="kpi-number">{{ formatAccuracy(item.value) }}</span>
         <span class="kpi-unit">%</span>
       </div>
       <div v-else class="kpi-main">
@@ -52,6 +50,13 @@ function formatValue(val) {
   if (!Number.isFinite(n)) return '--'
   if (n >= 1000) return n.toLocaleString('en-US', { maximumFractionDigits: 0 })
   return n % 1 === 0 ? String(n) : n.toFixed(1)
+}
+
+function formatAccuracy(value) {
+  const s = Number(value?.shortTerm) || 0
+  const u = Number(value?.ultraShort) || 0
+  const avg = (s + u) / 2
+  return avg > 0 ? avg.toFixed(2) : '--'
 }
 </script>
 
