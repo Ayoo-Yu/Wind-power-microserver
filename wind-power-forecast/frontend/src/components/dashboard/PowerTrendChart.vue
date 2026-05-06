@@ -1,9 +1,19 @@
 <template>
-  <div ref="chartRef" class="chart-host" />
+  <div class="chart-host">
+    <div v-if="showRangeButtons" class="range-bar">
+      <button
+        v-for="opt in rangeOptions"
+        :key="opt.value"
+        class="range-btn"
+        :class="{ active: currentRange === opt.value }"
+        @click="selectRange(opt.value)"
+      >{{ opt.label }}</button>
+    </div>
+    <div ref="chartRef" class="chart-canvas" />
+  </div>
 </template>
 
 <script setup>
-/* global defineProps */
 import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import * as echarts from 'echarts'
 
@@ -11,12 +21,30 @@ const props = defineProps({
   points: {
     type: Array,
     default: () => []
+  },
+  showRangeButtons: {
+    type: Boolean,
+    default: true
   }
 })
 
+const emit = defineEmits(['range-change'])
+
+const rangeOptions = [
+  { label: '1D', value: '1d' },
+  { label: '3D', value: '3d' },
+  { label: '7D', value: '7d' }
+]
+
+const currentRange = ref('1d')
 const chartRef = ref(null)
 let chart = null
 let disposed = false
+
+function selectRange(range) {
+  currentRange.value = range
+  emit('range-change', range)
+}
 
 function resolveNowIndex(labels) {
   const now = new Date()
@@ -54,6 +82,10 @@ function render() {
     {
       tooltip: {
         trigger: 'axis',
+        backgroundColor: 'rgba(10, 22, 40, 0.92)',
+        borderColor: 'rgba(18, 215, 255, 0.2)',
+        borderWidth: 1,
+        textStyle: { color: '#dff3ff', fontSize: 12 },
         formatter: (params) => {
           if (!params?.length) return ''
           const time = params[0].axisValue
@@ -193,7 +225,42 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .chart-host {
-  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.range-bar {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+
+.range-btn {
+  padding: 2px 10px;
+  font-size: 11px;
+  color: #7a96aa;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(136, 186, 217, 0.15);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.range-btn:hover {
+  color: #9fc4df;
+  border-color: rgba(18, 215, 255, 0.3);
+}
+
+.range-btn.active {
+  color: #12d7ff;
+  background: rgba(18, 215, 255, 0.1);
+  border-color: rgba(18, 215, 255, 0.4);
+}
+
+.chart-canvas {
   flex: 1;
   min-height: 180px;
 }

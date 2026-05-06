@@ -26,7 +26,7 @@
           <span class="legend-line ll-dot" style="background:#fbbf24"></span>超短期
           <span class="legend-line" style="background:#a78bfa"></span>容量
         </div>
-        <PowerTrendChart v-if="trendPoints.length" :points="trendPoints" />
+        <PowerTrendChart v-if="trendPoints.length" :points="trendPoints" @range-change="onRangeChange" />
         <div v-else-if="!loading" class="empty-state">暂无功率预测数据</div>
       </div>
 
@@ -104,6 +104,48 @@ function formatNow() {
   const mi = `${d.getMinutes()}`.padStart(2, '0')
   const s = `${d.getSeconds()}`.padStart(2, '0')
   return `${y}-${m}-${day} ${h}:${mi}:${s}`
+}
+
+const activeRange = ref('1d')
+
+function getRangeDates(range) {
+  const now = new Date()
+  const end = new Date(now)
+  end.setHours(23, 59, 59, 999)
+  const start = new Date(now)
+  start.setHours(0, 0, 0, 0)
+  if (range === '3d') start.setDate(start.getDate() - 2)
+  if (range === '7d') start.setDate(start.getDate() - 6)
+
+  const fmt = (d) => {
+    const y = d.getFullYear()
+    const m = `${d.getMonth() + 1}`.padStart(2, '0')
+    const day = `${d.getDate()}`.padStart(2, '0')
+    const hh = `${d.getHours()}`.padStart(2, '0')
+    const mm = `${d.getMinutes()}`.padStart(2, '0')
+    const ss = `${d.getSeconds()}`.padStart(2, '0')
+    return `${y}-${m}-${day} ${hh}:${mm}:${ss}`
+  }
+  return { start: fmt(start), end: fmt(end) }
+}
+
+async function onRangeChange(range) {
+  activeRange.value = range
+  loading.value = true
+  const farmCode = farmService.getCurrentFarm()
+  const rangeDates = getRangeDates(range)
+  try {
+    const trend = await getDashboardTrend({
+      farmCode,
+      start: rangeDates.start,
+      end: rangeDates.end
+    })
+    trendPoints.value = trend || []
+  } catch (error) {
+    console.warn('趋势数据加载失败:', error?.message || error)
+  } finally {
+    loading.value = false
+  }
 }
 
 async function loadData() {
