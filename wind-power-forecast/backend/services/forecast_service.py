@@ -481,7 +481,7 @@ def write_predictions_to_db(
     pre_at: datetime,
     raw_predictions: np.ndarray | None = None,
 ) -> int:
-    """Write predictions to shortl_power or mid_power using ORM merge.
+    """Upsert predictions: query by (farm_code, timestamp), update if exists, insert if not.
 
     predictions: calibrated values (written to wp_pred)
     raw_predictions: raw model output (written to wp_pred_raw, if provided)
@@ -489,20 +489,51 @@ def write_predictions_to_db(
     from db_models.power import ShortlPower, MidPower
 
     model_cls = ShortlPower if table_name == "shortl_power" else MidPower
+
+    # Batch query existing rows by (farm_code, timestamp range)
+    ts_min, ts_max = min(timestamps), max(timestamps)
+    existing_rows = session.query(model_cls).filter(
+        model_cls.farm_code == farm_code,
+        model_cls.timestamp >= ts_min,
+        model_cls.timestamp <= ts_max,
+    ).all()
+
+    # Map timestamp -> existing row (keep latest id if duplicates exist)
+    existing_map: Dict[datetime, object] = {}
+    for r in existing_rows:
+        if r.timestamp not in existing_map or r.id > existing_map[r.timestamp].id:
+            existing_map[r.timestamp] = r
+
+    # Remove duplicate rows (same timestamp, different pre_at)
+    keep_ids = {r.id for r in existing_map.values()}
+    dup_ids = [r.id for r in existing_rows if r.id not in keep_ids]
+    if dup_ids:
+        session.query(model_cls).filter(model_cls.id.in_(dup_ids)).delete(synchronize_session=False)
+
     count = 0
     for i, (ts, pred) in enumerate(zip(timestamps, predictions)):
-        obj = model_cls(
-            timestamp=ts,
-            farm_code=farm_code,
-            wp_pred=float(pred),
-            pre_at=pre_at,
-            pre_num=i + 1,
-        )
-        if raw_predictions is not None:
-            obj.wp_pred_raw = float(raw_predictions[i])
-        session.merge(obj)
+        raw_val = float(raw_predictions[i]) if raw_predictions is not None else None
+
+        if ts in existing_map:
+            row = existing_map[ts]
+            row.wp_pred = float(pred)
+            row.pre_at = pre_at
+            row.pre_num = i + 1
+            row.wp_pred_raw = raw_val
+        else:
+            obj = model_cls(
+                timestamp=ts,
+                farm_code=farm_code,
+                wp_pred=float(pred),
+                pre_at=pre_at,
+                pre_num=i + 1,
+            )
+            if raw_val is not None:
+                obj.wp_pred_raw = raw_val
+            session.add(obj)
         count += 1
     session.flush()
+    return count
     return count
 
 
