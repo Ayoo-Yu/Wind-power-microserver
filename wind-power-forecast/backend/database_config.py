@@ -1,10 +1,12 @@
 import os
 import time
+import threading
 
 from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import QueuePool
+from sqlalchemy.exc import OperationalError, DisconnectionError
 
 from config import KINGBASE_CONFIG
 from db_models import Base, Model
@@ -32,59 +34,101 @@ DATABASE_URL = URL.create(
 SQLALCHEMY_DATABASE_URI = DATABASE_URL
 SQLALCHEMY_DATABASE_URL = DATABASE_URL
 
+# Module-level state — guarded by _lock for thread safety.
+_engine = None
+_SessionLocal = None
+_lock = threading.Lock()
 
-def create_engine_with_retry():
-    max_retries = 5
-    retry_delay = 5
 
-    for attempt in range(max_retries):
+def _build_engine():
+    """Create a SQLAlchemy engine with connection pool settings."""
+    return create_engine(
+        SQLALCHEMY_DATABASE_URI,
+        poolclass=QueuePool,
+        pool_size=10,
+        max_overflow=10,
+        pool_timeout=30,
+        pool_recycle=300,
+        pool_pre_ping=True,
+        pool_use_lifo=True,
+        echo_pool=True,
+    )
+
+
+def _init_engine(eng):
+    """Attach event listeners to an engine."""
+    @event.listens_for(eng, "checkout")
+    def ping_connection(dbapi_connection, connection_record, connection_proxy):
+        cursor = dbapi_connection.cursor()
         try:
-            print(f"creating database engine, attempt {attempt + 1}/{max_retries}")
-            engine = create_engine(
-                SQLALCHEMY_DATABASE_URI,
-                poolclass=QueuePool,
-                pool_size=10,
-                max_overflow=10,
-                pool_timeout=30,
-                pool_recycle=300,
-                pool_pre_ping=True,
-                pool_use_lifo=True,
-                echo_pool=True,
-            )
+            cursor.execute("SELECT 1")
+        except Exception:
+            connection_proxy._pool.dispose()
+            raise
+        finally:
+            cursor.close()
 
-            @event.listens_for(engine, "checkout")
-            def ping_connection(dbapi_connection, connection_record, connection_proxy):
-                cursor = dbapi_connection.cursor()
-                try:
-                    cursor.execute("SELECT 1")
-                except Exception:
-                    connection_proxy._pool.dispose()
-                    raise
-                finally:
-                    cursor.close()
+    @event.listens_for(eng, "checkin")
+    def record_checkin_time(dbapi_connection, connection_record):
+        connection_record.info["last_use_time"] = time.time()
 
-            @event.listens_for(engine, "checkin")
-            def record_checkin_time(dbapi_connection, connection_record):
-                connection_record.info["last_use_time"] = time.time()
 
-            return engine
+def ensure_engine():
+    """Return the current engine, attempting reconnection if it is None.
+
+    Thread-safe.  Returns None when the database is unreachable.
+    """
+    global _engine, _SessionLocal
+    with _lock:
+        if _engine is not None:
+            return _engine
+        try:
+            eng = _build_engine()
+            _init_engine(eng)
+            # Verify the connection actually works.
+            with eng.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            _engine = eng
+            _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=eng)
+            print("[OK] database engine (re)connected")
+            return _engine
         except Exception as exc:
-            print(
-                f"failed to create database engine "
-                f"({attempt + 1}/{max_retries}): {exc}"
-            )
-            if attempt >= max_retries - 1:
-                raise
-            time.sleep(retry_delay)
+            print(f"warning: database (re)connection failed: {exc}")
+            return None
 
 
+def invalidate_engine():
+    """Mark the current engine as dead so the next call to ensure_engine()
+    will attempt a fresh connection."""
+    global _engine, _SessionLocal
+    with _lock:
+        if _engine is not None:
+            try:
+                _engine.dispose()
+            except Exception:
+                pass
+        _engine = None
+        _SessionLocal = None
+
+
+# Legacy aliases used throughout the codebase.
+engine = None
+SessionLocal = None
+
+
+def _sync_legacy_refs():
+    """Keep the module-level engine / SessionLocal in sync for legacy code."""
+    global engine, SessionLocal
+    engine = _engine
+    SessionLocal = _SessionLocal
+
+
+# Try initial connection at import time (non-fatal if it fails).
 try:
-    engine = create_engine_with_retry()
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-except Exception as exc:
-    print(f"warning: database engine unavailable: {exc}")
-    engine = None
-    SessionLocal = None
+    eng = ensure_engine()
+except Exception:
+    eng = None
+_sync_legacy_refs()
 
 
 def cleanup_idle_connections(db_engine, idle_timeout=120):
@@ -118,12 +162,14 @@ DEFAULT_FARM_CODE = os.environ.get("DEFAULT_FARM_CODE", "")
 
 
 def upgrade_legacy_power_tables():
-    if engine is None:
+    eng = ensure_engine()
+    _sync_legacy_refs()
+    if eng is None:
         return
 
-    inspector = inspect(engine)
+    inspector = inspect(eng)
 
-    with engine.begin() as connection:
+    with eng.begin() as connection:
         for table_name, index_name in LEGACY_POWER_TABLES.items():
             if not inspector.has_table(table_name):
                 continue
@@ -166,15 +212,19 @@ def upgrade_legacy_power_tables():
 
 
 def check_migrations():
-    if engine is None:
+    eng = ensure_engine()
+    _sync_legacy_refs()
+    if eng is None:
         print("warning: database engine unavailable, skip migration check")
         return
 
     try:
-        Base.metadata.create_all(engine)
+        Base.metadata.create_all(eng)
         print("[OK] ensured missing database tables exist")
         upgrade_legacy_power_tables()
     except Exception as exc:
+        invalidate_engine()
+        _sync_legacy_refs()
         print(f"warning: migration check failed: {exc}")
 
 
@@ -185,15 +235,22 @@ except Exception as exc:
 
 
 def get_db():
-    if SessionLocal is None:
+    eng = ensure_engine()
+    _sync_legacy_refs()
+    if eng is None:
         raise RuntimeError("database connection unavailable")
 
-    cleanup_idle_connections(engine)
-    db = SessionLocal()
+    cleanup_idle_connections(eng)
+    session = _SessionLocal()
     try:
-        yield db
+        yield session
+    except (OperationalError, DisconnectionError):
+        session.rollback()
+        invalidate_engine()
+        _sync_legacy_refs()
+        raise
     finally:
-        db.close()
+        session.close()
 
 
 def cleanup_old_models(db: Session, keep_last=5):

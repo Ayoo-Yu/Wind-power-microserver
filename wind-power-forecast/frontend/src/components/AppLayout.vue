@@ -1,5 +1,9 @@
 ﻿<template>
   <el-container class="app-container">
+    <div v-if="dbUnavailable" class="db-maintenance-banner">
+      数据库维护中，部分数据暂不可用。系统将在数据库恢复后自动重连。
+    </div>
+
     <div v-if="isAuthLoading" class="auth-loading-overlay">
       <div class="auth-loading-container">
         <el-icon class="loading-icon"><Loading /></el-icon>
@@ -145,6 +149,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getCurrentUser } from '../api/auth'
 import { isAuthReady, isAuthLoading } from '../store/authReady'
+import { dbState } from '../api/axios'
 import { UI_TEXT } from '../constants/uiText'
 import {
   HomeFilled,
@@ -194,7 +199,10 @@ export default {
     const uiText = UI_TEXT.appLayout
     const systemTime = ref('')
     const alertCount = ref(0)
+    const dbUnavailable = ref(dbState.unavailable)
     let timeTicker = null
+
+    const unsubscribeDb = dbState.onChange((val) => { dbUnavailable.value = val })
 
     provide('isAnimatedBackground', isAnimatedBackground)
 
@@ -349,12 +357,14 @@ export default {
       if (timeTicker) {
         clearInterval(timeTicker)
       }
+      unsubscribeDb()
     })
 
     return {
       isCollapsed,
       activeMenu,
       keepAliveRouteNames,
+      dbUnavailable,
       toggleCollapse,
       handleSelect,
       backgroundStyle,
@@ -577,6 +587,21 @@ export default {
   font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
+}
+
+.db-maintenance-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  background: linear-gradient(90deg, #f6b73c, #e6a817);
+  color: #1a1a2e;
+  text-align: center;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
 }
 
 .auth-loading-overlay {

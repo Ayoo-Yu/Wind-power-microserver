@@ -184,23 +184,18 @@ def _build_health_status():
 @app.route('/health', methods=['GET'])
 def health_check():
     health_status = _build_health_status()
-
-    if "error" in health_status["database"] or health_status["database"] == "unavailable":
-        return jsonify(health_status), 503
-    
+    # Always return 200 so Docker doesn't restart the container.
+    # The payload tells callers whether DB is connected.
     return jsonify(health_status)
 
 
 @app.route('/api/v1/health', methods=['GET'])
 def health_check_v1():
     health_status = _build_health_status()
-    is_healthy = not (
-        "error" in health_status["database"]
-        or health_status["database"] == "unavailable"
-    )
-    status_code = 200 if is_healthy else 503
+    is_healthy = health_status["database"] == "ok"
     payload = success(data=health_status, message="ok" if is_healthy else "degraded")
-    return jsonify(payload), status_code
+    # Always 200 — DB status is in the payload, not the HTTP status.
+    return jsonify(payload), 200
 
 @app.route('/api/v1/public/overview', methods=['GET'])
 def public_overview():
@@ -541,6 +536,27 @@ def upload_scaler():
 @app.errorhandler(413)
 def request_entity_too_large(error):
     return jsonify({'error': 'File too large (max 500MB)'}), 413
+
+
+@app.errorhandler(Exception)
+def handle_unhandled_exception(error):
+    """Catch unhandled DB errors and return 503 instead of 500."""
+    if isinstance(error, (RuntimeError,)) and "database connection unavailable" in str(error):
+        return jsonify({
+            'success': False,
+            'error': 'database_temporarily_unavailable',
+            'message': '数据库暂时不可用，请稍后重试'
+        }), 503
+    # Import here to avoid circular imports
+    from sqlalchemy.exc import OperationalError, DisconnectionError
+    if isinstance(error, (OperationalError, DisconnectionError)):
+        return jsonify({
+            'success': False,
+            'error': 'database_temporarily_unavailable',
+            'message': '数据库暂时不可用，请稍后重试'
+        }), 503
+    # Not a DB error — re-raise for Flask default handling
+    raise error
 
 @socketio.on('connect')
 def handle_connect():

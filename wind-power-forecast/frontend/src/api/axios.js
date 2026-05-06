@@ -3,6 +3,37 @@ import { ElMessage } from 'element-plus'
 import router from '../router'
 import { isAuthReady, isAuthLoading } from '../store/authReady'
 
+// --- Database maintenance state (shared across app) ---
+export const dbState = {
+  unavailable: false,
+  _timer: null,
+  _listeners: [],
+
+  setUnavailable() {
+    if (this.unavailable) return
+    this.unavailable = true
+    this._notify()
+    ElMessage({ message: '数据库维护中，部分功能暂不可用', type: 'warning', duration: 5000 })
+  },
+
+  setAvailable() {
+    if (!this.unavailable) return
+    this.unavailable = false
+    clearTimeout(this._timer)
+    this._notify()
+    ElMessage({ message: '数据库已恢复连接', type: 'success', duration: 3000 })
+  },
+
+  onChange(fn) {
+    this._listeners.push(fn)
+    return () => { this._listeners = this._listeners.filter(l => l !== fn) }
+  },
+
+  _notify() {
+    this._listeners.forEach(fn => fn(this.unavailable))
+  }
+}
+
 // All API requests use relative paths so dev proxy and production Nginx keep the same contracts.
 const API_BASE_URL = '/'
 
@@ -44,6 +75,28 @@ instance.interceptors.response.use(
     }
 
     if (error.response) {
+      // 503 = database temporarily unavailable
+      if (status === 503) {
+        const body = error.response.data
+        if (body?.error === 'database_temporarily_unavailable') {
+          dbState.setUnavailable()
+          // Auto-recover: after 30s, try a health check
+          clearTimeout(dbState._timer)
+          dbState._timer = setTimeout(() => {
+            instance.get('/health').then(resp => {
+              if (resp.data?.database === 'ok') dbState.setAvailable()
+            }).catch(() => {})
+          }, 30000)
+          error._dbUnavailable = true
+          return Promise.reject(error)
+        }
+      }
+
+      // If we get any successful response, clear DB unavailable state
+      if (status < 500) {
+        dbState.setAvailable()
+      }
+
       if (status === 401) {
         console.warn('Authentication failed or token expired:', error.config?.url)
 

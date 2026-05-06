@@ -5,6 +5,8 @@ import json
 import logging
 from datetime import datetime, timezone, timedelta
 
+from sqlalchemy.exc import OperationalError, DisconnectionError
+
 from . import celery_app
 from db_session import db_session
 from db_models import PredictionTask, PredictionRun
@@ -26,6 +28,15 @@ def _utc_now():
 def _validate_farm_code(farm_code):
     if not _FARM_CODE_RE.match(farm_code):
         raise ValueError(f"Invalid farm_code: {farm_code!r}")
+
+
+def _is_db_error(exc):
+    """Check if an exception is a database connectivity error."""
+    if isinstance(exc, (OperationalError, DisconnectionError)):
+        return True
+    if isinstance(exc, RuntimeError) and "database connection unavailable" in str(exc):
+        return True
+    return False
 
 
 def _get_task_id(farm_code, task_type):
@@ -121,8 +132,11 @@ def train_model(self, farm_code, task_type):
         _finish_run_and_update_task(run_id, task_id, "train", "success", result_data=result)
         return {"status": "success", "farm_code": farm_code, "task_type": task_type}
     except Exception as exc:
-        _finish_run_and_update_task(run_id, task_id, "train", "failed", str(exc))
-        raise self.retry(exc=exc, countdown=60)
+        if not _is_db_error(exc):
+            _finish_run_and_update_task(run_id, task_id, "train", "failed", str(exc))
+        else:
+            logger.warning(f"train_model DB error for {farm_code}/{task_type}, will retry: {exc}")
+        raise self.retry(exc=exc, countdown=120 if _is_db_error(exc) else 60)
 
 
 @celery_app.task(bind=True, max_retries=1, soft_time_limit=600)
@@ -147,8 +161,11 @@ def run_prediction(self, farm_code, task_type):
         _finish_run_and_update_task(run_id, task_id, "predict", "success", result_data=result)
         return {"status": "success", "farm_code": farm_code, "task_type": task_type}
     except Exception as exc:
-        _finish_run_and_update_task(run_id, task_id, "predict", "failed", str(exc))
-        raise self.retry(exc=exc, countdown=30)
+        if not _is_db_error(exc):
+            _finish_run_and_update_task(run_id, task_id, "predict", "failed", str(exc))
+        else:
+            logger.warning(f"run_prediction DB error for {farm_code}/{task_type}, will retry: {exc}")
+        raise self.retry(exc=exc, countdown=120 if _is_db_error(exc) else 30)
 
 
 @celery_app.task(bind=True, max_retries=1, soft_time_limit=300)
@@ -175,8 +192,11 @@ def run_calibration(self, farm_code, task_type):
         _finish_run_and_update_task(run_id, task_id, "calibrate", status, result_data=result)
         return {"status": status, "farm_code": farm_code, "task_type": task_type, **result}
     except Exception as exc:
-        _finish_run_and_update_task(run_id, task_id, "calibrate", "failed", str(exc))
-        raise self.retry(exc=exc, countdown=30)
+        if not _is_db_error(exc):
+            _finish_run_and_update_task(run_id, task_id, "calibrate", "failed", str(exc))
+        else:
+            logger.warning(f"run_calibration DB error for {farm_code}/{task_type}, will retry: {exc}")
+        raise self.retry(exc=exc, countdown=120 if _is_db_error(exc) else 30)
 
 
 @celery_app.task(bind=True, max_retries=1, soft_time_limit=300)
@@ -200,8 +220,11 @@ def run_supershort_predict(self, farm_code):
         _finish_run_and_update_task(run_id, task_id, "predict", "success", result_data=result)
         return {"status": "success", "farm_code": farm_code}
     except Exception as exc:
-        _finish_run_and_update_task(run_id, task_id, "predict", "failed", str(exc))
-        raise self.retry(exc=exc, countdown=15)
+        if not _is_db_error(exc):
+            _finish_run_and_update_task(run_id, task_id, "predict", "failed", str(exc))
+        else:
+            logger.warning(f"run_supershort_predict DB error for {farm_code}, will retry: {exc}")
+        raise self.retry(exc=exc, countdown=120 if _is_db_error(exc) else 15)
 
 
 @celery_app.task

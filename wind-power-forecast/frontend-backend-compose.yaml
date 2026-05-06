@@ -1,4 +1,4 @@
-﻿services:
+services:
   frontend:
     build:
       context: ./frontend
@@ -34,16 +34,14 @@
       - API_BASE_URL=http://backend:5000
     networks:
       - wind-power-network
-    depends_on:
-      kingbase:
-        condition: service_started  # 娣囶喗鏁兼稉绨奺rvice_started閿涘奔绗夊Λ鈧弻銉ヤ淮鎼撮濮搁幀?
+    # No depends_on for kingbase: backend starts independently and auto-reconnects.
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 40s
+      retries: 5
+      start_period: 60s
 
   scada_client_service:
     build:
@@ -117,8 +115,6 @@
     networks:
       - wind-power-network
     depends_on:
-      kingbase:
-        condition: service_started
       redis:
         condition: service_started
     restart: unless-stopped
@@ -167,8 +163,6 @@
     networks:
       - wind-power-network
     depends_on:
-      kingbase:
-        condition: service_started
       redis:
         condition: service_started
     restart: unless-stopped

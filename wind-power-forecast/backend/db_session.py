@@ -1,68 +1,64 @@
 """
 数据库会话管理模块 - 确保连接自动关闭
+
+支持数据库断连后自动重连：
+- 每次获取 session 时通过 ensure_engine() 尝试重连
+- 连接失败时抛出 RuntimeError，由上层错误处理器转为 503
 """
 from contextlib import contextmanager
-from sqlalchemy.orm import sessionmaker, scoped_session
-from database_config import engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import OperationalError, DisconnectionError
 import logging
+
+from database_config import ensure_engine, invalidate_engine, _sync_legacy_refs
 
 logger = logging.getLogger(__name__)
 
-# 创建线程安全的会话工厂
-SessionFactory = scoped_session(
-    sessionmaker(
-        autocommit=False,
-        autoflush=False,
-        bind=engine,
-        expire_on_commit=False  # 避免提交后访问对象属性重新查询数据库
-    )
-)
+
+def _make_session():
+    """Create a new session bound to the current engine (or None)."""
+    eng = ensure_engine()
+    _sync_legacy_refs()
+    if eng is None:
+        raise RuntimeError("database connection unavailable")
+    factory = sessionmaker(autocommit=False, autoflush=False, bind=eng, expire_on_commit=False)
+    return factory()
+
 
 @contextmanager
 def db_session():
+    """Context manager that auto-manages session lifecycle.
+
+    On OperationalError / DisconnectionError the engine is invalidated so
+    the next call will attempt a fresh connection.
     """
-    自动管理会话生命周期的上下文管理器
-    用法:
-    with db_session() as session:
-        # 使用session执行数据库操作
-        result = session.query(Model).all()
-        # ...
-    # 会话自动关闭，连接归还到连接池
-    """
-    session = SessionFactory()
+    session = _make_session()
     try:
         yield session
-        # 如果没有异常，提交事务
         session.commit()
-    except Exception as e:
-        # 发生异常，回滚事务
+    except (OperationalError, DisconnectionError) as e:
         session.rollback()
-        logger.error(f"数据库事务错误，已回滚: {str(e)}")
+        invalidate_engine()
+        _sync_legacy_refs()
+        logger.warning(f"database connection lost: {e}")
+        raise
+    except Exception as e:
+        session.rollback()
+        logger.error(f"database transaction error, rolled back: {e}")
         raise
     finally:
-        # 确保会话始终关闭，连接归还到连接池
         session.close()
-        
+
+
 def get_db():
-    """
-    用于FastAPI/Flask依赖注入的辅助函数
-    用法:
-    @app.route('/users')
-    def get_users():
-        db = next(get_db())
-        try:
-            users = db.query(User).all()
-            return jsonify([user.to_dict() for user in users])
-        finally:
-            db.close()
-    """
-    session = SessionFactory()
+    """Generator for Flask dependency injection."""
+    session = _make_session()
     try:
         yield session
     finally:
         session.close()
-        
-# 直接替换掉database_config中的get_db函数
-from database_config import get_db as original_get_db
+
+
+# Replace database_config.get_db so that all existing imports work.
 import sys
-sys.modules['database_config'].get_db = get_db 
+sys.modules['database_config'].get_db = get_db
