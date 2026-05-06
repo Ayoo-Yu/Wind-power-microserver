@@ -163,3 +163,7 @@ export function getEcmwfLatest(params) {
 export function getEcmwfData(params) {
   return axiosInstance.get('/api/ecmwf/data', { params, _silent: true })
 }
+
+export function getWeatherSnapshot(params) {
+  return axiosInstance.get('/api/dashboard/weather_snapshot', { params, _silent: true })
+}

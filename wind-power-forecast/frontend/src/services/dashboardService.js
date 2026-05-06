@@ -1,7 +1,7 @@
 import { getFarms } from '../api/farmApi'
 import { getPowerCompareData } from '../api/powerCompareApi'
 import { getReportLogs } from '../api/reportApi'
-import { getEcmwfData } from '../api/weatherFetchApi'
+import { getWeatherSnapshot } from '../api/weatherFetchApi'
 import farmService from '../utils/farmService'
 
 const TASK_KEYS = [
@@ -531,71 +531,14 @@ export async function getDashboardStationRank({ farmCode, start, end } = {}) {
 
 export async function getDashboardWeatherSnapshot({ farmCode } = {}) {
   const activeFarmCode = farmCode || farmService.getCurrentFarm()
-  const now = new Date()
-  const start = new Date(now)
-  start.setHours(start.getHours() - 6, 0, 0, 0)
-
-  const fmt = (d) => d.toISOString().slice(0, 19)
 
   try {
-    const resp = await getEcmwfData({
-      farm_code: activeFarmCode,
-      data_type: 'DQ',
-      start: fmt(start),
-      end: fmt(now),
-      limit: 1
-    })
-    const rows = resp?.data?.data?.data || []
-    if (!rows.length) {
-      return { mode: 'fleet', metrics: [], updateTime: null }
+    const resp = await getWeatherSnapshot({ farm_code: activeFarmCode })
+    const data = resp?.data?.data
+    if (data?.metrics?.length) {
+      return { mode: 'fleet', metrics: data.metrics, updateTime: data.updateTime }
     }
-
-    const latestRow = rows[rows.length - 1]
-    const cols = Object.keys(latestRow)
-
-    const avgColumns = (prefix) => {
-      const matched = cols.filter(c => c.startsWith(prefix))
-      if (!matched.length) return null
-      const vals = matched.map(c => safeNumber(latestRow[c], null)).filter(v => v !== null)
-      return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null
-    }
-
-    const u100 = avgColumns('100u_')
-    const v100 = avgColumns('100v_')
-    const u10 = avgColumns('10u_')
-    const v10 = avgColumns('10v_')
-    const t2 = avgColumns('2t_')
-    const d2 = avgColumns('2d_')
-    const sp = avgColumns('sp_')
-
-    const windSpeed100 = u100 !== null && v100 !== null ? Math.sqrt(u100 ** 2 + v100 ** 2) : null
-    const windSpeed10 = u10 !== null && v10 !== null ? Math.sqrt(u10 ** 2 + v10 ** 2) : null
-    const windDir = u100 !== null && v100 !== null ? ((Math.atan2(u100, v100) * 180 / Math.PI + 360) % 360) : null
-
-    const dirLabels = ['北', '东北', '东', '东南', '南', '西南', '西', '西北']
-    const dirLabel = windDir !== null ? dirLabels[Math.round(windDir / 45) % 8] : '--'
-
-    const tempC = t2 !== null ? (t2 - 273.15) : null
-    const dewC = d2 !== null ? (d2 - 273.15) : null
-    let humidity = null
-    if (tempC !== null && dewC !== null) {
-      humidity = Math.max(0, Math.min(100, 100 - 5 * (tempC - dewC)))
-    }
-
-    const pressureHpa = sp !== null ? sp / 100 : null
-
-    const metrics = [
-      { label: '轮毂高度风速', value: windSpeed100 !== null ? windSpeed100.toFixed(1) : '--', unit: 'm/s', icon: 'wind' },
-      { label: '地面风速', value: windSpeed10 !== null ? windSpeed10.toFixed(1) : '--', unit: 'm/s', icon: 'wind' },
-      { label: '主导风向', value: dirLabel, unit: windDir !== null ? `${Math.round(windDir)}°` : '', icon: 'compass' },
-      { label: '气温', value: tempC !== null ? tempC.toFixed(1) : '--', unit: '°C', icon: 'temp' },
-      { label: '湿度', value: humidity !== null ? humidity.toFixed(0) : '--', unit: '%', icon: 'drop' },
-      { label: '气压', value: pressureHpa !== null ? pressureHpa.toFixed(0) : '--', unit: 'hPa', icon: 'pressure' },
-    ]
-
-    const updateTime = latestRow.timestamp || null
-
-    return { mode: 'fleet', metrics, updateTime }
+    return { mode: 'fleet', metrics: [], updateTime: null }
   } catch (error) {
     console.warn('getDashboardWeatherSnapshot backend unavailable:', error)
     return { mode: 'fleet', metrics: [], updateTime: null }

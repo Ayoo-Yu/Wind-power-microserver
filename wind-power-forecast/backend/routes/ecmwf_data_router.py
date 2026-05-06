@@ -17,6 +17,7 @@ from services.grid_to_farm_service import (
     get_grid_latest_timestamp,
     get_grid_availability,
 )
+from services.weather_snapshot_service import get_weather_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -125,3 +126,23 @@ def check_availability():
         }
 
     return success(data={'farm_code': farm_code, 'date': date_str, 'availability': result})
+
+
+@ecmwf_data_bp.route('/api/dashboard/weather_snapshot', methods=['GET'])
+@jwt_required()
+def weather_snapshot():
+    """获取首页仪表盘的气象概览数据
+
+    自动从多个数据源获取最新的气象指标：
+    1. ecmwf_grid_{farm} 表（优先）
+    2. train_pre_short 表（E-text 管道填充的回退源）
+
+    Query params:
+        farm_code: 风场编码
+    """
+    farm_code = request.args.get('farm_code', '')
+
+    with db_session() as db:
+        result = get_weather_snapshot(db, farm_code)
+
+    return success(data=result)

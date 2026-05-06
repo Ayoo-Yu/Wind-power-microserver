@@ -75,14 +75,6 @@ import {
   getDashboardWeatherSnapshot
 } from '@/services/dashboardService'
 
-const DEMO_WEATHER = [
-  { label: '轮毂高度风速', value: '6.8', unit: 'm/s', icon: 'wind' },
-  { label: '地面风速', value: '4.2', unit: 'm/s', icon: 'wind' },
-  { label: '主导风向', value: '西北', unit: '315°', icon: 'compass' },
-  { label: '气温', value: '18.5', unit: '°C', icon: 'temp' },
-  { label: '湿度', value: '62', unit: '%', icon: 'drop' },
-  { label: '气压', value: '1013', unit: 'hPa', icon: 'pressure' },
-]
 import KpiCards from '@/components/dashboard/KpiCards.vue'
 import FleetMap from '@/components/dashboard/FleetMap.vue'
 import PowerTrendChart from '@/components/dashboard/PowerTrendChart.vue'
@@ -163,7 +155,7 @@ async function loadData() {
     cards.value = overview.cards || []
     topologyPoints.value = overview.topology || []
     trendPoints.value = trend || []
-    weatherMetrics.value = weather?.metrics?.length ? weather.metrics : DEMO_WEATHER
+    weatherMetrics.value = weather?.metrics || []
     weatherUpdateTime.value = weather?.updateTime || null
     updatedAt.value = formatNow()
   } catch (error) {
