@@ -322,16 +322,58 @@ export async function getDashboardOverview({ farmCode } = {}) {
   const shortAcc = weightedAccuracy(compareList.map(item => ({ acc: item.shortAcc, weight: item.shortWeight })))
   const ultraAcc = weightedAccuracy(compareList.map(item => ({ acc: item.ultraAcc, weight: item.ultraWeight })))
 
+  const totalCurrentPower = compareList.reduce((sum, item) => sum + safeNumber(item.latestActual, 0), 0)
+  const totalCapacity = selectedFarms.reduce((sum, farm) => sum + safeNumber(farm.capacity, 0), 0)
+  const loadRate = totalCapacity > 0 ? (totalCurrentPower / totalCapacity) * 100 : 0
+
+  const onlineFarms = compareList.filter(item => item.online).length
+  const totalFarms = compareList.length
+
+  const estimatedDailyEnergy = totalCurrentPower * (new Date().getHours() + new Date().getMinutes() / 60)
+
   return {
     cards: [
       {
         key: 'accuracy',
         type: 'accuracy-split',
         label: '综合预测准确率',
+        theme: 'cyan',
         value: {
           shortTerm: Number(shortAcc.toFixed(1)),
           ultraShort: Number(ultraAcc.toFixed(1))
         }
+      },
+      {
+        key: 'total-power',
+        type: 'value-unit',
+        label: '当前总功率',
+        theme: 'green',
+        value: Number(totalCurrentPower.toFixed(1)),
+        unit: 'MW',
+        sub: [
+          { label: '装机容量', value: `${Number(totalCapacity.toFixed(0))} MW` },
+          { label: '负荷率', value: `${Number(loadRate.toFixed(1))}%`, highlight: true }
+        ]
+      },
+      {
+        key: 'daily-energy',
+        type: 'value-unit',
+        label: '今日发电量(估)',
+        theme: 'yellow',
+        value: Number(estimatedDailyEnergy.toFixed(0)),
+        unit: 'MWh',
+        sub: []
+      },
+      {
+        key: 'farm-online',
+        type: 'value-unit',
+        label: '场站在线率',
+        theme: 'purple',
+        value: totalFarms > 0 ? Number(((onlineFarms / totalFarms) * 100).toFixed(1)) : 0,
+        unit: '%',
+        sub: [
+          { label: '在线', value: `${onlineFarms} / ${totalFarms}` }
+        ]
       }
     ],
     topology: buildTaskMatrix(selectedFarms, logs, commMap)
