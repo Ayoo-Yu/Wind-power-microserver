@@ -80,13 +80,16 @@ instance.interceptors.response.use(
         const body = error.response.data
         if (body?.error === 'database_temporarily_unavailable') {
           dbState.setUnavailable()
-          // Auto-recover: after 30s, try a health check
           clearTimeout(dbState._timer)
-          dbState._timer = setTimeout(() => {
-            instance.get('/health').then(resp => {
-              if (resp.data?.database === 'ok') dbState.setAvailable()
-            }).catch(() => {})
-          }, 30000)
+          const pollHealth = () => {
+            dbState._timer = setTimeout(() => {
+              instance.get('/health', { _silent: true }).then(resp => {
+                if (resp.data?.database === 'ok') dbState.setAvailable()
+                else pollHealth()
+              }).catch(() => { pollHealth() })
+            }, 30000)
+          }
+          pollHealth()
           error._dbUnavailable = true
           return Promise.reject(error)
         }

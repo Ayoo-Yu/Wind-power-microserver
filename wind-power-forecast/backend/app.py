@@ -176,7 +176,11 @@ def _build_health_status():
             db.execute(text("SELECT 1"))
             health_status["database"] = "ok"
     except Exception as e:
-        health_status["database"] = f"error: {str(e)}"
+        health_status["database"] = "error"
+        from database_config import invalidate_engine, _sync_legacy_refs
+        invalidate_engine()
+        _sync_legacy_refs()
+        current_app.logger.warning("Health check DB probe failed: %s", e)
 
     return health_status
 
@@ -541,21 +545,23 @@ def request_entity_too_large(error):
 @app.errorhandler(Exception)
 def handle_unhandled_exception(error):
     """Catch unhandled DB errors and return 503 instead of 500."""
-    if isinstance(error, (RuntimeError,)) and "database connection unavailable" in str(error):
+    if isinstance(error, RuntimeError) and "database connection unavailable" in str(error):
+        current_app.logger.warning("DB unavailable: %s", error)
         return jsonify({
             'success': False,
             'error': 'database_temporarily_unavailable',
             'message': '数据库暂时不可用，请稍后重试'
         }), 503
-    # Import here to avoid circular imports
     from sqlalchemy.exc import OperationalError, DisconnectionError
     if isinstance(error, (OperationalError, DisconnectionError)):
+        current_app.logger.warning("DB connection error: %s", error)
         return jsonify({
             'success': False,
             'error': 'database_temporarily_unavailable',
             'message': '数据库暂时不可用，请稍后重试'
         }), 503
-    # Not a DB error — re-raise for Flask default handling
+    # Not a DB error — log and re-raise for Flask default handling
+    current_app.logger.exception("Unhandled exception in request")
     raise error
 
 @socketio.on('connect')

@@ -6,7 +6,6 @@
 - 连接失败时抛出 RuntimeError，由上层错误处理器转为 503
 """
 from contextlib import contextmanager
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import OperationalError, DisconnectionError
 import logging
 
@@ -16,13 +15,13 @@ logger = logging.getLogger(__name__)
 
 
 def _make_session():
-    """Create a new session bound to the current engine (or None)."""
+    """Create a new session bound to the current engine."""
+    import database_config as _dbc
     eng = ensure_engine()
     _sync_legacy_refs()
-    if eng is None:
+    if eng is None or _dbc._SessionLocal is None:
         raise RuntimeError("database connection unavailable")
-    factory = sessionmaker(autocommit=False, autoflush=False, bind=eng, expire_on_commit=False)
-    return factory()
+    return _dbc._SessionLocal()
 
 
 @contextmanager
@@ -40,21 +39,31 @@ def db_session():
         session.rollback()
         invalidate_engine()
         _sync_legacy_refs()
-        logger.warning(f"database connection lost: {e}")
+        logger.warning("database connection lost: %s", e)
         raise
     except Exception as e:
         session.rollback()
-        logger.error(f"database transaction error, rolled back: {e}")
+        logger.error("database transaction error, rolled back: %s", e)
         raise
     finally:
         session.close()
 
 
 def get_db():
-    """Generator for Flask dependency injection."""
+    """Generator for Flask dependency injection.
+
+    On OperationalError / DisconnectionError the engine is invalidated so
+    the next call will attempt a fresh connection.
+    """
     session = _make_session()
     try:
         yield session
+    except (OperationalError, DisconnectionError) as e:
+        session.rollback()
+        invalidate_engine()
+        _sync_legacy_refs()
+        logger.warning("database connection lost in get_db: %s", e)
+        raise
     finally:
         session.close()
 
