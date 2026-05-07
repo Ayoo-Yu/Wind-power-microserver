@@ -183,6 +183,58 @@ ensure_app_database() {
     exit 1
 }
 
+import_seed_data() {
+    local db_name="${DB_NAME:-windpower}"
+    local db_user="${DB_USER:-system}"
+    local ksql="/home/kingbase/install/kingbase/bin/ksql"
+    local dump_file="../03_seed_data.dump"
+
+    # Check if data already exists (wind_farms table has rows)
+    local count
+    count=$(docker exec --user kingbase wind-power-kingbase \
+        "$ksql" -p 54321 -U "$db_user" -d "$db_name" -t -A \
+        -c "SELECT count(*) FROM wind_farms;" 2>/dev/null | tr -d '[:space:]')
+
+    if [ "$count" != "0" ] && [ -n "$count" ]; then
+        info "Database already has data ($count wind farms), skipping seed import."
+        return 0
+    fi
+
+    if [ ! -f "$dump_file" ]; then
+        warn "Seed data file not found: $dump_file"
+        warn "Database will be empty. Copy 03_seed_data.dump to the deploy parent directory for auto-import."
+        return 0
+    fi
+
+    info "Importing seed data (this may take a few minutes)..."
+
+    # Copy dump into container
+    docker cp "$dump_file" wind-power-kingbase:/tmp/seed.dump
+
+    # Restore using sys_restore (pg_restore equivalent)
+    if docker exec --user kingbase wind-power-kingbase \
+        sys_restore -p 54321 -U "$db_user" -d "$db_name" -c --if-exists \
+        /tmp/seed.dump 2>&1; then
+        info "Seed data imported successfully."
+    else
+        warn "Some warnings during import (this is usually normal for partition tables)."
+        warn "Checking if import succeeded..."
+
+        count=$(docker exec --user kingbase wind-power-kingbase \
+            "$ksql" -p 54321 -U "$db_user" -d "$db_name" -t -A \
+            -c "SELECT count(*) FROM wind_farms;" 2>/dev/null | tr -d '[:space:]')
+
+        if [ "$count" != "0" ] && [ -n "$count" ]; then
+            info "Import verified: $count wind farms found."
+        else
+            error "Seed import may have failed. Check database manually."
+        fi
+    fi
+
+    # Clean up
+    docker exec wind-power-kingbase rm -f /tmp/seed.dump 2>/dev/null || true
+}
+
 create_dirs() {
     info "Creating data directories..."
 
@@ -260,6 +312,7 @@ do_start() {
 
     wait_for_database
     ensure_app_database
+    import_seed_data
 
     info "Starting prediction system..."
     docker_compose -f docker-compose.prod.yaml up -d
