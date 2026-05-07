@@ -64,11 +64,38 @@ create_network() {
 
 create_dirs() {
     info "Creating data directories..."
+
+    # Celery worker data (prediction pipeline)
     mkdir -p datasets predict_inputs models predict_outputs logs_middle
     mkdir -p merged_predict_outputs feature_importance_mid
     mkdir -p datasets_short predict_inputs_short models_short predict_outputs_short
     mkdir -p logs_short feature_importance_short
     mkdir -p datasets_ss saved_models_ss prediction_inputs_ss prediction_results_ss logs_ss
+
+    # Backend persistent data
+    mkdir -p backend-data/forecast_models
+    mkdir -p backend-data/uploads
+    mkdir -p backend-data/forecasts
+    mkdir -p backend-data/logs
+    mkdir -p backend-data/saved_models
+    mkdir -p backend-data/saved_scalers
+    mkdir -p backend-data/saved_metrics
+    mkdir -p backend-data/data_etext
+    mkdir -p backend-data/archives
+
+    # Redis persistent data
+    mkdir -p redis-data
+
+    # Celery beat schedule data
+    mkdir -p celery-beat-data
+
+    # pgAdmin data
+    mkdir -p pgadmin-data
+    chmod 777 pgadmin-data 2>/dev/null || chown 5050:5050 pgadmin-data 2>/dev/null || true
+
+    # KingBase data (if using db compose)
+    mkdir -p kingbase-data
+    chmod 777 kingbase-data 2>/dev/null || true
 }
 
 do_install() {

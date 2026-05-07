@@ -11,7 +11,7 @@ services:
       - ENCODING=UTF8
       - TZ=Asia/Shanghai
     volumes:
-      - kingbase_data:/home/kingbase/userdata/
+      - ./kingbase-data:/home/kingbase/userdata/
     ports:
       - "54321:54321"
     restart: unless-stopped
@@ -24,9 +24,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-
-volumes:
-  kingbase_data:
 
 networks:
   wind-power-network:

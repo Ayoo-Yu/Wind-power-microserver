@@ -26,6 +26,16 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - API_BASE_URL=http://backend:5000
+    volumes:
+      - ./backend-data/forecast_models:/app/forecast_models
+      - ./backend-data/uploads:/app/uploads
+      - ./backend-data/forecasts:/app/forecasts
+      - ./backend-data/logs:/app/logs
+      - ./backend-data/saved_models:/app/saved_models
+      - ./backend-data/saved_scalers:/app/saved_scalers
+      - ./backend-data/saved_metrics:/app/saved_metrics
+      - ./backend-data/data_etext:/app/data/etext
+      - ./backend-data/archives:/app/archives
     networks:
       - wind-power-network
     restart: unless-stopped
@@ -95,6 +105,8 @@ services:
       - REDIS_PORT=6379
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - ./celery-beat-data:/app/celerybeat-data
     networks:
       - wind-power-network
     depends_on:
@@ -107,6 +119,9 @@ services:
     container_name: wind-power-redis
     ports:
       - "127.0.0.1:6379:6379"
+    volumes:
+      - ./redis-data:/data
+    command: redis-server --appendonly yes --appendfsync everysec
     restart: unless-stopped
     networks:
       - wind-power-network
@@ -126,7 +141,7 @@ services:
     ports:
       - "5050:80"
     volumes:
-      - pgadmin_data:/var/lib/pgadmin
+      - ./pgadmin-data:/var/lib/pgadmin
     restart: unless-stopped
     networks:
       - wind-power-network
@@ -136,9 +151,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
-
-volumes:
-  pgadmin_data:
 
 networks:
   wind-power-network:
