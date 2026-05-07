@@ -1,0 +1,145 @@
+services:
+  frontend:
+    image: wind-power-frontend:v250715_1.0
+    ports:
+      - "8080:80"
+    networks:
+      - wind-power-network
+    depends_on:
+      - backend
+    environment:
+      - TZ=Asia/Shanghai
+    restart: unless-stopped
+
+  backend:
+    image: wind-power-backend:v250714_1.0
+    ports:
+      - "5000:5000"
+    environment:
+      - DB_HOST=kingbase
+      - DB_PORT=54321
+      - DB_USER=system
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=windpower
+      - TZ=Asia/Shanghai
+      - SECRET_KEY=${SECRET_KEY}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - API_BASE_URL=http://backend:5000
+    networks:
+      - wind-power-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  celery-worker:
+    image: wind-power-celery-worker:latest
+    container_name: wind-power-celery-worker
+    command: ["worker", "--loglevel=info", "-c", "4", "--without-heartbeat"]
+    environment:
+      - DB_HOST=kingbase
+      - DB_PORT=54321
+      - DB_USER=system
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=windpower
+      - TZ=Asia/Shanghai
+      - SECRET_KEY=${SECRET_KEY}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - API_BASE_URL=http://backend:5000
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    networks:
+      - wind-power-network
+    depends_on:
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    volumes:
+      - ./datasets:/app/auto_scripts/scripts/middle/datasets
+      - ./predict_inputs:/app/auto_scripts/scripts/middle/predict_inputs
+      - ./models:/app/auto_scripts/scripts/middle/models
+      - ./predict_outputs:/app/auto_scripts/scripts/middle/predict_outputs
+      - ./logs_middle:/app/auto_scripts/scripts/middle/logs
+      - ./merged_predict_outputs:/app/auto_scripts/scripts/middle/merged_predict_outputs
+      - ./feature_importance_mid:/app/auto_scripts/scripts/middle/feature_importance
+      - ./datasets_short:/app/auto_scripts/scripts/short/datasets
+      - ./predict_inputs_short:/app/auto_scripts/scripts/short/predict_inputs
+      - ./models_short:/app/auto_scripts/scripts/short/models
+      - ./predict_outputs_short:/app/auto_scripts/scripts/short/predict_outputs
+      - ./logs_short:/app/auto_scripts/scripts/short/logs
+      - ./feature_importance_short:/app/auto_scripts/scripts/short/feature_importance
+      - ./datasets_ss:/app/auto_scripts/scripts/supershort/datasets
+      - ./saved_models_ss:/app/auto_scripts/scripts/supershort/saved_models
+      - ./prediction_inputs_ss:/app/auto_scripts/scripts/supershort/prediction_inputs
+      - ./prediction_results_ss:/app/auto_scripts/scripts/supershort/prediction_results
+      - ./logs_ss:/app/auto_scripts/scripts/supershort/logs
+
+  celery-beat:
+    image: wind-power-celery-worker:latest
+    container_name: wind-power-celery-beat
+    command: ["beat", "--loglevel=info"]
+    environment:
+      - DB_HOST=kingbase
+      - DB_PORT=54321
+      - DB_USER=system
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=windpower
+      - TZ=Asia/Shanghai
+      - SECRET_KEY=${SECRET_KEY}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    networks:
+      - wind-power-network
+    depends_on:
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: wind-power-redis
+    ports:
+      - "127.0.0.1:6379:6379"
+    restart: unless-stopped
+    networks:
+      - wind-power-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: wind-power-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      TZ: Asia/Shanghai
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    restart: unless-stopped
+    networks:
+      - wind-power-network
+    healthcheck:
+      test: ["CMD", "wget", "-O", "-", "http://localhost:80/misc/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  pgadmin_data:
+
+networks:
+  wind-power-network:
+    driver: bridge
