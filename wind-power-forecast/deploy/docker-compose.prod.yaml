@@ -160,4 +160,5 @@ services:
 
 networks:
   wind-power-network:
-    driver: bridge
+    external: true
+    name: wind-power-network
