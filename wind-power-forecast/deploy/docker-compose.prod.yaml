@@ -12,7 +12,7 @@ services:
     restart: unless-stopped
 
   backend:
-    image: wind-power-backend:v250714_1.0
+    image: wind-power-celery-worker:latest
     ports:
       - "5000:5000"
     environment:
@@ -27,7 +27,9 @@ services:
       - REDIS_PORT=6379
       - API_BASE_URL=http://backend:5000
       - PYTHONPATH=/app
-    command: ["/bin/bash", "/app/backend-entrypoint.sh"]
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    entrypoint: ["/bin/bash", "/app/backend-entrypoint.sh"]
     volumes:
       - ./app.env:/app/.env:ro
       - ./backend-entrypoint.sh:/app/backend-entrypoint.sh:ro
@@ -76,6 +78,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./app.env:/app/.env:ro
+      - ./backend-data/forecast_models:/app/forecast_models
       - ./datasets:/app/auto_scripts/scripts/middle/datasets
       - ./predict_inputs:/app/auto_scripts/scripts/middle/predict_inputs
       - ./models:/app/auto_scripts/scripts/middle/models
