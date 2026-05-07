@@ -1,10 +1,6 @@
 #!/bin/bash
 set -e
 
-# mkdir -p may return non-zero on Windows Git Bash for existing dirs;
-# wrap it so set -e does not kill the script.
-xmkdir() { mkdir -p "$@" 2>/dev/null || true; }
-
 # =============================================================
 # Wind Power Forecast - Deployment Script
 # Usage: ./deploy.sh [command]
@@ -30,6 +26,62 @@ info()  { echo -e "${GREEN}[INFO]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*"; }
 
+docker_compose() {
+    # These environment variables are harmless on Linux, and avoid common
+    # path-conversion surprises when this script is launched from Git Bash/MSYS.
+    COMPOSE_IGNORE_ORPHANS=true \
+    COMPOSE_CONVERT_WINDOWS_PATHS=1 \
+    MSYS_NO_PATHCONV=1 \
+    MSYS2_ARG_CONV_EXCL="*" \
+    docker compose "$@"
+}
+
+is_wsl_windows_path() {
+    [ -r /proc/version ] && grep -qi microsoft /proc/version && \
+    [ "${SCRIPT_DIR#/mnt/}" != "$SCRIPT_DIR" ] && \
+    command -v powershell.exe >/dev/null 2>&1 && \
+    command -v wslpath >/dev/null 2>&1
+}
+
+host_mkdir() {
+    local dir="$1"
+    local wsl_dir
+    local win_dir
+    local ps_dir
+    local ps_script
+    local ps_encoded
+
+    if is_wsl_windows_path; then
+        wsl_dir="$(realpath -m "$dir")"
+        win_dir="$(wslpath -w "$wsl_dir")"
+        ps_dir="${win_dir//\'/\'\'}"
+        ps_script="\$ProgressPreference = 'SilentlyContinue'; \$p = '$ps_dir'; if (Test-Path -LiteralPath \$p -PathType Leaf) { exit 2 }; New-Item -ItemType Directory -Force -Path \$p | Out-Null"
+        ps_encoded="$(printf '%s' "$ps_script" | iconv -f UTF-8 -t UTF-16LE | base64 -w 0)"
+        powershell.exe -NoProfile -NonInteractive -EncodedCommand "$ps_encoded" >/dev/null 2>&1
+    else
+        mkdir -p "$dir"
+    fi
+}
+
+ensure_dir() {
+    local dir
+    for dir in "$@"; do
+        if [ -e "$dir" ] && [ ! -d "$dir" ]; then
+            error "Path exists but is not a directory: $dir"
+            error "Please move or remove this file, then run: bash deploy.sh start"
+            exit 1
+        fi
+
+        host_mkdir "$dir" || true
+
+        if [ ! -d "$dir" ]; then
+            error "Failed to create directory: $dir"
+            error "Check filesystem permissions and Docker Desktop file sharing for: $SCRIPT_DIR"
+            exit 1
+        fi
+    done
+}
+
 check_env() {
     if [ ! -f .env ]; then
         error ".env file not found!"
@@ -53,7 +105,7 @@ check_docker() {
         error "Docker daemon is not running!"
         exit 1
     fi
-    if ! command -v docker &> /dev/null && docker compose version &> /dev/null; then
+    if ! docker compose version &> /dev/null; then
         error "Docker Compose V2 is not available!"
         exit 1
     fi
@@ -66,39 +118,104 @@ create_network() {
     fi
 }
 
+generate_app_env() {
+    cat > app.env <<EOF
+DB_HOST=kingbase
+DB_PORT=54321
+DB_USER=system
+DB_PASSWORD=${DB_PASSWORD}
+DB_NAME=windpower
+SECRET_KEY=${SECRET_KEY}
+JWT_SECRET_KEY=${SECRET_KEY}
+APP_HOST=0.0.0.0
+APP_PORT=5000
+EOF
+}
+
+wait_for_database() {
+    info "Waiting for database to be ready..."
+    for i in $(seq 1 60); do
+        if docker exec wind-power-kingbase \
+            /home/kingbase/install/kingbase/bin/sys_isready \
+            -h 127.0.0.1 -p 54321 >/dev/null 2>&1; then
+            info "Database is ready."
+            return 0
+        fi
+
+        if [ "$i" -eq 60 ]; then
+            error "Database health check timeout."
+            docker logs --tail 80 wind-power-kingbase 2>/dev/null || true
+            exit 1
+        fi
+
+        sleep 2
+    done
+}
+
+ensure_app_database() {
+    local db_name="${DB_NAME:-windpower}"
+    local db_user="${DB_USER:-system}"
+    local ksql="/home/kingbase/install/kingbase/bin/ksql"
+    local createdb="/home/kingbase/install/kingbase/bin/createdb"
+
+    info "Ensuring database exists: $db_name"
+
+    if docker exec --user kingbase wind-power-kingbase \
+        "$ksql" -p 54321 -U "$db_user" -d "$db_name" -c "select 1;" >/dev/null 2>&1; then
+        info "Database already exists: $db_name"
+        return 0
+    fi
+
+    if docker exec --user kingbase wind-power-kingbase \
+        "$createdb" -p 54321 -U "$db_user" "$db_name" >/dev/null 2>&1; then
+        info "Created database: $db_name"
+        return 0
+    fi
+
+    if docker exec --user kingbase wind-power-kingbase \
+        "$ksql" -p 54321 -U "$db_user" -d "$db_name" -c "select 1;" >/dev/null 2>&1; then
+        info "Database already exists: $db_name"
+        return 0
+    fi
+
+    error "Failed to create or connect to database: $db_name"
+    docker logs --tail 80 wind-power-kingbase 2>/dev/null || true
+    exit 1
+}
+
 create_dirs() {
     info "Creating data directories..."
 
     # Celery worker data (prediction pipeline)
-    xmkdir datasets predict_inputs models predict_outputs logs_middle 2>/dev/null
-    xmkdir merged_predict_outputs feature_importance_mid 2>/dev/null
-    xmkdir datasets_short predict_inputs_short models_short predict_outputs_short 2>/dev/null
-    xmkdir logs_short feature_importance_short 2>/dev/null
-    xmkdir datasets_ss saved_models_ss prediction_inputs_ss prediction_results_ss logs_ss 2>/dev/null
+    ensure_dir datasets predict_inputs models predict_outputs logs_middle
+    ensure_dir merged_predict_outputs feature_importance_mid
+    ensure_dir datasets_short predict_inputs_short models_short predict_outputs_short
+    ensure_dir logs_short feature_importance_short
+    ensure_dir datasets_ss saved_models_ss prediction_inputs_ss prediction_results_ss logs_ss
 
     # Backend persistent data
-    xmkdir backend-data/forecast_models 2>/dev/null
-    xmkdir backend-data/uploads 2>/dev/null
-    xmkdir backend-data/forecasts 2>/dev/null
-    xmkdir backend-data/logs 2>/dev/null
-    xmkdir backend-data/saved_models 2>/dev/null
-    xmkdir backend-data/saved_scalers 2>/dev/null
-    xmkdir backend-data/saved_metrics 2>/dev/null
-    xmkdir backend-data/data_etext 2>/dev/null
-    xmkdir backend-data/archives 2>/dev/null
+    ensure_dir backend-data/forecast_models
+    ensure_dir backend-data/uploads
+    ensure_dir backend-data/forecasts
+    ensure_dir backend-data/logs
+    ensure_dir backend-data/saved_models
+    ensure_dir backend-data/saved_scalers
+    ensure_dir backend-data/saved_metrics
+    ensure_dir backend-data/data_etext
+    ensure_dir backend-data/archives
 
     # Redis persistent data
-    xmkdir redis-data 2>/dev/null
+    ensure_dir redis-data
 
     # Celery beat schedule data
-    xmkdir celery-beat-data 2>/dev/null
+    ensure_dir celery-beat-data
 
     # pgAdmin data
-    xmkdir pgadmin-data 2>/dev/null
+    ensure_dir pgadmin-data
     chmod 777 pgadmin-data 2>/dev/null || chown 5050:5050 pgadmin-data 2>/dev/null || true
 
     # KingBase data (if using db compose)
-    xmkdir kingbase-data 2>/dev/null
+    ensure_dir kingbase-data
     chmod 777 kingbase-data 2>/dev/null || true
 }
 
@@ -135,25 +252,17 @@ do_start() {
     check_env
     check_docker
     create_network
+    generate_app_env
     create_dirs
 
     info "Starting database..."
-    docker compose -f docker-compose.db.yaml up -d
+    docker_compose -f docker-compose.db.yaml up -d
 
-    info "Waiting for database to be ready..."
-    for i in $(seq 1 30); do
-        if docker exec wind-power-kingbase ls /home/kingbase/userdata/data &> /dev/null; then
-            info "Database is ready."
-            break
-        fi
-        if [ $i -eq 30 ]; then
-            warn "Database health check timeout, continuing anyway..."
-        fi
-        sleep 2
-    done
+    wait_for_database
+    ensure_app_database
 
     info "Starting prediction system..."
-    docker compose -f docker-compose.prod.yaml up -d
+    docker_compose -f docker-compose.prod.yaml up -d
 
     info "=== All services started ==="
     info "Frontend:    http://<server-ip>:8080"
@@ -163,10 +272,10 @@ do_start() {
 
 do_stop() {
     info "Stopping prediction system..."
-    docker compose -f docker-compose.prod.yaml down 2>/dev/null || true
+    docker_compose -f docker-compose.prod.yaml down >/dev/null 2>&1 || true
 
     info "Stopping database..."
-    docker compose -f docker-compose.db.yaml down 2>/dev/null || true
+    docker_compose -f docker-compose.db.yaml down >/dev/null 2>&1 || true
 
     info "All services stopped."
 }
@@ -174,10 +283,10 @@ do_stop() {
 do_status() {
     echo ""
     echo "=== Database ==="
-    docker compose -f docker-compose.db.yaml ps 2>/dev/null || echo "  Not started"
+    docker_compose -f docker-compose.db.yaml ps 2>/dev/null || echo "  Not started"
     echo ""
     echo "=== Prediction System ==="
-    docker compose -f docker-compose.prod.yaml ps 2>/dev/null || echo "  Not started"
+    docker_compose -f docker-compose.prod.yaml ps 2>/dev/null || echo "  Not started"
     echo ""
 }
 
@@ -194,18 +303,20 @@ do_db_only() {
     create_network
 
     info "Starting database only..."
-    docker compose -f docker-compose.db.yaml up -d
+    docker_compose -f docker-compose.db.yaml up -d
+    wait_for_database
+    ensure_app_database
     info "Database started on port 54321"
 }
 
 do_logs() {
     local svc="${1:-}"
     if [ -n "$svc" ]; then
-        docker compose -f docker-compose.prod.yaml logs -f "$svc" 2>/dev/null || \
-        docker compose -f docker-compose.db.yaml logs -f "$svc"
+        docker_compose -f docker-compose.prod.yaml logs -f "$svc" 2>/dev/null || \
+        docker_compose -f docker-compose.db.yaml logs -f "$svc"
     else
-        docker compose -f docker-compose.prod.yaml logs -f 2>/dev/null &
-        docker compose -f docker-compose.db.yaml logs -f 2>/dev/null &
+        docker_compose -f docker-compose.prod.yaml logs -f 2>/dev/null &
+        docker_compose -f docker-compose.db.yaml logs -f 2>/dev/null &
         wait
     fi
 }

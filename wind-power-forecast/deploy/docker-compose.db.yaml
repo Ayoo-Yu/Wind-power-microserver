@@ -11,7 +11,7 @@ services:
       - ENCODING=UTF8
       - TZ=Asia/Shanghai
     volumes:
-      - ./kingbase-data:/home/kingbase/userdata/
+      - kingbase-data:/home/kingbase/userdata/
     ports:
       - "54321:54321"
     restart: unless-stopped
@@ -19,7 +19,7 @@ services:
       - wind-power-network
     command: /usr/sbin/init
     healthcheck:
-      test: ["CMD", "ls", "/home/kingbase/userdata/data"]
+      test: ["CMD", "/home/kingbase/install/kingbase/bin/sys_isready", "-h", "127.0.0.1", "-p", "54321"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -29,3 +29,6 @@ networks:
   wind-power-network:
     external: true
     name: wind-power-network
+
+volumes:
+  kingbase-data:

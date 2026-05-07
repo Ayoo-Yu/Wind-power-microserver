@@ -26,7 +26,11 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - API_BASE_URL=http://backend:5000
+      - PYTHONPATH=/app
+    command: ["/bin/bash", "/app/backend-entrypoint.sh"]
     volumes:
+      - ./app.env:/app/.env:ro
+      - ./backend-entrypoint.sh:/app/backend-entrypoint.sh:ro
       - ./backend-data/forecast_models:/app/forecast_models
       - ./backend-data/uploads:/app/uploads
       - ./backend-data/forecasts:/app/forecasts
@@ -61,6 +65,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - API_BASE_URL=http://backend:5000
+      - PYTHONPATH=/app
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     networks:
@@ -70,6 +75,7 @@ services:
         condition: service_started
     restart: unless-stopped
     volumes:
+      - ./app.env:/app/.env:ro
       - ./datasets:/app/auto_scripts/scripts/middle/datasets
       - ./predict_inputs:/app/auto_scripts/scripts/middle/predict_inputs
       - ./models:/app/auto_scripts/scripts/middle/models
@@ -103,9 +109,11 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - PYTHONPATH=/app
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     volumes:
+      - ./app.env:/app/.env:ro
       - ./celery-beat-data:/app/celerybeat-data
     networks:
       - wind-power-network
@@ -141,13 +149,7 @@ services:
     ports:
       - "5050:80"
     volumes:
-      - ./pgadmin-data:/var/lib/pgadmin
-    entrypoint: >
-      /bin/sh -c "
-      mkdir -p /var/lib/pgadmin &&
-      chown -R 5050:5050 /var/lib/pgadmin &&
-      /entrypoint.sh
-      "
+      - pgadmin-data:/var/lib/pgadmin
     restart: unless-stopped
     networks:
       - wind-power-network
@@ -162,3 +164,6 @@ networks:
   wind-power-network:
     external: true
     name: wind-power-network
+
+volumes:
+  pgadmin-data:
