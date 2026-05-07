@@ -12,9 +12,9 @@ from db_models import PredictionTask
 logger = logging.getLogger(__name__)
 
 DEFAULT_SCHEDULES = {
-    "short": {"train": "03:00", "predict": "08:50", "calibrate": "03:03"},
-    "medium": {"train": "02:00", "predict": "08:50", "calibrate": "03:03"},
-    "supershort": {"train": "04:30", "predict_cron": "14,29,44,59", "calibrate": "04:33"},
+    "short": {"train": "03:00", "predict": "08:50", "calibrate": "03:30"},
+    "medium": {"train": "02:00", "predict": "08:50", "calibrate": "02:30"},
+    "supershort": {"train": "04:30", "predict_cron": "14,29,44,59", "calibrate": "04:50"},
 }
 
 SCHEDULE_RELOAD_INTERVAL_SEC = int(os.environ.get("CELERY_BEAT_RELOAD_INTERVAL_SEC", "60"))
