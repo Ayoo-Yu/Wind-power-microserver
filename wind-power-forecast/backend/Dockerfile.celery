@@ -60,5 +60,8 @@ RUN pip install --no-cache-dir --retries 5 catboost==1.2.7
 
 COPY . /app/
 
+RUN find /app -name "*.py" -exec sed -i 's/\r$//' {} + && \
+    find /app -name "*.sh" -exec sed -i 's/\r$//' {} +
+
 ENTRYPOINT ["celery", "-A", "celery_app.celery_app"]
 CMD ["worker", "--loglevel=info", "--concurrency=2"]

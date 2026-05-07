@@ -59,7 +59,13 @@ RUN pip install --no-cache-dir --retries 5 catboost==1.2.7
 
 COPY . /app/
 
-RUN chmod +x /app/docker-entrypoint.sh
+RUN sed -i 's/\r$//' /app/docker-entrypoint.sh && \
+    chmod +x /app/docker-entrypoint.sh && \
+    sed -i 's/\r$//' /app/auto_scripts/scripts/middle/auto_pre_train.py && \
+    sed -i 's/\r$//' /app/auto_scripts/scripts/short/auto_pre_train.py && \
+    sed -i 's/\r$//' /app/auto_scripts/scripts/supershort/train_supershort.py && \
+    sed -i 's/\r$//' /app/auto_scripts/scripts/supershort/predict_supershort.py && \
+    find /app -name "*.sh" -exec sed -i 's/\r$//' {} +
 
 EXPOSE 5000
 
