@@ -26,6 +26,19 @@ def _parse_hhmm(value: str, fallback: str) -> tuple[int, int]:
     return int(hour), int(minute)
 
 
+def _parse_day_of_week(value):
+    """Parse day_of_week field. Accepts 'mon', '1', 'mon,wed', '*' etc. Returns string for crontab."""
+    raw = (value or "").strip().lower()
+    if not raw or raw == "*":
+        return "*"
+    day_map = {"mon": "1", "tue": "2", "wed": "3", "thu": "4", "fri": "5", "sat": "6", "sun": "0"}
+    parts = []
+    for p in raw.split(","):
+        p = p.strip()
+        parts.append(day_map.get(p, p))
+    return ",".join(parts)
+
+
 def build_beat_schedule():
     schedule = {}
     with db_session() as session:
@@ -33,6 +46,7 @@ def build_beat_schedule():
         for t in tasks:
             fc = t.farm_code
             tt = t.task_type
+            dow = _parse_day_of_week(getattr(t, "train_day_of_week", None))
 
             if tt == "supershort":
                 schedule[f"{fc}_supershort_predict"] = {
@@ -47,7 +61,7 @@ def build_beat_schedule():
                 schedule[f"{fc}_supershort_train"] = {
                     "task": "celery_app.tasks.train_model",
                     "args": (fc, "supershort"),
-                    "schedule": crontab(minute=m, hour=h),
+                    "schedule": crontab(minute=m, hour=h, day_of_week=dow),
                 }
                 ch, cm = _parse_hhmm(
                     getattr(t, "calibrate_schedule", None),
@@ -56,14 +70,14 @@ def build_beat_schedule():
                 schedule[f"{fc}_supershort_calibrate"] = {
                     "task": "celery_app.tasks.run_calibration",
                     "args": (fc, "supershort"),
-                    "schedule": crontab(minute=cm, hour=ch),
+                    "schedule": crontab(minute=cm, hour=ch, day_of_week=dow),
                 }
             else:
                 h, m = _parse_hhmm(t.train_schedule, DEFAULT_SCHEDULES[tt]["train"])
                 schedule[f"{fc}_{tt}_train"] = {
                     "task": "celery_app.tasks.train_model",
                     "args": (fc, tt),
-                    "schedule": crontab(minute=m, hour=h),
+                    "schedule": crontab(minute=m, hour=h, day_of_week=dow),
                 }
 
                 ph, pm = _parse_hhmm(t.predict_schedule, DEFAULT_SCHEDULES[tt]["predict"])
@@ -80,7 +94,7 @@ def build_beat_schedule():
                 schedule[f"{fc}_{tt}_calibrate"] = {
                     "task": "celery_app.tasks.run_calibration",
                     "args": (fc, tt),
-                    "schedule": crontab(minute=cm, hour=ch),
+                    "schedule": crontab(minute=cm, hour=ch, day_of_week=dow),
                 }
     return schedule
 
