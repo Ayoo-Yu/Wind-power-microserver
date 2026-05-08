@@ -1187,7 +1187,8 @@ def run_ultrashort_prediction(
     """Predict 16 future points (T+15min to T+4h) for one 15-min cycle.
 
     Triggered at :14,:29,:44,:59. Anchor T = next 15-min boundary.
-    Writes one row to supershortl_power with wp_pred2~wp_pred17.
+    Writes one row to supershortl_power with timestamp = first target time.
+    In that table wp_pred2 is aligned to row timestamp, wp_pred17 is row timestamp + 225min.
     """
     from services.ultrashort_model_manager import UltrashortModelManager
     from db_models.power import SupershortlPower
@@ -1268,14 +1269,17 @@ def run_ultrashort_prediction(
                 farm_code, s, predictions[s], cap,
             )
 
-    # Upsert supershortl_power: query by (farm_code, timestamp), update or insert
+    prediction_start_time = T + timedelta(minutes=15)
+
+    # Upsert supershortl_power: query by (farm_code, timestamp), update or insert.
+    # The DB/API convention treats row timestamp as the time of wp_pred2.
     existing = session.query(SupershortlPower).filter_by(
-        farm_code=farm_code, timestamp=T,
+        farm_code=farm_code, timestamp=prediction_start_time,
     ).first()
     if existing:
         obj = existing
     else:
-        obj = SupershortlPower(timestamp=T, farm_code=farm_code)
+        obj = SupershortlPower(timestamp=prediction_start_time, farm_code=farm_code)
         session.add(obj)
     for s in range(1, N_SHIFTS + 1):
         setattr(obj, f"wp_pred{s + 1}", predictions.get(s, 0.0))
@@ -1287,6 +1291,7 @@ def run_ultrashort_prediction(
         "farm_code": farm_code,
         "forecast_type": "supershort",
         "anchor_time": T.isoformat(),
+        "prediction_start_time": prediction_start_time.isoformat(),
         "n_predictions": len(predictions),
     }
 
@@ -1309,7 +1314,8 @@ def run_ultrashort_calibration(
 
     cutoff = datetime.now() - timedelta(days=14)
 
-    # Column index mapping: row[1]=wp_pred2_raw, row[2]=wp_pred3_raw, ..., row[16]=wp_pred17_raw
+    # Column index mapping: row[1]=wp_pred2_raw, row[2]=wp_pred3_raw, ..., row[16]=wp_pred17_raw.
+    # Row timestamp is the first predicted point, so shift 1 maps to timestamp + 0min.
     raw_cols = ", ".join(f"wp_pred{s + 1}_raw" for s in range(1, N_SHIFTS + 1))
     sql = text(f"""
         SELECT timestamp, {raw_cols}
@@ -1347,7 +1353,7 @@ def run_ultrashort_calibration(
 
         for row in rows:
             submit_time = row[0]
-            target_time = submit_time + timedelta(minutes=s * 15)
+            target_time = submit_time + timedelta(minutes=(s - 1) * 15)
             pred_val = row[col_idx]
             if pred_val is None:
                 continue

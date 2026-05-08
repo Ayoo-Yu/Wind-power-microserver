@@ -47,6 +47,15 @@ STATE_FILE = os.path.join(DATA_DIR, ".etext_pipeline_state.json")
 
 UPLOAD_BATCH_SIZE = 500
 
+FARM_COORD_WHITELISTS = {
+    "zyx": {
+        "lat_min": 23.8,
+        "lat_max": 24.2,
+        "lon_min": 103.2,
+        "lon_max": 103.4,
+    },
+}
+
 
 # --- Logging ---
 def setup_logging(verbose=False):
@@ -188,7 +197,25 @@ def get_table_columns(conn, table_name):
     return cols
 
 
-def filter_columns_for_farm(headers, data_rows, farm_columns):
+def is_column_allowed_for_farm(column_name, farm_code):
+    """Return whether a weather feature column is allowed for a farm."""
+    whitelist = FARM_COORD_WHITELISTS.get(farm_code)
+    if not whitelist:
+        return True
+
+    match = re.search(r"_([0-9]+(?:\.[0-9]+)?)_([0-9]+(?:\.[0-9]+)?)$", column_name)
+    if not match:
+        return True
+
+    lat = float(match.group(1))
+    lon = float(match.group(2))
+    return (
+        whitelist["lat_min"] <= lat <= whitelist["lat_max"]
+        and whitelist["lon_min"] <= lon <= whitelist["lon_max"]
+    )
+
+
+def filter_columns_for_farm(headers, data_rows, farm_columns, farm_code=None):
     """Filter E text data to only include columns matching the farm's DB table.
 
     Returns (filtered_headers, filtered_data_rows).
@@ -198,7 +225,7 @@ def filter_columns_for_farm(headers, data_rows, farm_columns):
     indices = []
     filtered_headers = []
     for i, h in enumerate(headers):
-        if h == "Timestamp" or h in farm_col_set:
+        if h == "Timestamp" or (h in farm_col_set and is_column_allowed_for_farm(h, farm_code)):
             indices.append(i)
             filtered_headers.append(h)
 
@@ -210,7 +237,12 @@ def filter_columns_for_farm(headers, data_rows, farm_columns):
     for row in data_rows:
         filtered_rows.append([row[i] for i in indices])
 
-    log.info(f"Filtered to {len(filtered_headers)} columns ({len(indices) - 1} features + Timestamp)")
+    log.info(
+        "Filtered to %d columns (%d features + Timestamp) for farm=%s",
+        len(filtered_headers),
+        len(indices) - 1,
+        farm_code or "?",
+    )
     return filtered_headers, filtered_rows
 
 
@@ -411,7 +443,7 @@ def process_file(filepath, conn=None, dry_run=False, farm_filter=None, type_filt
                     # Use known coordinate sets for dry-run column estimation
                     cols = farm_columns.get(farm, [])
                     if cols:
-                        fh, fr = filter_columns_for_farm(sel_headers, sel_rows, cols)
+                        fh, fr = filter_columns_for_farm(sel_headers, sel_rows, cols, farm)
                         log.info(f"[DRY RUN] Would upload {len(fr)} rows x {len(fh)} cols to {table_name}")
                         # Still write CSV in dry-run
                         csv_path = get_csv_path(ftype, farm, source_date)
@@ -427,7 +459,7 @@ def process_file(filepath, conn=None, dry_run=False, farm_filter=None, type_filt
                     log.warning(f"No columns found for {farm}, skipping")
                     continue
 
-                fh, fr = filter_columns_for_farm(sel_headers, sel_rows, cols)
+                fh, fr = filter_columns_for_farm(sel_headers, sel_rows, cols, farm)
                 if not fh:
                     log.warning(f"No matching columns for {farm} in {ftype}")
                     continue
