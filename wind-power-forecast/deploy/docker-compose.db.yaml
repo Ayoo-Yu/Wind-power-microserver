@@ -11,7 +11,7 @@ services:
       - ENCODING=UTF8
       - TZ=Asia/Shanghai
     volumes:
-      - kingbase-data:/home/kingbase/userdata/
+      - kingbase-data:/home/kingbase/userdata/data
     ports:
       - "54321:54321"
     restart: unless-stopped
