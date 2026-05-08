@@ -7,7 +7,7 @@ import platform
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 CONFIG_FILE = os.path.join(PROJECT_ROOT, "data", "etext", "etext_config.json")
 
 DEFAULT_CONFIG = {

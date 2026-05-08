@@ -78,6 +78,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./app.env:/app/.env:ro
+      - ./backend-data/data_etext:/app/data/etext
       - ./backend-data/forecast_models:/app/forecast_models
       - ./datasets:/app/auto_scripts/scripts/middle/datasets
       - ./predict_inputs:/app/auto_scripts/scripts/middle/predict_inputs
@@ -152,7 +153,7 @@ services:
     ports:
       - "5050:80"
     volumes:
-      - pgadmin-data:/var/lib/pgadmin
+      - ./pgadmin-data:/var/lib/pgadmin
     restart: unless-stopped
     networks:
       - wind-power-network
@@ -167,6 +168,3 @@ networks:
   wind-power-network:
     external: true
     name: wind-power-network
-
-volumes:
-  pgadmin-data:

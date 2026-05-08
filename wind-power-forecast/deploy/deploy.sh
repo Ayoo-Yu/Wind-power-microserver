@@ -36,6 +36,12 @@ docker_compose() {
     docker compose "$@"
 }
 
+docker_cmd() {
+    MSYS_NO_PATHCONV=1 \
+    MSYS2_ARG_CONV_EXCL="*" \
+    docker "$@"
+}
+
 is_wsl_windows_path() {
     [ -r /proc/version ] && grep -qi microsoft /proc/version && \
     [ "${SCRIPT_DIR#/mnt/}" != "$SCRIPT_DIR" ] && \
@@ -275,6 +281,56 @@ create_dirs() {
     chmod 777 kingbase-data 2>/dev/null || true
 }
 
+dir_has_content() {
+    [ -d "$1" ] && [ -n "$(find "$1" -mindepth 1 -print -quit 2>/dev/null)" ]
+}
+
+copy_seed_dir() {
+    local container="$1"
+    local src="$2"
+    local dst="$3"
+    local label="$4"
+
+    if dir_has_content "$dst"; then
+        info "$label already exists, skipping model seed: $dst"
+        return 0
+    fi
+
+    info "Seeding $label into $dst"
+    ensure_dir "$dst"
+
+    if docker_cmd cp "${container}:${src}/." "$dst/" >/dev/null 2>&1; then
+        if dir_has_content "$dst"; then
+            info "$label seeded successfully."
+        else
+            warn "$label source is empty in image: $src"
+        fi
+    else
+        warn "Failed to seed $label from image path: $src"
+    fi
+}
+
+seed_model_assets() {
+    local image="wind-power-celery-worker:latest"
+    local container="wind-power-model-seed"
+
+    if ! docker_cmd image inspect "$image" >/dev/null 2>&1; then
+        warn "Prediction image not found, skipping model seed: $image"
+        return 0
+    fi
+
+    info "Checking model asset directories..."
+    docker_cmd rm -f "$container" >/dev/null 2>&1 || true
+    docker_cmd create --name "$container" --entrypoint /bin/true "$image" >/dev/null
+
+    copy_seed_dir "$container" "/app/forecast_models" "backend-data/forecast_models" "backend forecast models"
+    copy_seed_dir "$container" "/app/auto_scripts/scripts/middle/models" "models" "middle prediction models"
+    copy_seed_dir "$container" "/app/auto_scripts/scripts/short/models" "models_short" "short prediction models"
+    copy_seed_dir "$container" "/app/auto_scripts/scripts/supershort/saved_models" "saved_models_ss" "supershort saved models"
+
+    docker_cmd rm -f "$container" >/dev/null 2>&1 || true
+}
+
 do_install() {
     info "=== Installing Wind Power Forecast System ==="
     check_docker
@@ -297,6 +353,7 @@ do_install() {
 
     create_network
     create_dirs
+    seed_model_assets
 
     info "=== Installation complete ==="
     info "Next steps:"
@@ -310,6 +367,7 @@ do_start() {
     create_network
     generate_app_env
     create_dirs
+    seed_model_assets
 
     info "Starting database..."
     docker_compose -f docker-compose.db.yaml up -d

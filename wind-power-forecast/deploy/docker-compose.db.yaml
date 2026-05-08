@@ -11,7 +11,7 @@ services:
       - ENCODING=UTF8
       - TZ=Asia/Shanghai
     volumes:
-      - kingbase-data:/home/kingbase/userdata/data
+      - ./kingbase-data:/home/kingbase/userdata
     ports:
       - "54321:54321"
     restart: unless-stopped
@@ -29,6 +29,3 @@ networks:
   wind-power-network:
     external: true
     name: wind-power-network
-
-volumes:
-  kingbase-data:

@@ -12,9 +12,8 @@ from db_models.weather_fetch import WeatherTask, WeatherConnection, WeatherLog
 from services.task_executor import execute_weather_task
 from services.partition_maintenance_service import ensure_future_partitions
 
-# Make scripts/ importable for etext_pipeline
-# scheduler_service.py is in backend/services/, so ../../scripts reaches wind-power-forecast/scripts/
-sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts")))
+# Make backend/scripts importable for etext_pipeline inside the Docker image.
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "scripts")))
 
 logger = logging.getLogger(__name__)
 
