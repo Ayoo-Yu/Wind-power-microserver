@@ -95,90 +95,6 @@ def split_data(df: pd.DataFrame) -> tuple:
 
 
 # ---- Feature engineering ----
-def identify_grid_columns(df: pd.DataFrame) -> dict:
-    var_points = {}
-    prefixes = ["100u", "100v", "10u", "10v", "200u", "200v", "2t", "2d", "sp", "msl", "ssrd", "tcc", "tcwv"]
-    for col in df.columns:
-        if col in [TIME_COL, TARGET]:
-            continue
-        for prefix in prefixes:
-            if col.startswith(prefix + "_"):
-                parts = col.split("_")
-                if len(parts) >= 3:
-                    var_points.setdefault(prefix, []).append((col, "_".join(parts[1:])))
-                break
-
-    grid_map = {}
-    for var, points in var_points.items():
-        for i, (col, _) in enumerate(sorted(points, key=lambda x: x[1])):
-            grid_map[col] = (var, i + 1)
-    return grid_map
-
-
-def build_grid_nwp_features(out: pd.DataFrame) -> pd.DataFrame:
-    grid_map = identify_grid_columns(out)
-    wind_cols = {}
-
-    for height in ["100", "10", "200"]:
-        u_cols = sorted([(idx, c) for c, (v, idx) in grid_map.items() if v == f"{height}u"], key=lambda x: x[0])
-        v_cols = sorted([(idx, c) for c, (v, idx) in grid_map.items() if v == f"{height}v"], key=lambda x: x[0])
-        for (ui, uc), (vi, vc) in zip(u_cols, v_cols):
-            if ui != vi:
-                continue
-            ws_name = f"ws{height}_{ui}"
-            u = out[uc].astype(float)
-            v = out[vc].astype(float)
-            out[ws_name] = np.sqrt(u ** 2 + v ** 2)
-            out[f"wd{height}_{ui}"] = (270 - np.degrees(np.arctan2(v, u))) % 360
-            wind_cols[(height, ui)] = ws_name
-
-    for height in ["100", "10", "200"]:
-        indexes = sorted(i for h, i in wind_cols if h == height)
-        for left, right in zip(indexes, indexes[1:]):
-            c1 = wind_cols[(height, left)]
-            c2 = wind_cols[(height, right)]
-            out[f"ws{height}_diff_{left}_{right}"] = out[c2].astype(float) - out[c1].astype(float)
-
-    for height in ["100", "10", "200"]:
-        indexes = sorted(i for h, i in wind_cols if h == height)
-        for i in indexes:
-            ws_name = wind_cols[(height, i)]
-            ws = out[ws_name].astype(float)
-            for lag in [1, 2, 3]:
-                out[f"{ws_name}_diff_prev{lag}"] = ws - ws.shift(lag)
-            out[f"{ws_name}_cubed"] = ws ** 3
-            out[f"{ws_name}_sigmoid"] = 1.0 / (1.0 + np.exp(-0.5 * (ws - 5)))
-            out[f"{ws_name}_pc"] = np.clip((ws - 3) / (12 - 3), 0, 1) * np.clip((25 - ws) / (25 - 20), 0, 1)
-
-    ws100_cols = [wind_cols[("100", i)] for i in sorted(i for h, i in wind_cols if h == "100")]
-    ws10_cols = [wind_cols[("10", i)] for i in sorted(i for h, i in wind_cols if h == "10")]
-    if ws100_cols:
-        ws100_mean = out[ws100_cols].mean(axis=1).astype(float)
-        out["ws100_mean"] = ws100_mean
-        out["ws100_mean_cubed"] = ws100_mean ** 3
-        out["ws100_mean_sigmoid"] = 1.0 / (1.0 + np.exp(-0.5 * (ws100_mean - 5)))
-        out["ws100_mean_pc"] = np.clip((ws100_mean - 3) / (12 - 3), 0, 1) * np.clip((25 - ws100_mean) / (25 - 20), 0, 1)
-        for horizon in [1, 2, 4, 8]:
-            out[f"nwp_ws100_trend_{horizon}h"] = ws100_mean.shift(-horizon) - ws100_mean
-        future_changes = pd.DataFrame({h: ws100_mean.shift(-h) - ws100_mean for h in [1, 2, 3, 4]})
-        out["nwp_ws100_ramp_4h"] = future_changes.max(axis=1) - future_changes.min(axis=1)
-        out["nwp_ws100_rising_1h"] = (out["nwp_ws100_trend_1h"] > 0).astype(int)
-        out["nwp_ws100_rising_4h"] = (out["nwp_ws100_trend_4h"] > 0).astype(int)
-
-    if ws100_cols and ws10_cols:
-        ws10_mean = out[ws10_cols].mean(axis=1).astype(float).replace(0, np.nan)
-        out["grid_wind_shear"] = np.log(out[ws100_cols].mean(axis=1).astype(float) / ws10_mean) / np.log(10)
-
-    sp_cols = [c for c, (v, _) in grid_map.items() if v == "sp"]
-    t2_cols = [c for c, (v, _) in grid_map.items() if v == "2t"]
-    if sp_cols and t2_cols:
-        out["grid_air_density"] = out[sp_cols].mean(axis=1).astype(float) / (287.05 * out[t2_cols].mean(axis=1).astype(float))
-        if ws100_cols:
-            out["grid_power_density_100m"] = 0.5 * out["grid_air_density"] * out[ws100_cols].mean(axis=1).astype(float) ** 3
-
-    return out
-
-
 def build_features(df: pd.DataFrame, cap: float) -> pd.DataFrame:
     out = df.copy()
     out[TIME_COL] = pd.to_datetime(out[TIME_COL])
@@ -205,7 +121,6 @@ def build_features(df: pd.DataFrame, cap: float) -> pd.DataFrame:
     out["power_yesterday_std"] = power.shift(96).rolling(96, min_periods=1).std()
     out["power_recent_6h"] = power.shift(24)
     out["power_recent_12h"] = power.shift(48)
-    out = build_grid_nwp_features(out)
 
     rename_map = {}
     for c in out.columns:

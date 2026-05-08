@@ -217,7 +217,8 @@
                 <el-progress :percentage="100" :indeterminate="true" :stroke-width="6" :show-text="false" status="success" />
                 <div class="trigger-progress-status">
                   <el-icon class="is-loading"><Loading /></el-icon>
-                  执行中... {{ triggerProgress[item.name].elapsed ? Math.floor(triggerProgress[item.name].elapsed) + 's' : '' }}
+                  {{ triggerProgress[item.name].phase === 'queued' ? '排队中...' : '执行中...' }}
+                  {{ triggerProgress[item.name].elapsed ? Math.floor(triggerProgress[item.name].elapsed) + 's' : '' }}
                 </div>
               </template>
               <template v-else-if="triggerProgress[item.name].status === 'success'">
@@ -575,6 +576,7 @@ const confirmDialog = reactive({
 // })
 
 const POLLING_INTERVAL = 60000
+const MANUAL_TRIGGER_MAX_WAIT_SECONDS = 1000
 const FARM_CHANGE_DEBOUNCE_MS = 300
 let intervalId = null
 let countdownTimerId = null
@@ -838,7 +840,7 @@ const handleCardCommand = (command, item) => {
 const pollTriggerProgress = (predictionType, celeryTaskId) => {
   const key = predictionType
   let elapsed = 0
-  const maxWait = 600
+  const maxWait = MANUAL_TRIGGER_MAX_WAIT_SECONDS
   const interval = 3000
 
   const timer = setInterval(async () => {
@@ -875,8 +877,22 @@ const pollTriggerProgress = (predictionType, celeryTaskId) => {
         }
         fetchStatus()
         fetchFleetStatus()
+      } else if (run && run.status === 'running') {
+        const startedAtMs = run.started_at ? new Date(run.started_at).getTime() : NaN
+        const runElapsed = Number.isFinite(startedAtMs)
+          ? Math.max(0, (Date.now() - startedAtMs) / 1000)
+          : elapsed
+        triggerProgress[key] = {
+          ...triggerProgress[key],
+          phase: 'running',
+          elapsed: runElapsed,
+        }
       } else {
-        triggerProgress[key] = { ...triggerProgress[key], elapsed }
+        triggerProgress[key] = {
+          ...triggerProgress[key],
+          phase: 'queued',
+          elapsed,
+        }
       }
     } catch {
       // ignore poll errors
@@ -900,6 +916,7 @@ const handleManualTrigger = async (predictionType, action) => {
       typeLabel: typeLabelMap[predictionType] || predictionType,
       farmDisplay: getFarmDisplayName(),
       taskId: taskId ? taskId.slice(0, 8) + '...' : '',
+      phase: 'queued',
       elapsed: 0,
     }
     pollTriggerProgress(predictionType, taskId)

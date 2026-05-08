@@ -36,6 +36,109 @@ N_SHIFTS = 16
 # Feature engineering (ported from scripts/forecast_shortterm.py)
 # ---------------------------------------------------------------------------
 
+def _identify_grid_columns_short(df: pd.DataFrame) -> Dict[str, Tuple[str, int]]:
+    """Parse short/medium NWP grid columns using the experimental script rules."""
+    var_points: Dict[str, list] = {}
+    prefixes = ["100u", "100v", "10u", "10v", "200u", "200v", "2t", "2d", "sp", "msl", "ssrd", "tcc", "tcwv"]
+    for col in df.columns:
+        if col in [TIME_COL, TARGET]:
+            continue
+        for prefix in prefixes:
+            if col.startswith(prefix + "_"):
+                parts = col.split("_")
+                if len(parts) >= 3:
+                    var_points.setdefault(prefix, []).append((col, "_".join(parts[1:])))
+                break
+
+    grid_map: Dict[str, Tuple[str, int]] = {}
+    for var, points in var_points.items():
+        for i, (col, _) in enumerate(sorted(points, key=lambda x: x[1])):
+            grid_map[col] = (var, i + 1)
+    return grid_map
+
+
+def _build_grid_nwp_features(out: pd.DataFrame) -> pd.DataFrame:
+    """Build the grid-point NWP features used by the short/medium experiment script."""
+    grid_map = _identify_grid_columns_short(out)
+    wind_cols: Dict[Tuple[str, int], str] = {}
+
+    for height in ["100", "10", "200"]:
+        u_cols = sorted(
+            [(idx, c) for c, (v, idx) in grid_map.items() if v == f"{height}u"],
+            key=lambda x: x[0],
+        )
+        v_cols = sorted(
+            [(idx, c) for c, (v, idx) in grid_map.items() if v == f"{height}v"],
+            key=lambda x: x[0],
+        )
+        for (ui, uc), (vi, vc) in zip(u_cols, v_cols):
+            if ui != vi:
+                continue
+            ws_name = f"ws{height}_{ui}"
+            u = out[uc].astype(float)
+            v = out[vc].astype(float)
+            out[ws_name] = np.sqrt(u ** 2 + v ** 2)
+            out[f"wd{height}_{ui}"] = (270 - np.degrees(np.arctan2(v, u))) % 360
+            wind_cols[(height, ui)] = ws_name
+
+    for height in ["100", "10", "200"]:
+        indexes = sorted(i for h, i in wind_cols if h == height)
+        for left, right in zip(indexes, indexes[1:]):
+            c1 = wind_cols[(height, left)]
+            c2 = wind_cols[(height, right)]
+            out[f"ws{height}_diff_{left}_{right}"] = out[c2].astype(float) - out[c1].astype(float)
+
+    for height in ["100", "10", "200"]:
+        indexes = sorted(i for h, i in wind_cols if h == height)
+        for i in indexes:
+            ws_name = wind_cols[(height, i)]
+            ws = out[ws_name].astype(float)
+            for lag in [1, 2, 3]:
+                out[f"{ws_name}_diff_prev{lag}"] = ws - ws.shift(lag)
+            out[f"{ws_name}_cubed"] = ws ** 3
+            out[f"{ws_name}_sigmoid"] = 1.0 / (1.0 + np.exp(-0.5 * (ws - 5)))
+            out[f"{ws_name}_pc"] = (
+                np.clip((ws - 3) / (12 - 3), 0, 1)
+                * np.clip((25 - ws) / (25 - 20), 0, 1)
+            )
+
+    ws100_cols = [wind_cols[("100", i)] for i in sorted(i for h, i in wind_cols if h == "100")]
+    ws10_cols = [wind_cols[("10", i)] for i in sorted(i for h, i in wind_cols if h == "10")]
+    if ws100_cols:
+        ws100_mean = out[ws100_cols].mean(axis=1).astype(float)
+        out["ws100_mean"] = ws100_mean
+        out["ws100_mean_cubed"] = ws100_mean ** 3
+        out["ws100_mean_sigmoid"] = 1.0 / (1.0 + np.exp(-0.5 * (ws100_mean - 5)))
+        out["ws100_mean_pc"] = (
+            np.clip((ws100_mean - 3) / (12 - 3), 0, 1)
+            * np.clip((25 - ws100_mean) / (25 - 20), 0, 1)
+        )
+        for horizon in [1, 2, 4, 8]:
+            out[f"nwp_ws100_trend_{horizon}h"] = ws100_mean.shift(-horizon) - ws100_mean
+        future_changes = pd.DataFrame({h: ws100_mean.shift(-h) - ws100_mean for h in [1, 2, 3, 4]})
+        out["nwp_ws100_ramp_4h"] = future_changes.max(axis=1) - future_changes.min(axis=1)
+        out["nwp_ws100_rising_1h"] = (out["nwp_ws100_trend_1h"] > 0).astype(int)
+        out["nwp_ws100_rising_4h"] = (out["nwp_ws100_trend_4h"] > 0).astype(int)
+
+    if ws100_cols and ws10_cols:
+        ws10_mean = out[ws10_cols].mean(axis=1).astype(float).replace(0, np.nan)
+        out["grid_wind_shear"] = np.log(out[ws100_cols].mean(axis=1).astype(float) / ws10_mean) / np.log(10)
+
+    sp_cols = [c for c, (v, _) in grid_map.items() if v == "sp"]
+    t2_cols = [c for c, (v, _) in grid_map.items() if v == "2t"]
+    if sp_cols and t2_cols:
+        out["grid_air_density"] = (
+            out[sp_cols].mean(axis=1).astype(float)
+            / (287.05 * out[t2_cols].mean(axis=1).astype(float))
+        )
+        if ws100_cols:
+            out["grid_power_density_100m"] = (
+                0.5 * out["grid_air_density"] * out[ws100_cols].mean(axis=1).astype(float) ** 3
+            )
+
+    return out
+
+
 def build_features(df: pd.DataFrame, cap: float) -> pd.DataFrame:
     """Build temporal, lag, NWP-derived, and physics features.
 
@@ -71,6 +174,7 @@ def build_features(df: pd.DataFrame, cap: float) -> pd.DataFrame:
         out["power_yesterday_std"] = power.shift(96).rolling(96, min_periods=1).std()
         out["power_recent_6h"] = power.shift(24)
         out["power_recent_12h"] = power.shift(48)
+    out = _build_grid_nwp_features(out)
 
     # --- rename NWP columns ---
     rename_map: Dict[str, str] = {}
@@ -104,44 +208,25 @@ def build_features(df: pd.DataFrame, cap: float) -> pd.DataFrame:
     out = out.rename(columns=rename_map)
 
     # --- wind speed / direction ---
-    # Match by prefix so that suffixed columns (e.g. wind_u_100m_23.8_103.2)
-    # are paired correctly.  For each u/v pair sharing the same suffix, derive
-    # wind_speed and wind_dir columns with the same suffix.
     for height in ["100m", "10m", "200m"]:
-        u_prefix, v_prefix = f"wind_u_{height}", f"wind_v_{height}"
-        u_cols = sorted(c for c in out.columns if c == u_prefix or c.startswith(u_prefix + "_"))
-        for u_col in u_cols:
-            suffix = u_col[len(u_prefix):]
-            v_col = v_prefix + suffix
-            if v_col not in out.columns:
-                continue
-            speed_name = f"wind_speed_{height}{suffix}"
-            dir_name = f"wind_dir_{height}{suffix}"
-            out[speed_name] = np.sqrt(
+        u_col, v_col = f"wind_u_{height}", f"wind_v_{height}"
+        if u_col in out.columns and v_col in out.columns:
+            out[f"wind_speed_{height}"] = np.sqrt(
                 out[u_col].astype(float) ** 2 + out[v_col].astype(float) ** 2
             )
-            out[dir_name] = (
+            out[f"wind_dir_{height}"] = (
                 270 - np.degrees(np.arctan2(out[v_col].astype(float), out[u_col].astype(float)))
             ) % 360
 
-    # Average wind speed across all grid points for shear / density features
-    ws100_cols = [c for c in out.columns if c.startswith("wind_speed_100m")]
-    ws10_cols = [c for c in out.columns if c.startswith("wind_speed_10m")]
-    avg_ws100 = out[ws100_cols].mean(axis=1) if ws100_cols else None
-    avg_ws10 = out[ws10_cols].mean(axis=1) if ws10_cols else None
-
-    # --- wind shear (from averaged grid-point speeds) ---
-    if avg_ws100 is not None and avg_ws10 is not None:
-        ws10_safe = avg_ws10.replace(0, np.nan)
-        out["wind_shear_index"] = np.log(avg_ws100 / ws10_safe) / np.log(10)
+    if "wind_speed_100m" in out.columns and "wind_speed_10m" in out.columns:
+        ws10 = out["wind_speed_10m"].astype(float).replace(0, np.nan)
+        out["wind_shear_index"] = np.log(out["wind_speed_100m"].astype(float) / ws10) / np.log(10)
 
     # --- air density ---
-    sp_cols = [c for c in out.columns if c.startswith("surface_pressure")]
-    t2m_cols = [c for c in out.columns if c.startswith("temperature_2m")]
-    if sp_cols and t2m_cols:
-        avg_sp = out[sp_cols].mean(axis=1).astype(float)
-        avg_t2m = out[t2m_cols].mean(axis=1).astype(float)
-        out["air_density"] = avg_sp / (287.05 * avg_t2m)
+    if "surface_pressure" in out.columns and "temperature_2m" in out.columns:
+        out["air_density"] = (
+            out["surface_pressure"].astype(float) / (287.05 * out["temperature_2m"].astype(float))
+        )
 
     # --- cubed wind, sigmoid, power-curve proxy ---
     for ws_col in [c for c in out.columns if c.startswith("wind_speed_")]:
@@ -154,8 +239,8 @@ def build_features(df: pd.DataFrame, cap: float) -> pd.DataFrame:
         )
 
     # --- power density (from averaged 100m speed) ---
-    if avg_ws100 is not None and "air_density" in out.columns:
-        out["power_density_100m"] = 0.5 * out["air_density"] * avg_ws100 ** 3
+    if "wind_speed_100m" in out.columns and "air_density" in out.columns:
+        out["power_density_100m"] = 0.5 * out["air_density"] * out["wind_speed_100m"] ** 3
 
     # --- src feature modules (matching forecast_shortterm.py) ---
     try:
@@ -234,20 +319,111 @@ def score(y: np.ndarray, p: np.ndarray, cap: float) -> Dict[str, float]:
     }
 
 
+def shortterm_accuracy_series(y_true: np.ndarray, y_pred: np.ndarray, cap: float) -> np.ndarray:
+    """Pointwise accuracy series used by the short/medium experiment script."""
+    d = np.maximum(y_true, 0.2 * cap)
+    return 1.0 - np.sqrt(((y_true - y_pred) / d) ** 2)
+
+
+def shortterm_accuracy(y_true: np.ndarray, y_pred: np.ndarray, cap: float) -> float:
+    return float(shortterm_accuracy_series(y_true, y_pred, cap).mean())
+
+
+def score_shortterm(y: np.ndarray, p: np.ndarray, cap: float) -> Dict[str, float]:
+    """Short/medium score matching the experimental script accuracy definition."""
+    return {
+        "accuracy_percent": shortterm_accuracy(y, p, cap) * 100,
+        "weighted_rmse": weighted_rmse(y, p, cap),
+        "mae": float(mean_absolute_error(y, p)),
+        "r2": float(r2_score(y, p)),
+        "bias": float(np.mean(p - y)),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Affine calibration
 # ---------------------------------------------------------------------------
 
 def fit_affine(y: np.ndarray, p: np.ndarray, cap: float) -> Tuple[float, float]:
     """Grid-search affine calibration: best (alpha, beta) minimising weighted RMSE."""
-    best = (float("inf"), 1.0, 0.0)
-    for a in np.linspace(0.60, 1.20, 61):
-        for b in np.linspace(-0.25 * cap, 0.20 * cap, 46):
-            pred = np.clip(a * p + b, 0, cap)
-            loss = weighted_rmse(y, pred, cap)
-            if loss < best[0]:
-                best = (loss, float(a), float(b))
-    return best[1], best[2]
+    y = np.asarray(y, dtype=float)
+    p = np.asarray(p, dtype=float)
+    valid = np.isfinite(y) & np.isfinite(p)
+    if not valid.any():
+        return 1.0, 0.0
+
+    y = y[valid]
+    p = p[valid]
+    denom = np.maximum(y, 0.2 * cap)
+    alphas = np.linspace(0.60, 1.20, 61)
+    betas = np.linspace(-0.25 * cap, 0.20 * cap, 46)
+    best_loss = float("inf")
+    best_alpha = 1.0
+    best_beta = 0.0
+
+    for alpha in alphas:
+        pred_matrix = np.clip(alpha * p[:, None] + betas[None, :], 0, cap)
+        losses = np.sqrt(np.mean(((y[:, None] - pred_matrix) / denom[:, None]) ** 2, axis=0))
+        idx = int(np.argmin(losses))
+        loss = float(losses[idx])
+        if loss < best_loss:
+            best_loss = loss
+            best_alpha = float(alpha)
+            best_beta = float(betas[idx])
+    return best_alpha, best_beta
+
+
+def dynamic_rolling_shortterm_predictions(
+    val_pred_df: pd.DataFrame,
+    test_pred_df: pd.DataFrame,
+    cap: float,
+    window_days: int = 14,
+) -> pd.DataFrame:
+    """Apply validation-seeded rolling affine calibration to short/medium predictions."""
+    val_df = val_pred_df.dropna(subset=["actual", "raw_pred"]).copy()
+    test_df = test_pred_df.dropna(subset=["actual", "raw_pred"]).copy()
+    val_df[TIME_COL] = pd.to_datetime(val_df[TIME_COL])
+    test_df[TIME_COL] = pd.to_datetime(test_df[TIME_COL])
+    val_df["date"] = val_df[TIME_COL].dt.normalize()
+    test_df["date"] = test_df[TIME_COL].dt.normalize()
+    test_df["cal_pred"] = test_df["raw_pred"].astype(float)
+
+    combined = pd.concat([val_df, test_df], ignore_index=True)
+    combined = combined.sort_values("date").reset_index(drop=True)
+    all_dates = sorted(combined["date"].unique())
+    test_dates = sorted(test_df["date"].unique())
+
+    for current_date in test_dates:
+        idx = all_dates.index(current_date)
+        fit_dates = all_dates[max(0, idx - window_days): idx]
+        mask = test_df["date"] == current_date
+        if not fit_dates:
+            continue
+
+        fit = combined[combined["date"].isin(fit_dates)]
+        alpha, beta = fit_affine(
+            fit["actual"].to_numpy(float),
+            fit["raw_pred"].to_numpy(float),
+            cap,
+        )
+        raw_pred = test_df.loc[mask, "raw_pred"].to_numpy(float)
+        test_df.loc[mask, "cal_pred"] = np.clip(alpha * raw_pred + beta, 0, cap)
+
+    return test_df
+
+
+def daily_rmse_accuracy_percent(pred_df: pd.DataFrame, pred_col: str, cap: float) -> float:
+    """Average daily RMSE-style accuracy for calibrated short/medium reporting."""
+    df = pred_df.dropna(subset=["actual", pred_col]).copy()
+    df[TIME_COL] = pd.to_datetime(df[TIME_COL])
+    df["date"] = df[TIME_COL].dt.normalize()
+    day_scores: List[float] = []
+    for _, day in df.groupby("date"):
+        y = day["actual"].to_numpy(float)
+        p = day[pred_col].to_numpy(float)
+        d = np.maximum(y, 0.2 * cap)
+        day_scores.append(float(1.0 - np.sqrt(np.mean(((y - p) / d) ** 2))))
+    return float(np.mean(day_scores) * 100) if day_scores else float("nan")
 
 
 # ---------------------------------------------------------------------------
@@ -315,6 +491,7 @@ def train_ensemble(
         reg_alpha=0.1,
         reg_lambda=1.0,
         random_state=42,
+        tree_method="hist",
         early_stopping_rounds=100,
     )
     m_xgb.fit(X_tr, y_tr, sample_weight=weights, eval_set=[(X_va, y_va)], verbose=False)
@@ -332,6 +509,7 @@ def train_ensemble(
         early_stopping_rounds=100,
         l2_leaf_reg=3.0,
         subsample=0.8,
+        allow_writing_files=False,
     )
     m_cb.fit(X_tr, y_tr, eval_set=(X_va, y_va), verbose=0)
     models["cb"] = m_cb
@@ -339,8 +517,29 @@ def train_ensemble(
     preds_test.append(m_cb.predict(X_te))
 
     # --- ensemble metrics on test set ---
+    raw_val = np.clip(np.mean(preds_val, axis=0), 0, cap)
     raw_ensemble = np.clip(np.mean(preds_test, axis=0), 0, cap)
-    test_metrics = score(y_te.to_numpy(float), raw_ensemble, cap)
+    raw_metrics = score_shortterm(y_te.to_numpy(float), raw_ensemble, cap)
+
+    val_pred_df = pd.DataFrame({
+        TIME_COL: val_df[TIME_COL].iloc[:len(y_va)].values,
+        "actual": y_va.to_numpy(float),
+        "raw_pred": raw_val.astype(float),
+    })
+    test_pred_df = pd.DataFrame({
+        TIME_COL: test_df[TIME_COL].iloc[:len(y_te)].values,
+        "actual": y_te.to_numpy(float),
+        "raw_pred": raw_ensemble.astype(float),
+    })
+    raw_metrics["pointwise_accuracy_percent"] = raw_metrics["accuracy_percent"]
+    raw_metrics["accuracy_percent"] = daily_rmse_accuracy_percent(test_pred_df, "raw_pred", cap)
+    cal_pred_df = dynamic_rolling_shortterm_predictions(val_pred_df, test_pred_df, cap, window_days=14)
+    cal_metrics = score_shortterm(
+        cal_pred_df["actual"].to_numpy(float),
+        cal_pred_df["cal_pred"].to_numpy(float),
+        cap,
+    )
+    cal_metrics["accuracy_percent"] = daily_rmse_accuracy_percent(cal_pred_df, "cal_pred", cap)
 
     # --- initial calibration from test set ---
     init_alpha, init_beta = fit_affine(y_te.to_numpy(float), raw_ensemble, cap)
@@ -351,8 +550,10 @@ def train_ensemble(
         "n_val_samples": int(len(X_va)),
         "n_test_samples": int(len(X_te)),
         "n_features": int(len(common)),
-        "cal_accuracy": test_metrics,
+        "raw_accuracy": raw_metrics,
+        "cal_accuracy": cal_metrics,
         "init_calibration": {"alpha": init_alpha, "beta": init_beta},
+        "dynamic_calibration": {"method": "rolling_affine", "window_days": 14, "seed": "validation"},
     }
 
     return models, common, meta
@@ -611,7 +812,23 @@ def build_features_ultrashort(
     hour = out[TIME_COL].dt.hour
     out["hour_sin"] = np.sin(2 * np.pi * hour / 24)
     out["hour_cos"] = np.cos(2 * np.pi * hour / 24)
+    doy = out[TIME_COL].dt.dayofyear
+    out["sin_doy"] = np.sin(2 * np.pi * doy / 365)
+    out["cos_doy"] = np.cos(2 * np.pi * doy / 365)
     out["is_daytime"] = ((hour >= 6) & (hour <= 18)).astype(int)
+
+    # Per-grid-point cubed / sigmoid / power-curve features
+    for height in ["100", "10", "200"]:
+        for i in range(1, 16):
+            ws_name = wind_cols.get((height, i))
+            if ws_name:
+                ws = out[ws_name].astype(float)
+                out[f"{ws_name}_cubed"] = ws ** 3
+                out[f"{ws_name}_sigmoid"] = 1.0 / (1.0 + np.exp(-0.5 * (ws - 5)))
+                out[f"{ws_name}_pc"] = (
+                    np.clip((ws - 3) / (12 - 3), 0, 1)
+                    * np.clip((25 - ws) / (25 - 20), 0, 1)
+                )
 
     # Wind power domain features
     ws100_cols = [f"ws100_{i}" for i in range(1, 16) if f"ws100_{i}" in out.columns]
@@ -675,8 +892,13 @@ def get_feature_cols_ultrashort(
         for i in range(1, 16):
             for lag in [1, 2, 3]:
                 ws_derived.append(f"ws{height}_{i}_diff_prev{lag}")
+    per_grid: List[str] = []
+    for height in ["100", "10", "200"]:
+        for i in range(1, 16):
+            for suffix in ["_cubed", "_sigmoid", "_pc"]:
+                per_grid.append(f"ws{height}_{i}{suffix}")
     extra = [
-        "hour_sin", "hour_cos", "is_daytime",
+        "hour_sin", "hour_cos", "is_daytime", "sin_doy", "cos_doy",
         "ws100_mean_cubed", "ws100_mean_sigmoid", "ws100_mean_pc",
         "wind_shear", "air_density", "power_density",
         "nwp_ws100_trend_1h", "nwp_ws100_trend_2h",
@@ -684,7 +906,7 @@ def get_feature_cols_ultrashort(
         "nwp_ws100_ramp_4h", "nwp_ws100_rising_1h", "nwp_ws100_rising_4h",
     ]
     return list(dict.fromkeys(
-        [c for c in raw_nwp + ws_derived + extra if c in train_feat.columns]
+        [c for c in raw_nwp + ws_derived + per_grid + extra if c in train_feat.columns]
     ))
 
 
@@ -726,6 +948,86 @@ def prepare_shift_features(
     return X, target.values, p_shifted.values
 
 
+def per_shift_dynamic_rolling_ultrashort(
+    val_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    val_shift_preds: Dict[int, np.ndarray],
+    test_shift_preds: Dict[int, np.ndarray],
+    cap: float,
+    window_days: int = 14,
+) -> List[Dict[str, float]]:
+    """Per-shift rolling affine calibration matching the ultra-short experiment script."""
+    y_val = val_df[TARGET].to_numpy(float)
+    y_test = test_df[TARGET].to_numpy(float)
+    timestamps_val = val_df[TIME_COL].values
+    timestamps_test = test_df[TIME_COL].values
+
+    def build_combined(shift_preds: Dict[int, np.ndarray], y_true: np.ndarray, timestamps: np.ndarray) -> pd.DataFrame:
+        rows = []
+        dates = pd.Series(timestamps).apply(lambda x: pd.Timestamp(x).normalize()).values
+        for i in range(N_SHIFTS, len(y_true)):
+            shifts = {f"shift_{s}": shift_preds[s][i] for s in range(1, N_SHIFTS + 1)}
+            if any(np.isnan(v) for v in shifts.values()):
+                continue
+            rows.append({"date": dates[i], TIME_COL: timestamps[i], "actual": y_true[i], **shifts})
+        return pd.DataFrame(rows)
+
+    val_combined = build_combined(val_shift_preds, y_val, timestamps_val)
+    test_combined = build_combined(test_shift_preds, y_test, timestamps_test)
+    if val_combined.empty or test_combined.empty:
+        return []
+
+    combined = pd.concat([val_combined, test_combined], ignore_index=True)
+    combined = combined.sort_values("date").reset_index(drop=True)
+    all_dates = sorted(combined["date"].unique())
+    test_dates = sorted(test_combined["date"].unique())
+
+    day_accs = {"raw": [], "per_shift_cal": [], "single_cal": []}
+    for current_date in test_dates:
+        cur = combined[combined["date"] == current_date]
+        y = cur["actual"].to_numpy(float)
+        d_floor = np.maximum(y, 0.2 * cap)
+        shift_matrix = np.column_stack([cur[f"shift_{s}"].to_numpy(float) for s in range(1, N_SHIFTS + 1)])
+        p_raw_avg = np.mean(shift_matrix, axis=1)
+        day_accs["raw"].append(float(1.0 - np.sqrt(np.mean(((y - p_raw_avg) / d_floor) ** 2))))
+
+        idx = all_dates.index(current_date)
+        fit_dates = all_dates[max(0, idx - window_days): idx]
+        if not fit_dates:
+            day_accs["per_shift_cal"].append(day_accs["raw"][-1])
+            day_accs["single_cal"].append(day_accs["raw"][-1])
+            continue
+
+        fit = combined[combined["date"].isin(fit_dates)]
+        y_fit = fit["actual"].to_numpy(float)
+
+        p_cal_shifts = np.zeros((len(cur), N_SHIFTS))
+        for s in range(1, N_SHIFTS + 1):
+            p_fit_s = fit[f"shift_{s}"].to_numpy(float)
+            alpha_s, beta_s = fit_affine(y_fit, p_fit_s, cap)
+            p_cur_s = cur[f"shift_{s}"].to_numpy(float)
+            p_cal_shifts[:, s - 1] = np.clip(alpha_s * p_cur_s + beta_s, 0, cap)
+        p_per_shift_avg = np.mean(p_cal_shifts, axis=1)
+        day_accs["per_shift_cal"].append(
+            float(1.0 - np.sqrt(np.mean(((y - p_per_shift_avg) / d_floor) ** 2)))
+        )
+
+        p_fit_avg = np.mean(
+            np.column_stack([fit[f"shift_{s}"].to_numpy(float) for s in range(1, N_SHIFTS + 1)]),
+            axis=1,
+        )
+        alpha_single, beta_single = fit_affine(y_fit, p_fit_avg, cap)
+        p_single_cal = np.clip(alpha_single * p_raw_avg + beta_single, 0, cap)
+        day_accs["single_cal"].append(
+            float(1.0 - np.sqrt(np.mean(((y - p_single_cal) / d_floor) ** 2)))
+        )
+
+    rows = []
+    for method in ["raw", "per_shift_cal", "single_cal"]:
+        rows.append({"method": method, "accuracy_percent": float(np.mean(day_accs[method])) * 100})
+    return rows
+
+
 def train_ultrashort_ensemble(
     train_df: pd.DataFrame,
     val_df: pd.DataFrame,
@@ -746,9 +1048,9 @@ def train_ultrashort_ensemble(
     from catboost import CatBoostRegressor
     from joblib import Parallel, delayed
 
-    def _train_one_shift(s: int) -> Tuple[int, Dict, np.ndarray]:
+    def _train_one_shift(s: int) -> Tuple[int, Dict, np.ndarray, np.ndarray]:
         X_tr, y_tr, _ = prepare_shift_features(train_feat, s, feat_cols)
-        X_va, y_va, _ = prepare_shift_features(val_feat, s, feat_cols)
+        X_va, y_va, p_base_va = prepare_shift_features(val_feat, s, feat_cols)
         X_te, y_te, p_base_te = prepare_shift_features(test_feat, s, feat_cols)
 
         common = [c for c in X_tr.columns if c in X_va.columns and c in X_te.columns]
@@ -770,41 +1072,52 @@ def train_ultrashort_ensemble(
         )
         m.fit(X_tr_c, y_tr_c)
         models["dart"] = m
+        preds_dart_va = m.predict(X_va)
         preds_dart = m.predict(X_te)
 
         m = XGBRegressor(
             n_estimators=500, max_depth=6, learning_rate=0.05,
             subsample=0.8, colsample_bytree=0.7, reg_alpha=0.1, reg_lambda=1.0,
-            random_state=42, early_stopping_rounds=50, n_jobs=1,
+            random_state=42, early_stopping_rounds=50, n_jobs=1, tree_method="hist",
         )
         m.fit(X_tr_c, y_tr_c, eval_set=[(X_va_c, y_va_c)], verbose=False)
         models["xgb"] = m
+        preds_xgb_va = m.predict(X_va)
         preds_xgb = m.predict(X_te)
 
         m = CatBoostRegressor(
             iterations=500, depth=6, learning_rate=0.05,
             random_seed=42, verbose=0, early_stopping_rounds=50,
             l2_leaf_reg=3.0, subsample=0.8, thread_count=1,
+            allow_writing_files=False,
         )
         m.fit(X_tr_c, y_tr_c, eval_set=(X_va_c, y_va_c), verbose=0)
         models["cb"] = m
+        preds_cb_va = m.predict(X_va)
         preds_cb = m.predict(X_te)
+
+        delta_pred_va = np.mean([preds_dart_va, preds_xgb_va, preds_cb_va], axis=0)
+        pred_power_val = np.clip(delta_pred_va + p_base_va, 0, cap)
+        pred_power_val[:s] = np.nan
 
         delta_pred = np.mean([preds_dart, preds_xgb, preds_cb], axis=0)
         pred_power = np.clip(delta_pred + p_base_te, 0, cap)
         pred_power[:s] = np.nan
 
         models["feature_columns"] = common
-        return s, models, pred_power
+        return s, models, pred_power_val, pred_power
 
-    results = Parallel(n_jobs=4, backend="threading")(
+    train_jobs = max(1, min(16, int(os.environ.get("ULTRASHORT_TRAIN_JOBS", "4"))))
+    results = Parallel(n_jobs=train_jobs, backend="threading")(
         delayed(_train_one_shift)(s) for s in range(1, N_SHIFTS + 1)
     )
 
     shift_models: Dict[int, Dict] = {}
+    shift_val_preds: Dict[int, np.ndarray] = {}
     shift_test_preds: Dict[int, np.ndarray] = {}
-    for s, models, pred_power in results:
+    for s, models, pred_power_val, pred_power in results:
         shift_models[s] = models
+        shift_val_preds[s] = pred_power_val
         shift_test_preds[s] = pred_power
         valid = ~np.isnan(pred_power)
         if valid.any():
@@ -821,6 +1134,25 @@ def train_ultrashort_ensemble(
             avg[i] = np.mean(vals)
     valid_avg = ~np.isnan(avg)
     avg_metrics = score(y_test[valid_avg], avg[valid_avg], cap) if valid_avg.any() else {}
+    run_full_ultrashort_calibration_eval = os.environ.get(
+        "ULTRASHORT_FULL_CAL_EVAL", "1"
+    ).strip().lower() in {"1", "true", "yes", "on"}
+    cal_rows = per_shift_dynamic_rolling_ultrashort(
+        val_feat,
+        test_feat,
+        shift_val_preds,
+        shift_test_preds,
+        cap,
+        window_days=14,
+    ) if run_full_ultrashort_calibration_eval else []
+    per_shift_row = next((r for r in cal_rows if r.get("method") == "per_shift_cal"), None)
+    raw_row = next((r for r in cal_rows if r.get("method") == "raw"), None)
+    if raw_row:
+        avg_metrics["global_accuracy_percent"] = avg_metrics.get("accuracy_percent")
+        avg_metrics["accuracy_percent"] = raw_row["accuracy_percent"]
+    cal_metrics = dict(avg_metrics)
+    if per_shift_row:
+        cal_metrics["accuracy_percent"] = per_shift_row["accuracy_percent"]
 
     # --- per-shift initial calibration from test-set predictions ---
     y_test_full = test_feat[TARGET].to_numpy(float)
@@ -841,8 +1173,15 @@ def train_ultrashort_ensemble(
         "n_test_samples": int(len(test_feat)),
         "n_features": len(feat_cols),
         "n_shifts": N_SHIFTS,
-        "cal_accuracy": avg_metrics,
+        "raw_accuracy": avg_metrics,
+        "cal_accuracy": cal_metrics,
         "averaged_test_accuracy": avg_metrics,
+        "dynamic_calibration": {
+            "method": "per_shift_rolling_affine",
+            "window_days": 14,
+            "seed": "validation",
+            "results": cal_rows,
+        },
         "init_shift_calibration": init_shift_calibration,
     }
     return shift_models, meta

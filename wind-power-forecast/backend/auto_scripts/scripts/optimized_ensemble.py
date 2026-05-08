@@ -99,10 +99,14 @@ def _ensure_wind_speed_features(out: pd.DataFrame, grid_map: dict[str, tuple[str
             if u_idx != v_idx:
                 continue
             ws_name = f"ws{height}_{u_idx}"
+            wd_name = f"wd{height}_{u_idx}"
+            u = pd.to_numeric(out[u_col], errors="coerce")
+            v = pd.to_numeric(out[v_col], errors="coerce")
             out[ws_name] = np.sqrt(
-                pd.to_numeric(out[u_col], errors="coerce") ** 2
-                + pd.to_numeric(out[v_col], errors="coerce") ** 2
+                u ** 2
+                + v ** 2
             )
+            out[wd_name] = (270 - np.degrees(np.arctan2(v, u))) % 360
             wind_cols[(height, u_idx)] = ws_name
 
     for height in ["100", "10", "200"]:
@@ -118,6 +122,9 @@ def _ensure_wind_speed_features(out: pd.DataFrame, grid_map: dict[str, tuple[str
                 ws = pd.to_numeric(out[ws_name], errors="coerce")
                 for lag in [1, 2, 3]:
                     out[f"{ws_name}_diff_prev{lag}"] = ws - ws.shift(lag)
+                out[f"{ws_name}_cubed"] = ws ** 3
+                out[f"{ws_name}_sigmoid"] = 1.0 / (1.0 + np.exp(-0.5 * (ws - 5)))
+                out[f"{ws_name}_pc"] = np.clip((ws - 3) / 9, 0, 1) * np.clip((25 - ws) / 5, 0, 1)
 
 
 def _first_existing_col(df: pd.DataFrame, names: list[str]) -> str | None:
@@ -186,7 +193,7 @@ def _add_optional_feature_modules(out: pd.DataFrame) -> pd.DataFrame:
         return out
 
 
-def build_wind_features(df: pd.DataFrame) -> pd.DataFrame:
+def build_wind_features(df: pd.DataFrame, include_target_history: bool = False) -> pd.DataFrame:
     out = df.copy()
     if TIME_COL in out.columns:
         out[TIME_COL] = pd.to_datetime(out[TIME_COL], errors="coerce")
@@ -209,27 +216,29 @@ def build_wind_features(df: pd.DataFrame) -> pd.DataFrame:
     out["cos_doy"] = np.cos(2 * np.pi * doy / 365)
     out["is_daytime"] = ((hour >= 6) & (hour <= 18)).astype(int)
 
-    target = None
-    for candidate in ["Total_Power", "wp_true", "power"]:
-        if candidate in out.columns:
-            target = pd.to_numeric(out[candidate], errors="coerce")
-            break
-    if target is not None:
-        out["power_lag_1d"] = target.shift(96)
-        out["power_lag_2d"] = target.shift(192)
-        out["power_lag_3d"] = target.shift(288)
-        out["power_lag_7d"] = target.shift(672)
-        out["power_yesterday_mean"] = target.shift(96).rolling(96, min_periods=1).mean()
-        out["power_yesterday_max"] = target.shift(96).rolling(96, min_periods=1).max()
-        out["power_yesterday_min"] = target.shift(96).rolling(96, min_periods=1).min()
-        out["power_yesterday_std"] = target.shift(96).rolling(96, min_periods=1).std()
-        out["power_recent_6h"] = target.shift(24)
-        out["power_recent_12h"] = target.shift(48)
+    if include_target_history:
+        target = None
+        for candidate in ["Total_Power", "wp_true", "power"]:
+            if candidate in out.columns:
+                target = pd.to_numeric(out[candidate], errors="coerce")
+                break
+        if target is not None:
+            out["power_lag_1d"] = target.shift(96)
+            out["power_lag_2d"] = target.shift(192)
+            out["power_lag_3d"] = target.shift(288)
+            out["power_lag_7d"] = target.shift(672)
+            out["power_yesterday_mean"] = target.shift(96).rolling(96, min_periods=1).mean()
+            out["power_yesterday_max"] = target.shift(96).rolling(96, min_periods=1).max()
+            out["power_yesterday_min"] = target.shift(96).rolling(96, min_periods=1).min()
+            out["power_yesterday_std"] = target.shift(96).rolling(96, min_periods=1).std()
+            out["power_recent_6h"] = target.shift(24)
+            out["power_recent_12h"] = target.shift(48)
 
     ws100_cols = [f"ws100_{i}" for i in range(1, 16) if f"ws100_{i}" in out.columns]
     ws10_cols = [f"ws10_{i}" for i in range(1, 16) if f"ws10_{i}" in out.columns]
     if ws100_cols:
         ws100_mean = out[ws100_cols].apply(pd.to_numeric, errors="coerce").mean(axis=1)
+        out["ws100_mean"] = ws100_mean
         out["ws100_mean_cubed"] = ws100_mean ** 3
         out["ws100_mean_sigmoid"] = 1.0 / (1.0 + np.exp(-0.5 * (ws100_mean - 5)))
         out["ws100_mean_pc"] = np.clip((ws100_mean - 3) / 9, 0, 1) * np.clip((25 - ws100_mean) / 5, 0, 1)
@@ -253,9 +262,11 @@ def build_wind_features(df: pd.DataFrame) -> pd.DataFrame:
     if sp_cols and t2_cols:
         sp_mean = out[sp_cols].apply(pd.to_numeric, errors="coerce").mean(axis=1)
         t2_mean = out[t2_cols].apply(pd.to_numeric, errors="coerce").mean(axis=1)
-        out["air_density"] = sp_mean / (287.05 * t2_mean)
+        out["grid_air_density"] = sp_mean / (287.05 * t2_mean)
+        out["air_density"] = out["grid_air_density"]
         if ws100_cols:
-            out["power_density"] = 0.5 * out["air_density"] * out[ws100_cols].apply(pd.to_numeric, errors="coerce").mean(axis=1) ** 3
+            out["grid_power_density_100m"] = 0.5 * out["grid_air_density"] * out[ws100_cols].apply(pd.to_numeric, errors="coerce").mean(axis=1) ** 3
+            out["power_density"] = out["grid_power_density_100m"]
 
     if "air_density" not in out.columns and "surface_pressure" in out.columns and "temperature_2m" in out.columns:
         out["air_density"] = (
