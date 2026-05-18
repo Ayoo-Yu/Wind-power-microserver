@@ -29,11 +29,22 @@ error() { echo -e "${RED}[ERROR]${NC} $*"; }
 docker_compose() {
     # These environment variables are harmless on Linux, and avoid common
     # path-conversion surprises when this script is launched from Git Bash/MSYS.
-    COMPOSE_IGNORE_ORPHANS=true \
-    COMPOSE_CONVERT_WINDOWS_PATHS=1 \
-    MSYS_NO_PATHCONV=1 \
-    MSYS2_ARG_CONV_EXCL="*" \
-    docker compose "$@"
+    if docker compose version >/dev/null 2>&1; then
+        COMPOSE_IGNORE_ORPHANS=true \
+        COMPOSE_CONVERT_WINDOWS_PATHS=1 \
+        MSYS_NO_PATHCONV=1 \
+        MSYS2_ARG_CONV_EXCL="*" \
+        docker compose "$@"
+    elif command -v docker-compose >/dev/null 2>&1; then
+        COMPOSE_IGNORE_ORPHANS=true \
+        COMPOSE_CONVERT_WINDOWS_PATHS=1 \
+        MSYS_NO_PATHCONV=1 \
+        MSYS2_ARG_CONV_EXCL="*" \
+        docker-compose "$@"
+    else
+        error "Docker Compose is not available. Install docker compose plugin or docker-compose."
+        exit 1
+    fi
 }
 
 docker_cmd() {
@@ -111,16 +122,16 @@ check_docker() {
         error "Docker daemon is not running!"
         exit 1
     fi
-    if ! docker compose version &> /dev/null; then
-        error "Docker Compose V2 is not available!"
+    if ! docker compose version &> /dev/null && ! command -v docker-compose &> /dev/null; then
+        error "Docker Compose is not available. Install docker compose plugin or docker-compose."
         exit 1
     fi
 }
 
 create_network() {
-    if ! docker network inspect wind-power-network &> /dev/null; then
-        info "Creating Docker network: wind-power-network"
-        docker network create wind-power-network
+    if ! docker network inspect wind-power-staging-network &> /dev/null; then
+        info "Creating Docker network: wind-power-staging-network"
+        docker network create wind-power-staging-network
     fi
 }
 
@@ -145,7 +156,7 @@ EOF
 wait_for_database() {
     info "Waiting for database to be ready..."
     for i in $(seq 1 60); do
-        if docker exec wind-power-kingbase \
+        if docker exec wind-power-staging-kingbase \
             /home/kingbase/install/kingbase/bin/sys_isready \
             -h 127.0.0.1 -p 54321 >/dev/null 2>&1; then
             info "Database is ready."
@@ -154,7 +165,7 @@ wait_for_database() {
 
         if [ "$i" -eq 60 ]; then
             error "Database health check timeout."
-            docker logs --tail 80 wind-power-kingbase 2>/dev/null || true
+            docker logs --tail 80 wind-power-staging-kingbase 2>/dev/null || true
             exit 1
         fi
 
@@ -170,26 +181,26 @@ ensure_app_database() {
 
     info "Ensuring database exists: $db_name"
 
-    if docker exec --user kingbase wind-power-kingbase \
+    if docker exec --user kingbase wind-power-staging-kingbase \
         "$ksql" -p 54321 -U "$db_user" -d "$db_name" -c "select 1;" >/dev/null 2>&1; then
         info "Database already exists: $db_name"
         return 0
     fi
 
-    if docker exec --user kingbase wind-power-kingbase \
+    if docker exec --user kingbase wind-power-staging-kingbase \
         "$createdb" -p 54321 -U "$db_user" "$db_name" >/dev/null 2>&1; then
         info "Created database: $db_name"
         return 0
     fi
 
-    if docker exec --user kingbase wind-power-kingbase \
+    if docker exec --user kingbase wind-power-staging-kingbase \
         "$ksql" -p 54321 -U "$db_user" -d "$db_name" -c "select 1;" >/dev/null 2>&1; then
         info "Database already exists: $db_name"
         return 0
     fi
 
     error "Failed to create or connect to database: $db_name"
-    docker logs --tail 80 wind-power-kingbase 2>/dev/null || true
+    docker logs --tail 80 wind-power-staging-kingbase 2>/dev/null || true
     exit 1
 }
 
@@ -201,7 +212,7 @@ import_seed_data() {
 
     # Check if data already exists (wind_farms table has rows)
     local count
-    count=$(docker exec --user kingbase wind-power-kingbase \
+    count=$(docker exec --user kingbase wind-power-staging-kingbase \
         "$ksql" -p 54321 -U "$db_user" -d "$db_name" -t -A \
         -c "SELECT count(*) FROM wind_farms;" 2>/dev/null | tr -d '[:space:]')
 
@@ -219,10 +230,10 @@ import_seed_data() {
     info "Importing seed data (this may take a few minutes)..."
 
     # Copy dump into container
-    docker cp "$dump_file" wind-power-kingbase:/tmp/seed.dump
+    docker cp "$dump_file" wind-power-staging-kingbase:/tmp/seed.dump
 
     # Restore using sys_restore (pg_restore equivalent)
-    if docker exec --user kingbase wind-power-kingbase \
+    if docker exec --user kingbase wind-power-staging-kingbase \
         sys_restore -p 54321 -U "$db_user" -d "$db_name" -c --if-exists \
         /tmp/seed.dump 2>&1; then
         info "Seed data imported successfully."
@@ -230,7 +241,7 @@ import_seed_data() {
         warn "Some warnings during import (this is usually normal for partition tables)."
         warn "Checking if import succeeded..."
 
-        count=$(docker exec --user kingbase wind-power-kingbase \
+        count=$(docker exec --user kingbase wind-power-staging-kingbase \
             "$ksql" -p 54321 -U "$db_user" -d "$db_name" -t -A \
             -c "SELECT count(*) FROM wind_farms;" 2>/dev/null | tr -d '[:space:]')
 
@@ -242,7 +253,7 @@ import_seed_data() {
     fi
 
     # Clean up
-    docker exec wind-power-kingbase rm -f /tmp/seed.dump 2>/dev/null || true
+    docker exec wind-power-staging-kingbase rm -f /tmp/seed.dump 2>/dev/null || true
 }
 
 create_dirs() {
@@ -264,8 +275,6 @@ create_dirs() {
     ensure_dir backend-data/saved_scalers
     ensure_dir backend-data/saved_metrics
     ensure_dir backend-data/data_etext
-    ensure_dir backend-data/data_etext/incoming
-    ensure_dir backend-data/data_etext/csv
     ensure_dir backend-data/archives
 
     # Redis persistent data
@@ -313,8 +322,8 @@ copy_seed_dir() {
 }
 
 seed_model_assets() {
-    local image="wind-power-celery-worker:latest"
-    local container="wind-power-model-seed"
+    local image="wind-power-celery-worker:staging-20260510"
+    local container="wind-power-staging-model-seed"
 
     if ! docker_cmd image inspect "$image" >/dev/null 2>&1; then
         warn "Prediction image not found, skipping model seed: $image"
@@ -382,9 +391,9 @@ do_start() {
     docker_compose -f docker-compose.prod.yaml up -d
 
     info "=== All services started ==="
-    info "Frontend:    http://<server-ip>:8080"
-    info "Backend API: http://<server-ip>:5000"
-    info "pgAdmin:     http://<server-ip>:5050"
+    info "Frontend:    http://<server-ip>:18080"
+    info "Backend API: http://<server-ip>:15000"
+    info "pgAdmin:     http://<server-ip>:15050"
 }
 
 do_stop() {
@@ -423,7 +432,7 @@ do_db_only() {
     docker_compose -f docker-compose.db.yaml up -d
     wait_for_database
     ensure_app_database
-    info "Database started on port 54321"
+    info "Database started on host port 15432"
 }
 
 do_logs() {
@@ -438,25 +447,49 @@ do_logs() {
     fi
 }
 
+do_refresh_db() {
+    check_env
+    check_docker
+
+    info "=== Refreshing database container (preserving data) ==="
+    info "This recreates the KingBase container to reset the license."
+    info "Data in ./kingbase-data is preserved. Other services are NOT affected."
+
+    # Stop and remove only the DB container
+    info "Stopping database container..."
+    docker_compose -f docker-compose.db.yaml down
+
+    info "Recreating database container..."
+    docker_compose -f docker-compose.db.yaml up -d
+
+    wait_for_database
+    ensure_app_database
+
+    info "=== Database container refreshed ==="
+    info "License reset. Data preserved. App services continue running."
+}
+
 case "${1:-}" in
-    install)  do_install  ;;
-    start)    do_start    ;;
-    stop)     do_stop     ;;
-    status)   do_status   ;;
-    restart)  do_restart  ;;
-    db-only)  do_db_only  ;;
-    logs)     do_logs "${2:-}" ;;
+    install)    do_install    ;;
+    start)      do_start      ;;
+    stop)       do_stop       ;;
+    status)     do_status     ;;
+    restart)    do_restart    ;;
+    db-only)    do_db_only    ;;
+    refresh-db) do_refresh_db ;;
+    logs)       do_logs "${2:-}" ;;
     *)
-        echo "Usage: $0 {install|start|stop|status|restart|db-only|logs [service]}"
+        echo "Usage: $0 {install|start|stop|status|restart|db-only|refresh-db|logs [service]}"
         echo ""
         echo "Commands:"
-        echo "  install   Load Docker images from tar files"
-        echo "  start     Start all services (DB first, then app)"
-        echo "  stop      Stop all services"
-        echo "  status    Show status of all services"
-        echo "  restart   Restart all services"
-        echo "  db-only   Start only the database"
-        echo "  logs      Tail logs (optional: specify service name)"
+        echo "  install     Load Docker images from tar files"
+        echo "  start       Start all services (DB first, then app)"
+        echo "  stop        Stop all services"
+        echo "  status      Show status of all services"
+        echo "  restart     Restart all services"
+        echo "  db-only     Start only the database"
+        echo "  refresh-db  Recreate DB container to reset license (data preserved, apps untouched)"
+        echo "  logs        Tail logs (optional: specify service name)"
         exit 1
         ;;
 esac

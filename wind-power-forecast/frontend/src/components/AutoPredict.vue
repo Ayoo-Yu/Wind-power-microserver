@@ -233,6 +233,7 @@
                     <div class="detail-row"><span>验证样本</span><strong>{{ triggerProgress[item.name].result.meta.n_val_samples ?? '-' }}</strong></div>
                     <div class="detail-row"><span>测试样本</span><strong>{{ triggerProgress[item.name].result.meta.n_test_samples ?? '-' }}</strong></div>
                     <div class="detail-row"><span>特征数</span><strong>{{ triggerProgress[item.name].result.meta.n_features ?? '-' }}</strong></div>
+                    <div class="detail-row" v-if="triggerProgress[item.name].result.training_lookback_days"><span>训练窗口</span><strong>最近 {{ triggerProgress[item.name].result.training_lookback_days }} 天</strong></div>
                     <template v-if="triggerProgress[item.name].result.meta.cal_accuracy">
                       <div class="detail-row"><span>准确率</span><strong>{{ (triggerProgress[item.name].result.meta.cal_accuracy.accuracy_percent ?? 0).toFixed(1) }}%</strong></div>
                       <div class="detail-row"><span>RMSE</span><strong>{{ (triggerProgress[item.name].result.meta.cal_accuracy.weighted_rmse ?? 0).toFixed(2) }}</strong></div>

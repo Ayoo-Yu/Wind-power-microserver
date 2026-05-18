@@ -1,10 +1,12 @@
+version: "2.4"
+
 services:
   frontend:
-    image: wind-power-frontend:v250715_1.0
+    image: wind-power-frontend:staging-20260510
     ports:
-      - "8080:80"
+      - "18080:80"
     networks:
-      - wind-power-network
+      - wind-power-staging-network
     depends_on:
       - backend
     environment:
@@ -12,9 +14,9 @@ services:
     restart: unless-stopped
 
   backend:
-    image: wind-power-celery-worker:latest
+    image: wind-power-celery-worker:staging-20260510
     ports:
-      - "5000:5000"
+      - "15000:5000"
     environment:
       - DB_HOST=kingbase
       - DB_PORT=54321
@@ -29,11 +31,16 @@ services:
       - PYTHONPATH=/app
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - SCADA_SIMULATOR_HOST=wind-power-scada-simulator
+      - SCADA_SIMULATOR_HOST=wind-power-staging-scada-simulator
     entrypoint: ["/bin/bash", "/app/backend-entrypoint.sh"]
     volumes:
       - ./app.env:/app/.env:ro
       - ./backend-entrypoint.sh:/app/backend-entrypoint.sh:ro
+      - ./patches/scada_worker.py:/app/services/scada_worker.py:ro
+      - ./patches/services/scada_manager.py:/app/services/scada_manager.py:ro
+      - ./patches/services/model_manager.py:/app/services/model_manager.py:ro
+      - ./patches/services/ultrashort_model_manager.py:/app/services/ultrashort_model_manager.py:ro
+      - ./patches/routes/etext_pipeline_router.py:/app/routes/etext_pipeline_router.py:ro
       - ./backend-data/forecast_models:/app/forecast_models
       - ./backend-data/uploads:/app/uploads
       - ./backend-data/forecasts:/app/forecasts
@@ -44,7 +51,7 @@ services:
       - ./backend-data/data_etext:/app/data/etext
       - ./backend-data/archives:/app/archives
     networks:
-      - wind-power-network
+      - wind-power-staging-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
@@ -54,8 +61,8 @@ services:
       start_period: 60s
 
   celery-worker:
-    image: wind-power-celery-worker:latest
-    container_name: wind-power-celery-worker
+    image: wind-power-celery-worker:staging-20260510
+    container_name: wind-power-staging-celery-worker
     command: ["worker", "--loglevel=info", "-c", "4", "--without-heartbeat"]
     environment:
       - DB_HOST=kingbase
@@ -72,13 +79,15 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     networks:
-      - wind-power-network
+      - wind-power-staging-network
     depends_on:
       redis:
         condition: service_started
     restart: unless-stopped
     volumes:
       - ./app.env:/app/.env:ro
+      - ./patches/services/model_manager.py:/app/services/model_manager.py:ro
+      - ./patches/services/ultrashort_model_manager.py:/app/services/ultrashort_model_manager.py:ro
       - ./backend-data/data_etext:/app/data/etext
       - ./backend-data/forecast_models:/app/forecast_models
       - ./datasets:/app/auto_scripts/scripts/middle/datasets
@@ -101,8 +110,8 @@ services:
       - ./logs_ss:/app/auto_scripts/scripts/supershort/logs
 
   celery-beat:
-    image: wind-power-celery-worker:latest
-    container_name: wind-power-celery-beat
+    image: wind-power-celery-worker:staging-20260510
+    container_name: wind-power-staging-celery-beat
     command: ["beat", "--loglevel=info"]
     environment:
       - DB_HOST=kingbase
@@ -121,7 +130,7 @@ services:
       - ./app.env:/app/.env:ro
       - ./celery-beat-data:/app/celerybeat-data
     networks:
-      - wind-power-network
+      - wind-power-staging-network
     depends_on:
       redis:
         condition: service_started
@@ -129,15 +138,15 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: wind-power-redis
+    container_name: wind-power-staging-redis
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:16379:6379"
     volumes:
       - ./redis-data:/data
     command: redis-server --appendonly yes --appendfsync everysec
     restart: unless-stopped
     networks:
-      - wind-power-network
+      - wind-power-staging-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -146,18 +155,18 @@ services:
 
   pgadmin:
     image: dpage/pgadmin4
-    container_name: wind-power-pgadmin
+    container_name: wind-power-staging-pgadmin
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@admin.com
       PGADMIN_DEFAULT_PASSWORD: admin
       TZ: Asia/Shanghai
     ports:
-      - "5050:80"
+      - "15050:80"
     volumes:
       - ./pgadmin-data:/var/lib/pgadmin
     restart: unless-stopped
     networks:
-      - wind-power-network
+      - wind-power-staging-network
     healthcheck:
       test: ["CMD", "wget", "-O", "-", "http://localhost:80/misc/ping"]
       interval: 30s
@@ -166,6 +175,6 @@ services:
       start_period: 20s
 
 networks:
-  wind-power-network:
-    external: true
-    name: wind-power-network
+  wind-power-staging-network:
+    external:
+      name: wind-power-staging-network

@@ -17,7 +17,7 @@
 
     <el-aside :width="isCollapsed ? '64px' : '240px'" class="sidebar">
       <div class="brand" @click="toggleCollapse">
-        <img v-if="!isCollapsed" src="@/assets/Sanxia_logo.png" alt="Logo" class="brand-logo" />
+        <img v-if="!isCollapsed" src="@/assets/Hust_logo.png" alt="华中科技大学" class="brand-logo" />
         <el-icon v-else class="collapse-icon"><Expand /></el-icon>
       </div>
 
@@ -435,7 +435,9 @@ export default {
 }
 
 .brand-logo {
-  height: 40px;
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
   filter: drop-shadow(0 0 8px rgba(18, 215, 255, 0.2));
 }
 

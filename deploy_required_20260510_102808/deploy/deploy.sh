@@ -264,8 +264,6 @@ create_dirs() {
     ensure_dir backend-data/saved_scalers
     ensure_dir backend-data/saved_metrics
     ensure_dir backend-data/data_etext
-    ensure_dir backend-data/data_etext/incoming
-    ensure_dir backend-data/data_etext/csv
     ensure_dir backend-data/archives
 
     # Redis persistent data

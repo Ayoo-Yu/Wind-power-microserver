@@ -52,6 +52,10 @@ def read_config():
         cfg = dict(DEFAULT_CONFIG)
     if not cfg["incoming_dir"]:
         cfg["incoming_dir"] = os.path.join(PROJECT_ROOT, "data", "etext", "incoming")
+    try:
+        os.makedirs(cfg["incoming_dir"], exist_ok=True)
+    except OSError as e:
+        logger.warning("Failed to create Etext incoming directory %s: %s", cfg["incoming_dir"], e)
     return cfg
 
 
@@ -70,6 +74,11 @@ def validate_and_apply_config_updates(cfg, updates):
         path = updates["incoming_dir"].strip()
         if path and not _is_allowed_path(path):
             return cfg, "目录必须在项目根目录下"
+        if path:
+            try:
+                os.makedirs(path, exist_ok=True)
+            except OSError as e:
+                return cfg, f"failed to create incoming_dir: {e}"
         cfg = {**cfg, "incoming_dir": path}
 
     if "schedule_hour" in updates:

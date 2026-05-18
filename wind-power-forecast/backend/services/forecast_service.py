@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 TIME_COL = "Timestamp"
 TARGET = "Total_Power"
 N_SHIFTS = 16
+DEFAULT_TRAINING_LOOKBACK_DAYS = 365
 
 # ---------------------------------------------------------------------------
 # Feature engineering (ported from scripts/forecast_shortterm.py)
@@ -601,18 +602,28 @@ def load_training_data_from_db(
     session,
     feature_table: str,
     farm_code: str,
+    lookback_days: Optional[int] = DEFAULT_TRAINING_LOOKBACK_DAYS,
 ) -> pd.DataFrame:
     """JOIN feature table with actual_power and return a DataFrame."""
     from sqlalchemy import text
+
+    cutoff = None
+    where_clause = ""
+    params = {"farm_code": farm_code}
+    if lookback_days is not None:
+        cutoff = datetime.now() - timedelta(days=lookback_days)
+        where_clause = 'WHERE f."Timestamp" >= :cutoff'
+        params["cutoff"] = cutoff
 
     sql = text(f"""
         SELECT f.*, a.wp_true AS "Total_Power"
         FROM "{feature_table}" f
         LEFT JOIN actual_power a
             ON a.farm_code = :farm_code AND a.timestamp = f."Timestamp"
+        {where_clause}
         ORDER BY f."Timestamp"
     """)
-    rows = session.execute(sql, {"farm_code": farm_code}).fetchall()
+    rows = session.execute(sql, params).fetchall()
     if not rows:
         return pd.DataFrame()
     cols = list(rows[0]._fields) if hasattr(rows[0], "_fields") else list(rows[0].keys())
@@ -1230,7 +1241,13 @@ def run_monthly_training(
     cap = farm["capacity_mw"]
     feature_table = farm["short_table"] if forecast_type == "short" else farm["mid_table"]
 
-    logger.info("Monthly training: %s/%s from %s", farm_code, forecast_type, feature_table)
+    logger.info(
+        "Monthly training: %s/%s from %s, lookback_days=%s",
+        farm_code,
+        forecast_type,
+        feature_table,
+        DEFAULT_TRAINING_LOOKBACK_DAYS,
+    )
 
     df = load_training_data_from_db(session, feature_table, farm_code)
     if df.empty:
@@ -1257,6 +1274,7 @@ def run_monthly_training(
         "farm_code": farm_code,
         "forecast_type": forecast_type,
         "n_rows": len(df),
+        "training_lookback_days": DEFAULT_TRAINING_LOOKBACK_DAYS,
         "meta": meta,
         "model_dir": model_manager._dir(farm_code, forecast_type),
     }
@@ -1274,7 +1292,12 @@ def run_ultrashort_monthly_training(
     cap = farm["capacity_mw"]
     feature_table = farm["supershort_table"]
 
-    logger.info("Ultra-short monthly training: %s from %s", farm_code, feature_table)
+    logger.info(
+        "Ultra-short monthly training: %s from %s, lookback_days=%s",
+        farm_code,
+        feature_table,
+        DEFAULT_TRAINING_LOOKBACK_DAYS,
+    )
 
     df = load_training_data_from_db(session, feature_table, farm_code)
     if df.empty:
@@ -1305,6 +1328,7 @@ def run_ultrashort_monthly_training(
         "forecast_type": "supershort",
         "n_rows": len(df),
         "n_shifts": len(shift_models),
+        "training_lookback_days": DEFAULT_TRAINING_LOOKBACK_DAYS,
         "meta": meta,
         "model_dir": usmm._base(farm_code),
     }

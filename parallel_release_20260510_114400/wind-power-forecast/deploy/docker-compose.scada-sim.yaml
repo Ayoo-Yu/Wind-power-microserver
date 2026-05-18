@@ -1,0 +1,26 @@
+version: "2.4"
+
+services:
+  scada-simulator:
+    image: wind-power-scada-simulator:staging-20260510
+    container_name: wind-power-staging-scada-simulator
+    environment:
+      - TZ=Asia/Shanghai
+      - SIMULATOR_PORT=2404
+      - UPDATE_INTERVAL_SECONDS=${SCADA_SIM_UPDATE_INTERVAL_SECONDS:-10}
+    ports:
+      - "12404:2404"
+    networks:
+      - wind-power-staging-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 2404 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  wind-power-staging-network:
+    external:
+      name: wind-power-staging-network

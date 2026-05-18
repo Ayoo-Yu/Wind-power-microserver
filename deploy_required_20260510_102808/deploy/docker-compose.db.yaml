@@ -1,0 +1,31 @@
+services:
+  kingbase:
+    image: kingbase_v009r001c002b0014_single_x86:v1
+    container_name: wind-power-kingbase
+    privileged: true
+    environment:
+      - NEED_START=yes
+      - DB_USER=system
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_MODE=oracle
+      - ENCODING=UTF8
+      - TZ=Asia/Shanghai
+    volumes:
+      - ./kingbase-data:/home/kingbase/userdata
+    ports:
+      - "54321:54321"
+    restart: unless-stopped
+    networks:
+      - wind-power-network
+    command: /usr/sbin/init
+    healthcheck:
+      test: ["CMD", "/home/kingbase/install/kingbase/bin/sys_isready", "-h", "127.0.0.1", "-p", "54321"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+networks:
+  wind-power-network:
+    external: true
+    name: wind-power-network

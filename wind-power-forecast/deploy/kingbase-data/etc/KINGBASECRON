@@ -1,0 +1,2 @@
+* * * * * kingbase /home/kingbase/docker-entrypoint.sh check_and_run /home/kingbase/userdata/data >> /home/kingbase/cronlog
+

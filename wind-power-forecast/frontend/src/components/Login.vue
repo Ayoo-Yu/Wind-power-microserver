@@ -52,9 +52,9 @@
     <section class="login-panel">
       <div class="login-card">
         <div class="logo-line">
-          <img src="@/assets/Sanxia_logo_black.png" alt="logo" class="logo" />
+          <img src="@/assets/Hust_logo.png" alt="华中科技大学" class="logo" />
           <div class="logo-copy">
-            <h2>三峡能源</h2>
+            <h2>华中科技大学</h2>
             <span>风电功率预测平台</span>
           </div>
         </div>
@@ -101,7 +101,7 @@
           <a href="#" class="helper-link" @click.prevent>联系管理员</a>
         </div>
 
-        <div class="footer">© 2026 中国三峡集团 风电功率预测系统</div>
+        <div class="footer">© 2026 华中科技大学 风电功率预测系统</div>
         <div class="version">v1.2.4 (Build 20260305)</div>
       </div>
     </section>
@@ -549,8 +549,10 @@ export default {
 }
 
 .logo {
-  height: 38px;
-  filter: grayscale(100%) brightness(2.15) contrast(1.08) drop-shadow(0 0 6px rgba(199, 236, 255, 0.2));
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 6px rgba(199, 236, 255, 0.2));
 }
 
 .logo-copy {
