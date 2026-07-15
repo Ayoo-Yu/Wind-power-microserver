@@ -13,6 +13,7 @@ from .alarm import AlarmRecord, AlarmRule, AlarmNotificationPolicy
 from .manual_intervention import ManualInterventionVersion
 from .farm_profile import FarmProfileConfig
 from .report_config_meta import ReportConfigMeta
+from .report_outbox import ReportOutbox
 # 新增导入特征模型
 from .features import TrainPreSupershort
 # 物理仿真模型
@@ -58,6 +59,7 @@ __all__ = [
     'ManualInterventionVersion',
     'FarmProfileConfig',
     'ReportConfigMeta',
+    'ReportOutbox',
     'UserProfileMeta', 'OperationAuditLog',
     # 特征模型
     'TrainPreShort', 'TrainPreMiddle', 'TrainPreSupershort',

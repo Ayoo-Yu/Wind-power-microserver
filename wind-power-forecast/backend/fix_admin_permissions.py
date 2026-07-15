@@ -40,6 +40,7 @@ def fix_admin_permissions():
                         "train_models",
                         "run_predictions",
                         "configure_system",
+                        "manage_reports",
                         "view_dashboard",
                         "manage_tasks"
                     ]
@@ -55,13 +56,21 @@ def fix_admin_permissions():
         # 显示当前权限
         logger.info(f"当前权限设置: {permissions}")
         
-        # 确保权限格式正确且包含manage_users
-        if isinstance(permissions, dict) and "permissions" in permissions:
-            if "manage_users" not in permissions["permissions"]:
-                permissions["permissions"].append("manage_users")
-                admin_role.permissions = permissions
+        # 确保权限格式正确且包含管理员运行所需权限。
+        if (
+            isinstance(permissions, dict)
+            and isinstance(permissions.get("permissions"), list)
+        ):
+            required_permissions = {"manage_users", "manage_reports"}
+            missing_permissions = sorted(required_permissions - set(permissions["permissions"]))
+            if missing_permissions:
+                updated_permissions = dict(permissions)
+                updated_permissions["permissions"] = (
+                    list(permissions["permissions"]) + missing_permissions
+                )
+                admin_role.permissions = updated_permissions
                 db.commit()
-                logger.info("已添加manage_users权限")
+                logger.info(f"已补充管理员权限: {missing_permissions}")
         else:
             # 如果权限格式不正确，重置为正确的格式
             admin_role.permissions = {
@@ -74,6 +83,7 @@ def fix_admin_permissions():
                     "train_models",
                     "run_predictions",
                     "configure_system",
+                    "manage_reports",
                     "view_dashboard",
                     "manage_tasks"
                 ]
@@ -105,4 +115,4 @@ if __name__ == "__main__":
     if fix_admin_permissions():
         logger.info("管理员权限修复成功")
     else:
-        logger.error("管理员权限修复失败") 
+        logger.error("管理员权限修复失败")

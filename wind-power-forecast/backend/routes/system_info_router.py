@@ -398,21 +398,16 @@ def get_system_logs():
             except Exception as e:
                 logging.error(f"读取日志文件失败: {str(e)}")
         
-        # 如果没有日志文件或读取失败，提供一些默认的系统状态日志
+        # 没有实际日志时明确提示观测缺口，避免生成虚假的正常状态。
         if not logs:
             current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             logs = [
                 {
                     'id': 1,
                     'timestamp': current_time,
-                    'level': 'info',
-                    'message': '风电功率预测系统运行正常'
-                },
-                {
-                    'id': 2,
-                    'timestamp': (datetime.now() - timedelta(minutes=5)).strftime('%Y-%m-%d %H:%M:%S'),
-                    'level': 'info',
-                    'message': '系统监控数据已更新'
+                    'level': 'warning',
+                    'message': '未发现应用日志文件，当前接口无法判断系统运行状态',
+                    'synthetic': True,
                 }
             ]
         

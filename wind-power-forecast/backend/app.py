@@ -104,6 +104,9 @@ from routes.autopredict import autopredict_bp
 from routes.extreme_weather_router import extreme_weather_bp
 from routes.scada_connection import scada_connection_bp
 from routes.etext_pipeline_router import etext_pipeline_bp
+from routes.integration_router import integration_bp
+from routes.report_outbox_router import report_outbox_bp
+from routes.capability_router import capability_bp
 
 # app.register_blueprint(upload_bp, url_prefix='/')
 app.register_blueprint(download_bp, url_prefix='/')
@@ -133,9 +136,17 @@ app.register_blueprint(v1_compat_bp)  # compat bridge
 app.register_blueprint(ecmwf_data_bp)  # ECMWF气象数据API
 app.register_blueprint(ecmwf_grid_bp)  # ECMWF格点数据API
 app.register_blueprint(autopredict_bp, url_prefix='/api')  # 自动预测调度API
-app.register_blueprint(extreme_weather_bp)  # 极端天气检测API
+app.register_blueprint(extreme_weather_bp)  # 极端天气检测旧接口
+app.register_blueprint(
+    extreme_weather_bp,
+    url_prefix='/api/extreme-weather',
+    name='extreme_weather_api',
+)  # 极端天气检测前端接口
 app.register_blueprint(scada_connection_bp)  # SCADA connection management API
 app.register_blueprint(etext_pipeline_bp)  # E text pipeline config & trigger
+app.register_blueprint(integration_bp)  # 跨区统一数据接入
+app.register_blueprint(report_outbox_bp)  # 可靠上报队列运维接口
+app.register_blueprint(capability_bp)  # 系统能力事实表
 
 try:
     from services.scheduler_service import init_scheduler

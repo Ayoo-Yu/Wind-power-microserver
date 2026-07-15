@@ -26,7 +26,7 @@ extreme_weather_bp = Blueprint("extreme_weather", __name__)
 
 
 # ---------------------------------------------------------------------------
-# Stub helpers
+# 配置与数据源辅助函数
 # ---------------------------------------------------------------------------
 
 
@@ -69,8 +69,7 @@ def _get_alarm_history(
 ) -> list[dict[str, Any]]:
     """Return historical extreme weather alarm events.
 
-    Stub implementation -- returns an empty list until database
-    integration is wired up.
+    当前尚未接入历史事件存储，因此调用方必须同时检查 data_available。
     """
     logger.debug(
         "Fetching alarm history: farm_code=%s page=%d per_page=%d",
@@ -172,16 +171,21 @@ def get_status() -> tuple[dict[str, Any], int]:
     """
     farm_code: str = request.args.get("farm_code", "")
 
-    # Placeholder response until live data feed is connected.
+    # 当前没有实时输入时，显式返回未知状态，防止界面展示虚假正常。
     payload: dict[str, Any] = {
         "farm_code": farm_code,
         "current_condition": {
-            "type": "normal",
+            "type": "unknown",
             "severity": "info",
-            "details": {},
+            "details": {
+                "reason": "live_weather_feed_not_connected",
+            },
         },
-        "active_alerts": 0,
+        "data_available": False,
+        "source_status": "not_connected",
+        "active_alerts": None,
         "last_checked": None,
+        "message": "实时天气数据源尚未接入，无法判断当前天气状态",
     }
 
     logger.debug("GET /status farm_code=%s", farm_code)
@@ -217,6 +221,10 @@ def get_history() -> tuple[dict[str, Any], int]:
         "events": events,
         "page": page,
         "per_page": per_page,
+        "total": None,
+        "data_available": False,
+        "source_status": "not_connected",
+        "message": "极端天气历史事件存储尚未接入",
     }
 
     logger.debug(

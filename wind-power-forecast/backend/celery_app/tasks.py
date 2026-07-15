@@ -303,3 +303,36 @@ def merge_predictions(self, farm_code, date_str):
         if db_down:
             raise self.retry(exc=exc, countdown=120)
         return {"status": "failed", "error": str(exc)}
+
+
+@celery_app.task(bind=True, max_retries=3, soft_time_limit=240)
+def process_report_outbox(self, batch_size=20):
+    """发送已持久化的上报任务并恢复中断任务。"""
+
+    try:
+        from services.report_outbox_service import dispatch_batch
+
+        return dispatch_batch(
+            db_session,
+            limit=max(1, min(int(batch_size), 100)),
+            worker_id=self.request.hostname,
+        )
+    except Exception as exc:
+        logger.exception("Report outbox dispatch failed")
+        raise self.retry(exc=exc, countdown=30)
+
+
+@celery_app.task(bind=True, max_retries=2, soft_time_limit=240)
+def scan_scheduled_reports(self):
+    """由 Celery Beat 扫描到期的自动上报配置。"""
+
+    if os.environ.get("REPORT_SCHEDULER_MODE", "embedded").lower() != "celery":
+        return {"status": "skipped", "reason": "scheduler mode is not celery"}
+    try:
+        from routes.report_management_router import check_and_execute_scheduled_reports
+
+        result = check_and_execute_scheduled_reports()
+        return {"status": "ok", "result": result}
+    except Exception as exc:
+        logger.exception("Scheduled report scan failed")
+        raise self.retry(exc=exc, countdown=30)

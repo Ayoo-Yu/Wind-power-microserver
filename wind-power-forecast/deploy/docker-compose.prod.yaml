@@ -1,6 +1,6 @@
 services:
   frontend:
-    image: wind-power-frontend:v250715_1.0
+    image: ${FRONTEND_IMAGE:-wind-power-frontend:v250715_1.0}
     ports:
       - "8080:80"
     networks:
@@ -12,7 +12,7 @@ services:
     restart: unless-stopped
 
   backend:
-    image: wind-power-celery-worker:latest
+    image: ${PREDICTION_IMAGE:-wind-power-celery-worker:latest}
     ports:
       - "5000:5000"
     environment:
@@ -30,6 +30,14 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - SCADA_SIMULATOR_HOST=wind-power-scada-simulator
+      - DEPLOYMENT_MODE=${DEPLOYMENT_MODE:-field}
+      - SCADA_REALTIME_ENABLED=${SCADA_REALTIME_ENABLED:-false}
+      - NWP_INGESTION_ENABLED=${NWP_INGESTION_ENABLED:-false}
+      - PHYSICAL_SIMULATION_ENABLED=${PHYSICAL_SIMULATION_ENABLED:-false}
+      - REPORT_SCHEDULER_MODE=${REPORT_SCHEDULER_MODE:-celery}
+      - INTEGRATION_API_ENABLED=${INTEGRATION_API_ENABLED:-false}
+      - INTEGRATION_API_TOKEN=${INTEGRATION_API_TOKEN:-}
+      - INTEGRATION_SPOOL_DIR=/app/runtime/integration
     entrypoint: ["/bin/bash", "/app/backend-entrypoint.sh"]
     volumes:
       - ./app.env:/app/.env:ro
@@ -43,6 +51,7 @@ services:
       - ./backend-data/saved_metrics:/app/saved_metrics
       - ./backend-data/data_etext:/app/data/etext
       - ./backend-data/archives:/app/archives
+      - ./backend-data/integration:/app/runtime/integration
     networks:
       - wind-power-network
     restart: unless-stopped
@@ -54,7 +63,7 @@ services:
       start_period: 60s
 
   celery-worker:
-    image: wind-power-celery-worker:latest
+    image: ${PREDICTION_IMAGE:-wind-power-celery-worker:latest}
     container_name: wind-power-celery-worker
     command: ["worker", "--loglevel=info", "-c", "4", "--without-heartbeat"]
     environment:
@@ -71,6 +80,7 @@ services:
       - PYTHONPATH=/app
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - REPORT_SCHEDULER_MODE=${REPORT_SCHEDULER_MODE:-celery}
     networks:
       - wind-power-network
     depends_on:
@@ -101,7 +111,7 @@ services:
       - ./logs_ss:/app/auto_scripts/scripts/supershort/logs
 
   celery-beat:
-    image: wind-power-celery-worker:latest
+    image: ${PREDICTION_IMAGE:-wind-power-celery-worker:latest}
     container_name: wind-power-celery-beat
     command: ["beat", "--loglevel=info"]
     environment:
@@ -117,6 +127,7 @@ services:
       - PYTHONPATH=/app
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - REPORT_SCHEDULER_MODE=${REPORT_SCHEDULER_MODE:-celery}
     volumes:
       - ./app.env:/app/.env:ro
       - ./celery-beat-data:/app/celerybeat-data

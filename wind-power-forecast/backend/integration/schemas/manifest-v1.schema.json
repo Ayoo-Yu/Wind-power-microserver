@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:wind-power:integration-manifest:1.0",
+  "title": "Wind Power Integration Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "message_id",
+    "source",
+    "farm_code",
+    "data_type",
+    "event_time",
+    "created_at",
+    "payload_filename",
+    "payload_sha256",
+    "payload_size",
+    "schema_version"
+  ],
+  "properties": {
+    "message_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,126}[A-Za-z0-9_-])?$"
+    },
+    "source": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "farm_code": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,49}$"
+    },
+    "data_type": {
+      "enum": [
+        "scada",
+        "actual_power",
+        "nwp",
+        "weather",
+        "operational",
+        "forecast",
+        "report_receipt"
+      ]
+    },
+    "event_time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload_filename": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "pattern": "^[^<>:\"/\\\\|?*\\u0000-\\u001F]+[^<>:\"/\\\\|?*\\u0000-\\u001F .]$|^[^<>:\"/\\\\|?*\\u0000-\\u001F .]$"
+    },
+    "payload_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "payload_size": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "record_count": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "sequence": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "quality": {
+      "type": "object"
+    },
+    "metadata": {
+      "type": "object"
+    }
+  }
+}

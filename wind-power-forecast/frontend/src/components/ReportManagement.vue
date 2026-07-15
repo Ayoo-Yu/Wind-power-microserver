@@ -23,11 +23,14 @@
         <div class="card-header">
           <span><i class="el-icon-timer"></i> 自动上报调度器</span>
           <div class="scheduler-controls">
-            <el-tag :type="schedulerStatus.running ? 'success' : 'danger'" size="small">
-              {{ schedulerStatus.running ? '运行中' : '已停止' }}
+            <el-tag
+              :type="schedulerStatus.managed_externally ? 'info' : (schedulerStatus.running ? 'success' : 'danger')"
+              size="small"
+            >
+              {{ schedulerStatus.managed_externally ? 'Celery 托管' : (schedulerStatus.running ? '运行中' : '已停止') }}
             </el-tag>
             <el-button 
-              v-if="!schedulerStatus.running"
+              v-if="!schedulerStatus.managed_externally && !schedulerStatus.running"
               type="success" 
               size="small" 
               @click="startScheduler"
@@ -35,7 +38,7 @@
               <i class="el-icon-video-play"></i> 启动
             </el-button>
             <el-button 
-              v-else
+              v-else-if="!schedulerStatus.managed_externally"
               type="warning" 
               size="small" 
               @click="stopScheduler"
@@ -60,7 +63,7 @@
         </div>
         <div class="info-item">
           <span class="info-label">检查时间:</span>
-          <span class="info-value">每分钟第45秒</span>
+          <span class="info-value">{{ schedulerStatus.managed_externally ? '每分钟整分扫描' : '每分钟第45秒' }}</span>
         </div>
         <div class="info-item" v-if="schedulerStatus.next_report_times.length > 0">
           <span class="info-label">下次检查:</span>
@@ -68,9 +71,55 @@
         </div>
         <div class="info-item">
           <span class="info-label">状态说明:</span>
-          <span class="info-value">调度器在后端运行，前端关闭后仍会自动上报</span>
+          <span class="info-value">
+            {{ schedulerStatus.managed_externally
+              ? '由独立 Celery Beat 和 Worker 托管，Web 进程重启不影响调度职责'
+              : '兼容模式由后端单进程运行，前端关闭后仍会自动上报' }}
+          </span>
         </div>
       </div>
+    </el-card>
+
+    <el-card v-if="canManageReports" class="info-card outbox-status-card" shadow="hover">
+      <template #header>
+        <div class="card-header">
+          <span>可靠上报队列</span>
+          <el-button size="small" :loading="outboxLoading" @click="fetchOutboxStatus">刷新</el-button>
+        </div>
+      </template>
+      <div class="outbox-grid">
+        <div class="outbox-metric">
+          <span>待发送</span>
+          <strong>{{ outboxSummary.counts.pending || 0 }}</strong>
+        </div>
+        <div class="outbox-metric">
+          <span>发送中</span>
+          <strong>{{ outboxSummary.counts.processing || 0 }}</strong>
+        </div>
+        <div class="outbox-metric">
+          <span>等待重试</span>
+          <strong class="metric-warning">{{ outboxSummary.counts.retry || 0 }}</strong>
+        </div>
+        <div class="outbox-metric">
+          <span>死信</span>
+          <strong class="metric-danger">{{ outboxSummary.counts.dead || 0 }}</strong>
+        </div>
+        <div class="outbox-metric">
+          <span>最老积压</span>
+          <strong>{{ outboxSummary.oldest_active_age_seconds === null ? '--' : `${outboxSummary.oldest_active_age_seconds}s` }}</strong>
+        </div>
+      </div>
+      <el-table v-if="deadOutboxItems.length" :data="deadOutboxItems" size="small" class="dead-letter-table">
+        <el-table-column prop="farm_code" label="场站" width="100" />
+        <el-table-column prop="report_type" label="类型" width="130" />
+        <el-table-column prop="attempt_count" label="尝试" width="70" />
+        <el-table-column prop="last_error" label="失败原因" min-width="220" show-overflow-tooltip />
+        <el-table-column label="操作" width="90">
+          <template #default="scope">
+            <el-button link type="primary" @click="retryDeadLetter(scope.row.id)">重新投递</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
     </el-card>
 
     <!-- 主要内容区域 -->
@@ -967,6 +1016,9 @@ import {
   getReportSchedulerStatus,
   startReportScheduler,
   stopReportScheduler,
+  getReportOutboxSummary,
+  getReportOutboxItems,
+  retryReportOutboxItem,
   getReportLogs,
   createReportConfig,
   updateReportConfig,
@@ -1011,9 +1063,17 @@ export default {
     // 调度器状态
     const schedulerStatus = ref({
       running: false,
+      managed_externally: false,
+      mode: 'embedded',
       next_report_times: []
     })
     const schedulerLoading = ref(false)
+    const outboxLoading = ref(false)
+    const outboxSummary = ref({
+      counts: { pending: 0, processing: 0, retry: 0, sent: 0, dead: 0 },
+      oldest_active_age_seconds: null
+    })
+    const deadOutboxItems = ref([])
     
     // 上报数据质量统计
     const statsLoading = ref(false)
@@ -1445,6 +1505,47 @@ export default {
         ElMessage.error('刷新调度器状态失败')
       } finally {
         schedulerLoading.value = false
+      }
+    }
+
+    const fetchOutboxStatus = async () => {
+      if (outboxLoading.value) return
+      outboxLoading.value = true
+      try {
+        const [summaryResponse, deadResponse] = await Promise.all([
+          getReportOutboxSummary(),
+          getReportOutboxItems({ status: 'dead', limit: 5 })
+        ])
+        outboxSummary.value = summaryResponse.data
+        deadOutboxItems.value = deadResponse.data?.items || []
+      } catch (error) {
+        console.warn('可靠上报队列状态加载失败:', error?.message || error)
+      } finally {
+        outboxLoading.value = false
+      }
+    }
+
+    const retryDeadLetter = async (outboxId) => {
+      if (!ensureReportManagePermission()) return
+      try {
+        await ElMessageBox.confirm(
+          '该操作会将原始载荷再次发送到目标服务器，请确认下游能够按幂等键处理重复请求。',
+          '确认重新投递',
+          {
+            confirmButtonText: '确认投递',
+            cancelButtonText: '取消',
+            type: 'warning'
+          }
+        )
+      } catch (action) {
+        return
+      }
+      try {
+        await retryReportOutboxItem(outboxId)
+        ElMessage.success('死信任务已重新进入发送队列')
+        await fetchOutboxStatus()
+      } catch (error) {
+        ElMessage.error(error?.response?.data?.message || '重新投递失败')
       }
     }
 
@@ -2544,6 +2645,7 @@ export default {
     }
     
     let monitorTimer = null
+    let outboxTimer = null
 
     // 生命周期
     onMounted(async () => {
@@ -2555,11 +2657,17 @@ export default {
       await fetchConfigs()
       await fetchLogs()
       await fetchSchedulerStatus()
+      if (canManageReports.value) {
+        await fetchOutboxStatus()
+      }
       await fetchStatistics()
       await refreshRealtimeMonitor()
       monitorTimer = setInterval(() => {
         refreshRealtimeMonitor()
       }, 60 * 1000)
+      if (canManageReports.value) {
+        outboxTimer = setInterval(fetchOutboxStatus, 15 * 1000)
+      }
     })
 
     // 组件卸载时清理
@@ -2572,6 +2680,10 @@ export default {
       if (monitorTimer) {
         clearInterval(monitorTimer)
         monitorTimer = null
+      }
+      if (outboxTimer) {
+        clearInterval(outboxTimer)
+        outboxTimer = null
       }
     })
     
@@ -2669,10 +2781,14 @@ export default {
       configsLoading,
       logsLoading,
       selectedFarmId,
+      canManageReports,
       
       // 调度器相关
       schedulerStatus,
       schedulerLoading,
+      outboxLoading,
+      outboxSummary,
+      deadOutboxItems,
       
       // 上报数据质量统计
       statsLoading,
@@ -2734,6 +2850,8 @@ export default {
       startScheduler,
       stopScheduler,
       refreshSchedulerStatus,
+      fetchOutboxStatus,
+      retryDeadLetter,
       refreshRealtimeMonitor,
       retryMonitorTask,
       showAddConfigDialog,
@@ -3203,6 +3321,44 @@ export default {
 }
 
 /* 调度器状态卡片样式 */
+.outbox-status-card {
+  margin-bottom: 18px;
+}
+
+.outbox-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(110px, 1fr));
+  gap: 12px;
+}
+
+.outbox-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid rgba(18, 215, 255, 0.15);
+  border-radius: 8px;
+  background: rgba(10, 25, 38, 0.45);
+  color: var(--text-secondary);
+}
+
+.outbox-metric strong {
+  color: var(--text-primary);
+  font-size: 20px;
+}
+
+.outbox-metric .metric-warning {
+  color: #f6b73c;
+}
+
+.outbox-metric .metric-danger {
+  color: #ff5d73;
+}
+
+.dead-letter-table {
+  margin-top: 14px;
+}
+
 .scheduler-status-card {
   margin-bottom: 20px;
 }

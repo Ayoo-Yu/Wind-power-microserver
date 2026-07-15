@@ -1,6 +1,6 @@
 services:
   kingbase:
-    image: kingbase_v009r001c002b0014_single_x86:v1
+    image: ${DATABASE_IMAGE:-kingbase_v009r001c002b0014_single_x86:v1}
     container_name: wind-power-kingbase
     privileged: true
     environment:

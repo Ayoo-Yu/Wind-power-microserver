@@ -42,6 +42,18 @@ docker_cmd() {
     docker "$@"
 }
 
+find_package_file() {
+    local name="$1"
+    local candidate
+    for candidate in "$SCRIPT_DIR/../$name" "$SCRIPT_DIR/../../$name"; do
+        if [ -f "$candidate" ]; then
+            realpath "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
 is_wsl_windows_path() {
     [ -r /proc/version ] && grep -qi microsoft /proc/version && \
     [ "${SCRIPT_DIR#/mnt/}" != "$SCRIPT_DIR" ] && \
@@ -137,6 +149,14 @@ CELERY_BROKER_URL=redis://redis:6379/0
 CELERY_RESULT_BACKEND=redis://redis:6379/0
 SECRET_KEY=${SECRET_KEY}
 JWT_SECRET_KEY=${SECRET_KEY}
+DEPLOYMENT_MODE=${DEPLOYMENT_MODE:-field}
+SCADA_REALTIME_ENABLED=${SCADA_REALTIME_ENABLED:-false}
+NWP_INGESTION_ENABLED=${NWP_INGESTION_ENABLED:-false}
+PHYSICAL_SIMULATION_ENABLED=${PHYSICAL_SIMULATION_ENABLED:-false}
+REPORT_SCHEDULER_MODE=${REPORT_SCHEDULER_MODE:-celery}
+INTEGRATION_API_ENABLED=${INTEGRATION_API_ENABLED:-false}
+INTEGRATION_API_TOKEN=${INTEGRATION_API_TOKEN:-}
+INTEGRATION_SPOOL_DIR=/app/runtime/integration
 APP_HOST=0.0.0.0
 APP_PORT=5000
 EOF
@@ -197,7 +217,7 @@ import_seed_data() {
     local db_name="${DB_NAME:-windpower}"
     local db_user="${DB_USER:-system}"
     local ksql="/home/kingbase/install/kingbase/bin/ksql"
-    local dump_file="../03_seed_data.dump"
+    local dump_file
 
     # Check if data already exists (wind_farms table has rows)
     local count
@@ -210,9 +230,9 @@ import_seed_data() {
         return 0
     fi
 
-    if [ ! -f "$dump_file" ]; then
-        warn "Seed data file not found: $dump_file"
-        warn "Database will be empty. Copy 03_seed_data.dump to the deploy parent directory for auto-import."
+    if ! dump_file="$(find_package_file 03_seed_data.dump)"; then
+        warn "Seed data file not found in the release package."
+        warn "Database will be empty. Place 03_seed_data.dump beside the deploy directory or at the release root."
         return 0
     fi
 
@@ -267,6 +287,7 @@ create_dirs() {
     ensure_dir backend-data/data_etext/incoming
     ensure_dir backend-data/data_etext/csv
     ensure_dir backend-data/archives
+    ensure_dir backend-data/integration
 
     # Redis persistent data
     ensure_dir redis-data
@@ -313,7 +334,7 @@ copy_seed_dir() {
 }
 
 seed_model_assets() {
-    local image="wind-power-celery-worker:latest"
+    local image="${PREDICTION_IMAGE:-wind-power-celery-worker:latest}"
     local container="wind-power-model-seed"
 
     if ! docker_cmd image inspect "$image" >/dev/null 2>&1; then
@@ -334,21 +355,30 @@ seed_model_assets() {
 }
 
 do_install() {
+    local checksum_file
+    local database_archive
+    local prediction_archive
+
     info "=== Installing Wind Power Forecast System ==="
     check_docker
 
+    if checksum_file="$(find_package_file SHA256SUMS)"; then
+        info "Verifying offline release package..."
+        bash ./verify-release.sh "$(dirname "$checksum_file")"
+    fi
+
     # Load database image
-    if [ -f ../01_database.tar ]; then
+    if database_archive="$(find_package_file 01_database.tar)"; then
         info "Loading database image..."
-        docker load -i ../01_database.tar
+        docker load -i "$database_archive"
     else
         warn "01_database.tar not found, skipping database image"
     fi
 
     # Load prediction system image
-    if [ -f ../02_prediction_system.tar ]; then
+    if prediction_archive="$(find_package_file 02_prediction_system.tar)"; then
         info "Loading prediction system images..."
-        docker load -i ../02_prediction_system.tar
+        docker load -i "$prediction_archive"
     else
         warn "02_prediction_system.tar not found, skipping prediction system images"
     fi

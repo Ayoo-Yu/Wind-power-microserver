@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone, date
-import requests
+import os
 import json
 import logging
 from db_session import db_session
@@ -13,6 +13,12 @@ from models import (
 from db_models.report_config_meta import ReportConfigMeta
 from sqlalchemy import desc, and_, or_, func, distinct
 from routes.power_compare import _calc_basic_metrics
+from services.report_outbox_service import (
+    build_report_payload,
+    dispatch_one,
+    enqueue_report,
+    make_idempotency_key,
+)
 
 # 添加定时调度器
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -23,6 +29,7 @@ from threading import Lock
 # 创建调度器实例和锁
 report_scheduler = BackgroundScheduler(daemon=True)
 scheduler_lock = Lock()
+REPORT_SCHEDULER_MODE = os.environ.get('REPORT_SCHEDULER_MODE', 'embedded').lower()
 
 report_management_bp = Blueprint('report_management', __name__)
 
@@ -557,100 +564,56 @@ def manual_report():
                 else:
                     return jsonify({'error': f'未知的上报类型: {config.report_type}'}), 400
             
-            # 执行上报
             start_time = datetime.now()
-            try:
-                # 发送数据
-                response = send_report_data(config, data_to_send, farm.farm_code)
-                
-                # 记录成功日志
-                execution_time = (datetime.now() - start_time).total_seconds()
-                log = ReportLog(
-                    config_id=config.id,
-                    farm_code=farm.farm_code,
-                    report_type=config.report_type,
-                    data_count=len(data_to_send) if data_to_send else 0,
-                    data_completeness_rate=check_data_completeness(data_to_send, config.report_type),
-                    status='success',
-                    response_code=response.status_code,
-                    response_message=response.text[:500] if response.text else None,
-                    execution_time=execution_time
-                )
-                
-                # 更新最后上报时间
-                config.last_report_time = datetime.now()
-                
-                db.add(log)
-                db.commit()
-                
-                # 手动上报也更新质量统计
+            delivery = queue_report_data(
+                db,
+                config,
+                data_to_send,
+                farm.farm_code,
+                logical_time=start_time,
+                scope='manual',
+            )
+            execution_time = (datetime.now() - start_time).total_seconds()
+
+            if delivery['status'] == 'sent':
                 try:
-                    # 检查数据完整性和及时性
-                    data_completeness = check_data_completeness(data_to_send, config.report_type)
-                    
-                    # 获取数据时间戳用于及时性检查
-                    data_timestamp = None
-                    if data_to_send and len(data_to_send) > 0:
-                        if 'timestamp' in data_to_send[0]:
-                            try:
-                                if isinstance(data_to_send[0]['timestamp'], str):
-                                    if '+' in data_to_send[0]['timestamp']:
-                                        timestamp_str = data_to_send[0]['timestamp'].split('+')[0]
-                                    else:
-                                        timestamp_str = data_to_send[0]['timestamp'].replace('T', ' ').replace('Z', '')
-                                    data_timestamp = datetime.fromisoformat(timestamp_str)
-                                else:
-                                    data_timestamp = data_to_send[0]['timestamp']
-                            except:
-                                data_timestamp = None
-                    
-                    is_on_time = check_report_timeliness(start_time, data_timestamp)
-                    
                     with db_session() as stats_db:
-                        update_quality_statistics_async(stats_db, farm.farm_code, start_time, data_completeness, is_on_time, config.report_type)
-                        stats_db.commit()
+                        update_quality_statistics_async(
+                            stats_db,
+                            farm.farm_code,
+                            start_time,
+                            delivery['data_completeness'],
+                            delivery['is_on_time'],
+                            config.report_type,
+                        )
                 except Exception as stats_error:
                     logging.warning(f"手动上报质量统计更新失败: {stats_error}")
-                
                 return jsonify({
                     'status': 'success',
                     'message': '手动上报执行完成',
                     'data_count': len(data_to_send) if data_to_send else 0,
                     'execution_time': execution_time,
-                    'response_code': response.status_code,
-                    'custom_data_used': bool(custom_data)
+                    'response_code': delivery['response_code'],
+                    'outbox_id': delivery['outbox_id'],
+                    'custom_data_used': bool(custom_data),
                 })
-                
-            except Exception as e:
-                # 记录失败日志
-                execution_time = (datetime.now() - start_time).total_seconds()
-                log = ReportLog(
-                    config_id=config.id,
-                    farm_code=farm.farm_code,
-                    report_type=config.report_type,
-                    data_count=0,
-                    data_completeness_rate=0.0,
-                    status='failed',
-                    error_message=str(e)[:500],
-                    execution_time=execution_time
-                )
-                
-                db.add(log)
-                db.commit()
-                
-                # 失败时也更新统计
-                try:
-                    with db_session() as stats_db:
-                        update_quality_statistics_async(stats_db, farm.farm_code, start_time, 0.0, False, config.report_type)
-                        stats_db.commit()
-                except Exception as stats_error:
-                    logging.warning(f"手动上报失败统计更新失败: {stats_error}")
-                
+
+            if delivery['status'] == 'dead':
                 return jsonify({
                     'status': 'failed',
-                    'error': str(e),
-                    'execution_time': execution_time
-                }), 500
+                    'error': delivery['error'],
+                    'execution_time': execution_time,
+                    'outbox_id': delivery['outbox_id'],
+                }), 502
+
+            return jsonify({
+                'status': 'queued',
+                'message': '上报数据已可靠保存，将由后台继续重试',
+                'data_count': len(data_to_send) if data_to_send else 0,
+                'execution_time': execution_time,
+                'outbox_id': delivery['outbox_id'],
+                'custom_data_used': bool(custom_data),
+            }), 202
     
     except Exception as e:
         logging.error(f"手动上报失败: {str(e)}")
@@ -760,6 +723,8 @@ def execute_report(db: Session, config: ReportConfig):
     """执行具体的上报逻辑"""
     start_time = datetime.now()
     farm = db.query(WindFarm).filter(WindFarm.id == config.farm_id).first()
+    if not farm:
+        raise ValueError(f"找不到上报配置 {config.id} 对应的场站")
     
     try:
         # 根据上报类型获取数据，传入当前上报时间
@@ -786,66 +751,54 @@ def execute_report(db: Session, config: ReportConfig):
         else:
             raise ValueError(f"未知的上报类型: {config.report_type}")
         
-        # 检查数据完整性
-        data_completeness = check_data_completeness(data, config.report_type)
-        
-        # 发送数据
-        response = send_report_data(config, data, farm.farm_code)
-        
-        # 检查上报及时性（获取数据时间戳）
-        data_timestamp = None
-        if data and len(data) > 0:
-            # 尝试从数据中提取时间戳
-            if 'timestamp' in data[0]:
-                try:
-                    if isinstance(data[0]['timestamp'], str):
-                        # 处理ISO格式的时间字符串
-                        if '+' in data[0]['timestamp']:
-                            timestamp_str = data[0]['timestamp'].split('+')[0]
-                        else:
-                            timestamp_str = data[0]['timestamp'].replace('T', ' ').replace('Z', '')
-                        data_timestamp = datetime.fromisoformat(timestamp_str)
-                    else:
-                        data_timestamp = data[0]['timestamp']
-                except:
-                    data_timestamp = None
-        
-        is_on_time = check_report_timeliness(start_time, data_timestamp)
-        
-        # 记录成功日志
-        execution_time = (datetime.now() - start_time).total_seconds()
-        log = ReportLog(
-            config_id=config.id,
-            farm_code=farm.farm_code,
-            report_type=config.report_type,
-            data_count=len(data) if data else 0,
-            data_completeness_rate=data_completeness,
-            status='success',
-            response_code=response.status_code,
-            response_message=response.text[:500] if response.text else None,
-            execution_time=execution_time
+        delivery = queue_report_data(
+            db,
+            config,
+            data,
+            farm.farm_code,
+            logical_time=start_time,
+            scope='scheduled',
         )
-        
-        # 更新最后上报时间
-        config.last_report_time = datetime.now()
-        
-        db.add(log)
-        db.commit()
-        
-        # 在新的事务中更新质量统计（避免影响上报性能）
-        try:
-            with db_session() as stats_db:
-                update_quality_statistics_async(stats_db, farm.farm_code, start_time, data_completeness, is_on_time, config.report_type)
-                stats_db.commit()
-        except Exception as stats_error:
-            logging.warning(f"更新质量统计失败: {stats_error}")
-        
+        execution_time = (datetime.now() - start_time).total_seconds()
+
+        if delivery['status'] == 'sent':
+            try:
+                with db_session() as stats_db:
+                    update_quality_statistics_async(
+                        stats_db,
+                        farm.farm_code,
+                        start_time,
+                        delivery['data_completeness'],
+                        delivery['is_on_time'],
+                        config.report_type,
+                    )
+            except Exception as stats_error:
+                logging.warning(f"更新质量统计失败: {stats_error}")
+
+            return {
+                'status': 'success',
+                'data_count': len(data) if data else 0,
+                'execution_time': execution_time,
+                'data_completeness': delivery['data_completeness'],
+                'is_on_time': delivery['is_on_time'],
+                'outbox_id': delivery['outbox_id'],
+            }
+
+        if delivery['status'] == 'dead':
+            return {
+                'status': 'failed',
+                'error': delivery['error'],
+                'execution_time': execution_time,
+                'outbox_id': delivery['outbox_id'],
+            }
+
         return {
-            'status': 'success',
+            'status': 'queued',
+            'message': '上报数据已可靠保存，将由后台继续重试',
             'data_count': len(data) if data else 0,
             'execution_time': execution_time,
-            'data_completeness': data_completeness,
-            'is_on_time': is_on_time
+            'outbox_id': delivery['outbox_id'],
+            'delivery_status': delivery['status'],
         }
         
     except Exception as e:
@@ -1513,30 +1466,64 @@ def get_available_power_data(db: Session, report_time: datetime = None, farm_cod
             logging.warning(f"场站 {farm_code} 完全没有可用功率数据")
         return []
 
-def send_report_data(config: ReportConfig, data, farm_code: str):
-    """发送上报数据"""
-    # 使用配置中的target_path，如果没有则默认使用/receive-data
-    target_path = getattr(config, 'target_path', '/receive-data') or '/receive-data'
-    url = f"http://{config.target_ip}:{config.target_port}{target_path}"
-    
-    payload = {
-        'report_type': config.report_type,
-        'timestamp': datetime.now().isoformat(),
-        'farm_code': farm_code,
-        'data': data
-    }
-    
-    headers = {'Content-Type': 'application/json'}
-    
-    response = requests.post(
-        url,
-        json=payload,
-        headers=headers,
-        timeout=config.timeout_seconds
+def _extract_report_timestamp(data):
+    if not data or not isinstance(data, list) or not isinstance(data[0], dict):
+        return None
+    raw_timestamp = data[0].get('timestamp') or data[0].get('time')
+    if isinstance(raw_timestamp, datetime):
+        return raw_timestamp.replace(tzinfo=None) if raw_timestamp.tzinfo else raw_timestamp
+    if not isinstance(raw_timestamp, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw_timestamp.replace('Z', '+00:00'))
+        return parsed.replace(tzinfo=None) if parsed.tzinfo else parsed
+    except ValueError:
+        return None
+
+
+def queue_report_data(
+    db: Session,
+    config: ReportConfig,
+    data,
+    farm_code: str,
+    *,
+    logical_time: datetime,
+    scope: str,
+):
+    """先提交发件箱事务，再尝试一次即时发送。"""
+
+    data_completeness = check_data_completeness(data, config.report_type)
+    data_timestamp = _extract_report_timestamp(data)
+    is_on_time = check_report_timeliness(logical_time, data_timestamp)
+    payload = build_report_payload(config, data, farm_code)
+    idempotency_key = make_idempotency_key(
+        config_id=config.id,
+        farm_code=farm_code,
+        report_type=config.report_type,
+        logical_time=logical_time,
+        scope=scope,
     )
-    
-    response.raise_for_status()
-    return response
+    queued = enqueue_report(
+        db,
+        config=config,
+        farm_code=farm_code,
+        payload=payload,
+        idempotency_key=idempotency_key,
+        data_completeness_rate=data_completeness,
+        is_on_time=is_on_time,
+    )
+    # 此提交点保证网络发送发生前，完整载荷已持久化。
+    db.commit()
+    dispatched = dispatch_one(db_session, outbox_id=queued.outbox_id)
+    return {
+        'status': dispatched.status,
+        'outbox_id': queued.outbox_id,
+        'created': queued.created,
+        'data_completeness': data_completeness,
+        'is_on_time': is_on_time,
+        'response_code': dispatched.response_code,
+        'error': dispatched.error,
+    }
 
 def check_and_execute_scheduled_reports():
     """
@@ -1572,16 +1559,17 @@ def check_and_execute_scheduled_reports():
                             logging.info(f"Long-term forecast task {config_id} scheduled at {report_time} matches current time {current_time_str}")
                         else:
                             logging.debug(f"Long-term forecast task {config_id} scheduled at {report_time} does not match current time {current_time_str}")
-                    else:
-                        # 其他类型保持现有逻辑（15分钟间隔）
+                    elif now.minute in {14, 29, 44, 59}:
+                        # 其他类型固定在每个 15 分钟窗口执行一次。
                         unique_tasks.append(config_id)
                         
         logging.info(f"Found {len(unique_tasks)} unique tasks to process.")
     except Exception as e:
         logging.error(f"Error while fetching tasks for scheduler: {e}")
-        return
+        return {'status': 'failed', 'error': str(e), 'selected': 0, 'results': []}
 
     # 步骤2: 遍历去重后的任务列表，为每个任务开启独立的事务
+    execution_results = []
     for config_id in unique_tasks:
         try:
             # 为每个任务使用独立的事务和会话
@@ -1603,7 +1591,12 @@ def check_and_execute_scheduled_reports():
                 farm = db.query(WindFarm).filter(WindFarm.id == config.farm_id).first()
                 if farm:
                     logging.info(f"Processing report for farm '{farm.farm_name}' (config_id: {config.id}, type: {config.report_type})")
-                    execute_report(db, config)
+                    result = execute_report(db, config)
+                    execution_results.append({
+                        'config_id': config_id,
+                        'status': result.get('status'),
+                        'outbox_id': result.get('outbox_id'),
+                    })
                 else:
                     logging.error(f"Could not find farm for config_id {config.id}")
             
@@ -1613,6 +1606,17 @@ def check_and_execute_scheduled_reports():
             # 如果在处理单个任务时发生任何错误（包括获取锁超时），记录日志并继续下一个
             logging.error(f"Failed to execute report for config_id {config_id}. Error: {e}", exc_info=True)
             # 事务在此处自动回滚，锁被释放
+            execution_results.append({
+                'config_id': config_id,
+                'status': 'failed',
+                'error': str(e),
+            })
+
+    return {
+        'status': 'ok',
+        'selected': len(unique_tasks),
+        'results': execution_results,
+    }
 
 def start_report_scheduler():
     """启动上报调度器"""
@@ -1658,6 +1662,11 @@ def stop_report_scheduler():
 def start_scheduler():
     """启动上报调度器"""
     try:
+        if REPORT_SCHEDULER_MODE == 'celery':
+            return jsonify({
+                'message': '自动上报由 Celery Beat 托管，请通过服务管理工具操作',
+                'mode': 'celery',
+            }), 409
         if not report_scheduler.running:
             start_report_scheduler()
             return jsonify({'message': '上报调度器启动成功'})
@@ -1671,6 +1680,11 @@ def start_scheduler():
 def stop_scheduler():
     """停止上报调度器"""
     try:
+        if REPORT_SCHEDULER_MODE == 'celery':
+            return jsonify({
+                'message': '自动上报由 Celery Beat 托管，请通过服务管理工具操作',
+                'mode': 'celery',
+            }), 409
         stop_report_scheduler()
         return jsonify({'message': '上报调度器已停止'})
     except Exception as e:
@@ -1682,7 +1696,10 @@ def get_scheduler_status():
     """获取调度器状态"""
     try:
         status = {
-            'running': report_scheduler.running if report_scheduler else False,
+            'running': report_scheduler.running if REPORT_SCHEDULER_MODE == 'embedded' else None,
+            'configured': True,
+            'mode': REPORT_SCHEDULER_MODE,
+            'managed_externally': REPORT_SCHEDULER_MODE == 'celery',
             'next_report_times': get_next_report_times()
         }
         return jsonify(status)
@@ -1693,6 +1710,10 @@ def get_scheduler_status():
 def get_next_report_times():
     """获取接下来的调度检查时间点"""
     now = datetime.now()
+
+    if REPORT_SCHEDULER_MODE == 'celery':
+        next_time = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
+        return [next_time.strftime('%H:%M:%S')]
     
     # 调度器每分钟的45秒检查
     if now.second < 45:
@@ -2611,11 +2632,14 @@ def update_daily_statistics(db: Session, farm_code: str, date: str):
         logging.error(f"更新{farm_code}在{date}的统计数据失败: {str(e)}")
         return {'success': False, 'error': str(e)}
 
-# 在模块加载时自动启动调度器
-try:
-    start_report_scheduler()
-except Exception as e:
-    logging.error(f"自动启动上报调度器失败: {str(e)}")
+# 兼容模式允许单进程开发环境继续使用内嵌调度器。
+if REPORT_SCHEDULER_MODE == 'embedded':
+    try:
+        start_report_scheduler()
+    except Exception as e:
+        logging.error(f"自动启动上报调度器失败: {str(e)}")
+else:
+    logging.info("自动上报调度由 Celery Beat 托管，Web 进程不启动内嵌调度器")
 
 @report_management_bp.route('/statistics/test-update', methods=['POST'])
 def test_statistics_update():

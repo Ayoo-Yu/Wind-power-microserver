@@ -104,6 +104,16 @@
         </div>
 
         <div class="header-right">
+          <el-tooltip
+            v-if="capabilityIssues.length"
+            :content="capabilityIssueText"
+            placement="bottom"
+          >
+            <div class="capability-chip">
+              {{ capabilityIssues.length }} 项能力待接入
+            </div>
+          </el-tooltip>
+
           <el-badge v-if="canViewAlerts" :value="alertCount" :max="99" class="alert-badge">
             <el-button class="alert-btn" text @click="goAlerts">
               <el-icon><Bell /></el-icon>
@@ -169,6 +179,7 @@ import {
 } from '@element-plus/icons-vue'
 import FarmSelector from './FarmSelector.vue'
 import farmService from '../utils/farmService'
+import { getCapabilities } from '../api/capabilityApi'
 
 export default {
   name: 'AppLayout',
@@ -200,6 +211,7 @@ export default {
     const systemTime = ref('')
     const alertCount = ref(0)
     const dbUnavailable = ref(dbState.unavailable)
+    const capabilities = ref([])
     let timeTicker = null
 
     const unsubscribeDb = dbState.onChange((val) => { dbUnavailable.value = val })
@@ -224,6 +236,24 @@ export default {
         .map(r => r.name)
     )
     const canViewAlerts = computed(() => hasPermission('view_alarm_center') || hasPermission('manage_reports'))
+    const capabilityIssues = computed(() =>
+      capabilities.value.filter(item => item.availability !== 'available')
+    )
+    const capabilityIssueText = computed(() =>
+      capabilityIssues.value.map(item => `${item.name}: ${item.reason}`).join('；')
+    )
+
+    const fetchCapabilities = async () => {
+      try {
+        const response = await getCapabilities()
+        capabilities.value = response?.data?.capabilities || []
+      } catch (error) {
+        capabilities.value = []
+        console.warn('系统能力清单加载失败:', error?.message || error)
+      }
+    }
+
+    provide('capabilities', capabilities)
 
     const userInitial = computed(() => {
       const userStr = localStorage.getItem('user')
@@ -351,6 +381,7 @@ export default {
       refreshSystemTime()
       timeTicker = setInterval(refreshSystemTime, 1000)
       fetchCurrentUser()
+      fetchCapabilities()
     })
 
     onUnmounted(() => {
@@ -379,7 +410,9 @@ export default {
       handleFarmChanged,
       hasPermission,
       isAuthReady,
-      isAuthLoading
+      isAuthLoading,
+      capabilityIssues,
+      capabilityIssueText
     }
   }
 }
@@ -555,6 +588,16 @@ export default {
   background: rgba(10, 25, 38, 0.6);
   color: var(--text-secondary);
   font-size: 12px;
+}
+
+.capability-chip {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(246, 183, 60, 0.5);
+  background: rgba(246, 183, 60, 0.12);
+  color: #f6c453;
+  font-size: 12px;
+  cursor: help;
 }
 
 .time-dot {

@@ -32,10 +32,20 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - API_BASE_URL=http://backend:5000
+      - DEPLOYMENT_MODE=${DEPLOYMENT_MODE:-field}
+      - SCADA_REALTIME_ENABLED=${SCADA_REALTIME_ENABLED:-false}
+      - NWP_INGESTION_ENABLED=${NWP_INGESTION_ENABLED:-false}
+      - PHYSICAL_SIMULATION_ENABLED=${PHYSICAL_SIMULATION_ENABLED:-false}
+      - REPORT_SCHEDULER_MODE=${REPORT_SCHEDULER_MODE:-celery}
+      - INTEGRATION_API_ENABLED=${INTEGRATION_API_ENABLED:-false}
+      - INTEGRATION_API_TOKEN=${INTEGRATION_API_TOKEN:-}
+      - INTEGRATION_SPOOL_DIR=/app/runtime/integration
     networks:
       - wind-power-network
     # No depends_on for kingbase: backend starts independently and auto-reconnects.
     restart: unless-stopped
+    volumes:
+      - ./backend/runtime/integration:/app/runtime/integration
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
@@ -112,6 +122,7 @@ services:
       - API_BASE_URL=http://backend:5000
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - REPORT_SCHEDULER_MODE=${REPORT_SCHEDULER_MODE:-celery}
     networks:
       - wind-power-network
     depends_on:
@@ -160,6 +171,7 @@ services:
       - REDIS_PORT=6379
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - REPORT_SCHEDULER_MODE=${REPORT_SCHEDULER_MODE:-celery}
     networks:
       - wind-power-network
     depends_on:

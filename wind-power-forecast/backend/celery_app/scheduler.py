@@ -19,6 +19,17 @@ DEFAULT_SCHEDULES = {
 
 SCHEDULE_RELOAD_INTERVAL_SEC = int(os.environ.get("CELERY_BEAT_RELOAD_INTERVAL_SEC", "60"))
 
+STATIC_SCHEDULES = {
+    "report_outbox_dispatch": {
+        "task": "celery_app.tasks.process_report_outbox",
+        "schedule": float(os.environ.get("REPORT_OUTBOX_POLL_INTERVAL_SEC", "10")),
+    },
+    "report_schedule_scan": {
+        "task": "celery_app.tasks.scan_scheduled_reports",
+        "schedule": crontab(minute="*"),
+    },
+}
+
 
 def _parse_hhmm(value: str, fallback: str) -> tuple[int, int]:
     raw = value or fallback
@@ -40,72 +51,85 @@ def _parse_day_of_week(value):
 
 
 def build_beat_schedule():
-    schedule = {}
-    with db_session() as session:
-        tasks = session.query(PredictionTask).filter_by(enabled=True).all()
-        for t in tasks:
-            fc = t.farm_code
-            tt = t.task_type
-            dow = _parse_day_of_week(getattr(t, "train_day_of_week", None))
-
-            if tt == "supershort":
-                schedule[f"{fc}_supershort_predict"] = {
-                    "task": "celery_app.tasks.run_supershort_predict",
-                    "args": (fc,),
-                    "schedule": crontab(minute="14,29,44,59"),
-                }
-                h, m = _parse_hhmm(
-                    t.train_schedule,
-                    DEFAULT_SCHEDULES["supershort"]["train"],
-                )
-                schedule[f"{fc}_supershort_train"] = {
-                    "task": "celery_app.tasks.train_model",
-                    "args": (fc, "supershort"),
-                    "schedule": crontab(minute=m, hour=h, day_of_week=dow),
-                }
-                ch, cm = _parse_hhmm(
-                    getattr(t, "calibrate_schedule", None),
-                    DEFAULT_SCHEDULES["supershort"].get("calibrate", "04:33"),
-                )
-                schedule[f"{fc}_supershort_calibrate"] = {
-                    "task": "celery_app.tasks.run_calibration",
-                    "args": (fc, "supershort"),
-                    "schedule": crontab(minute=cm, hour=ch, day_of_week=dow),
-                }
-            else:
-                h, m = _parse_hhmm(t.train_schedule, DEFAULT_SCHEDULES[tt]["train"])
-                schedule[f"{fc}_{tt}_train"] = {
-                    "task": "celery_app.tasks.train_model",
-                    "args": (fc, tt),
-                    "schedule": crontab(minute=m, hour=h, day_of_week=dow),
-                }
-
-                ph, pm = _parse_hhmm(t.predict_schedule, DEFAULT_SCHEDULES[tt]["predict"])
-                schedule[f"{fc}_{tt}_predict"] = {
-                    "task": "celery_app.tasks.run_prediction",
-                    "args": (fc, tt),
-                    "schedule": crontab(minute=pm, hour=ph),
-                }
-
-                ch, cm = _parse_hhmm(
-                    getattr(t, "calibrate_schedule", None),
-                    DEFAULT_SCHEDULES[tt].get("calibrate", "03:03"),
-                )
-                schedule[f"{fc}_{tt}_calibrate"] = {
-                    "task": "celery_app.tasks.run_calibration",
-                    "args": (fc, tt),
-                    "schedule": crontab(minute=cm, hour=ch, day_of_week=dow),
-                }
+    # 可靠上报恢复任务不能依赖预测任务表是否可用。
+    schedule = dict(STATIC_SCHEDULES)
+    try:
+        with db_session() as session:
+            tasks = session.query(PredictionTask).filter_by(enabled=True).all()
+            for t in tasks:
+                _add_prediction_schedules(schedule, t)
+    except Exception:
+        logger.exception("Failed to load prediction schedules, keeping static schedules active")
     return schedule
 
 
+def _add_prediction_schedules(schedule, task):
+    t = task
+    fc = t.farm_code
+    tt = t.task_type
+    dow = _parse_day_of_week(getattr(t, "train_day_of_week", None))
+
+    if tt == "supershort":
+        schedule[f"{fc}_supershort_predict"] = {
+            "task": "celery_app.tasks.run_supershort_predict",
+            "args": (fc,),
+            "schedule": crontab(minute="14,29,44,59"),
+        }
+        h, m = _parse_hhmm(
+            t.train_schedule,
+            DEFAULT_SCHEDULES["supershort"]["train"],
+        )
+        schedule[f"{fc}_supershort_train"] = {
+            "task": "celery_app.tasks.train_model",
+            "args": (fc, "supershort"),
+            "schedule": crontab(minute=m, hour=h, day_of_week=dow),
+        }
+        ch, cm = _parse_hhmm(
+            getattr(t, "calibrate_schedule", None),
+            DEFAULT_SCHEDULES["supershort"].get("calibrate", "04:33"),
+        )
+        schedule[f"{fc}_supershort_calibrate"] = {
+            "task": "celery_app.tasks.run_calibration",
+            "args": (fc, "supershort"),
+            "schedule": crontab(minute=cm, hour=ch, day_of_week=dow),
+        }
+    else:
+        h, m = _parse_hhmm(t.train_schedule, DEFAULT_SCHEDULES[tt]["train"])
+        schedule[f"{fc}_{tt}_train"] = {
+            "task": "celery_app.tasks.train_model",
+            "args": (fc, tt),
+            "schedule": crontab(minute=m, hour=h, day_of_week=dow),
+        }
+
+        ph, pm = _parse_hhmm(t.predict_schedule, DEFAULT_SCHEDULES[tt]["predict"])
+        schedule[f"{fc}_{tt}_predict"] = {
+            "task": "celery_app.tasks.run_prediction",
+            "args": (fc, tt),
+            "schedule": crontab(minute=pm, hour=ph),
+        }
+
+        ch, cm = _parse_hhmm(
+            getattr(t, "calibrate_schedule", None),
+            DEFAULT_SCHEDULES[tt].get("calibrate", "03:03"),
+        )
+        schedule[f"{fc}_{tt}_calibrate"] = {
+            "task": "celery_app.tasks.run_calibration",
+            "args": (fc, tt),
+            "schedule": crontab(minute=cm, hour=ch, day_of_week=dow),
+        }
+
+
 def get_schedule_revision():
-    with db_session() as session:
-        row = session.query(
-            func.count(PredictionTask.id),
-            func.max(PredictionTask.updated_at),
-        ).one()
-        return row[0], row[1].isoformat() if row[1] else None
+    try:
+        with db_session() as session:
+            row = session.query(
+                func.count(PredictionTask.id),
+                func.max(PredictionTask.updated_at),
+            ).one()
+            return row[0], row[1].isoformat() if row[1] else None
+    except Exception:
+        logger.exception("Failed to read prediction schedule revision")
+        return "database-unavailable", None
 
 
 class DatabaseScheduler(PersistentScheduler):

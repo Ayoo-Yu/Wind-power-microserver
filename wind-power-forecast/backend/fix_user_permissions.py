@@ -82,6 +82,7 @@ def fix_user_permissions():
                                     "train_models",
                                     "run_predictions",
                                     "configure_system",
+                                    "manage_reports",
                                     "view_dashboard",
                                     "manage_tasks"
                                 ]
@@ -123,4 +124,4 @@ if __name__ == "__main__":
     if fix_user_permissions():
         logger.info("用户权限修复成功")
     else:
-        logger.error("用户权限修复失败") 
+        logger.error("用户权限修复失败")

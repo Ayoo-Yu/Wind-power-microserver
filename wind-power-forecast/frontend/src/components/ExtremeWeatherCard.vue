@@ -20,37 +20,38 @@ import farmService from '@/utils/farmService'
 import { getWeatherStatus } from '@/api/extremeWeatherApi'
 
 const SEVERITY_MAP = {
+  unknown: { icon: 'QuestionFilled', label: '数据未接入', cls: 'severity-unknown' },
   normal: { icon: 'Sunny', label: '正常', cls: 'severity-normal' },
   info: { icon: 'WarningFilled', label: '注意', cls: 'severity-info' },
   warning: { icon: 'Warning', label: '预警', cls: 'severity-warning' },
   danger: { icon: 'CircleCloseFilled', label: '警报', cls: 'severity-danger' }
 }
 
-import { Sunny, WarningFilled, Warning, CircleCloseFilled } from '@element-plus/icons-vue'
+import { Sunny, WarningFilled, Warning, CircleCloseFilled, QuestionFilled } from '@element-plus/icons-vue'
 
-const ICON_COMPONENTS = { Sunny, WarningFilled, Warning, CircleCloseFilled }
+const ICON_COMPONENTS = { Sunny, WarningFilled, Warning, CircleCloseFilled, QuestionFilled }
 
 const router = useRouter()
 
-const severity = ref('normal')
-const statusMessage = ref('')
+const severity = ref('unknown')
+const statusMessage = ref('正在检查实时天气数据源')
 
 let farmListener = null
 
 const severityClass = computed(() => {
   const entry = SEVERITY_MAP[severity.value]
-  return entry ? entry.cls : 'severity-normal'
+  return entry ? entry.cls : 'severity-unknown'
 })
 
 const statusIcon = computed(() => {
   const entry = SEVERITY_MAP[severity.value]
-  const iconName = entry ? entry.icon : 'Sunny'
-  return ICON_COMPONENTS[iconName] || Sunny
+  const iconName = entry ? entry.icon : 'QuestionFilled'
+  return ICON_COMPONENTS[iconName] || QuestionFilled
 })
 
 const statusLabel = computed(() => {
   const entry = SEVERITY_MAP[severity.value]
-  return entry ? entry.label : '正常'
+  return entry ? entry.label : '数据未接入'
 })
 
 async function fetchStatus() {
@@ -59,18 +60,21 @@ async function fetchStatus() {
     const response = await getWeatherStatus(farmCode)
     const data = response?.data?.data || response?.data || {}
     const condition = data.current_condition || {}
-    severity.value = condition.severity || 'normal'
-    statusMessage.value = condition.type && condition.type !== 'normal'
-      ? `${condition.type}`
-      : ''
+    if (data.data_available === false || condition.type === 'unknown') {
+      severity.value = 'unknown'
+      statusMessage.value = data.message || '实时天气数据源尚未接入'
+      return
+    }
+    severity.value = condition.severity || 'unknown'
+    statusMessage.value = condition.type && condition.type !== 'normal' ? `${condition.type}` : ''
   } catch {
-    severity.value = 'normal'
-    statusMessage.value = ''
+    severity.value = 'unknown'
+    statusMessage.value = '天气状态接口不可用'
   }
 }
 
 function goToAlarm() {
-  router.push('/alarm')
+  router.push('/alarm-center')
 }
 
 onMounted(async () => {
@@ -136,16 +140,19 @@ onBeforeUnmount(() => {
 
 /* Severity colors */
 .severity-normal { color: #2dd36f; }
+.severity-unknown { color: #94a3b8; }
 .severity-info { color: #f6b73c; }
 .severity-warning { color: #ff9f43; }
 .severity-danger { color: #ff5d73; animation: pulse-danger 1.4s ease-in-out infinite; }
 
 .ew-icon.severity-normal { color: #2dd36f; filter: drop-shadow(0 0 6px rgba(45, 211, 111, 0.4)); }
+.ew-icon.severity-unknown { color: #94a3b8; }
 .ew-icon.severity-info { color: #f6b73c; filter: drop-shadow(0 0 6px rgba(246, 183, 60, 0.4)); }
 .ew-icon.severity-warning { color: #ff9f43; filter: drop-shadow(0 0 6px rgba(255, 159, 67, 0.4)); }
 .ew-icon.severity-danger { color: #ff5d73; filter: drop-shadow(0 0 6px rgba(255, 93, 115, 0.5)); }
 
 .extreme-weather-card.severity-normal { border-left: 3px solid #2dd36f; }
+.extreme-weather-card.severity-unknown { border-left: 3px solid #94a3b8; }
 .extreme-weather-card.severity-info { border-left: 3px solid #f6b73c; }
 .extreme-weather-card.severity-warning { border-left: 3px solid #ff9f43; }
 .extreme-weather-card.severity-danger { border-left: 3px solid #ff5d73; }

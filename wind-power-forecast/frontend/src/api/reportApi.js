@@ -51,6 +51,19 @@ export function stopReportScheduler() {
   )
 }
 
+export function getReportOutboxSummary() {
+  return axiosInstance.get('/api/v1/report-outbox/summary', { _silent: true })
+}
+
+export function getReportOutboxItems(params = {}) {
+  return axiosInstance.get('/api/v1/report-outbox/items', { params, _silent: true })
+}
+
+export function retryReportOutboxItem(outboxId) {
+  const safeId = encodeURIComponent(String(outboxId))
+  return axiosInstance.post(`/api/v1/report-outbox/items/${safeId}/retry`)
+}
+
 export function getReportLogs(params = {}) {
   return withLegacyFallback(
     () => axiosInstance.get('/api/v1/report/logs', { params, _silent: true }),
