@@ -21,6 +21,7 @@ const PowerCurveAnalysis = () => import('../components/PowerCurveAnalysis.vue')
 const ScadaConnection = () => import('../components/ScadaConnection.vue')
 const DataPopulation = () => import('../views/DataPopulation.vue')
 const DatabaseGovernance = () => import('../components/DatabaseGovernance.vue')
+const OperationsCenter = () => import('../components/OperationsCenter.vue')
 
 const routes = [
   {
@@ -106,6 +107,12 @@ const routes = [
         name: 'ScadaConnection',
         component: ScadaConnection,
         meta: { requiredPermissions: ['manage_system_settings'], keepAlive: true }
+      },
+      {
+        path: 'operations-center',
+        name: 'OperationsCenter',
+        component: OperationsCenter,
+        meta: { requiredPermissions: ['view_alarm_center'], keepAlive: true }
       },
       {
         path: 'alarm-center',

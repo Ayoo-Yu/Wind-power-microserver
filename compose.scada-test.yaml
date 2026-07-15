@@ -85,6 +85,35 @@ services:
       retries: 20
       start_period: 3s
 
+  nwp-simulator:
+    <<: [*testbed-image, *testbed-runtime]
+    command: ["python3", "-m", "scada_testbed.nwp_simulator"]
+    environment:
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      TZ: Asia/Shanghai
+      SCADA_CATALOG_PATH: /app/config/point-catalog.json
+      NWP_OUTPUT_ROOT: /artifacts/nwp-inbox
+      NWP_CONTROL_PORT: "8084"
+      NWP_UPDATE_INTERVAL_SECONDS: ${NWP_TEST_UPDATE_INTERVAL_SECONDS:-60}
+      NWP_HORIZON_STEPS: ${NWP_TEST_HORIZON_STEPS:-96}
+      NWP_SCENARIO: ${NWP_TEST_SCENARIO:-normal}
+    ports:
+      - "127.0.0.1:${NWP_TEST_CONTROL_PORT:-18084}:8084"
+    networks:
+      - field-simulation
+      - test-control
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8084/ready', timeout=2)
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 3s
+
   mock-ingress:
     <<: [*testbed-image, *testbed-runtime]
     profiles: ["acceptance"]
@@ -149,6 +178,7 @@ services:
       SCADA_SIMULATOR_CONTROL_URL: http://scada-simulator:8080
       SCADA_PROXY_CONTROL_URL: http://fault-proxy:8081
       SCADA_MOCK_INGRESS_URL: http://mock-ingress:8090
+      NWP_SIMULATOR_CONTROL_URL: http://nwp-simulator:8084
       SCADA_PROBE_HOST: fault-proxy
       SCADA_PROBE_PORT: "2405"
       SCADA_ACCEPTANCE_REPORT: /artifacts/acceptance-report.json
@@ -164,6 +194,8 @@ services:
       fault-proxy:
         condition: service_healthy
       mock-ingress:
+        condition: service_healthy
+      nwp-simulator:
         condition: service_healthy
       worker-harness:
         condition: service_started

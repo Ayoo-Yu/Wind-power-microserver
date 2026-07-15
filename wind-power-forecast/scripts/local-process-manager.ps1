@@ -4,7 +4,7 @@ param(
     [string]$Action,
 
     [Parameter(Mandatory = $true)]
-    [ValidateSet("backend", "worker", "beat", "frontend", "all")]
+    [ValidateSet("backend", "worker", "beat", "scada-manager", "integration", "frontend", "all")]
     [string]$Service
 )
 
@@ -65,6 +65,24 @@ function Start-LocalService {
             $Arguments = @("-m", "celery", "-A", "celery_app.celery_app", "beat", "--loglevel=info")
             $WorkingDirectory = $BackendDir
         }
+        "integration" {
+            $Executable = $env:MAIN_PY
+            $Arguments = @(
+                "-m", "integration.processor",
+                "--spool", $env:INTEGRATION_SPOOL_DIR,
+                "--nwp-input-root", $env:NWP_INPUT_ROOT,
+                "--nwp-farm-codes", $env:NWP_FARM_CODES,
+                "--source", "development.nwp"
+            )
+            $WorkingDirectory = $BackendDir
+            $WindowStyle = "Hidden"
+        }
+        "scada-manager" {
+            $Executable = $env:MAIN_PY
+            $Arguments = @("scada_manager_main.py")
+            $WorkingDirectory = $BackendDir
+            $WindowStyle = "Hidden"
+        }
         "frontend" {
             $PackageFile = Join-Path $FrontendDir "package.json"
             $VueCli = Join-Path $FrontendDir "node_modules\.bin\vue-cli-service.cmd"
@@ -87,11 +105,15 @@ function Start-LocalService {
         throw "Executable was not found for service '$Name': $Executable"
     }
 
+    if (-not $WindowStyle) {
+        $WindowStyle = "Normal"
+    }
+
     $Process = Start-Process `
         -FilePath $Executable `
         -ArgumentList $Arguments `
         -WorkingDirectory $WorkingDirectory `
-        -WindowStyle Normal `
+        -WindowStyle $WindowStyle `
         -PassThru
 
     Start-Sleep -Milliseconds 500
@@ -115,7 +137,7 @@ if ($Action -eq "start") {
 }
 
 if ($Service -eq "all") {
-    foreach ($Name in @("frontend", "beat", "worker", "backend")) {
+    foreach ($Name in @("frontend", "integration", "scada-manager", "beat", "worker", "backend")) {
         Stop-LocalService -Name $Name
     }
 }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import os
 import sys
@@ -72,6 +73,9 @@ class AcceptanceSuite:
         self.ingress_url = os.environ.get(
             "SCADA_MOCK_INGRESS_URL", "http://mock-ingress:8090"
         ).rstrip("/")
+        self.nwp_url = os.environ.get(
+            "NWP_SIMULATOR_CONTROL_URL", "http://nwp-simulator:8084"
+        ).rstrip("/")
         self.proxy_host = os.environ.get("SCADA_PROBE_HOST", "fault-proxy")
         self.proxy_port = int(os.environ.get("SCADA_PROBE_PORT", "2405"))
         self.catalog = load_json(
@@ -127,7 +131,13 @@ class AcceptanceSuite:
             lambda value: value.get("status") == "healthy",
             20,
         )
-        return {"simulator": simulator, "proxy": proxy, "ingress": ingress}
+        nwp = wait_for(
+            "NWP 仿真器就绪",
+            lambda: request_json("GET", f"{self.nwp_url}/ready"),
+            lambda value: value.get("ready") is True,
+            20,
+        )
+        return {"simulator": simulator, "proxy": proxy, "ingress": ingress, "nwp": nwp}
 
     def normal_protocol(self) -> dict[str, Any]:
         request_json("POST", f"{self.proxy_url}/reset", {})
@@ -152,17 +162,86 @@ class AcceptanceSuite:
     def production_worker_path(self) -> dict[str, Any]:
         request_json("POST", f"{self.ingress_url}/reset", {})
         expected_farms = sorted(farm["farm_code"] for farm in self.catalog["farms"])
+        expected_metrics = sorted({
+            point["metric"]
+            for farm in self.catalog["farms"]
+            for point in farm["points"]
+        })
+
+        def worker_snapshot() -> dict[str, Any]:
+            stats = request_json("GET", f"{self.ingress_url}/stats")
+            events = request_json("GET", f"{self.ingress_url}/events?limit=2000").get("events", [])
+            metrics_by_farm = {
+                farm_code: sorted({
+                    str(event.get("metric"))
+                    for event in events
+                    if event.get("farm_code") == farm_code
+                })
+                for farm_code in expected_farms
+            }
+            return {**stats, "metrics_by_farm": metrics_by_farm}
+
         stats = wait_for(
-            "真实 scada_worker 上送全部场站",
-            lambda: request_json("GET", f"{self.ingress_url}/stats"),
-            lambda value: value.get("farm_codes") == expected_farms,
+            "真实 scada_worker 上送全部场站和五类指标",
+            worker_snapshot,
+            lambda value: (
+                value.get("farm_codes") == expected_farms
+                and all(
+                    value.get("metrics_by_farm", {}).get(farm_code) == expected_metrics
+                    for farm_code in expected_farms
+                )
+            ),
             25,
             0.5,
         )
         return {
             "farm_codes": stats["farm_codes"],
+            "metrics": expected_metrics,
             "deliveries": stats["deliveries"],
             "worker_count": len(stats.get("worker_status", {})),
+        }
+
+    @staticmethod
+    def _read_nwp_rows(file_path: str) -> list[dict[str, str]]:
+        with Path(file_path).open("r", encoding="utf-8", newline="") as handle:
+            return list(csv.DictReader(handle))
+
+    def nwp_packages(self) -> dict[str, Any]:
+        request_json("POST", f"{self.nwp_url}/scenario", {"name": "normal"})
+        normal = request_json("POST", f"{self.nwp_url}/generate", {})
+        files = normal.get("files") or []
+        if len(files) != len(self.catalog["farms"]):
+            raise RuntimeError("NWP 正常场景没有为全部场站生成文件")
+        expected_rows = int(normal["horizon_steps"]) * 4
+        for file_path in files:
+            rows = self._read_nwp_rows(file_path)
+            if len(rows) != expected_rows:
+                raise RuntimeError(f"NWP 文件行数不符: {file_path}")
+            required = {"forecast_source", "forecast_time", "100u", "100v", "2t", "sp"}
+            if not rows or not required.issubset(rows[0]):
+                raise RuntimeError(f"NWP 文件字段不完整: {file_path}")
+
+        request_json("POST", f"{self.nwp_url}/scenario", {"name": "missing"})
+        missing = request_json("POST", f"{self.nwp_url}/generate", {})
+        missing_rows = self._read_nwp_rows(missing["files"][0])
+        if not any(row.get("100u") == "" for row in missing_rows):
+            raise RuntimeError("NWP 缺失值场景没有注入空值")
+
+        request_json("POST", f"{self.nwp_url}/scenario", {"name": "malformed"})
+        malformed = request_json("POST", f"{self.nwp_url}/generate", {})
+        malformed_rows = self._read_nwp_rows(malformed["files"][0])
+        if not any(row.get("forecast_time") == "invalid-time" for row in malformed_rows):
+            raise RuntimeError("NWP 非法时间场景没有注入异常值")
+
+        request_json("POST", f"{self.nwp_url}/scenario", {"name": "stale"})
+        stale = request_json("POST", f"{self.nwp_url}/generate", {})
+        if stale.get("files"):
+            raise RuntimeError("NWP 陈旧场景仍生成了新文件")
+        request_json("POST", f"{self.nwp_url}/scenario", {"name": "normal"})
+        return {
+            "farm_files": len(files),
+            "rows_per_file": expected_rows,
+            "scenarios": ["normal", "missing", "malformed", "stale"],
         }
 
     def invalid_quality(self) -> dict[str, Any]:
@@ -261,11 +340,16 @@ class AcceptanceSuite:
             request_json("POST", f"{self.simulator_url}/scenario", {"name": "normal"})
         except Exception:
             pass
+        try:
+            request_json("POST", f"{self.nwp_url}/scenario", {"name": "normal"})
+        except Exception:
+            pass
 
     def run(self) -> int:
         self.record("服务与控制面就绪", self.readiness)
         self.record("C104 点表和正常质量码", self.normal_protocol)
         self.record("真实 scada_worker 端到端上送", self.production_worker_path)
+        self.record("NWP 多场站文件与故障场景", self.nwp_packages)
         self.record("无效质量码注入", self.invalid_quality)
         self.record("链路延迟注入", self.latency_fault)
         self.record("断线后的自动重连", self.reconnect_after_outage)

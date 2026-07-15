@@ -40,6 +40,7 @@ from .features import TrainPreShort, TrainPreMiddle
 from .prediction_task import PredictionTask
 from .prediction_run import PredictionRun
 from .model_version import ModelVersion
+from .data_lineage import IngestionBatch, SourceObservation, PredictionInputSnapshot
 # ECMWF 格点数据工具 (每场独立表)
 from .ecmwf_grid_model import (
     ecmwf_grid_table_name,
@@ -79,4 +80,5 @@ __all__ = [
     'TaskHistory',
     # 自动预测模型
     'PredictionTask', 'PredictionRun', 'ModelVersion',
+    'IngestionBatch', 'SourceObservation', 'PredictionInputSnapshot',
 ] 

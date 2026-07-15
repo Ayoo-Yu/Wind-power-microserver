@@ -2,15 +2,32 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Mapping
 
 from db_models.power import ActualPower
+from db_models.data_lineage import SourceObservation
+from db_models.operational_data import (
+    AvailableCapacityData,
+    AvailablePowerData,
+    TheoreticalPowerData,
+    WeatherData,
+)
 from db_models.report_config import WindFarm
 from db_models.scada_connection import ScadaConnection
 from db_models.scada_ingest_record import ScadaIngestRecord
+from services.scada_contract import (
+    SCADA_METRICS,
+    SCADA_POINT_CONTRACT_VERSION,
+    ScadaContractError,
+    metric_range_error,
+    normalize_point_catalog,
+    validate_metric_unit,
+)
 
 
 BEIJING_TZ = timezone(timedelta(hours=8), name="Asia/Shanghai")
@@ -32,6 +49,8 @@ class ScadaIngestResult:
     record_id: int | None
     actual_power_id: int | None
     normalized_timestamp: datetime | None
+    metric: str = "active_power_mw"
+    observation_id: int | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -40,6 +59,8 @@ class ScadaIngestResult:
             "message": self.message,
             "record_id": self.record_id,
             "actual_power_id": self.actual_power_id,
+            "metric": self.metric,
+            "observation_id": self.observation_id,
             "normalized_timestamp": (
                 self.normalized_timestamp.isoformat()
                 if self.normalized_timestamp is not None
@@ -95,28 +116,244 @@ def _add_record(
     source_timestamp: datetime | None,
     normalized_timestamp: datetime | None,
     received_at: datetime,
-    power_mw: float | None,
+    metric: str,
+    value: float | None,
+    unit: str,
+    source_id: str,
     quality: str,
     outcome: str,
     message: str,
     actual_power_id: int | None = None,
+    observation_id: int | None = None,
 ) -> ScadaIngestRecord:
     record = ScadaIngestRecord(
         connection_id=connection_id,
         farm_code=farm_code,
         ioa=ioa,
+        metric=metric,
+        value=value,
+        unit=unit,
+        source_id=source_id,
         source_timestamp=source_timestamp,
         normalized_timestamp=normalized_timestamp,
         received_at=received_at,
-        power_mw=power_mw,
+        power_mw=value if metric == "active_power_mw" else None,
         quality=quality,
         outcome=outcome,
         message=message,
         actual_power_id=actual_power_id,
+        observation_id=observation_id,
     )
     session.add(record)
     session.flush()
     return record
+
+
+def _load_point_catalog(connection: ScadaConnection) -> dict:
+    try:
+        raw = json.loads(connection.ioa_points) if connection.ioa_points else {}
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise ScadaIngestError("SCADA 点表不是有效 JSON", status_code=409) from exc
+    try:
+        return normalize_point_catalog(
+            raw,
+            active_power_ioa=connection.upload_target_ioa,
+        )
+    except ScadaContractError as exc:
+        raise ScadaIngestError(str(exc), status_code=409) from exc
+
+
+def _observation_key(
+    *,
+    source_id: str,
+    farm_code: str,
+    metric: str,
+    event_time: datetime,
+    ioa: int | None,
+    sequence: str | None,
+    value: float,
+    quality: str,
+) -> str:
+    identity = {
+        "source_id": source_id,
+        "farm_code": farm_code,
+        "metric": metric,
+        "event_time": event_time.isoformat(timespec="microseconds"),
+        "ioa": ioa,
+        "sequence": sequence,
+        "value": value,
+        "quality": quality,
+    }
+    canonical = json.dumps(identity, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _record_observation(
+    session,
+    *,
+    source_id: str,
+    farm_code: str,
+    metric: str,
+    event_time: datetime,
+    received_at: datetime,
+    value: float,
+    unit: str,
+    quality: str,
+    ioa: int | None,
+    sequence: str | None,
+    schema_version: str,
+    payload_sha256: str | None,
+    normalized_timestamp: datetime | None,
+) -> tuple[SourceObservation, bool]:
+    key = _observation_key(
+        source_id=source_id,
+        farm_code=farm_code,
+        metric=metric,
+        event_time=event_time,
+        ioa=ioa,
+        sequence=sequence,
+        value=value,
+        quality=quality,
+    )
+    existing = session.query(SourceObservation).filter(
+        SourceObservation.observation_key == key
+    ).first()
+    if existing is not None:
+        return existing, True
+
+    observation = SourceObservation(
+        observation_key=key,
+        source_type="scada",
+        source_id=source_id,
+        farm_code=farm_code,
+        metric=metric,
+        event_time=event_time,
+        received_at=received_at,
+        value=value,
+        unit=unit,
+        quality=quality,
+        sequence=sequence,
+        schema_version=schema_version,
+        payload_sha256=payload_sha256,
+        metadata_json={
+            "ioa": ioa,
+            "normalized_timestamp": (
+                normalized_timestamp.isoformat() if normalized_timestamp else None
+            ),
+        },
+    )
+    session.add(observation)
+    session.flush()
+    return observation, False
+
+
+def _project_metric(
+    session,
+    *,
+    metric: str,
+    farm_code: str,
+    timestamp: datetime,
+    value: float,
+    farm: WindFarm | None,
+) -> tuple[str, int | None]:
+    """将规范化观测投影到现有业务表，保持旧查询继续可用。"""
+
+    if metric == "active_power_mw":
+        actual = session.query(ActualPower).filter(
+            ActualPower.farm_code == farm_code,
+            ActualPower.timestamp == timestamp,
+        ).first()
+        if actual is None:
+            actual = ActualPower(farm_code=farm_code, timestamp=timestamp, wp_true=value)
+            session.add(actual)
+            session.flush()
+            return "created", actual.id
+        if actual.wp_true is not None and abs(float(actual.wp_true) - value) <= 1e-6:
+            return "duplicate", actual.id
+        actual.wp_true = value
+        session.flush()
+        return "updated", actual.id
+
+    if metric == "wind_speed_mps":
+        row = session.query(WeatherData).filter(
+            WeatherData.farm_code == farm_code,
+            WeatherData.timestamp == timestamp,
+        ).first()
+        if row is None:
+            row = WeatherData(farm_code=farm_code, timestamp=timestamp, wind_speed_avg=value)
+            session.add(row)
+            session.flush()
+            return "created", row.id
+        outcome = "duplicate" if row.wind_speed_avg == value else "updated"
+        row.wind_speed_avg = value
+        session.flush()
+        return outcome, row.id
+
+    if metric == "theoretical_power_mw":
+        row = session.query(TheoreticalPowerData).filter(
+            TheoreticalPowerData.farm_code == farm_code,
+            TheoreticalPowerData.timestamp == timestamp,
+        ).first()
+        if row is None:
+            row = TheoreticalPowerData(
+                farm_code=farm_code,
+                timestamp=timestamp,
+                theoretical_power=value,
+            )
+            session.add(row)
+            session.flush()
+            return "created", row.id
+        outcome = "duplicate" if row.theoretical_power == value else "updated"
+        row.theoretical_power = value
+        session.flush()
+        return outcome, row.id
+
+    if metric == "available_power_mw":
+        row = session.query(AvailablePowerData).filter(
+            AvailablePowerData.farm_code == farm_code,
+            AvailablePowerData.timestamp == timestamp,
+        ).first()
+        if row is None:
+            row = AvailablePowerData(
+                farm_code=farm_code,
+                timestamp=timestamp,
+                available_power=value,
+            )
+            session.add(row)
+            session.flush()
+            return "created", row.id
+        outcome = "duplicate" if row.available_power == value else "updated"
+        row.available_power = value
+        session.flush()
+        return outcome, row.id
+
+    if metric == "availability_pct":
+        available_capacity = (
+            float(farm.capacity) * value / 100.0
+            if farm is not None and farm.capacity is not None
+            else 0.0
+        )
+        row = session.query(AvailableCapacityData).filter(
+            AvailableCapacityData.farm_code == farm_code,
+            AvailableCapacityData.timestamp == timestamp,
+        ).first()
+        if row is None:
+            row = AvailableCapacityData(
+                farm_code=farm_code,
+                timestamp=timestamp,
+                available_capacity=available_capacity,
+                availability_rate=value,
+            )
+            session.add(row)
+            session.flush()
+            return "created", row.id
+        outcome = "duplicate" if row.availability_rate == value else "updated"
+        row.available_capacity = available_capacity
+        row.availability_rate = value
+        session.flush()
+        return outcome, row.id
+
+    raise ScadaIngestError(f"没有指标 {metric} 的业务投影器")
 
 
 def ingest_scada_sample(
@@ -157,33 +394,74 @@ def ingest_scada_sample(
     )
     ioa = _optional_int(payload.get("ioa"), "ioa")
     quality = str(payload.get("quality", "unknown") or "unknown").strip().lower()
+    catalog = _load_point_catalog(connection)
+    point = catalog.get(str(ioa)) if ioa is not None else None
 
-    raw_power = payload.get("power_mw")
+    metric = str(payload.get("metric") or (point or {}).get("metric") or "").strip()
+    if not metric and "power_mw" in payload:
+        metric = "active_power_mw"
+    unit = str(
+        payload.get("unit")
+        or (point or {}).get("unit")
+        or SCADA_METRICS.get(metric, {}).get("unit")
+        or "unknown"
+    ).strip()
+    source_id = str(
+        payload.get("source_id") or f"scada.connection.{connection_id}"
+    ).strip()
+    sequence = payload.get("sequence")
+    sequence = str(sequence) if sequence not in (None, "") else None
+    schema_version = str(
+        payload.get("schema_version")
+        or connection.point_catalog_version
+        or SCADA_POINT_CONTRACT_VERSION
+    ).strip()
+    payload_sha256 = str(payload.get("payload_sha256") or "").strip() or None
+
+    raw_value = payload.get("value", payload.get("power_mw"))
     try:
-        power_mw = float(raw_power) if raw_power is not None else None
+        value = float(raw_value) if raw_value is not None else None
     except (TypeError, ValueError):
-        power_mw = None
+        value = None
 
     rejection = None
-    if quality != "good":
+    if catalog and point is None:
+        rejection = f"IOA {ioa} 未在当前版本点表中配置"
+    elif point and point.get("metric") and metric != point["metric"]:
+        rejection = f"IOA {ioa} 与指标 {metric} 的点表映射不一致"
+    elif metric not in SCADA_METRICS:
+        rejection = f"不支持的 SCADA 指标: {metric or 'empty'}"
+    else:
+        try:
+            validate_metric_unit(metric, unit)
+        except ScadaContractError as exc:
+            rejection = str(exc)
+
+    if rejection is None and quality != "good":
         rejection = f"质量码不可用: {quality}"
-    elif power_mw is None or not math.isfinite(power_mw):
-        rejection = "功率值无效"
+    elif rejection is None and (value is None or not math.isfinite(value)):
+        rejection = f"{metric} 数值无效"
 
     farm = session.query(WindFarm).filter(WindFarm.farm_code == farm_code).first()
-    min_power = _float_setting(config, "SCADA_POWER_MIN_MW", -0.5)
-    max_factor = _float_setting(config, "SCADA_POWER_MAX_CAPACITY_FACTOR", 1.2)
-    if rejection is None and power_mw is not None and power_mw < min_power:
-        rejection = f"功率值低于允许下限 {min_power:.2f} MW"
-    if (
-        rejection is None
-        and power_mw is not None
-        and farm is not None
-        and farm.capacity is not None
-        and farm.capacity > 0
-        and power_mw > float(farm.capacity) * max_factor
-    ):
-        rejection = "功率值超过装机容量允许范围"
+    if rejection is None and value is not None:
+        if metric == "active_power_mw":
+            min_power = _float_setting(config, "SCADA_POWER_MIN_MW", -0.5)
+            max_factor = _float_setting(config, "SCADA_POWER_MAX_CAPACITY_FACTOR", 1.2)
+            if value < min_power:
+                rejection = f"功率值低于允许下限 {min_power:.2f} MW"
+            elif (
+                farm is not None
+                and farm.capacity is not None
+                and farm.capacity > 0
+                and value > float(farm.capacity) * max_factor
+            ):
+                rejection = "功率值超过装机容量允许范围"
+        else:
+            rejection = metric_range_error(
+                metric,
+                value,
+                float(farm.capacity) if farm and farm.capacity is not None else None,
+            )
 
     max_future_seconds = _int_setting(config, "SCADA_MAX_CLOCK_SKEW_SECONDS", 300)
     max_source_age_seconds = _int_setting(config, "SCADA_MAX_SOURCE_AGE_SECONDS", 86400)
@@ -200,10 +478,13 @@ def ingest_scada_sample(
             connection_id=connection_id,
             farm_code=farm_code,
             ioa=ioa,
+            metric=metric or "unknown",
+            value=value,
+            unit=unit,
+            source_id=source_id,
             source_timestamp=source_timestamp,
             normalized_timestamp=normalized_timestamp,
             received_at=received_at,
-            power_mw=power_mw,
             quality=quality,
             outcome="rejected",
             message=rejection,
@@ -217,83 +498,86 @@ def ingest_scada_sample(
             record_id=record.id,
             actual_power_id=None,
             normalized_timestamp=normalized_timestamp,
+            metric=metric or "unknown",
         )
 
+    event_time = source_timestamp or normalized_timestamp or received_at
+    observation, observation_duplicate = _record_observation(
+        session,
+        source_id=source_id,
+        farm_code=farm_code,
+        metric=metric,
+        event_time=event_time,
+        received_at=received_at,
+        value=value,
+        unit=unit,
+        quality=quality,
+        ioa=ioa,
+        sequence=sequence,
+        schema_version=schema_version,
+        payload_sha256=payload_sha256,
+        normalized_timestamp=normalized_timestamp,
+    )
+
     connection.last_data_at = received_at
-    connection.last_power_value = int(round(power_mw * 10))
+    if metric == "active_power_mw":
+        connection.last_power_value = int(round(value * 10))
     connection.updated_at = received_at
     connection.last_error = None
     if connection.status in {"connecting", "error"}:
         connection.status = "running"
 
     if normalized_timestamp is None:
-        message = "实时样本已审计，当前时间策略无需写入十五分钟实际功率"
-        connection.status_message = message
-        record = _add_record(
+        outcome = "duplicate" if observation_duplicate else "observed"
+        message = (
+            "重复实时观测已幂等处理"
+            if observation_duplicate
+            else "实时观测已审计，当前时间策略无需写入业务汇总表"
+        )
+        actual_power_id = None
+    else:
+        outcome, projected_id = _project_metric(
             session,
-            connection_id=connection_id,
-            farm_code=farm_code,
-            ioa=ioa,
-            source_timestamp=source_timestamp,
-            normalized_timestamp=None,
-            received_at=received_at,
-            power_mw=power_mw,
-            quality=quality,
-            outcome="observed",
-            message=message,
-        )
-        return ScadaIngestResult(
-            accepted=True,
-            outcome="observed",
-            message=message,
-            record_id=record.id,
-            actual_power_id=None,
-            normalized_timestamp=None,
-        )
-
-    actual = session.query(ActualPower).filter(
-        ActualPower.farm_code == farm_code,
-        ActualPower.timestamp == normalized_timestamp,
-    ).first()
-    if actual is None:
-        actual = ActualPower(
+            metric=metric,
             farm_code=farm_code,
             timestamp=normalized_timestamp,
-            wp_true=power_mw,
+            value=value,
+            farm=farm,
         )
-        session.add(actual)
-        session.flush()
-        outcome = "created"
-        message = "实际功率记录已创建"
-    elif actual.wp_true is not None and abs(float(actual.wp_true) - power_mw) <= 1e-6:
-        outcome = "duplicate"
-        message = "重复样本已幂等处理"
-    else:
-        actual.wp_true = power_mw
-        session.flush()
-        outcome = "updated"
-        message = "实际功率记录已更新"
+        actual_power_id = projected_id if metric == "active_power_mw" else None
+        action = {
+            "created": "记录已创建",
+            "updated": "记录已更新",
+            "duplicate": "重复样本已幂等处理",
+        }[outcome]
+        message = f"{SCADA_METRICS[metric]['label']}{action}"
 
-    connection.status_message = f"{power_mw:.2f} MW，{message}"
+    connection.status_message = f"{SCADA_METRICS[metric]['label']} {value:.2f} {unit}，{message}"
     record = _add_record(
         session,
         connection_id=connection_id,
         farm_code=farm_code,
         ioa=ioa,
+        metric=metric,
+        value=value,
+        unit=unit,
+        source_id=source_id,
         source_timestamp=source_timestamp,
         normalized_timestamp=normalized_timestamp,
         received_at=received_at,
-        power_mw=power_mw,
         quality=quality,
         outcome=outcome,
         message=message,
-        actual_power_id=actual.id,
+        actual_power_id=actual_power_id,
+        observation_id=observation.id,
     )
     return ScadaIngestResult(
         accepted=True,
         outcome=outcome,
         message=message,
         record_id=record.id,
-        actual_power_id=actual.id,
+        actual_power_id=actual_power_id,
         normalized_timestamp=normalized_timestamp,
+        metric=metric,
+        observation_id=observation.id,
     )

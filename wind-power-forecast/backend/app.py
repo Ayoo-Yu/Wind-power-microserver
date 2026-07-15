@@ -106,6 +106,7 @@ from routes.integration_router import integration_bp
 from routes.report_outbox_router import report_outbox_bp
 from routes.capability_router import capability_bp
 from routes.database_governance_router import database_governance_bp
+from routes.operations_router import operations_bp
 
 # app.register_blueprint(upload_bp, url_prefix='/')
 app.register_blueprint(download_bp, url_prefix='/')
@@ -150,6 +151,7 @@ app.register_blueprint(
     url_prefix='/api/v1/system',
     name='database_governance_v1',
 )
+app.register_blueprint(operations_bp)  # 现场运维总览和预测输入追溯
 
 
 def validate_database_schema():
@@ -313,20 +315,6 @@ def metrics():
 @app.route('/<path:path>', methods=['OPTIONS'])
 def handle_options(path):
     return '', 200
-
-# SCADA连接自动恢复：后端启动时重新启动之前运行中的Worker
-try:
-    from services.scada_manager import get_scada_manager
-    _scada_mgr = get_scada_manager()
-    if app.config.get('SCADA_REALTIME_ENABLED', False):
-        _recovered = _scada_mgr.recover_on_startup()
-        if _recovered:
-            print(f"SCADA自动恢复: 重新启动 {_recovered} 个连接")
-    else:
-        _scada_mgr.disable_on_startup()
-        print("SCADA实时接入未启用，遗留Worker已清理")
-except Exception as e:
-    print(f"SCADA自动恢复失败: {e}")
 
 @app.route('/upload_train_csv', methods=['POST'])
 def upload_train_csv():

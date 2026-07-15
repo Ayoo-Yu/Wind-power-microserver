@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
@@ -6,6 +7,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from db_models.power import ActualPower
+from db_models.data_lineage import SourceObservation
+from db_models.operational_data import (
+    AvailableCapacityData,
+    AvailablePowerData,
+    TheoreticalPowerData,
+    WeatherData,
+)
 from db_models.prediction_task import PredictionTask
 from db_models.report_config import ReportConfig, WindFarm
 from db_models.report_outbox import ReportOutbox
@@ -22,7 +30,12 @@ TABLES = [
     WindFarm.__table__,
     ScadaConnection.__table__,
     ScadaIngestRecord.__table__,
+    SourceObservation.__table__,
     ActualPower.__table__,
+    WeatherData.__table__,
+    TheoreticalPowerData.__table__,
+    AvailablePowerData.__table__,
+    AvailableCapacityData.__table__,
     PredictionTask.__table__,
     ReportConfig.__table__,
     ReportOutbox.__table__,
@@ -97,6 +110,7 @@ def test_ingest_creates_trace_and_actual_power(session):
     assert record.quality == "good"
     assert connection.last_data_at == now
     assert connection.last_power_value == 215
+    assert session.query(SourceObservation).one().metric == "active_power_mw"
 
 
 def test_ingest_is_idempotent_and_records_updates(session):
@@ -120,6 +134,48 @@ def test_ingest_is_idempotent_and_records_updates(session):
     assert session.query(ActualPower).count() == 1
     assert session.query(ActualPower).one().wp_true == 22.0
     assert session.query(ScadaIngestRecord).count() == 3
+    assert session.query(SourceObservation).count() == 2
+
+
+def test_ingest_projects_all_versioned_scada_metrics(session):
+    _farm, connection = _connection(session)
+    definitions = {
+        16385: ("active_power_mw", "MW", 21.5),
+        17385: ("wind_speed_mps", "m/s", 8.2),
+        18385: ("theoretical_power_mw", "MW", 25.0),
+        19385: ("available_power_mw", "MW", 23.0),
+        20385: ("availability_pct", "%", 95.0),
+    }
+    connection.ioa_points = json.dumps({
+        str(ioa): {"type": "M_ME_NC_1", "metric": metric, "unit": unit}
+        for ioa, (metric, unit, _value) in definitions.items()
+    })
+    connection.upload_target_ioa = 16385
+
+    for ioa, (metric, unit, value) in definitions.items():
+        result = ingest_scada_sample(
+            session,
+            _payload(
+                connection.id,
+                ioa=ioa,
+                metric=metric,
+                unit=unit,
+                value=value,
+                power_mw=value if metric == "active_power_mw" else None,
+            ),
+            {},
+            now=datetime(2026, 7, 15, 10, 0, 5),
+        )
+        assert result.accepted is True
+
+    assert session.query(SourceObservation).count() == 5
+    assert session.query(ActualPower).one().wp_true == 21.5
+    assert session.query(WeatherData).one().wind_speed_avg == 8.2
+    assert session.query(TheoreticalPowerData).one().theoretical_power == 25.0
+    assert session.query(AvailablePowerData).one().available_power == 23.0
+    availability = session.query(AvailableCapacityData).one()
+    assert availability.availability_rate == 95.0
+    assert availability.available_capacity == pytest.approx(45.6)
 
 
 def test_ingest_keeps_raw_observation_without_quarter_write(session):

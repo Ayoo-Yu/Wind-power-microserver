@@ -65,6 +65,9 @@
             <el-icon><WarnTriangleFilled /></el-icon>
             <span>运维与质量</span>
           </template>
+          <el-menu-item index="/operations-center" v-if="hasPermission('view_alarm_center')">
+            运行控制中心
+          </el-menu-item>
           <el-menu-item index="/alarm-center" v-if="hasPermission('view_alarm_center') || hasPermission('manage_reports')">统一告警中心</el-menu-item>
           <el-menu-item index="/data-quality" v-if="hasPermission('manage_data_quality') || hasPermission('view_all_data')">
             数据质量与限电标记

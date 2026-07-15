@@ -10,12 +10,14 @@ import sys
 import threading
 import time
 import os
+import uuid
 from datetime import datetime
 from typing import Optional
 
 from db_session import db_session
 from db_models.scada_connection import ScadaConnection
 from db_models.report_config import WindFarm
+from services.scada_security import validate_scada_target
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +71,10 @@ class ScadaManager:
         self._processes: dict[int, subprocess.Popen] = {}  # conn_id -> Popen
         self._monitor_thread: Optional[threading.Thread] = None
         self._running = False
+        self._instance_id = uuid.uuid4().hex
+        self._started_at = datetime.now()
+        self._last_reconcile_at: Optional[datetime] = None
+        self._last_error: Optional[str] = None
         self._worker_script = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), 'scada_worker.py'
         )
@@ -80,6 +86,9 @@ class ScadaManager:
 
     def _detect_backend_url(self) -> str:
         """Detect the backend URL for workers to POST data to."""
+        configured = os.environ.get('SCADA_BACKEND_URL', '').strip()
+        if configured:
+            return configured.rstrip('/')
         host = os.environ.get('APP_HOST', '127.0.0.1').strip()
         if host == '0.0.0.0':
             host = '127.0.0.1'
@@ -103,6 +112,11 @@ class ScadaManager:
             'originator_address': conn.originator_address or 0,
             'ioa_points': json.loads(conn.ioa_points) if conn.ioa_points else {},
             'upload_target_ioa': conn.upload_target_ioa,
+            'point_catalog_version': (
+                conn.point_catalog_version or 'scada-point-v2'
+            ),
+            'source_id': f'scada.connection.{conn.id}',
+            'worker_secret': os.environ.get('SCADA_WORKER_SECRET', ''),
             'fetch_interval': conn.fetch_interval or 60,
             'backend_url': self._backend_url,
             'capacity': farm.capacity if farm and farm.capacity else 200,
@@ -138,6 +152,8 @@ class ScadaManager:
                     raise RuntimeError(
                         'Synthetic HTTP polling is disabled by deployment config'
                     )
+
+                validate_scada_target(conn.server_ip)
 
                 farm = db.query(WindFarm).filter(WindFarm.farm_code == conn.farm_code).first()
                 config = self._build_worker_config(conn, farm)
@@ -269,6 +285,11 @@ class ScadaManager:
         self._monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
         self._monitor_thread.start()
 
+    def start_monitor(self):
+        """在没有需要恢复的连接时也启动状态收敛循环。"""
+        if not self._running:
+            self._start_monitor()
+
     def _monitor_loop(self):
         """周期检查子进程，并将其收敛到数据库记录的期望状态。"""
         while self._running:
@@ -287,9 +308,12 @@ class ScadaManager:
                     )
 
                 self._reconcile_desired_state()
+                self._last_reconcile_at = datetime.now()
+                self._last_error = None
 
             except Exception as e:
                 logger.error(f"Monitor loop error: {e}")
+                self._last_error = str(e)
 
             time.sleep(self._reconcile_seconds)
 
@@ -358,6 +382,32 @@ class ScadaManager:
                     db.commit()
         except Exception as e:
             logger.error(f"Failed to update worker status for {conn_id}: {e}")
+
+    def snapshot(self) -> dict:
+        """返回独立管理进程的存活、收敛和子进程状态。"""
+        processes = {}
+        for conn_id, process in list(self._processes.items()):
+            return_code = process.poll()
+            processes[str(conn_id)] = {
+                'pid': process.pid,
+                'alive': return_code is None,
+                'return_code': return_code,
+            }
+        return {
+            'service': 'scada-manager',
+            'instance_id': self._instance_id,
+            'running': self._running,
+            'ready': self._running and self._last_error is None,
+            'started_at': self._started_at.isoformat(),
+            'last_reconcile_at': (
+                self._last_reconcile_at.isoformat()
+                if self._last_reconcile_at is not None
+                else None
+            ),
+            'last_error': self._last_error,
+            'worker_count': sum(1 for item in processes.values() if item['alive']),
+            'workers': processes,
+        }
 
 
 def get_scada_manager() -> ScadaManager:

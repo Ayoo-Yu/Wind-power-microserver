@@ -11,6 +11,6 @@ ENV PYTHONUNBUFFERED=1 \
     SCADA_CATALOG_PATH=/app/config/point-catalog.json \
     SCADA_SCENARIOS_PATH=/app/config/scenarios.json
 
-EXPOSE 2404 2405 8080 8081 8090
+EXPOSE 2404 2405 8080 8081 8084 8090
 
 CMD ["python3", "-m", "scada_testbed.simulator"]

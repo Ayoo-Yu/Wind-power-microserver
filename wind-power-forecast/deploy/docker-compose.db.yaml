@@ -13,7 +13,7 @@ services:
     volumes:
       - ./kingbase-data:/home/kingbase/userdata
     ports:
-      - "54321:54321"
+      - "127.0.0.1:54321:54321"
     restart: unless-stopped
     networks:
       - wind-power-network

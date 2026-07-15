@@ -66,6 +66,22 @@ function Copy-RequiredItem($Source, $Destination) {
     Copy-Item -LiteralPath $Source -Destination $Destination -Recurse -Force
 }
 
+function Get-ImageMetadata($Name, $Reference) {
+    $raw = @(& docker image inspect $Reference)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to inspect image: $Reference"
+    }
+    $items = ($raw -join "`n") | ConvertFrom-Json
+    $item = @($items)[0]
+    return [ordered]@{
+        name = $Name
+        reference = $Reference
+        id = $item.Id
+        created = $item.Created
+        repo_digests = @($item.RepoDigests)
+    }
+}
+
 $dirtyLines = @(& git -C $projectDir status --porcelain -- .)
 if ($LASTEXITCODE -ne 0) {
     throw "Unable to inspect Git state"
@@ -111,8 +127,7 @@ Run "docker" @(
     "-o", $predictionTar,
     $FrontendImage,
     $PredictionImage,
-    "redis:7-alpine",
-    "dpage/pgadmin4"
+    "redis:7-alpine"
 )
 
 if (-not $SkipDatabaseDump) {
@@ -148,6 +163,8 @@ $deployItems = @(
     "docker-compose.prod.yaml",
     "INSTALL_GUIDE.md",
     "verify-release.sh",
+    "validate-field-config.sh",
+    "generate-sbom.py",
     "zone-agent"
 )
 foreach ($item in $deployItems) {
@@ -185,6 +202,38 @@ foreach ($entry in $imageValues.GetEnumerator()) {
 Write-Utf8NoBom $releaseEnvPath $releaseEnv
 Write-Utf8NoBom (Join-Path $releaseDir "VERSION") ($ReleaseVersion + "`n")
 
+$pythonPackagesTemp = Join-Path $releaseDir ".prediction-python-packages.json"
+$imageMetadataTemp = Join-Path $releaseDir ".image-metadata.json"
+$predictionPackages = @(
+    & docker run --rm --entrypoint python $PredictionImage `
+        -m pip list --format=json --disable-pip-version-check
+)
+if ($LASTEXITCODE -ne 0) {
+    throw "Unable to collect Python package inventory from $PredictionImage"
+}
+$predictionPackageJson = ($predictionPackages -join "`n")
+$predictionPackageJson | ConvertFrom-Json | Out-Null
+Write-Utf8NoBom $pythonPackagesTemp $predictionPackageJson
+
+$imageMetadata = @(
+    Get-ImageMetadata "frontend" $FrontendImage
+    Get-ImageMetadata "prediction" $PredictionImage
+    Get-ImageMetadata "database" $DatabaseImage
+    Get-ImageMetadata "redis" "redis:7-alpine"
+)
+Write-Utf8NoBom $imageMetadataTemp ($imageMetadata | ConvertTo-Json -Depth 6)
+$sbomPath = Join-Path $releaseDir "application-sbom.cdx.json"
+Run "python" @(
+    (Join-Path $deployDir "generate-sbom.py"),
+    "--release-version", $ReleaseVersion,
+    "--git-commit", $gitCommit,
+    "--python-packages", $pythonPackagesTemp,
+    "--frontend-lock", (Join-Path $projectDir "frontend\package-lock.json"),
+    "--image-metadata", $imageMetadataTemp,
+    "--output", $sbomPath
+)
+Remove-Item -LiteralPath $pythonPackagesTemp, $imageMetadataTemp -Force
+
 if (-not [string]::IsNullOrWhiteSpace($SigningKeyPath)) {
     if ([string]::IsNullOrWhiteSpace($SigningPublicKeyPath)) {
         throw "SigningPublicKeyPath is required when SigningKeyPath is provided"
@@ -208,7 +257,7 @@ $artifactRows = @(
 )
 
 $manifest = [ordered]@{
-    schema_version = "1.0"
+    schema_version = "1.1"
     release_id = $ReleaseVersion
     created_at = (Get-Date).ToUniversalTime().ToString("o")
     source = [ordered]@{
@@ -221,7 +270,12 @@ $manifest = [ordered]@{
         prediction = $PredictionImage
         database = $DatabaseImage
         redis = "redis:7-alpine"
-        pgadmin = "dpage/pgadmin4"
+    }
+    image_metadata = $imageMetadata
+    sbom = [ordered]@{
+        path = "application-sbom.cdx.json"
+        format = "CycloneDX"
+        spec_version = "1.5"
     }
     database_dump_included = (-not $SkipDatabaseDump)
     signature_included = (-not [string]::IsNullOrWhiteSpace($SigningKeyPath))

@@ -32,6 +32,7 @@ set "REDIS_PORT=%LOCAL_REDIS_PORT%"
 set "CELERY_BROKER_URL=redis://%REDIS_HOST%:%REDIS_PORT%/0"
 set "CELERY_RESULT_BACKEND=redis://%REDIS_HOST%:%REDIS_PORT%/0"
 set "CELERY_BEAT_RELOAD_INTERVAL_SEC=30"
+if not defined INTEGRATION_SPOOL_DIR set "INTEGRATION_SPOOL_DIR=%BACKEND_DIR%\runtime\integration"
 
 REM Local service ports
 set "MAIN_APP_HOST=127.0.0.1"
@@ -42,6 +43,7 @@ REM Frontend dev proxy target ports. Keep AUTO_BACKEND_PORT for vue.config.js co
 set "MAIN_BACKEND_PORT=%MAIN_APP_PORT%"
 set "AUTO_BACKEND_PORT=%MAIN_APP_PORT%"
 set "API_BASE_URL=http://%MAIN_APP_HOST%:%MAIN_APP_PORT%"
+set "SCADA_BACKEND_URL=http://%MAIN_APP_HOST%:%MAIN_APP_PORT%"
 set "APP_HOST=%MAIN_APP_HOST%"
 set "APP_PORT=%MAIN_APP_PORT%"
 set "PYTHONIOENCODING=utf-8"
@@ -181,12 +183,40 @@ IF ERRORLEVEL 1 (
   exit /b 1
 )
 
+REM NWP 输入启用时启动统一接入业务处理器。
+if /I "%NWP_INGESTION_ENABLED%"=="true" (
+  if not defined NWP_INPUT_ROOT (
+    echo [ERROR] NWP_INPUT_ROOT is required when NWP_INGESTION_ENABLED=true.
+    pause
+    exit /b 1
+  )
+  if not defined NWP_FARM_CODES (
+    echo [ERROR] NWP_FARM_CODES is required when NWP_INGESTION_ENABLED=true.
+    pause
+    exit /b 1
+  )
+  CALL :start_local_process integration
+  IF ERRORLEVEL 1 (
+    pause
+    exit /b 1
+  )
+)
+
 REM Wait for backend before launching frontend.
 CALL :wait_tcp %MAIN_APP_HOST% %MAIN_APP_PORT% Backend
 IF ERRORLEVEL 1 (
   echo [ERROR] Backend is not ready. Abort frontend startup.
   pause
   exit /b 1
+)
+
+REM SCADA 启用时启动独立管理进程。
+if /I "%SCADA_REALTIME_ENABLED%"=="true" (
+  CALL :start_local_process scada-manager
+  IF ERRORLEVEL 1 (
+    pause
+    exit /b 1
+  )
 )
 
 REM Start frontend.

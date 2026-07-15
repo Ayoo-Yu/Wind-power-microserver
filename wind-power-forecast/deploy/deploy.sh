@@ -153,10 +153,16 @@ DEPLOYMENT_MODE=${DEPLOYMENT_MODE:-field}
 SCADA_REALTIME_ENABLED=${SCADA_REALTIME_ENABLED:-false}
 SCADA_REQUIRED=${SCADA_REQUIRED:-false}
 SCADA_WORKER_SECRET=${SCADA_WORKER_SECRET:-}
+SCADA_ALLOWED_NETWORKS=${SCADA_ALLOWED_NETWORKS:-}
 SCADA_DATA_STALE_AFTER_SECONDS=${SCADA_DATA_STALE_AFTER_SECONDS:-1200}
 SCADA_INGEST_RETENTION_DAYS=${SCADA_INGEST_RETENTION_DAYS:-30}
+SOURCE_OBSERVATION_RETENTION_DAYS=${SOURCE_OBSERVATION_RETENTION_DAYS:-180}
+INGESTION_BATCH_RETENTION_DAYS=${INGESTION_BATCH_RETENTION_DAYS:-730}
+PREDICTION_LINEAGE_RETENTION_DAYS=${PREDICTION_LINEAGE_RETENTION_DAYS:-730}
 NWP_INGESTION_ENABLED=${NWP_INGESTION_ENABLED:-false}
 NWP_INGESTION_REQUIRED=${NWP_INGESTION_REQUIRED:-false}
+NWP_DATA_STALE_AFTER_SECONDS=${NWP_DATA_STALE_AFTER_SECONDS:-21600}
+MODEL_AUTO_APPROVAL_ENABLED=${MODEL_AUTO_APPROVAL_ENABLED:-false}
 REPORT_SCHEDULER_MODE=${REPORT_SCHEDULER_MODE:-celery}
 INTEGRATION_API_ENABLED=${INTEGRATION_API_ENABLED:-false}
 INTEGRATION_API_REQUIRED=${INTEGRATION_API_REQUIRED:-false}
@@ -300,10 +306,6 @@ create_dirs() {
     # Celery beat schedule data
     ensure_dir celery-beat-data
 
-    # pgAdmin data
-    ensure_dir pgadmin-data
-    chmod 777 pgadmin-data 2>/dev/null || chown 5050:5050 pgadmin-data 2>/dev/null || true
-
     # KingBase data (if using db compose)
     ensure_dir kingbase-data
     chmod 777 kingbase-data 2>/dev/null || true
@@ -400,6 +402,7 @@ do_install() {
 
 do_start() {
     check_env
+    bash ./validate-field-config.sh .env
     check_docker
     create_network
     generate_app_env
@@ -419,7 +422,7 @@ do_start() {
     info "=== All services started ==="
     info "Frontend:    http://<server-ip>:8080"
     info "Backend API: http://<server-ip>:5000"
-    info "pgAdmin:     http://<server-ip>:5050"
+    info "数据库治理请使用前端运行控制中心与数据库治理页面"
 }
 
 do_stop() {

@@ -29,7 +29,7 @@ class EventStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         self._deliveries: list[dict[str, Any]] = []
-        self._latest: dict[tuple[str, str], dict[str, Any]] = {}
+        self._latest: dict[tuple[str, str, str], dict[str, Any]] = {}
         self._worker_status: dict[str, dict[str, Any]] = {}
         self._response_status = 200
         self._failure_remaining = 0
@@ -76,7 +76,7 @@ class EventStore:
         except (TypeError, ValueError) as exc:
             raise ValueError("Timestamp 或 wp_true 无效") from exc
 
-        key = (farm_code.strip(), timestamp.isoformat())
+        key = (farm_code.strip(), timestamp.isoformat(), "active_power_mw")
         with self._lock:
             action = "updated" if key in self._latest else "created"
             self._sequence += 1
@@ -86,6 +86,7 @@ class EventStore:
                 "Timestamp": timestamp.isoformat(),
                 "farm_code": farm_code.strip(),
                 "wp_true": round(power, 6),
+                "metric": "active_power_mw",
                 "action": action,
             }
             self._deliveries.append(event)
@@ -113,12 +114,14 @@ class EventStore:
         if missing:
             raise ValueError(f"缺少字段: {', '.join(missing)}")
         quality = str(payload.get("quality", "unknown")).lower()
-        power = payload.get("power_mw")
-        if quality != "good" or power is None:
+        metric = str(payload.get("metric") or "active_power_mw")
+        value = payload.get("value", payload.get("power_mw"))
+        if quality != "good" or value is None:
             event = {
                 "connection_id": payload.get("connection_id"),
                 "farm_code": payload.get("farm_code"),
                 "quality": quality,
+                "metric": metric,
                 "outcome": "rejected",
                 "message": "模拟接收端拒绝无效质量样本",
             }
@@ -127,11 +130,33 @@ class EventStore:
         timestamp = payload.get("normalized_timestamp") or payload.get("source_timestamp")
         if not timestamp:
             timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
-        action, event = self.add_power({
-            "Timestamp": timestamp,
-            "farm_code": payload["farm_code"],
-            "wp_true": power,
-        })
+        if metric == "active_power_mw":
+            action, event = self.add_power({
+                "Timestamp": timestamp,
+                "farm_code": payload["farm_code"],
+                "wp_true": value,
+            })
+        else:
+            key = (str(payload["farm_code"]), str(timestamp), metric)
+            with self._lock:
+                action = "updated" if key in self._latest else "created"
+                self._sequence += 1
+                event = {
+                    "delivery_sequence": self._sequence,
+                    "received_at": datetime.now().astimezone().isoformat(timespec="milliseconds"),
+                    "Timestamp": str(timestamp),
+                    "farm_code": str(payload["farm_code"]),
+                    "metric": metric,
+                    "value": float(value),
+                    "unit": payload.get("unit"),
+                    "action": action,
+                }
+                self._deliveries.append(event)
+                self._deliveries = self._deliveries[-20000:]
+                self._latest[key] = event
+                with self.path.open("a", encoding="utf-8", newline="\n") as handle:
+                    handle.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
+                    handle.flush()
         event.update({
             "connection_id": payload.get("connection_id"),
             "ioa": payload.get("ioa"),

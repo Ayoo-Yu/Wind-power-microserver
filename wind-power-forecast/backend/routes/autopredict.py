@@ -14,17 +14,18 @@ import threading
 import logging
 import traceback
 
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, g
 from sqlalchemy import text as _text, desc, func, case as db_case
 from datetime import datetime as _dt
 import re as _re
 
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from database_config import Base, get_db
 from db_session import db_session
 from db_models import TaskHistory, PredictionTask, PredictionRun
 from config import Config
+from routes.auth import permission_required
 
 # ---------------------------------------------------------------------------
 # Sub-module imports (extracted helpers)
@@ -1259,21 +1260,102 @@ def get_model_versions():
                 'val_mae': v.val_mae,
                 'val_accuracy': v.val_accuracy,
                 'is_active': v.is_active,
+                'lifecycle_status': v.lifecycle_status,
+                'feature_contract_version': v.feature_contract_version,
+                'dataset_version': v.dataset_version,
+                'artifact_sha256': v.artifact_sha256,
+                'approved_by': v.approved_by,
+                'approved_at': v.approved_at.isoformat() if v.approved_at else None,
+                'rejection_reason': v.rejection_reason,
                 'training_samples': v.training_samples,
                 'trained_at': v.trained_at.isoformat() if v.trained_at else None,
+                'activated_at': v.activated_at.isoformat() if v.activated_at else None,
+                'deactivated_at': v.deactivated_at.isoformat() if v.deactivated_at else None,
             })
-    return jsonify({'code': 200, 'data': result})
+    return api_success(data=result)
+
+
+def _model_action_actor():
+    acting_user = getattr(g, 'acting_user', None)
+    if acting_user is not None and getattr(acting_user, 'username', None):
+        return acting_user.username
+    return str(get_jwt_identity() or 'unknown')
+
+
+def _model_registry_action(version_id, action, reason=None):
+    from services.model_registry import ModelRegistry
+
+    registry = ModelRegistry()
+    actor = _model_action_actor()
+    try:
+        if action == 'approve':
+            result = registry.approve(version_id, actor)
+            message = f'模型版本 {version_id} 已审批'
+        elif action == 'reject':
+            result = registry.reject(version_id, actor, reason)
+            message = f'模型版本 {version_id} 已拒绝'
+        elif action == 'rollback':
+            result = registry.rollback_to(version_id, actor)
+            message = f'运行模型已回滚到版本 {version_id}'
+        else:
+            return api_error('未知模型治理操作', code=1001, status_code=400)
+        record_task_history(
+            task_type='model',
+            action=action,
+            status='success',
+            details=json.dumps(result, ensure_ascii=False),
+            user=actor,
+        )
+        return api_success(data=result, message=message)
+    except ValueError as exc:
+        record_task_history(
+            task_type='model',
+            action=action,
+            status='failed',
+            details=str(exc),
+            user=actor,
+        )
+        return api_error(str(exc), code=1001, status_code=400)
+
+
+@autopredict_bp.route('/model_versions/<int:version_id>/approve', methods=['POST'])
+@jwt_required()
+@permission_required('manage_tasks')
+def approve_model_version(version_id):
+    """审批满足质量门槛且制品校验通过的候选模型。"""
+    return _model_registry_action(version_id, 'approve')
+
+
+@autopredict_bp.route('/model_versions/<int:version_id>/reject', methods=['POST'])
+@jwt_required()
+@permission_required('manage_tasks')
+def reject_model_version(version_id):
+    """拒绝候选模型并保留原因。"""
+    data = request.get_json(silent=True) or {}
+    reason = str(data.get('reason') or '').strip()
+    if not reason:
+        return api_error('拒绝原因不能为空', code=1001, status_code=400)
+    return _model_registry_action(version_id, 'reject', reason=reason)
+
+
+@autopredict_bp.route('/model_versions/<int:version_id>/rollback', methods=['POST'])
+@jwt_required()
+@permission_required('manage_tasks')
+def rollback_model_version(version_id):
+    """将运行版本切换到指定已审批模型。"""
+    return _model_registry_action(version_id, 'rollback')
 
 
 @autopredict_bp.route('/model_versions/<int:version_id>/deactivate', methods=['POST'])
 @jwt_required()
+@permission_required('manage_tasks')
 def deactivate_model_version(version_id):
     """Deactivate a specific model version."""
 
     from services.model_registry import ModelRegistry
     registry = ModelRegistry()
     registry.deactivate(version_id)
-    return jsonify({'code': 200, 'message': f'模型版本 {version_id} 已停用'})
+    return api_success(message=f'模型版本 {version_id} 已停用')
 
 
 @autopredict_bp.route('/model_versions/fusion_status', methods=['GET'])

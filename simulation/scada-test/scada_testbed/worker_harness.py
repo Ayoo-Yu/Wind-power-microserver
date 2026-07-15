@@ -43,6 +43,14 @@ class WorkerHarness:
 
     def _config(self, farm: dict[str, Any], index: int) -> dict[str, Any]:
         point = farm["points"]["active_power_mw"]
+        ioa_points = {
+            str(definition["ioa"]): {
+                "type": definition["type"],
+                "metric": metric,
+                "unit": definition["unit"],
+            }
+            for metric, definition in farm["points"].items()
+        }
         return {
             "connection_id": index + 1,
             "farm_code": farm["farm_code"],
@@ -52,8 +60,9 @@ class WorkerHarness:
             "server_port": self.server_port,
             "casdu_address": int(self.catalog["common_address"]),
             "originator_address": int(self.catalog.get("originator_address", 0)),
-            "ioa_points": {str(point["ioa"]): point["type"]},
+            "ioa_points": ioa_points,
             "upload_target_ioa": int(point["ioa"]),
+            "point_catalog_version": "scada-point-v2",
             "fetch_interval": self.fetch_interval,
             "backend_url": self.backend_url,
             "capacity": float(farm["capacity_mw"]),

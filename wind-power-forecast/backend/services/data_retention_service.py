@@ -35,6 +35,21 @@ RETENTION_TABLES = [
         "received_at",
         int(os.environ.get("SCADA_INGEST_RETENTION_DAYS", "30")),
     ),
+    RetentionTable(
+        "source_observations",
+        "event_time",
+        int(os.environ.get("SOURCE_OBSERVATION_RETENTION_DAYS", "180")),
+    ),
+    RetentionTable(
+        "ingestion_batches",
+        "received_at",
+        int(os.environ.get("INGESTION_BATCH_RETENTION_DAYS", "730")),
+    ),
+    RetentionTable(
+        "prediction_input_snapshots",
+        "captured_at",
+        int(os.environ.get("PREDICTION_LINEAGE_RETENTION_DAYS", "730")),
+    ),
 ]
 
 

@@ -44,6 +44,15 @@ SUPPORTED_TIMESTAMP_POLICIES = {
     'source_quarter_window',
 }
 
+POINT_CONTRACT_VERSION = 'scada-point-v2'
+POINT_DEFAULT_UNITS = {
+    'active_power_mw': 'MW',
+    'wind_speed_mps': 'm/s',
+    'theoretical_power_mw': 'MW',
+    'available_power_mw': 'MW',
+    'availability_pct': '%',
+}
+
 
 def resolve_c104_ip(server_ip: str) -> str:
     """Resolve Docker service names before passing them to the c104 client."""
@@ -242,14 +251,43 @@ def point_quality_label(point) -> str:
     return 'unknown'
 
 
+def normalize_worker_points(raw_points: dict, target_ioa=None) -> dict[str, dict]:
+    """将历史点表和带业务语义的新点表统一为 Worker 配置。"""
+    normalized = {}
+    for raw_ioa, raw_definition in dict(raw_points or {}).items():
+        ioa = str(int(raw_ioa))
+        if isinstance(raw_definition, str):
+            definition = {'type': raw_definition}
+        elif isinstance(raw_definition, dict):
+            definition = dict(raw_definition)
+        else:
+            raise ValueError(f'Invalid point definition for IOA {ioa}')
+        definition['type'] = str(definition.get('type') or 'M_ME_NC_1')
+        if not definition.get('metric') and target_ioa is not None and int(ioa) == int(target_ioa):
+            definition['metric'] = 'active_power_mw'
+        metric = definition.get('metric')
+        if metric:
+            if metric not in POINT_DEFAULT_UNITS:
+                raise ValueError(f'Unsupported metric {metric} for IOA {ioa}')
+            definition['unit'] = str(
+                definition.get('unit') or POINT_DEFAULT_UNITS[metric]
+            )
+        normalized[ioa] = definition
+    return normalized
+
+
 def submit_sample(
     config: dict,
     *,
-    power: float | None,
+    power: float | None = None,
+    value: float | None = None,
+    metric: str = 'active_power_mw',
+    unit: str | None = None,
     normalized_timestamp: datetime | None,
     source_timestamp: datetime | None,
     ioa: int | None,
     quality: str,
+    sequence: str | int | None = None,
 ):
     """提交可追溯样本，旧后端仅在新接口不存在时回退。"""
     backend_url = config.get('backend_url', 'http://127.0.0.1:5000')
@@ -257,25 +295,41 @@ def submit_sample(
     secret = config.get('worker_secret') or os.environ.get('SCADA_WORKER_SECRET', '')
     if secret:
         headers['X-Worker-Secret'] = secret
+    if value is None:
+        value = power
+    unit = unit or POINT_DEFAULT_UNITS.get(metric, '')
+    request_payload = {
+        'connection_id': config['connection_id'],
+        'farm_code': config['farm_code'],
+        'source_id': config.get('source_id') or f"scada.connection.{config['connection_id']}",
+        'schema_version': config.get('point_catalog_version') or POINT_CONTRACT_VERSION,
+        'ioa': ioa,
+        'metric': metric,
+        'unit': unit,
+        'value': value,
+        'source_timestamp': _timestamp_text(source_timestamp),
+        'normalized_timestamp': _timestamp_text(normalized_timestamp),
+        'quality': quality,
+        'sequence': sequence,
+    }
+    if metric == 'active_power_mw':
+        request_payload['power_mw'] = value
     status, body = _post_json(
         f'{backend_url}/api/v1/scada/ingest',
-        {
-            'connection_id': config['connection_id'],
-            'farm_code': config['farm_code'],
-            'ioa': ioa,
-            'source_timestamp': _timestamp_text(source_timestamp),
-            'normalized_timestamp': _timestamp_text(normalized_timestamp),
-            'power_mw': power,
-            'quality': quality,
-        },
+        request_payload,
         headers,
     )
-    if status == 404 and normalized_timestamp is not None and power is not None:
+    if (
+        status == 404
+        and metric == 'active_power_mw'
+        and normalized_timestamp is not None
+        and value is not None
+    ):
         legacy_status = post_power(
             backend_url,
             config['farm_code'],
             normalized_timestamp.strftime('%Y-%m-%dT%H:%M:%S'),
-            power,
+            value,
         )
         return legacy_status, {'outcome': 'legacy_actual_power'}
     return status, body
@@ -377,7 +431,11 @@ def run_c104(config: dict):
     if target_ioa is not None:
         target_ioa = int(target_ioa)
         ioa_points = {str(k): v for k, v in ioa_points.items()}
-        ioa_points.setdefault(str(target_ioa), 'M_ME_NC_1')
+        ioa_points.setdefault(
+            str(target_ioa),
+            {'type': 'M_ME_NC_1', 'metric': 'active_power_mw', 'unit': 'MW'},
+        )
+    point_definitions = normalize_worker_points(ioa_points, target_ioa)
 
     try:
         import c104
@@ -389,41 +447,50 @@ def run_c104(config: dict):
     update_status(config, 'connecting', f'Connecting to {configured_server_ip}:{server_port}')
 
     def on_measurement(point, previous_info, message):
-        if target_ioa is not None and int(point.io_address) != target_ioa:
+        ioa = int(point.io_address)
+        definition = point_definitions.get(str(ioa), {})
+        metric = definition.get('metric')
+        if not metric:
+            logger.warning(f"IOA={ioa} has no metric mapping; sample ignored")
             return c104.ResponseState.SUCCESS
 
         quality = point_quality_label(point)
-        value = point.value
-        power = float(value) if value is not None else None
+        raw_value = point.value
+        value = float(raw_value) if raw_value is not None else None
         now = datetime.now(BEIJING_TZ)
         source_time = getattr(point, 'recorded_at', None)
         rounded = (
             select_sample_timestamp(now, config, source_time)
-            if power is not None and quality == 'good'
+            if value is not None and quality == 'good'
             else None
         )
         status, result = submit_sample(
             config,
-            power=power,
+            value=value,
+            metric=metric,
+            unit=definition.get('unit'),
             normalized_timestamp=rounded,
             source_timestamp=source_time,
-            ioa=int(point.io_address),
+            ioa=ioa,
             quality=quality,
         )
-        if 200 <= status < 300 and power is not None:
+        if 200 <= status < 300 and value is not None:
             outcome = result.get('outcome', 'accepted')
             target = rounded.strftime('%H:%M') if rounded is not None else 'raw'
-            logger.info(f"IOA={point.io_address}: {power} MW → {target} ({outcome})")
+            logger.info(
+                f"IOA={ioa} metric={metric}: {value} {definition.get('unit', '')} "
+                f"→ {target} ({outcome})"
+            )
             update_status(
                 config,
                 'running',
-                f'IOA={point.io_address}: {power:.2f} MW, {outcome}',
-                power,
+                f'IOA={ioa} {metric}: {value:.2f}, {outcome}',
+                value if metric == 'active_power_mw' else None,
             )
         else:
             error = result.get('error') or result.get('message') or f'HTTP {status}'
             logger.warning(
-                f"IOA={point.io_address}: sample rejected status={status}, reason={error}"
+                f"IOA={ioa}: sample rejected status={status}, reason={error}"
             )
             update_status(config, 'running', f'Sample rejected: {error}')
         return c104.ResponseState.SUCCESS
@@ -467,8 +534,9 @@ def run_c104(config: dict):
     connection.on_state_change(callable=on_state_change)
 
     station = connection.add_station(common_address=casdu_address)
-    for ioa_str, point_type_str in ioa_points.items():
+    for ioa_str, definition in point_definitions.items():
         ioa = int(ioa_str)
+        point_type_str = definition.get('type', 'M_ME_NC_1')
         point_type = getattr(c104.Type, point_type_str, c104.Type.M_ME_NC_1)
         point = station.add_point(io_address=ioa, type=point_type)
         point.on_receive(callable=on_measurement)

@@ -56,6 +56,11 @@ class Config:
         'SCADA_ALLOW_SYNTHETIC_HTTP_POLL', 'false'
     ).lower() == 'true'
     SCADA_WORKER_SECRET = _env('SCADA_WORKER_SECRET', '')
+    SCADA_MANAGEMENT_AUTH_REQUIRED = _env(
+        'SCADA_MANAGEMENT_AUTH_REQUIRED',
+        'false' if DEPLOYMENT_MODE in {'development', 'test'} else 'true',
+    ).lower() == 'true'
+    SCADA_ALLOWED_NETWORKS = _env('SCADA_ALLOWED_NETWORKS', '')
     SCADA_DATA_STALE_AFTER_SECONDS = int(
         _env('SCADA_DATA_STALE_AFTER_SECONDS', '1200')
     )
@@ -75,6 +80,13 @@ class Config:
     NWP_INGESTION_ENABLED = _env('NWP_INGESTION_ENABLED', 'false').lower() == 'true'
     NWP_INGESTION_REQUIRED = _env(
         'NWP_INGESTION_REQUIRED', 'false'
+    ).lower() == 'true'
+    NWP_DATA_STALE_AFTER_SECONDS = int(
+        _env('NWP_DATA_STALE_AFTER_SECONDS', '21600')
+    )
+    MODEL_AUTO_APPROVAL_ENABLED = _env(
+        'MODEL_AUTO_APPROVAL_ENABLED',
+        'true' if DEPLOYMENT_MODE in {'development', 'test'} else 'false',
     ).lower() == 'true'
     EXTREME_WEATHER_LIVE_ENABLED = _env(
         'EXTREME_WEATHER_LIVE_ENABLED', 'false'

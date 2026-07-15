@@ -23,10 +23,12 @@ $ComposePrefix = @('compose', '-p', 'wind-power-scada-test', '-f', $ComposeFile)
 $SimulatorControlPort = if ($env:SCADA_TEST_SIMULATOR_CONTROL_PORT) { $env:SCADA_TEST_SIMULATOR_CONTROL_PORT } else { '18082' }
 $ProxyControlPort = if ($env:SCADA_TEST_PROXY_CONTROL_PORT) { $env:SCADA_TEST_PROXY_CONTROL_PORT } else { '18081' }
 $C104Port = if ($env:SCADA_TEST_C104_PORT) { $env:SCADA_TEST_C104_PORT } else { '12404' }
+$NwpControlPort = if ($env:NWP_TEST_CONTROL_PORT) { $env:NWP_TEST_CONTROL_PORT } else { '18084' }
 $DatabasePort = if ($env:SCADA_TEST_DB_PORT) { $env:SCADA_TEST_DB_PORT } else { '15433' }
 $RedisPort = if ($env:SCADA_TEST_REDIS_PORT) { $env:SCADA_TEST_REDIS_PORT } else { '6380' }
 $SimulatorControlUrl = "http://127.0.0.1:$SimulatorControlPort"
 $ProxyControlUrl = "http://127.0.0.1:$ProxyControlPort"
+$NwpControlUrl = "http://127.0.0.1:$NwpControlPort"
 
 function Invoke-DockerCompose {
     param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
@@ -91,12 +93,14 @@ function Start-Core {
     Test-DockerReady
     Ensure-BaseImage
     New-Item -ItemType Directory -Force -Path $ArtifactsDir | Out-Null
-    Invoke-DockerCompose up --detach --build scada-simulator fault-proxy
+    Invoke-DockerCompose up --detach --build scada-simulator fault-proxy nwp-simulator
     Wait-HttpReady "$SimulatorControlUrl/ready" 'SCADA simulator'
     Wait-HttpReady "$ProxyControlUrl/live" 'fault proxy'
+    Wait-HttpReady "$NwpControlUrl/ready" 'NWP simulator'
     Write-Host "[OK] C104 test endpoint: 127.0.0.1:$C104Port"
     Write-Host "[OK] Simulator control API: $SimulatorControlUrl"
     Write-Host "[OK] Fault proxy control API: $ProxyControlUrl"
+    Write-Host "[OK] NWP simulator control API: $NwpControlUrl"
 }
 
 Push-Location $RepositoryRoot
@@ -171,7 +175,7 @@ try {
         }
         'logs' {
             Test-DockerReady
-            & docker @ComposePrefix logs --follow --tail 200 scada-simulator fault-proxy
+            & docker @ComposePrefix logs --follow --tail 200 scada-simulator fault-proxy nwp-simulator
             if ($LASTEXITCODE -ne 0) {
                 throw "Failed to read test environment logs. Exit code: $LASTEXITCODE"
             }

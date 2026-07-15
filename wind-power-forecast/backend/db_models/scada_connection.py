@@ -19,6 +19,7 @@ class ScadaConnection(Base):
     originator_address = Column(Integer, default=0)
     ioa_points = Column(Text)  # JSON: {"1009": "M_ME_NC_1", "16385": "M_ME_NC_1"}
     upload_target_ioa = Column(Integer, nullable=True)
+    point_catalog_version = Column(String(32), nullable=False, default='scada-point-v1')
     fetch_interval = Column(Integer, default=60)  # seconds
 
     # HTTP polling specific

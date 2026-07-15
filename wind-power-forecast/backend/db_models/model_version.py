@@ -1,5 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text, Index
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text, Index, JSON
 from datetime import datetime, timezone
 from .base import Base
 
@@ -15,14 +14,21 @@ class ModelVersion(Base):
     farm_code = Column(String(50), nullable=False)
     task_type = Column(String(20), nullable=False)  # supershort / short / medium
     algorithm = Column(String(50), nullable=False)   # xgboost / lightgbm_gbdt / lightgbm_dart / lightgbm_goss
-    hyperparams = Column(JSONB)
+    hyperparams = Column(JSON)
     val_rmse = Column(Float)
     val_mae = Column(Float)
     val_accuracy = Column(Float)  # 1 - rmse/capacity
     is_active = Column(Boolean, default=True)
     local_path = Column(String(500))
     scaler_path = Column(String(500))
-    feature_cols = Column(JSONB)
+    feature_cols = Column(JSON)
+    feature_contract_version = Column(String(50))
+    dataset_version = Column(String(64))
+    artifact_sha256 = Column(String(64))
+    lifecycle_status = Column(String(20), nullable=False, default="candidate")
+    approved_by = Column(String(100))
+    approved_at = Column(DateTime)
+    rejection_reason = Column(Text)
     training_samples = Column(Integer)
     trained_at = Column(DateTime, default=utc_now)
     activated_at = Column(DateTime)

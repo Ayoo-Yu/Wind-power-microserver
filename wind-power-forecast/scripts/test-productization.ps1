@@ -19,7 +19,13 @@ $testFiles = @(
     "tests/test_capability_service.py",
     "tests/test_celery_static_schedules.py",
     "tests/test_scada_worker_timestamp.py",
-    "tests/test_scada_closed_loop.py"
+    "tests/test_scada_closed_loop.py",
+    "tests/test_scada_security.py",
+    "tests/test_integration_processor.py",
+    "tests/test_prediction_lineage_service.py",
+    "tests/test_model_registry_governance.py",
+    "tests/test_operations_overview_service.py",
+    "tests/test_sbom_generator.py"
 )
 
 Push-Location $backendDir
@@ -134,6 +140,7 @@ if (Get-Command bash -ErrorAction SilentlyContinue) {
         $shellFiles = @(
             "deploy/deploy.sh",
             "deploy/verify-release.sh",
+            "deploy/validate-field-config.sh",
             "deploy/zone-agent/install-zone-agent.sh",
             "deploy/zone-agent/run-agent.sh",
             "scripts/scada-test.sh"

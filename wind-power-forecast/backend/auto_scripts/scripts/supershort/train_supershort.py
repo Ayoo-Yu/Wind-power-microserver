@@ -210,6 +210,7 @@ def main():
                 model_path=model_path,
                 scaler_path=scaler_path if os.path.exists(scaler_path) else None,
                 val_accuracy=None,
+                dataset_path=training_csv_path,
             )
         logging.info("已注册超短期模型到 ModelRegistry")
     except Exception as reg_e:

@@ -88,9 +88,17 @@ foreach ($farm in $catalog.farms) {
         }
     }
 
-    $activePoint = $farm.points.active_power_mw
     $ioaPoints = @{}
-    $ioaPoints[[string]$activePoint.ioa] = [string]$activePoint.type
+    foreach ($metricProperty in $farm.points.PSObject.Properties) {
+        $metric = [string]$metricProperty.Name
+        $point = $metricProperty.Value
+        $ioaPoints[[string]$point.ioa] = @{
+            type = [string]$point.type
+            metric = $metric
+            unit = [string]$point.unit
+        }
+    }
+    $activePoint = $farm.points.active_power_mw
     $payload = @{
         farm_code = [string]$farm.farm_code
         name = "$($farm.name) SCADA Testbed"
@@ -101,6 +109,7 @@ foreach ($farm in $catalog.farms) {
         originator_address = [int]$catalog.originator_address
         ioa_points = $ioaPoints
         upload_target_ioa = [int]$activePoint.ioa
+        point_catalog_version = 'scada-point-v2'
         fetch_interval = 10
         is_enabled = $true
     }

@@ -162,6 +162,17 @@ def run_prediction(self, farm_code, task_type):
         raise
     try:
         _update_task_running(task_id, "predict")
+        input_snapshot_id = None
+        if run_id:
+            from services.prediction_lineage_service import capture_prediction_input_snapshot
+            with db_session() as lineage_session:
+                snapshot = capture_prediction_input_snapshot(
+                    lineage_session,
+                    prediction_run_id=run_id,
+                    farm_code=farm_code,
+                    task_type=task_type,
+                )
+                input_snapshot_id = snapshot.id
         from services.forecast_service import run_daily_prediction
         from services.model_manager import ModelManager
         from services.calibration_manager import CalibrationManager
@@ -174,6 +185,7 @@ def run_prediction(self, farm_code, task_type):
 
         if result.get("status") != "ok":
             raise RuntimeError(result.get("message", "prediction failed"))
+        result["input_snapshot_id"] = input_snapshot_id
         _finish_run_and_update_task(run_id, task_id, "predict", "success", result_data=result)
         return {"status": "success", "farm_code": farm_code, "task_type": task_type}
     except Exception as exc:

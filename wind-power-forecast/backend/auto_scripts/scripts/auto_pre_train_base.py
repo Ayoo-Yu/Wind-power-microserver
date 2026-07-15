@@ -371,7 +371,11 @@ def train_model(data_file_path, model_folder_today):
                              f"评分={model_info['score']:.4f}")
 
         # --- Register models to ModelRegistry ---
-        _register_models_to_registry(best_models_info, model_folder_today)
+        _register_models_to_registry(
+            best_models_info,
+            model_folder_today,
+            data_file_path,
+        )
 
         # --- Select global best model ---
         _select_global_best_model(best_models_info, model_folder_today)
@@ -392,7 +396,7 @@ def train_model(data_file_path, model_folder_today):
                         model_folder_today, output_dir)
 
 
-def _register_models_to_registry(best_models_info, model_folder_today):
+def _register_models_to_registry(best_models_info, model_folder_today, dataset_path=None):
     """Register trained models to ModelRegistry."""
     try:
         from model_registry import ModelRegistry
@@ -431,6 +435,7 @@ def _register_models_to_registry(best_models_info, model_folder_today):
                 val_accuracy=(float(val_accuracy)
                               if val_accuracy is not None else None),
                 training_samples=model_info_dict.get('training_samples'),
+                dataset_path=dataset_path,
             )
             print(f"  ✅ 已注册 {algo_type} 模型到 ModelRegistry "
                   f"({task_type})")
@@ -476,6 +481,7 @@ def _register_models_to_registry(best_models_info, model_folder_today):
                     val_accuracy=(float(_best_val_accuracy_for_q)
                                   if _best_val_accuracy_for_q is not None
                                   else None),
+                    dataset_path=dataset_path,
                 )
                 logging.info("已注册分位数模型 %s 到 ModelRegistry (%s, "
                              "val_accuracy=%.4f)",

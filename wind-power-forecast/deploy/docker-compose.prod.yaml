@@ -36,10 +36,17 @@ services:
       - SCADA_REALTIME_ENABLED=${SCADA_REALTIME_ENABLED:-false}
       - SCADA_REQUIRED=${SCADA_REQUIRED:-false}
       - SCADA_WORKER_SECRET=${SCADA_WORKER_SECRET:-}
+      - SCADA_MANAGEMENT_AUTH_REQUIRED=true
+      - SCADA_ALLOWED_NETWORKS=${SCADA_ALLOWED_NETWORKS:-}
       - SCADA_DATA_STALE_AFTER_SECONDS=${SCADA_DATA_STALE_AFTER_SECONDS:-1200}
       - SCADA_INGEST_RETENTION_DAYS=${SCADA_INGEST_RETENTION_DAYS:-30}
+      - SOURCE_OBSERVATION_RETENTION_DAYS=${SOURCE_OBSERVATION_RETENTION_DAYS:-180}
+      - INGESTION_BATCH_RETENTION_DAYS=${INGESTION_BATCH_RETENTION_DAYS:-730}
+      - PREDICTION_LINEAGE_RETENTION_DAYS=${PREDICTION_LINEAGE_RETENTION_DAYS:-730}
       - NWP_INGESTION_ENABLED=${NWP_INGESTION_ENABLED:-false}
       - NWP_INGESTION_REQUIRED=${NWP_INGESTION_REQUIRED:-false}
+      - NWP_DATA_STALE_AFTER_SECONDS=${NWP_DATA_STALE_AFTER_SECONDS:-21600}
+      - MODEL_AUTO_APPROVAL_ENABLED=${MODEL_AUTO_APPROVAL_ENABLED:-false}
       - REPORT_SCHEDULER_MODE=${REPORT_SCHEDULER_MODE:-celery}
       - INTEGRATION_API_ENABLED=${INTEGRATION_API_ENABLED:-false}
       - INTEGRATION_API_REQUIRED=${INTEGRATION_API_REQUIRED:-false}
@@ -69,6 +76,73 @@ services:
       retries: 5
       start_period: 60s
 
+  scada-manager:
+    image: ${PREDICTION_IMAGE:-wind-power-celery-worker:latest}
+    entrypoint: ["python", "scada_manager_main.py"]
+    environment:
+      - DB_HOST=kingbase
+      - DB_PORT=54321
+      - DB_USER=system
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=windpower
+      - PYTHONPATH=/app
+      - TZ=Asia/Shanghai
+      - DEPLOYMENT_MODE=${DEPLOYMENT_MODE:-field}
+      - SCADA_REALTIME_ENABLED=${SCADA_REALTIME_ENABLED:-false}
+      - SCADA_WORKER_SECRET=${SCADA_WORKER_SECRET:-}
+      - SCADA_ALLOWED_NETWORKS=${SCADA_ALLOWED_NETWORKS:-}
+      - SCADA_BACKEND_URL=http://backend:5000
+      - SCADA_SIMULATOR_HOST=wind-power-scada-simulator
+      - SCADA_MANAGER_HEALTH_PORT=9102
+      - SCADA_MANAGER_RECONCILE_SECONDS=${SCADA_MANAGER_RECONCILE_SECONDS:-5}
+      - SCADA_ALLOW_SYNTHETIC_HTTP_POLL=false
+    volumes:
+      - ./backend-data/logs:/app/logs
+    networks:
+      - wind-power-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:9102/ready', timeout=3)
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  integration-processor:
+    image: ${PREDICTION_IMAGE:-wind-power-celery-worker:latest}
+    entrypoint:
+      - python
+      - -m
+      - integration.processor
+      - --spool
+      - /app/runtime/integration
+    environment:
+      - DB_HOST=kingbase
+      - DB_PORT=54321
+      - DB_USER=system
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=windpower
+      - SECRET_KEY=${SECRET_KEY}
+      - PYTHONPATH=/app
+      - TZ=Asia/Shanghai
+      - DEPLOYMENT_MODE=${DEPLOYMENT_MODE:-field}
+      - NWP_INGESTION_ENABLED=${NWP_INGESTION_ENABLED:-false}
+    volumes:
+      - ./backend-data/integration:/app/runtime/integration
+    networks:
+      - wind-power-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
   celery-worker:
     image: ${PREDICTION_IMAGE:-wind-power-celery-worker:latest}
     container_name: wind-power-celery-worker
@@ -87,6 +161,10 @@ services:
       - PYTHONPATH=/app
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DEPLOYMENT_MODE=${DEPLOYMENT_MODE:-field}
+      - MODEL_AUTO_APPROVAL_ENABLED=${MODEL_AUTO_APPROVAL_ENABLED:-false}
+      - SCADA_DATA_STALE_AFTER_SECONDS=${SCADA_DATA_STALE_AFTER_SECONDS:-1200}
+      - NWP_DATA_STALE_AFTER_SECONDS=${NWP_DATA_STALE_AFTER_SECONDS:-21600}
       - REPORT_SCHEDULER_MODE=${REPORT_SCHEDULER_MODE:-celery}
     networks:
       - wind-power-network
@@ -161,27 +239,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
-
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: wind-power-pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-      TZ: Asia/Shanghai
-    ports:
-      - "5050:80"
-    volumes:
-      - ./pgadmin-data:/var/lib/pgadmin
-    restart: unless-stopped
-    networks:
-      - wind-power-network
-    healthcheck:
-      test: ["CMD", "wget", "-O", "-", "http://localhost:80/misc/ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
 
 networks:
   wind-power-network:

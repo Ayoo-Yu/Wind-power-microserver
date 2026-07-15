@@ -1,9 +1,11 @@
 import json
 import logging
 import os
-import ipaddress
+import hmac
+from functools import wraps
 
 from flask import Blueprint, request, jsonify, current_app
+from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
 from db_session import db_session
 from db_models.scada_connection import ScadaConnection
 from db_models.report_config import WindFarm
@@ -11,6 +13,14 @@ from db_models.power import ActualPower
 from datetime import datetime
 from services.scada_health_service import build_scada_health_snapshot
 from services.scada_ingest_service import ScadaIngestError, ingest_scada_sample
+from services.scada_runtime_service import update_worker_status
+from services.scada_security import ScadaNetworkPolicyError, validate_scada_target
+from db_models.user import User
+from services.scada_contract import (
+    SCADA_POINT_CONTRACT_VERSION,
+    ScadaContractError,
+    normalize_point_catalog,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +29,37 @@ scada_connection_bp = Blueprint('scada_connection', __name__)
 WORKER_SECRET = os.environ.get('SCADA_WORKER_SECRET', '')
 ALLOWED_PROTOCOLS = ('c104', 'http_poll')
 ALLOWED_WORKER_STATUSES = {'stopped', 'running', 'error', 'connecting'}
+
+
+def _management_required(function):
+    """现场部署要求登录用户具备系统配置权限。"""
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        if not current_app.config.get('SCADA_MANAGEMENT_AUTH_REQUIRED', False):
+            return function(*args, **kwargs)
+        try:
+            verify_jwt_in_request()
+        except Exception:
+            return jsonify({'success': False, 'error': '需要登录后操作 SCADA 配置'}), 401
+        user_id = get_jwt_identity()
+        with db_session() as db:
+            user = db.query(User).filter(User.id == user_id).first()
+            if user is None or not user.is_active or user.role is None:
+                return jsonify({'success': False, 'error': '当前用户无权操作 SCADA 配置'}), 403
+            role_name = str(user.role.name or '').lower()
+            permissions = user.role.permissions or []
+            if isinstance(permissions, dict):
+                permissions = permissions.get('permissions', [])
+            allowed = (
+                role_name in {'admin', 'administrator', '系统管理员'}
+                or 'admin' in permissions
+                or 'configure_system' in permissions
+                or 'system_maintenance' in permissions
+            )
+            if not allowed:
+                return jsonify({'success': False, 'error': '缺少 SCADA 系统配置权限'}), 403
+        return function(*args, **kwargs)
+    return wrapped
 
 
 def _parse_ioa_points(raw):
@@ -43,6 +84,7 @@ def _connection_to_dict(conn: ScadaConnection, health: dict | None = None) -> di
         'originator_address': conn.originator_address,
         'ioa_points': _parse_ioa_points(conn.ioa_points),
         'upload_target_ioa': conn.upload_target_ioa,
+        'point_catalog_version': conn.point_catalog_version,
         'fetch_interval': conn.fetch_interval,
         'poll_url': conn.poll_url,
         'is_enabled': conn.is_enabled,
@@ -66,6 +108,10 @@ def _validate_connection_data(data: dict) -> tuple[dict | None, str | None]:
         return None, 'name is required'
     if not data.get('server_ip'):
         return None, 'server_ip is required'
+    try:
+        validate_scada_target(data['server_ip'], current_app.config)
+    except ScadaNetworkPolicyError as exc:
+        return None, str(exc)
 
     protocol = data.get('protocol', 'c104')
     if protocol not in ALLOWED_PROTOCOLS:
@@ -86,6 +132,14 @@ def _validate_connection_data(data: dict) -> tuple[dict | None, str | None]:
     except (ValueError, TypeError):
         return None, 'fetch_interval must be a valid integer'
 
+    try:
+        point_catalog = normalize_point_catalog(
+            data.get('ioa_points', {}),
+            active_power_ioa=data.get('upload_target_ioa'),
+        )
+    except ScadaContractError as exc:
+        return None, str(exc)
+
     return {
         'farm_code': data['farm_code'].strip(),
         'name': data['name'].strip(),
@@ -94,8 +148,11 @@ def _validate_connection_data(data: dict) -> tuple[dict | None, str | None]:
         'server_port': server_port,
         'casdu_address': int(data.get('casdu_address', 1)),
         'originator_address': int(data.get('originator_address', 0)),
-        'ioa_points': data.get('ioa_points', {}),
+        'ioa_points': point_catalog,
         'upload_target_ioa': data.get('upload_target_ioa'),
+        'point_catalog_version': str(
+            data.get('point_catalog_version') or SCADA_POINT_CONTRACT_VERSION
+        ),
         'fetch_interval': fetch_interval,
         'poll_url': data.get('poll_url'),
         'is_enabled': data.get('is_enabled', True),
@@ -111,6 +168,7 @@ def _safe_int(value, field_name):
 
 
 @scada_connection_bp.route('/scada/connections', methods=['GET'])
+@_management_required
 def list_connections():
     with db_session() as db:
         connections = db.query(ScadaConnection).order_by(ScadaConnection.id).all()
@@ -131,6 +189,7 @@ def list_connections():
 
 
 @scada_connection_bp.route('/scada/connections/<int:conn_id>', methods=['GET'])
+@_management_required
 def get_connection(conn_id: int):
     with db_session() as db:
         conn = db.query(ScadaConnection).filter(ScadaConnection.id == conn_id).first()
@@ -145,6 +204,7 @@ def get_connection(conn_id: int):
 
 
 @scada_connection_bp.route('/scada/connections', methods=['POST'])
+@_management_required
 def create_connection():
     data = request.get_json()
     if not data:
@@ -179,6 +239,7 @@ def create_connection():
             originator_address=validated['originator_address'],
             ioa_points=json.dumps(validated['ioa_points']) if validated['ioa_points'] else None,
             upload_target_ioa=validated['upload_target_ioa'],
+            point_catalog_version=validated['point_catalog_version'],
             fetch_interval=validated['fetch_interval'],
             poll_url=validated['poll_url'],
             is_enabled=validated['is_enabled'],
@@ -191,6 +252,7 @@ def create_connection():
 
 
 @scada_connection_bp.route('/scada/connections/<int:conn_id>', methods=['PUT'])
+@_management_required
 def update_connection(conn_id: int):
     data = request.get_json()
     if not data:
@@ -216,6 +278,10 @@ def update_connection(conn_id: int):
             if 'name' in data:
                 conn.name = data['name'].strip()
             if 'server_ip' in data:
+                try:
+                    validate_scada_target(data['server_ip'], current_app.config)
+                except ScadaNetworkPolicyError as exc:
+                    return jsonify({'success': False, 'error': str(exc)}), 400
                 conn.server_ip = data['server_ip'].strip()
             if 'server_port' in data:
                 conn.server_port = _safe_int(data['server_port'], 'server_port')
@@ -226,9 +292,20 @@ def update_connection(conn_id: int):
             if 'originator_address' in data:
                 conn.originator_address = _safe_int(data['originator_address'], 'originator_address')
             if 'ioa_points' in data:
-                conn.ioa_points = json.dumps(data['ioa_points']) if data['ioa_points'] else None
+                try:
+                    normalized_points = normalize_point_catalog(
+                        data['ioa_points'],
+                        active_power_ioa=data.get(
+                            'upload_target_ioa', conn.upload_target_ioa
+                        ),
+                    )
+                except ScadaContractError as exc:
+                    return jsonify({'success': False, 'error': str(exc)}), 400
+                conn.ioa_points = json.dumps(normalized_points) if normalized_points else None
             if 'upload_target_ioa' in data:
                 conn.upload_target_ioa = data['upload_target_ioa']
+            if 'point_catalog_version' in data:
+                conn.point_catalog_version = str(data['point_catalog_version']).strip()
             if 'fetch_interval' in data:
                 conn.fetch_interval = _safe_int(data['fetch_interval'], 'fetch_interval')
             if 'poll_url' in data:
@@ -249,6 +326,7 @@ def update_connection(conn_id: int):
 
 
 @scada_connection_bp.route('/scada/connections/<int:conn_id>', methods=['DELETE'])
+@_management_required
 def delete_connection(conn_id: int):
     with db_session() as db:
         conn = db.query(ScadaConnection).filter(ScadaConnection.id == conn_id).first()
@@ -264,6 +342,7 @@ def delete_connection(conn_id: int):
 
 
 @scada_connection_bp.route('/scada/connections/<int:conn_id>/start', methods=['POST'])
+@_management_required
 def start_connection(conn_id: int):
     if not current_app.config.get('SCADA_REALTIME_ENABLED', False):
         return jsonify({
@@ -294,6 +373,7 @@ def start_connection(conn_id: int):
 
 
 @scada_connection_bp.route('/scada/connections/<int:conn_id>/stop', methods=['POST'])
+@_management_required
 def stop_connection(conn_id: int):
     with db_session() as db:
         conn = db.query(ScadaConnection).filter(ScadaConnection.id == conn_id).first()
@@ -308,6 +388,7 @@ def stop_connection(conn_id: int):
 
 
 @scada_connection_bp.route('/scada/connections/<int:conn_id>/restart', methods=['POST'])
+@_management_required
 def restart_connection(conn_id: int):
     if not current_app.config.get('SCADA_REALTIME_ENABLED', False):
         return jsonify({
@@ -327,6 +408,7 @@ def restart_connection(conn_id: int):
 
 
 @scada_connection_bp.route('/scada/connections/<int:conn_id>/test', methods=['POST'])
+@_management_required
 def test_connection(conn_id: int):
     import socket
 
@@ -337,13 +419,10 @@ def test_connection(conn_id: int):
 
         ip, port = conn.server_ip, conn.server_port
 
-    # Block cloud metadata endpoint
     try:
-        ip_obj = ipaddress.ip_address(ip)
-        if str(ip_obj) == '169.254.169.254':
-            return jsonify({'success': False, 'error': 'Address not allowed'}), 400
-    except ValueError:
-        pass  # hostname, not IP - allow it
+        validate_scada_target(ip, current_app.config)
+    except ScadaNetworkPolicyError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
 
     try:
         sock = socket.create_connection((ip, port), timeout=5)
@@ -358,6 +437,7 @@ def test_connection(conn_id: int):
 
 
 @scada_connection_bp.route('/scada/connections/<int:conn_id>/data', methods=['GET'])
+@_management_required
 def get_connection_data(conn_id: int):
     limit = request.args.get('limit', 20, type=int)
 
@@ -383,9 +463,11 @@ def _verify_worker_secret():
     """Validate the worker-to-manager shared secret."""
     expected = current_app.config.get('SCADA_WORKER_SECRET', '') or WORKER_SECRET
     if not expected:
-        return True  # No secret configured, skip check
+        return str(current_app.config.get('DEPLOYMENT_MODE', 'development')).lower() in {
+            'development', 'test'
+        }
     provided = request.headers.get('X-Worker-Secret', '')
-    return provided == expected
+    return bool(provided) and hmac.compare_digest(provided, expected)
 
 
 @scada_connection_bp.route('/scada/worker-status', methods=['POST'])
@@ -399,17 +481,19 @@ def worker_status():
         return jsonify({'error': 'connection_id required'}), 400
 
     try:
-        from services.scada_manager import get_scada_manager
-        manager = get_scada_manager()
         worker_state = data.get('status', 'unknown')
         if worker_state not in ALLOWED_WORKER_STATUSES:
             return jsonify({'error': 'invalid worker status'}), 400
-        manager.update_worker_status(
-            conn_id=data['connection_id'],
-            status=worker_state,
-            message=data.get('status_message', ''),
-            power_value=data.get('last_power_value'),
-        )
+        with db_session() as db:
+            found = update_worker_status(
+                db,
+                connection_id=data['connection_id'],
+                status=worker_state,
+                message=data.get('status_message', ''),
+                power_value=data.get('last_power_value'),
+            )
+        if not found:
+            return jsonify({'error': 'Connection not found'}), 404
         return jsonify({'success': True})
     except Exception as e:
         logger.error(f"Failed to process worker status: {e}")
@@ -463,6 +547,7 @@ def scada_health():
 
 
 @scada_connection_bp.route('/scada/connections/farms', methods=['GET'])
+@_management_required
 def available_farms():
     """Get farms that don't yet have a SCADA connection configured."""
     with db_session() as db:

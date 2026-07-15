@@ -7,6 +7,11 @@ set "SCADA_REALTIME_ENABLED=true"
 set "SCADA_REQUIRED=true"
 set "SCADA_DATA_STALE_AFTER_SECONDS=60"
 set "SCADA_TIMESTAMP_POLICY=floor_quarter"
+set "NWP_INGESTION_ENABLED=true"
+set "NWP_INGESTION_REQUIRED=true"
+set "NWP_INPUT_ROOT=%~dp0..\simulation\scada-test\artifacts\nwp-inbox"
+set "NWP_FARM_CODES=CF,BNJ,SDS,DPLZ,ZYX"
+set "INTEGRATION_SPOOL_DIR=%~dp0backend\runtime\integration"
 
 call "%~dp0start-scada-test.bat"
 if errorlevel 1 exit /b 1
@@ -27,6 +32,7 @@ if errorlevel 1 (
 
 echo [OK] 风电预测开发环境与 SCADA 测试链路均已启动。
 echo C104:   127.0.0.1:12404
+echo NWP:     %NWP_INPUT_ROOT%
 echo Backend: http://127.0.0.1:18080
 echo Frontend: http://127.0.0.1:8080
 echo.
