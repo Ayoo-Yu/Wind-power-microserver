@@ -6,19 +6,28 @@ set "SCRIPT_DIR=%~dp0"
 set "PROJECT_DIR=%SCRIPT_DIR:~0,-1%"
 set "BACKEND_DIR=%PROJECT_DIR%\backend"
 set "FRONTEND_DIR=%PROJECT_DIR%\frontend"
+set "LOCAL_INFRA_COMPOSE=%PROJECT_DIR%\compose.local-infra.yaml"
+set "LOCAL_INFRA_MANAGER=%PROJECT_DIR%\manage-local-infra.bat"
+set "LOCAL_PROCESS_MANAGER=%PROJECT_DIR%\scripts\local-process-manager.ps1"
 
 REM Local infrastructure
 set "DB_HOST=localhost"
-set "DB_PORT=15432"
-set "DB_USER=system"
-set "DB_PASSWORD=12345678ab"
+if not defined LOCAL_DB_PORT set "LOCAL_DB_PORT=15432"
+if not defined LOCAL_DB_USER set "LOCAL_DB_USER=system"
+if not defined LOCAL_DB_PASSWORD set "LOCAL_DB_PASSWORD=12345678ab"
+set "DB_PORT=%LOCAL_DB_PORT%"
+set "DB_USER=%LOCAL_DB_USER%"
+set "DB_PASSWORD=%LOCAL_DB_PASSWORD%"
 set "DB_NAME=windpower"
 set "METRICS_ENABLED=false"
-set "SECRET_KEY=local-dev-secret-key-do-not-use-in-prod"
+if not defined LOCAL_SECRET_KEY set "LOCAL_SECRET_KEY=local-dev-secret-key-do-not-use-in-prod"
+set "SECRET_KEY=%LOCAL_SECRET_KEY%"
+if not defined LOCAL_SEED_ENABLED set "LOCAL_SEED_ENABLED=true"
 
 REM Redis and Celery
 set "REDIS_HOST=localhost"
-set "REDIS_PORT=6379"
+if not defined LOCAL_REDIS_PORT set "LOCAL_REDIS_PORT=6379"
+set "REDIS_PORT=%LOCAL_REDIS_PORT%"
 set "CELERY_BROKER_URL=redis://%REDIS_HOST%:%REDIS_PORT%/0"
 set "CELERY_RESULT_BACKEND=redis://%REDIS_HOST%:%REDIS_PORT%/0"
 set "CELERY_BEAT_RELOAD_INTERVAL_SEC=30"
@@ -31,7 +40,11 @@ set "APP_DEBUG=false"
 REM Frontend dev proxy target ports. Keep AUTO_BACKEND_PORT for vue.config.js compatibility.
 set "MAIN_BACKEND_PORT=%MAIN_APP_PORT%"
 set "AUTO_BACKEND_PORT=%MAIN_APP_PORT%"
-set "BACKEND_ENV_CMD=set DB_HOST=%DB_HOST% && set DB_PORT=%DB_PORT% && set DB_USER=%DB_USER% && set DB_PASSWORD=%DB_PASSWORD% && set DB_NAME=%DB_NAME% && set METRICS_ENABLED=%METRICS_ENABLED% && set SECRET_KEY=%SECRET_KEY% && set REDIS_HOST=%REDIS_HOST% && set REDIS_PORT=%REDIS_PORT% && set CELERY_BROKER_URL=%CELERY_BROKER_URL% && set CELERY_RESULT_BACKEND=%CELERY_RESULT_BACKEND% && set CELERY_BEAT_RELOAD_INTERVAL_SEC=%CELERY_BEAT_RELOAD_INTERVAL_SEC% && set API_BASE_URL=http://%MAIN_APP_HOST%:%MAIN_APP_PORT% && set APP_HOST=%MAIN_APP_HOST% && set APP_PORT=%MAIN_APP_PORT% && set APP_DEBUG=%APP_DEBUG% && set PYTHONIOENCODING=utf-8"
+set "API_BASE_URL=http://%MAIN_APP_HOST%:%MAIN_APP_PORT%"
+set "APP_HOST=%MAIN_APP_HOST%"
+set "APP_PORT=%MAIN_APP_PORT%"
+set "PYTHONIOENCODING=utf-8"
+set "NODE_OPTIONS=--trace-deprecation"
 
 call :resolve_python MAIN_PY "%BACKEND_DIR%\wind-power-env\python.exe"
 if errorlevel 1 exit /b 1
@@ -61,44 +74,86 @@ if not exist "%FRONTEND_DIR%\vue.config.js" (
   exit /b 1
 )
 
-REM Release stale local app ports.
-CALL :free_port %MAIN_APP_PORT% MainBackend
-CALL :free_port 8080 Frontend
-
-REM Start Redis locally if port 6379 is not available.
-CALL :ensure_redis
-IF ERRORLEVEL 1 (
-  echo [ERROR] Redis is not ready. Abort startup.
+if not exist "%LOCAL_INFRA_COMPOSE%" (
+  echo [ERROR] Local infrastructure compose file not found: "%LOCAL_INFRA_COMPOSE%"
   pause
   exit /b 1
 )
 
-REM Wait for database before starting backend and Celery.
-CALL :wait_tcp %DB_HOST% %DB_PORT% Kingbase
+if not exist "%LOCAL_INFRA_MANAGER%" (
+  echo [ERROR] Local infrastructure manager not found: "%LOCAL_INFRA_MANAGER%"
+  pause
+  exit /b 1
+)
+
+if not exist "%LOCAL_PROCESS_MANAGER%" (
+  echo [ERROR] Local process manager not found: "%LOCAL_PROCESS_MANAGER%"
+  pause
+  exit /b 1
+)
+
+REM 关闭由本项目上一次启动并记录的本地进程。
+powershell -NoProfile -ExecutionPolicy Bypass -File "%LOCAL_PROCESS_MANAGER%" -Action stop -Service all
 IF ERRORLEVEL 1 (
-  echo [ERROR] Kingbase is not ready. Abort startup.
+  echo [ERROR] Failed to stop stale local processes.
+  pause
+  exit /b 1
+)
+
+REM 发现未知进程占用端口时终止启动，避免误杀其他开发服务。
+CALL :require_free_port %MAIN_APP_PORT% MainBackend
+IF ERRORLEVEL 1 (
+  pause
+  exit /b 1
+)
+CALL :require_free_port 8080 Frontend
+IF ERRORLEVEL 1 (
+  pause
+  exit /b 1
+)
+
+REM 启动本地基础设施并等待健康检查通过。
+CALL :ensure_local_infra
+IF ERRORLEVEL 1 (
+  echo [ERROR] Local infrastructure is not ready. Abort startup.
   pause
   exit /b 1
 )
 
 REM Seed farms and historical data.
-echo [INFO] Running seed script...
-cd /D "%BACKEND_DIR%" && set DB_HOST=%DB_HOST% && set DB_PORT=%DB_PORT% && set DB_USER=%DB_USER% && set DB_PASSWORD=%DB_PASSWORD% && set DB_NAME=%DB_NAME% && ""%MAIN_PY%"" seed_farms.py
+if /I "%LOCAL_SEED_ENABLED%"=="true" (
+  echo [INFO] Running seed script...
+  cd /D "%BACKEND_DIR%" && set DB_HOST=%DB_HOST% && set DB_PORT=%DB_PORT% && set DB_USER=%DB_USER% && set DB_PASSWORD=%DB_PASSWORD% && set DB_NAME=%DB_NAME% && ""%MAIN_PY%"" seed_farms.py
+  IF ERRORLEVEL 1 (
+    echo [ERROR] Seed script failed.
+    pause
+    exit /b 1
+  )
+  echo [OK] Seed data initialized.
+) else (
+  echo [INFO] Seed data initialization skipped by LOCAL_SEED_ENABLED=%LOCAL_SEED_ENABLED%.
+)
+
+REM Start merged backend.
+CALL :start_local_process backend
 IF ERRORLEVEL 1 (
-  echo [ERROR] Seed script failed.
   pause
   exit /b 1
 )
-echo [OK] Seed data initialized.
-
-REM Start merged backend.
-start "Backend" /D "%BACKEND_DIR%" cmd /k "chcp 65001 > nul && %BACKEND_ENV_CMD% && ""%MAIN_PY%"" app.py"
 
 REM Start Celery worker. Use solo pool for Windows local development.
-start "Celery Worker" /D "%BACKEND_DIR%" cmd /k "chcp 65001 > nul && %BACKEND_ENV_CMD% && ""%MAIN_PY%"" -m celery -A celery_app.celery_app worker --loglevel=info --pool=solo"
+CALL :start_local_process worker
+IF ERRORLEVEL 1 (
+  pause
+  exit /b 1
+)
 
 REM Start Celery beat with DB-backed schedule reload.
-start "Celery Beat" /D "%BACKEND_DIR%" cmd /k "chcp 65001 > nul && %BACKEND_ENV_CMD% && ""%MAIN_PY%"" -m celery -A celery_app.celery_app beat --loglevel=info"
+CALL :start_local_process beat
+IF ERRORLEVEL 1 (
+  pause
+  exit /b 1
+)
 
 REM Wait for backend before launching frontend.
 CALL :wait_tcp %MAIN_APP_HOST% %MAIN_APP_PORT% Backend
@@ -110,7 +165,11 @@ IF ERRORLEVEL 1 (
 
 REM Start frontend.
 if defined FRONTEND_CMD (
-  start "Frontend" /D "%FRONTEND_DIR%" cmd /k "chcp 65001 > nul && set NODE_OPTIONS=--trace-deprecation && set MAIN_BACKEND_PORT=%MAIN_BACKEND_PORT% && set AUTO_BACKEND_PORT=%AUTO_BACKEND_PORT% && %FRONTEND_CMD%"
+  CALL :start_local_process frontend
+  IF ERRORLEVEL 1 (
+    pause
+    exit /b 1
+  )
 ) else (
   echo [WARN] Frontend startup skipped. Neither package.json nor vue-cli-service.cmd was found.
 )
@@ -119,8 +178,10 @@ echo Services are starting...
 echo Backend:       http://%MAIN_APP_HOST%:%MAIN_APP_PORT%
 echo Celery worker: local console window
 echo Celery beat:   local console window
+echo KingBase:      %DB_HOST%:%DB_PORT%
 echo Redis:         %REDIS_HOST%:%REDIS_PORT%
 echo Frontend:      http://localhost:8080
+echo Infrastructure management: manage-local-infra.bat status^|stop^|logs^|tools
 echo.
 exit /b 0
 
@@ -141,28 +202,23 @@ echo         Checked: %~2
 pause
 exit /b 1
 
-:ensure_redis
-CALL :check_tcp %REDIS_HOST% %REDIS_PORT%
-IF %ERRORLEVEL% EQU 0 exit /b 0
-
-echo [INFO] Redis is not listening. Trying Docker container wind-power-local-redis...
-docker version > nul 2>&1
+:ensure_local_infra
+echo [INFO] Starting local KingBase and Redis...
+call "%LOCAL_INFRA_MANAGER%" start
 IF ERRORLEVEL 1 (
-  echo [ERROR] Docker is not available and Redis is not running on %REDIS_HOST%:%REDIS_PORT%.
+  echo [ERROR] Failed to start or prepare the local infrastructure.
   exit /b 1
 )
+echo [OK] Local infrastructure is healthy.
+exit /b 0
 
-docker start wind-power-local-redis > nul 2>&1
-IF ERRORLEVEL 1 (
-  docker run -d --name wind-power-local-redis -p %REDIS_PORT%:6379 redis:7-alpine > nul
-  IF ERRORLEVEL 1 (
-    echo [ERROR] Failed to start Redis container.
-    exit /b 1
-  )
+:start_local_process
+powershell -NoProfile -ExecutionPolicy Bypass -File "%LOCAL_PROCESS_MANAGER%" -Action start -Service %~1
+if errorlevel 1 (
+  echo [ERROR] Failed to start local process: %~1
+  exit /b 1
 )
-
-CALL :wait_tcp %REDIS_HOST% %REDIS_PORT% Redis
-exit /b %ERRORLEVEL%
+exit /b 0
 
 :check_tcp
 powershell -NoProfile -Command "$c = New-Object Net.Sockets.TcpClient; try { $c.Connect('%~1', %~2); if ($c.Connected) { $c.Close(); exit 0 } else { exit 1 } } catch { exit 1 }"
@@ -186,17 +242,18 @@ if %_elapsed% GEQ %_max_wait% (
   echo [ERROR] Timeout waiting for %_name%.
   exit /b 1
 )
-timeout /t 2 > nul
+powershell -NoProfile -Command "Start-Sleep -Seconds 2"
 set /a "_elapsed+=2"
 goto :wait_tcp_loop
 
-:free_port
+:require_free_port
 set "_target_port=%~1"
 set "_target_name=%~2"
 
 echo [INFO] Checking %_target_name% port (%_target_port%)...
 for /f %%p in ('powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort %_target_port% -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique"') do (
-  echo [WARN] Port %_target_port% is occupied by PID %%p, terminating...
-  taskkill /PID %%p /F > nul 2>&1
+  echo [ERROR] Port %_target_port% is occupied by unknown PID %%p.
+  echo         Stop that process or configure another local port before retrying.
+  exit /b 1
 )
 exit /b 0

@@ -150,3 +150,6 @@ dashboard-fix-verification.png
 *_test.log
 template_predict_input.csv
 
+# 本地开发进程状态
+**/.local-run/
+

@@ -1,0 +1,63 @@
+services:
+  kingbase:
+    image: kingbase_v009r001c002b0014_single_x86:v1
+    privileged: true
+    environment:
+      NEED_START: "yes"
+      DB_USER: ${LOCAL_DB_USER:-system}
+      DB_PASSWORD: ${LOCAL_DB_PASSWORD:-12345678ab}
+      DB_MODE: oracle
+      ENCODING: UTF8
+      TZ: Asia/Shanghai
+    command: /usr/sbin/init
+    ports:
+      - "127.0.0.1:${LOCAL_DB_PORT:-15432}:54321"
+    volumes:
+      - local_kingbase_data:/home/kingbase/userdata
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - /home/kingbase/install/kingbase/bin/ksql -U$${DB_USER} -d test -c "SELECT 1;" >/dev/null 2>&1
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --appendfsync everysec
+    ports:
+      - "127.0.0.1:${LOCAL_REDIS_PORT:-6379}:6379"
+    volumes:
+      - local_redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  pgadmin:
+    image: dpage/pgadmin4
+    profiles: ["tools"]
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${LOCAL_PGADMIN_EMAIL:-admin@admin.com}
+      PGADMIN_DEFAULT_PASSWORD: ${LOCAL_PGADMIN_PASSWORD:-admin}
+      TZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:${LOCAL_PGADMIN_PORT:-5050}:80"
+    volumes:
+      - local_pgadmin_data:/var/lib/pgadmin
+    restart: unless-stopped
+    depends_on:
+      kingbase:
+        condition: service_healthy
+
+volumes:
+  local_kingbase_data:
+    name: wind-power-local-kingbase-data
+  local_redis_data:
+    name: wind-power-local-redis-data
+  local_pgadmin_data:
+    name: wind-power-local-pgadmin-data
