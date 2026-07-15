@@ -54,3 +54,8 @@ export async function getAvailableFarms() {
   const response = await axiosInstance.get('/scada/connections/farms')
   return response?.data?.data || []
 }
+
+export async function getHealth() {
+  const response = await axiosInstance.get('/api/v1/scada/health')
+  return response?.data || { availability: 'unavailable', connections: [] }
+}

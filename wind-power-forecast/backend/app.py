@@ -89,7 +89,6 @@ from routes.auth_extensions import auth_extensions_bp
 from routes.user import user_bp
 from routes.example_route import example_bp
 from routes.feature_upload import feature_upload_bp
-from routes.physical_simulation_router import physical_simulation_bp
 from routes.system_info_router import system_info_bp
 from routes.system_settings_router import system_settings_bp
 from routes.alarm_router import alarm_bp
@@ -123,7 +122,9 @@ app.register_blueprint(auth_extensions_bp, url_prefix='/api/v1/auth', name='auth
 app.register_blueprint(user_bp, url_prefix='/api/user')
 app.register_blueprint(example_bp, url_prefix='/api/example')
 app.register_blueprint(feature_upload_bp)
-app.register_blueprint(physical_simulation_bp)
+if app.config.get('PHYSICAL_SIMULATION_ENABLED', False):
+    from routes.physical_simulation_router import physical_simulation_bp
+    app.register_blueprint(physical_simulation_bp)
 app.register_blueprint(system_info_bp, url_prefix='/system')
 app.register_blueprint(system_settings_bp, url_prefix='/system')
 app.register_blueprint(alarm_bp, url_prefix='/system')
@@ -334,9 +335,13 @@ initialize()
 try:
     from services.scada_manager import get_scada_manager
     _scada_mgr = get_scada_manager()
-    _recovered = _scada_mgr.recover_on_startup()
-    if _recovered:
-        print(f"SCADA自动恢复: 重新启动 {_recovered} 个连接")
+    if app.config.get('SCADA_REALTIME_ENABLED', False):
+        _recovered = _scada_mgr.recover_on_startup()
+        if _recovered:
+            print(f"SCADA自动恢复: 重新启动 {_recovered} 个连接")
+    else:
+        _scada_mgr.disable_on_startup()
+        print("SCADA实时接入未启用，遗留Worker已清理")
 except Exception as e:
     print(f"SCADA自动恢复失败: {e}")
 

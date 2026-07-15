@@ -35,6 +35,23 @@ function Invoke-Api {
     Invoke-RestMethod @parameters
 }
 
+function Wait-ConnectionStatus {
+    param(
+        [int]$ConnectionId,
+        [string]$ExpectedStatus,
+        [int]$WaitSeconds = 20
+    )
+    $statusDeadline = (Get-Date).AddSeconds($WaitSeconds)
+    while ((Get-Date) -lt $statusDeadline) {
+        $response = Invoke-Api -Method Get -Path "/scada/connections/$ConnectionId"
+        if ($response.data.status -eq $ExpectedStatus) {
+            return
+        }
+        Start-Sleep -Milliseconds 250
+    }
+    throw "SCADA connection $ConnectionId did not reach status $ExpectedStatus"
+}
+
 if (-not (Test-Path -LiteralPath $CatalogPath)) {
     throw "Point catalog not found: $CatalogPath"
 }
@@ -64,7 +81,7 @@ foreach ($farm in $catalog.farms) {
     if ($null -ne $existing -and $existing.status -ne 'stopped') {
         try {
             Invoke-Api -Method Post -Path "/scada/connections/$($existing.id)/stop" -Body @{} | Out-Null
-            Start-Sleep -Milliseconds 500
+            Wait-ConnectionStatus -ConnectionId ([int]$existing.id) -ExpectedStatus 'stopped'
         }
         catch {
             Write-Host "[WARN] Could not stop stale connection $($farm.farm_code): $($_.Exception.Message)"

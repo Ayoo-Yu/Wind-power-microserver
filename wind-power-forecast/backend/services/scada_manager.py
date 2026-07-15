@@ -73,7 +73,10 @@ class ScadaManager:
             os.path.dirname(os.path.abspath(__file__)), 'scada_worker.py'
         )
         self._backend_url = self._detect_backend_url()
-        self._worker_secret = os.environ.get('SCADA_WORKER_SECRET', '')
+        self._reconcile_seconds = max(
+            1,
+            int(os.environ.get('SCADA_MANAGER_RECONCILE_SECONDS', '5')),
+        )
 
     def _detect_backend_url(self) -> str:
         """Detect the backend URL for workers to POST data to."""
@@ -102,7 +105,6 @@ class ScadaManager:
             'upload_target_ioa': conn.upload_target_ioa,
             'fetch_interval': conn.fetch_interval or 60,
             'backend_url': self._backend_url,
-            'worker_secret': self._worker_secret,
             'capacity': farm.capacity if farm and farm.capacity else 200,
         }
         with db_session() as db:
@@ -115,7 +117,7 @@ class ScadaManager:
                 config['farm_index'] = 0
         return config
 
-    def start_connection(self, conn_id: int):
+    def start_connection(self, conn_id: int, *, ensure_monitor: bool = True):
         """Start a worker subprocess for the given connection (thread-safe)."""
         with _start_lock:
             if conn_id in self._processes:
@@ -127,6 +129,15 @@ class ScadaManager:
                 conn = db.query(ScadaConnection).filter(ScadaConnection.id == conn_id).first()
                 if not conn:
                     raise ValueError(f'Connection {conn_id} not found')
+                if (
+                    conn.protocol == 'http_poll'
+                    and os.environ.get(
+                        'SCADA_ALLOW_SYNTHETIC_HTTP_POLL', 'false'
+                    ).strip().lower() != 'true'
+                ):
+                    raise RuntimeError(
+                        'Synthetic HTTP polling is disabled by deployment config'
+                    )
 
                 farm = db.query(WindFarm).filter(WindFarm.farm_code == conn.farm_code).first()
                 config = self._build_worker_config(conn, farm)
@@ -146,17 +157,20 @@ class ScadaManager:
             if sys.platform == 'win32':
                 popen_kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
 
-            proc = subprocess.Popen(
-                [python, self._worker_script, '--config', config_json],
-                **popen_kwargs,
-            )
+            try:
+                proc = subprocess.Popen(
+                    [python, self._worker_script, '--config', config_json],
+                    **popen_kwargs,
+                )
+            finally:
+                log_file.close()
 
             self._processes[conn_id] = proc
-            self._update_db_status(conn_id, 'running', 'Worker started')
+            self._update_db_status(conn_id, 'connecting', 'Worker started, waiting for data source')
 
             logger.info(f"Started worker for connection {conn_id} (PID={proc.pid}, farm={config['farm_code']})")
 
-            if not self._running:
+            if ensure_monitor and not self._running:
                 self._start_monitor()
 
     def stop_connection(self, conn_id: int):
@@ -216,7 +230,7 @@ class ScadaManager:
         recovered = 0
         for conn_id, farm_code in enabled_rows:
             try:
-                self.start_connection(conn_id)
+                self.start_connection(conn_id, ensure_monitor=False)
                 recovered += 1
                 logger.info(f"Recovered connection {conn_id} ({farm_code})")
             except Exception as e:
@@ -224,7 +238,20 @@ class ScadaManager:
 
         if recovered:
             logger.info(f"SCADA auto-recovery: started {recovered} worker(s)")
+        if not self._running:
+            self._start_monitor()
         return recovered
+
+    def disable_on_startup(self):
+        """部署开关关闭时清理遗留 Worker，并统一重置数据库状态。"""
+        _kill_orphan_workers()
+        with db_session() as db:
+            connections = db.query(ScadaConnection).all()
+            for conn in connections:
+                conn.status = 'stopped'
+                conn.status_message = 'SCADA realtime ingestion disabled by deployment config'
+                conn.updated_at = datetime.now()
+            db.commit()
 
     def stop_all(self):
         """Stop all running workers."""
@@ -243,7 +270,7 @@ class ScadaManager:
         self._monitor_thread.start()
 
     def _monitor_loop(self):
-        """Periodically check worker health and restart dead workers."""
+        """周期检查子进程，并将其收敛到数据库记录的期望状态。"""
         while self._running:
             try:
                 dead_connections: list[tuple[int, int]] = []
@@ -253,21 +280,47 @@ class ScadaManager:
 
                 for conn_id, exit_code in dead_connections:
                     del self._processes[conn_id]
-                    with db_session() as db:
-                        conn = db.query(ScadaConnection).filter(ScadaConnection.id == conn_id).first()
-                        if conn and conn.is_enabled and conn.status == 'running':
-                            logger.info(f"Auto-restarting connection {conn_id}")
-                            try:
-                                self.start_connection(conn_id)
-                            except Exception as e:
-                                logger.error(f"Auto-restart failed for {conn_id}: {e}")
-                        elif conn:
-                            self._update_db_status(conn_id, 'error', f'Worker exited (code {exit_code})')
+                    self._update_db_status(
+                        conn_id,
+                        'error',
+                        f'Worker exited (code {exit_code})',
+                    )
+
+                self._reconcile_desired_state()
 
             except Exception as e:
                 logger.error(f"Monitor loop error: {e}")
 
-            time.sleep(30)
+            time.sleep(self._reconcile_seconds)
+
+    def _reconcile_desired_state(self):
+        """让实际 Worker 进程与数据库中的启用和重启请求保持一致。"""
+        with db_session() as db:
+            desired = [
+                (conn.id, bool(conn.is_enabled), conn.status)
+                for conn in db.query(ScadaConnection).all()
+            ]
+
+        for conn_id, enabled, status in desired:
+            proc = self._processes.get(conn_id)
+            alive = proc is not None and proc.poll() is None
+            try:
+                if status == 'restart_requested':
+                    if alive:
+                        self.restart_connection(conn_id)
+                    else:
+                        self.start_connection(conn_id)
+                elif enabled and not alive:
+                    self.start_connection(conn_id)
+                elif not enabled and alive:
+                    self.stop_connection(conn_id)
+                elif not enabled and status == 'stopping':
+                    self._update_db_status(conn_id, 'stopped', 'Worker stopped')
+            except Exception as exc:
+                logger.error(
+                    f"Failed to reconcile SCADA connection {conn_id}: {exc}"
+                )
+                self._update_db_status(conn_id, 'error', str(exc))
 
     def _update_db_status(self, conn_id: int, status: str, message: str = ''):
         try:
@@ -300,6 +353,8 @@ class ScadaManager:
                         conn.last_data_at = datetime.now()
                     if status == 'error':
                         conn.last_error = message
+                    elif status == 'running':
+                        conn.last_error = None
                     db.commit()
         except Exception as e:
             logger.error(f"Failed to update worker status for {conn_id}: {e}")

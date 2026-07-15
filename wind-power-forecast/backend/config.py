@@ -47,8 +47,35 @@ class Config:
         _env('INTEGRATION_MAX_PAYLOAD_BYTES', str(256 * 1024 * 1024))
     )
     DEPLOYMENT_MODE = _env('DEPLOYMENT_MODE', 'development')
+    INTEGRATION_API_REQUIRED = _env(
+        'INTEGRATION_API_REQUIRED', 'false'
+    ).lower() == 'true'
     SCADA_REALTIME_ENABLED = _env('SCADA_REALTIME_ENABLED', 'false').lower() == 'true'
+    SCADA_REQUIRED = _env('SCADA_REQUIRED', 'false').lower() == 'true'
+    SCADA_ALLOW_SYNTHETIC_HTTP_POLL = _env(
+        'SCADA_ALLOW_SYNTHETIC_HTTP_POLL', 'false'
+    ).lower() == 'true'
+    SCADA_WORKER_SECRET = _env('SCADA_WORKER_SECRET', '')
+    SCADA_DATA_STALE_AFTER_SECONDS = int(
+        _env('SCADA_DATA_STALE_AFTER_SECONDS', '1200')
+    )
+    SCADA_MAX_CLOCK_SKEW_SECONDS = int(
+        _env('SCADA_MAX_CLOCK_SKEW_SECONDS', '300')
+    )
+    SCADA_MAX_SOURCE_AGE_SECONDS = int(
+        _env('SCADA_MAX_SOURCE_AGE_SECONDS', '86400')
+    )
+    SCADA_POWER_MIN_MW = float(_env('SCADA_POWER_MIN_MW', '-0.5'))
+    SCADA_POWER_MAX_CAPACITY_FACTOR = float(
+        _env('SCADA_POWER_MAX_CAPACITY_FACTOR', '1.2')
+    )
+    SCADA_INGEST_RETENTION_DAYS = int(
+        _env('SCADA_INGEST_RETENTION_DAYS', '30')
+    )
     NWP_INGESTION_ENABLED = _env('NWP_INGESTION_ENABLED', 'false').lower() == 'true'
+    NWP_INGESTION_REQUIRED = _env(
+        'NWP_INGESTION_REQUIRED', 'false'
+    ).lower() == 'true'
     EXTREME_WEATHER_LIVE_ENABLED = _env(
         'EXTREME_WEATHER_LIVE_ENABLED', 'false'
     ).lower() == 'true'

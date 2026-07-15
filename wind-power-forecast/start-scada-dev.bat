@@ -4,6 +4,8 @@ setlocal
 
 set "SCADA_TEST_UPDATE_INTERVAL_SECONDS=10"
 set "SCADA_REALTIME_ENABLED=true"
+set "SCADA_REQUIRED=true"
+set "SCADA_DATA_STALE_AFTER_SECONDS=60"
 set "SCADA_TIMESTAMP_POLICY=floor_quarter"
 
 call "%~dp0start-scada-test.bat"

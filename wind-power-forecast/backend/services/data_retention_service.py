@@ -22,6 +22,7 @@ ARCHIVE_DIR = os.environ.get(
 class RetentionTable:
     table_name: str
     time_column: str
+    retention_days: Optional[int] = None
 
 
 RETENTION_TABLES = [
@@ -29,6 +30,11 @@ RETENTION_TABLES = [
     RetentionTable("supershortl_power", "timestamp"),
     RetentionTable("shortl_power", "timestamp"),
     RetentionTable("mid_power", "timestamp"),
+    RetentionTable(
+        "scada_ingest_records",
+        "received_at",
+        int(os.environ.get("SCADA_INGEST_RETENTION_DAYS", "30")),
+    ),
 ]
 
 
@@ -113,7 +119,8 @@ def run_retention_archive(
     archive_dir: str = ARCHIVE_DIR,
     now: Optional[datetime] = None,
 ) -> dict:
-    cutoff = (now or datetime.now()) - timedelta(days=retention_days)
+    effective_now = now or datetime.now()
+    cutoff = effective_now - timedelta(days=retention_days)
     os.makedirs(archive_dir, exist_ok=True)
 
     connection = engine.raw_connection()
@@ -122,7 +129,14 @@ def run_retention_archive(
         try:
             results: List[dict] = []
             for config in RETENTION_TABLES:
-                results.append(_archive_and_delete_table(cursor, config, cutoff, archive_dir))
+                table_days = config.retention_days or retention_days
+                table_cutoff = effective_now - timedelta(days=table_days)
+                result = _archive_and_delete_table(
+                    cursor, config, table_cutoff, archive_dir
+                )
+                result["retention_days"] = table_days
+                result["cutoff"] = table_cutoff.isoformat(timespec="seconds")
+                results.append(result)
 
             # Per-farm ECMWF grid tables
             cursor.execute("SELECT farm_code FROM wind_farms WHERE is_active = true")

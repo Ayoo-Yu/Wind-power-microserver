@@ -9,6 +9,8 @@ from db_models.scada_connection import ScadaConnection
 from db_models.report_config import WindFarm
 from db_models.power import ActualPower
 from datetime import datetime
+from services.scada_health_service import build_scada_health_snapshot
+from services.scada_ingest_service import ScadaIngestError, ingest_scada_sample
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +18,7 @@ scada_connection_bp = Blueprint('scada_connection', __name__)
 
 WORKER_SECRET = os.environ.get('SCADA_WORKER_SECRET', '')
 ALLOWED_PROTOCOLS = ('c104', 'http_poll')
+ALLOWED_WORKER_STATUSES = {'stopped', 'running', 'error', 'connecting'}
 
 
 def _parse_ioa_points(raw):
@@ -28,8 +31,8 @@ def _parse_ioa_points(raw):
         return {}
 
 
-def _connection_to_dict(conn: ScadaConnection) -> dict:
-    return {
+def _connection_to_dict(conn: ScadaConnection, health: dict | None = None) -> dict:
+    result = {
         'id': conn.id,
         'farm_code': conn.farm_code,
         'name': conn.name,
@@ -51,6 +54,9 @@ def _connection_to_dict(conn: ScadaConnection) -> dict:
         'created_at': conn.created_at.isoformat() if conn.created_at else None,
         'updated_at': conn.updated_at.isoformat() if conn.updated_at else None,
     }
+    if health is not None:
+        result['health'] = health
+    return result
 
 
 def _validate_connection_data(data: dict) -> tuple[dict | None, str | None]:
@@ -73,6 +79,13 @@ def _validate_connection_data(data: dict) -> tuple[dict | None, str | None]:
     except (ValueError, TypeError):
         return None, 'server_port must be a valid integer'
 
+    try:
+        fetch_interval = int(data.get('fetch_interval', 60))
+        if not 1 <= fetch_interval <= 3600:
+            return None, 'fetch_interval must be between 1 and 3600 seconds'
+    except (ValueError, TypeError):
+        return None, 'fetch_interval must be a valid integer'
+
     return {
         'farm_code': data['farm_code'].strip(),
         'name': data['name'].strip(),
@@ -83,7 +96,7 @@ def _validate_connection_data(data: dict) -> tuple[dict | None, str | None]:
         'originator_address': int(data.get('originator_address', 0)),
         'ioa_points': data.get('ioa_points', {}),
         'upload_target_ioa': data.get('upload_target_ioa'),
-        'fetch_interval': int(data.get('fetch_interval', 60)),
+        'fetch_interval': fetch_interval,
         'poll_url': data.get('poll_url'),
         'is_enabled': data.get('is_enabled', True),
     }, None
@@ -101,7 +114,20 @@ def _safe_int(value, field_name):
 def list_connections():
     with db_session() as db:
         connections = db.query(ScadaConnection).order_by(ScadaConnection.id).all()
-        return jsonify({'success': True, 'data': [_connection_to_dict(c) for c in connections]})
+        snapshot = build_scada_health_snapshot(db, current_app.config)
+        health_by_id = {
+            item['connection_id']: item for item in snapshot['connections']
+        }
+        return jsonify({
+            'success': True,
+            'data': [
+                _connection_to_dict(c, health_by_id.get(c.id)) for c in connections
+            ],
+            'health_summary': {
+                key: snapshot[key]
+                for key in ('availability', 'reason', 'generated_at', 'counts')
+            },
+        })
 
 
 @scada_connection_bp.route('/scada/connections/<int:conn_id>', methods=['GET'])
@@ -110,7 +136,12 @@ def get_connection(conn_id: int):
         conn = db.query(ScadaConnection).filter(ScadaConnection.id == conn_id).first()
         if not conn:
             return jsonify({'success': False, 'error': 'Connection not found'}), 404
-        return jsonify({'success': True, 'data': _connection_to_dict(conn)})
+        snapshot = build_scada_health_snapshot(db, current_app.config)
+        health = next(
+            (item for item in snapshot['connections'] if item['connection_id'] == conn_id),
+            None,
+        )
+        return jsonify({'success': True, 'data': _connection_to_dict(conn, health)})
 
 
 @scada_connection_bp.route('/scada/connections', methods=['POST'])
@@ -118,6 +149,14 @@ def create_connection():
     data = request.get_json()
     if not data:
         return jsonify({'success': False, 'error': 'Request body is required'}), 400
+    if (
+        data.get('protocol', 'c104') == 'http_poll'
+        and not current_app.config.get('SCADA_ALLOW_SYNTHETIC_HTTP_POLL', False)
+    ):
+        return jsonify({
+            'success': False,
+            'error': 'HTTP 轮询模式会生成研发模拟数据，当前部署禁止创建该连接',
+        }), 400
 
     validated, error = _validate_connection_data(data)
     if error:
@@ -156,13 +195,21 @@ def update_connection(conn_id: int):
     data = request.get_json()
     if not data:
         return jsonify({'success': False, 'error': 'Request body is required'}), 400
+    if (
+        data.get('protocol') == 'http_poll'
+        and not current_app.config.get('SCADA_ALLOW_SYNTHETIC_HTTP_POLL', False)
+    ):
+        return jsonify({
+            'success': False,
+            'error': 'HTTP 轮询模式会生成研发模拟数据，当前部署禁止启用该模式',
+        }), 400
 
     with db_session() as db:
         conn = db.query(ScadaConnection).filter(ScadaConnection.id == conn_id).first()
         if not conn:
             return jsonify({'success': False, 'error': 'Connection not found'}), 404
 
-        if conn.status == 'running':
+        if conn.status in {'running', 'connecting', 'stopping', 'restart_requested'}:
             return jsonify({'success': False, 'error': 'Cannot update a running connection. Stop it first.'}), 409
 
         try:
@@ -208,7 +255,7 @@ def delete_connection(conn_id: int):
         if not conn:
             return jsonify({'success': False, 'error': 'Connection not found'}), 404
 
-        if conn.status == 'running':
+        if conn.status in {'running', 'connecting', 'stopping', 'restart_requested'}:
             return jsonify({'success': False, 'error': 'Cannot delete a running connection. Stop it first.'}), 409
 
         db.delete(conn)
@@ -218,52 +265,65 @@ def delete_connection(conn_id: int):
 
 @scada_connection_bp.route('/scada/connections/<int:conn_id>/start', methods=['POST'])
 def start_connection(conn_id: int):
+    if not current_app.config.get('SCADA_REALTIME_ENABLED', False):
+        return jsonify({
+            'success': False,
+            'error': '当前部署未启用 SCADA 实时接入，请先设置 SCADA_REALTIME_ENABLED',
+        }), 409
+
     with db_session() as db:
         conn = db.query(ScadaConnection).filter(ScadaConnection.id == conn_id).first()
         if not conn:
             return jsonify({'success': False, 'error': 'Connection not found'}), 404
-        if conn.status == 'running':
+        if (
+            conn.protocol == 'http_poll'
+            and not current_app.config.get('SCADA_ALLOW_SYNTHETIC_HTTP_POLL', False)
+        ):
+            return jsonify({
+                'success': False,
+                'error': '当前部署禁止启动会生成模拟数据的 HTTP 轮询连接',
+            }), 409
+        if conn.status in {'running', 'connecting', 'stopping', 'restart_requested'}:
             return jsonify({'success': False, 'error': 'Connection is already running'}), 409
         conn.is_enabled = True
+        conn.status = 'connecting'
+        conn.status_message = 'Start requested, waiting for SCADA manager reconciliation'
+        conn.updated_at = datetime.now()
         db.commit()
-
-    try:
-        from services.scada_manager import get_scada_manager
-        manager = get_scada_manager()
-        manager.start_connection(conn_id)
-        return jsonify({'success': True, 'message': 'Connection starting'})
-    except Exception as e:
-        logger.error(f"Failed to start SCADA connection {conn_id}: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+    return jsonify({'success': True, 'message': 'Connection start requested'}), 202
 
 
 @scada_connection_bp.route('/scada/connections/<int:conn_id>/stop', methods=['POST'])
 def stop_connection(conn_id: int):
-    try:
-        from services.scada_manager import get_scada_manager
-        manager = get_scada_manager()
-        manager.stop_connection(conn_id)
-        with db_session() as db:
-            conn = db.query(ScadaConnection).filter(ScadaConnection.id == conn_id).first()
-            if conn:
-                conn.is_enabled = False
-                db.commit()
-        return jsonify({'success': True, 'message': 'Connection stopped'})
-    except Exception as e:
-        logger.error(f"Failed to stop SCADA connection {conn_id}: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+    with db_session() as db:
+        conn = db.query(ScadaConnection).filter(ScadaConnection.id == conn_id).first()
+        if not conn:
+            return jsonify({'success': False, 'error': 'Connection not found'}), 404
+        conn.is_enabled = False
+        conn.status = 'stopping'
+        conn.status_message = 'Stop requested, waiting for SCADA manager reconciliation'
+        conn.updated_at = datetime.now()
+        db.commit()
+    return jsonify({'success': True, 'message': 'Connection stop requested'}), 202
 
 
 @scada_connection_bp.route('/scada/connections/<int:conn_id>/restart', methods=['POST'])
 def restart_connection(conn_id: int):
-    try:
-        from services.scada_manager import get_scada_manager
-        manager = get_scada_manager()
-        manager.restart_connection(conn_id)
-        return jsonify({'success': True, 'message': 'Connection restarting'})
-    except Exception as e:
-        logger.error(f"Failed to restart SCADA connection {conn_id}: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+    if not current_app.config.get('SCADA_REALTIME_ENABLED', False):
+        return jsonify({
+            'success': False,
+            'error': '当前部署未启用 SCADA 实时接入',
+        }), 409
+    with db_session() as db:
+        conn = db.query(ScadaConnection).filter(ScadaConnection.id == conn_id).first()
+        if not conn:
+            return jsonify({'success': False, 'error': 'Connection not found'}), 404
+        conn.is_enabled = True
+        conn.status = 'restart_requested'
+        conn.status_message = 'Restart requested, waiting for SCADA manager reconciliation'
+        conn.updated_at = datetime.now()
+        db.commit()
+    return jsonify({'success': True, 'message': 'Connection restart requested'}), 202
 
 
 @scada_connection_bp.route('/scada/connections/<int:conn_id>/test', methods=['POST'])
@@ -321,10 +381,11 @@ def get_connection_data(conn_id: int):
 
 def _verify_worker_secret():
     """Validate the worker-to-manager shared secret."""
-    if not WORKER_SECRET:
+    expected = current_app.config.get('SCADA_WORKER_SECRET', '') or WORKER_SECRET
+    if not expected:
         return True  # No secret configured, skip check
     provided = request.headers.get('X-Worker-Secret', '')
-    return provided == WORKER_SECRET
+    return provided == expected
 
 
 @scada_connection_bp.route('/scada/worker-status', methods=['POST'])
@@ -340,9 +401,12 @@ def worker_status():
     try:
         from services.scada_manager import get_scada_manager
         manager = get_scada_manager()
+        worker_state = data.get('status', 'unknown')
+        if worker_state not in ALLOWED_WORKER_STATUSES:
+            return jsonify({'error': 'invalid worker status'}), 400
         manager.update_worker_status(
             conn_id=data['connection_id'],
-            status=data.get('status', 'unknown'),
+            status=worker_state,
             message=data.get('status_message', ''),
             power_value=data.get('last_power_value'),
         )
@@ -350,6 +414,52 @@ def worker_status():
     except Exception as e:
         logger.error(f"Failed to process worker status: {e}")
         return jsonify({'error': str(e)}), 500
+
+
+@scada_connection_bp.route('/api/v1/scada/ingest', methods=['POST'])
+def ingest_sample():
+    """接收 Worker 样本，并在一个事务中完成审计、质检和实际功率落库。"""
+    if not current_app.config.get('SCADA_REALTIME_ENABLED', False):
+        return jsonify({
+            'accepted': False,
+            'error': 'SCADA 实时接入未启用',
+        }), 503
+    if not _verify_worker_secret():
+        return jsonify({'accepted': False, 'error': 'Unauthorized'}), 403
+
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({'accepted': False, 'error': '请求体必须是 JSON 对象'}), 400
+
+    try:
+        with db_session() as db:
+            result = ingest_scada_sample(db, payload, current_app.config)
+            response = result.to_dict()
+            status_code = 201 if result.outcome == 'created' else 200
+            if not result.accepted:
+                status_code = 422
+            return jsonify(response), status_code
+    except ScadaIngestError as exc:
+        return jsonify({'accepted': False, 'error': str(exc)}), exc.status_code
+    except Exception as exc:
+        logger.exception('SCADA 样本处理失败')
+        return jsonify({'accepted': False, 'error': 'SCADA 样本处理失败'}), 500
+
+
+@scada_connection_bp.route('/api/v1/scada/health', methods=['GET'])
+def scada_health():
+    """返回采集、预测和实际上报的运行态闭环状态。"""
+    try:
+        with db_session() as db:
+            return jsonify(build_scada_health_snapshot(db, current_app.config))
+    except Exception as exc:
+        logger.exception('SCADA 健康状态查询失败')
+        return jsonify({
+            'availability': 'unavailable',
+            'reason': 'SCADA 健康状态查询失败',
+            'error': str(exc),
+            'connections': [],
+        }), 503
 
 
 @scada_connection_bp.route('/scada/connections/farms', methods=['GET'])

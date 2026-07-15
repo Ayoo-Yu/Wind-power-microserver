@@ -22,6 +22,7 @@ from .physical_simulation import Condition, Turbine, Reading
 from .report_config import WindFarm, ReportConfig, ReportLog, ReportQualityStatistics, DataQualityMarker
 # SCADA连接管理模型
 from .scada_connection import ScadaConnection
+from .scada_ingest_record import ScadaIngestRecord
 # 运行数据模型
 from .operational_data import (
     WindSpeedData, TurbinePowerData, WeatherData,
@@ -68,7 +69,7 @@ __all__ = [
     'Condition', 'Turbine', 'Reading',
     # 上报管理模型
     'WindFarm', 'ReportConfig', 'ReportLog', 'ReportQualityStatistics', 'DataQualityMarker',
-    'ScadaConnection',
+    'ScadaConnection', 'ScadaIngestRecord',
     # 运行数据模型
     'WindSpeedData', 'TurbinePowerData', 'WeatherData',
     'InstalledCapacityData', 'AvailableCapacityData',

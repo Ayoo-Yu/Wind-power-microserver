@@ -32,3 +32,36 @@ def test_capability_manifest_reflects_deployment_flags():
     assert capabilities["integration_ingest"]["availability"] == "available"
     assert capabilities["extreme_weather"]["maturity"] == "placeholder"
     assert manifest["counts"]["unavailable"] == 1
+
+
+def test_capability_manifest_uses_scada_runtime_health():
+    runtime = {
+        "scada": {
+            "availability": "degraded",
+            "reason": "4/5 个数据源健康",
+            "connections": [],
+        }
+    }
+    manifest = build_capability_manifest(
+        {
+            "SCADA_REALTIME_ENABLED": True,
+            "SCADA_REQUIRED": True,
+        },
+        runtime,
+    )
+    capability = _by_id(manifest)["scada_realtime"]
+
+    assert capability["availability"] == "degraded"
+    assert capability["attention_required"] is True
+    assert capability["runtime"] == runtime["scada"]
+    assert manifest["counts"]["degraded"] == 1
+
+
+def test_optional_placeholders_do_not_request_banner_attention():
+    manifest = build_capability_manifest({"DEPLOYMENT_MODE": "development"})
+    capabilities = _by_id(manifest)
+
+    assert capabilities["integration_ingest"]["attention_required"] is False
+    assert capabilities["nwp_ingestion"]["attention_required"] is False
+    assert capabilities["extreme_weather"]["attention_required"] is False
+    assert capabilities["physical_simulation"]["attention_required"] is False

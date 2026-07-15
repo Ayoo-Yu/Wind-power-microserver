@@ -4,8 +4,10 @@ import pytest
 
 from services.scada_worker import (
     BEIJING_TZ,
+    point_quality_label,
     round_to_quarter_hour,
     select_sample_timestamp,
+    submit_sample,
 )
 
 
@@ -43,3 +45,47 @@ def test_unknown_timestamp_policy_is_rejected():
             datetime.now(timezone(timedelta(hours=8))),
             {"timestamp_policy": "unknown"},
         )
+
+
+def test_point_quality_is_normalized():
+    class Quality:
+        def __init__(self, good):
+            self.good = good
+
+        def is_good(self):
+            return self.good
+
+    class Point:
+        def __init__(self, good):
+            self.quality = Quality(good)
+
+    assert point_quality_label(Point(True)) == "good"
+    assert point_quality_label(Point(False)) == "bad"
+
+
+def test_sample_submission_only_falls_back_for_old_backend(monkeypatch):
+    calls = []
+
+    def fake_post_json(url, payload, headers=None):
+        calls.append((url, payload, headers))
+        return 404, {"error": "endpoint_not_found"}
+
+    monkeypatch.setattr("services.scada_worker._post_json", fake_post_json)
+    monkeypatch.setattr("services.scada_worker.post_power", lambda *args: 201)
+
+    status, result = submit_sample(
+        {
+            "connection_id": 1,
+            "farm_code": "CF",
+            "backend_url": "http://backend",
+        },
+        power=12.5,
+        normalized_timestamp=datetime(2026, 7, 15, 10, 0),
+        source_timestamp=None,
+        ioa=16385,
+        quality="good",
+    )
+
+    assert status == 201
+    assert result["outcome"] == "legacy_actual_power"
+    assert calls[0][0].endswith("/api/v1/scada/ingest")

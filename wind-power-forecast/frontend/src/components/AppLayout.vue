@@ -213,6 +213,7 @@ export default {
     const dbUnavailable = ref(dbState.unavailable)
     const capabilities = ref([])
     let timeTicker = null
+    let capabilityTicker = null
 
     const unsubscribeDb = dbState.onChange((val) => { dbUnavailable.value = val })
 
@@ -237,7 +238,9 @@ export default {
     )
     const canViewAlerts = computed(() => hasPermission('view_alarm_center') || hasPermission('manage_reports'))
     const capabilityIssues = computed(() =>
-      capabilities.value.filter(item => item.availability !== 'available')
+      capabilities.value.filter(
+        item => item.attention_required !== false && item.availability !== 'available'
+      )
     )
     const capabilityIssueText = computed(() =>
       capabilityIssues.value.map(item => `${item.name}: ${item.reason}`).join('；')
@@ -250,6 +253,12 @@ export default {
       } catch (error) {
         capabilities.value = []
         console.warn('系统能力清单加载失败:', error?.message || error)
+      }
+    }
+
+    const refreshCapabilitiesWhenVisible = () => {
+      if (document.visibilityState === 'visible') {
+        fetchCapabilities()
       }
     }
 
@@ -382,12 +391,18 @@ export default {
       timeTicker = setInterval(refreshSystemTime, 1000)
       fetchCurrentUser()
       fetchCapabilities()
+      capabilityTicker = setInterval(fetchCapabilities, 30000)
+      document.addEventListener('visibilitychange', refreshCapabilitiesWhenVisible)
     })
 
     onUnmounted(() => {
       if (timeTicker) {
         clearInterval(timeTicker)
       }
+      if (capabilityTicker) {
+        clearInterval(capabilityTicker)
+      }
+      document.removeEventListener('visibilitychange', refreshCapabilitiesWhenVisible)
       unsubscribeDb()
     })
 

@@ -18,7 +18,8 @@ $testFiles = @(
     "tests/test_report_outbox_service.py",
     "tests/test_capability_service.py",
     "tests/test_celery_static_schedules.py",
-    "tests/test_scada_worker_timestamp.py"
+    "tests/test_scada_worker_timestamp.py",
+    "tests/test_scada_closed_loop.py"
 )
 
 Push-Location $backendDir
@@ -104,6 +105,26 @@ foreach ($scadaPowerShellFile in $scadaPowerShellFiles) {
     ) | Out-Null
     if ($parseErrors.Count -gt 0) {
         throw "SCADA PowerShell syntax validation failed: $scadaPowerShellFile"
+    }
+}
+
+$scadaBatchFiles = @(
+    "start-scada-dev.bat",
+    "start-scada-test.bat",
+    "stop-scada-dev.bat",
+    "stop-scada-test.bat",
+    "test-scada-test.bat"
+)
+foreach ($scadaBatchFile in $scadaBatchFiles) {
+    $batchPath = Join-Path $projectDir $scadaBatchFile
+    $bytes = [System.IO.File]::ReadAllBytes($batchPath)
+    for ($index = 0; $index -lt $bytes.Length; $index++) {
+        if (
+            $bytes[$index] -eq 10 -and
+            ($index -eq 0 -or $bytes[$index - 1] -ne 13)
+        ) {
+            throw "SCADA batch file must use CRLF: $scadaBatchFile"
+        }
     }
 }
 

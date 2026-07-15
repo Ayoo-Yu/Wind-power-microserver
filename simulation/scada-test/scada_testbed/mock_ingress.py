@@ -107,6 +107,39 @@ class EventStore:
                 "received_at": datetime.now().astimezone().isoformat(timespec="milliseconds"),
             }
 
+    def add_ingest(self, payload: dict[str, Any]) -> tuple[bool, str, dict[str, Any]]:
+        required = {"connection_id", "farm_code", "quality"}
+        missing = sorted(required - set(payload))
+        if missing:
+            raise ValueError(f"缺少字段: {', '.join(missing)}")
+        quality = str(payload.get("quality", "unknown")).lower()
+        power = payload.get("power_mw")
+        if quality != "good" or power is None:
+            event = {
+                "connection_id": payload.get("connection_id"),
+                "farm_code": payload.get("farm_code"),
+                "quality": quality,
+                "outcome": "rejected",
+                "message": "模拟接收端拒绝无效质量样本",
+            }
+            return False, "rejected", event
+
+        timestamp = payload.get("normalized_timestamp") or payload.get("source_timestamp")
+        if not timestamp:
+            timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
+        action, event = self.add_power({
+            "Timestamp": timestamp,
+            "farm_code": payload["farm_code"],
+            "wp_true": power,
+        })
+        event.update({
+            "connection_id": payload.get("connection_id"),
+            "ioa": payload.get("ioa"),
+            "quality": quality,
+            "outcome": action,
+        })
+        return True, action, event
+
     def reset(self) -> None:
         with self._lock:
             self._deliveries.clear()
@@ -186,6 +219,19 @@ def make_handler(store: EventStore) -> type[BaseHTTPRequestHandler]:
                         return
                     action, event = store.add_power(self._body())
                     self._json(HTTPStatus.OK, {"success": True, "action": action, "data": event})
+                elif self.path == "/api/v1/scada/ingest":
+                    failure = store.should_fail()
+                    if failure is not None:
+                        self._json(failure, {"error": "injected_downstream_failure"})
+                        return
+                    accepted, outcome, event = store.add_ingest(self._body())
+                    status = HTTPStatus.OK if accepted else HTTPStatus.UNPROCESSABLE_ENTITY
+                    self._json(status, {
+                        "accepted": accepted,
+                        "outcome": outcome,
+                        "message": event.get("message", "模拟接收端已处理"),
+                        "data": event,
+                    })
                 elif self.path == "/scada/worker-status":
                     store.add_worker_status(self._body())
                     self._json(HTTPStatus.OK, {"success": True})

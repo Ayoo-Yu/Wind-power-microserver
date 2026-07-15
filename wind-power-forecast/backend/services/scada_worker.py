@@ -164,7 +164,7 @@ def update_status(config: dict, status: str, message: str = '', power_value=None
     if power_value is not None:
         payload['last_power_value'] = int(power_value * 10)
     headers = {'Content-Type': 'application/json'}
-    secret = config.get('worker_secret')
+    secret = config.get('worker_secret') or os.environ.get('SCADA_WORKER_SECRET', '')
     if secret:
         headers['X-Worker-Secret'] = secret
     try:
@@ -180,29 +180,105 @@ def update_status(config: dict, status: str, message: str = '', power_value=None
         logger.warning(f"Failed to update status: {e}")
 
 
-def post_power(backend_url: str, farm_code: str, timestamp_str: str, power: float):
-    """POST power data to the backend actual_power API"""
-    url = f'{backend_url}/actual_power/'
-    payload = json.dumps({
-        'Timestamp': timestamp_str,
-        'farm_code': farm_code,
-        'wp_true': round(power, 2),
-    }).encode('utf-8')
+def _post_json(url: str, payload: dict, headers: dict | None = None):
+    request_headers = {'Content-Type': 'application/json'}
+    request_headers.update(headers or {})
     req = urllib.request.Request(
         url,
-        data=payload,
-        headers={'Content-Type': 'application/json'},
+        data=json.dumps(payload).encode('utf-8'),
+        headers=request_headers,
         method='POST',
     )
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
-            return resp.status
-    except urllib.error.HTTPError as e:
-        logger.warning(f"POST power failed: {e.code}")
-        return e.code
-    except Exception as e:
-        logger.warning(f"POST power error: {e}")
-        return 0
+            raw = resp.read().decode('utf-8')
+            body = json.loads(raw) if raw else {}
+            return resp.status, body
+    except urllib.error.HTTPError as exc:
+        try:
+            raw = exc.read().decode('utf-8')
+            body = json.loads(raw) if raw else {}
+        except Exception:
+            body = {}
+        return exc.code, body
+    except Exception as exc:
+        logger.warning(f"POST sample error: {exc}")
+        return 0, {'error': str(exc)}
+
+
+def post_power(backend_url: str, farm_code: str, timestamp_str: str, power: float):
+    """兼容旧后端的实际功率写入接口。"""
+    url = f'{backend_url}/actual_power/'
+    status, _body = _post_json(url, {
+        'Timestamp': timestamp_str,
+        'farm_code': farm_code,
+        'wp_true': round(power, 2),
+    })
+    return status
+
+
+def _timestamp_text(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    try:
+        return value.isoformat()
+    except AttributeError:
+        return str(value)
+
+
+def point_quality_label(point) -> str:
+    """将 c104 质量对象归一化为后端可校验的值。"""
+    quality = getattr(point, 'quality', None)
+    if quality is None:
+        return 'unknown'
+    is_good = getattr(quality, 'is_good', None)
+    try:
+        if callable(is_good):
+            return 'good' if is_good() else 'bad'
+        if isinstance(is_good, bool):
+            return 'good' if is_good else 'bad'
+    except Exception:
+        pass
+    return 'unknown'
+
+
+def submit_sample(
+    config: dict,
+    *,
+    power: float | None,
+    normalized_timestamp: datetime | None,
+    source_timestamp: datetime | None,
+    ioa: int | None,
+    quality: str,
+):
+    """提交可追溯样本，旧后端仅在新接口不存在时回退。"""
+    backend_url = config.get('backend_url', 'http://127.0.0.1:5000')
+    headers = {}
+    secret = config.get('worker_secret') or os.environ.get('SCADA_WORKER_SECRET', '')
+    if secret:
+        headers['X-Worker-Secret'] = secret
+    status, body = _post_json(
+        f'{backend_url}/api/v1/scada/ingest',
+        {
+            'connection_id': config['connection_id'],
+            'farm_code': config['farm_code'],
+            'ioa': ioa,
+            'source_timestamp': _timestamp_text(source_timestamp),
+            'normalized_timestamp': _timestamp_text(normalized_timestamp),
+            'power_mw': power,
+            'quality': quality,
+        },
+        headers,
+    )
+    if status == 404 and normalized_timestamp is not None and power is not None:
+        legacy_status = post_power(
+            backend_url,
+            config['farm_code'],
+            normalized_timestamp.strftime('%Y-%m-%dT%H:%M:%S'),
+            power,
+        )
+        return legacy_status, {'outcome': 'legacy_actual_power'}
+    return status, body
 
 
 def run_http_poll(config: dict):
@@ -243,22 +319,35 @@ def run_http_poll(config: dict):
             power = round(factor * capacity, 2)
 
             rounded = select_sample_timestamp(now, config)
-            if rounded is None:
+            status, result = submit_sample(
+                config,
+                power=power,
+                normalized_timestamp=rounded,
+                source_timestamp=now,
+                ioa=config.get('upload_target_ioa'),
+                quality='good',
+            )
+            if 200 <= status < 300:
+                outcome = result.get('outcome', 'accepted')
+                if rounded is None:
+                    logger.debug(
+                        f"[{farm_code}] {power:.2f} MW observed without quarter-hour write"
+                    )
+                else:
+                    logger.info(
+                        f"[{farm_code}] {power:7.2f} MW → {rounded.strftime('%H:%M')} "
+                        f"({outcome}, cycle {cycle})"
+                    )
+                update_status(config, 'running', f'Cycle {cycle}: {power:.2f} MW, {outcome}', power)
+            elif rounded is None:
                 logger.debug(
-                    f"[{farm_code}] {power:.2f} MW skipped "
-                    f"(outside {WINDOW_BEFORE_MINUTES}-min window, now={now.strftime('%H:%M:%S')})"
+                    f"[{farm_code}] sample submission failed status={status}"
                 )
             else:
-                ts_str = rounded.strftime('%Y-%m-%dT%H:%M:%S')
-                status = post_power(backend_url, farm_code, ts_str, power)
-                if 200 <= status < 300:
-                    logger.info(
-                        f"[{farm_code}] {power:7.2f} MW → {rounded.strftime('%H:%M')}  (cycle {cycle})"
-                    )
-                    update_status(config, 'running', f'Cycle {cycle}: {power:.2f} MW', power)
-                else:
-                    logger.warning(f"[{farm_code}] POST failed status={status}")
-                    update_status(config, 'running', f'POST failed: status={status}', power)
+                logger.warning(f"[{farm_code}] sample submission failed status={status}")
+            if not 200 <= status < 300:
+                error = result.get('error') or result.get('message') or f'HTTP {status}'
+                update_status(config, 'running', f'Sample rejected: {error}')
 
         except Exception as e:
             logger.error(f"Error in polling cycle: {e}")
@@ -303,22 +392,40 @@ def run_c104(config: dict):
         if target_ioa is not None and int(point.io_address) != target_ioa:
             return c104.ResponseState.SUCCESS
 
+        quality = point_quality_label(point)
         value = point.value
-        if value is not None:
-            power = float(value)
-            now = datetime.now(BEIJING_TZ)
-            source_time = getattr(point, 'recorded_at', None)
-            rounded = select_sample_timestamp(now, config, source_time)
-            if rounded is None:
-                logger.debug(
-                    f"IOA={point.io_address}: {power} MW skipped "
-                    f"(outside {WINDOW_BEFORE_MINUTES}-min window)"
-                )
-            else:
-                ts_str = rounded.strftime('%Y-%m-%dT%H:%M:%S')
-                post_power(backend_url, farm_code, ts_str, power)
-                logger.info(f"IOA={point.io_address}: {power} MW → {rounded.strftime('%H:%M')}")
-                update_status(config, 'running', f'IOA={point.io_address}: {power:.2f} MW', power)
+        power = float(value) if value is not None else None
+        now = datetime.now(BEIJING_TZ)
+        source_time = getattr(point, 'recorded_at', None)
+        rounded = (
+            select_sample_timestamp(now, config, source_time)
+            if power is not None and quality == 'good'
+            else None
+        )
+        status, result = submit_sample(
+            config,
+            power=power,
+            normalized_timestamp=rounded,
+            source_timestamp=source_time,
+            ioa=int(point.io_address),
+            quality=quality,
+        )
+        if 200 <= status < 300 and power is not None:
+            outcome = result.get('outcome', 'accepted')
+            target = rounded.strftime('%H:%M') if rounded is not None else 'raw'
+            logger.info(f"IOA={point.io_address}: {power} MW → {target} ({outcome})")
+            update_status(
+                config,
+                'running',
+                f'IOA={point.io_address}: {power:.2f} MW, {outcome}',
+                power,
+            )
+        else:
+            error = result.get('error') or result.get('message') or f'HTTP {status}'
+            logger.warning(
+                f"IOA={point.io_address}: sample rejected status={status}, reason={error}"
+            )
+            update_status(config, 'running', f'Sample rejected: {error}')
         return c104.ResponseState.SUCCESS
     on_measurement.__annotations__ = {
         'point': c104.Point,

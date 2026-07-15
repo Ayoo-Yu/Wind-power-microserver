@@ -2,6 +2,7 @@ import { getFarms } from '../api/farmApi'
 import { getPowerCompareData } from '../api/powerCompareApi'
 import { getReportLogs } from '../api/reportApi'
 import { getWeatherSnapshot } from '../api/weatherFetchApi'
+import { getHealth as getScadaHealth } from '../api/scadaApi'
 import farmService from '../utils/farmService'
 
 const TASK_KEYS = [
@@ -134,7 +135,7 @@ function normalizeStatus(status) {
   if (text.includes('error') || text.includes('fail') || text.includes('failed')) return 'error'
   if (text.includes('warn') || text.includes('running') || text.includes('pending')) return 'warn'
   if (text.includes('success') || text.includes('ok')) return 'ok'
-  return 'ok'
+  return 'warn'
 }
 
 function toHHmm(value) {
@@ -188,12 +189,12 @@ function collectFarmLogs(logs, farmCode) {
 }
 
 function taskStatusFromLogs(logs, keywords = []) {
-  if (!logs.length) return 'ok'
+  if (!logs.length) return 'warn'
   const related = logs.filter((row) => {
     const text = `${row?.message || ''} ${row?.response_message || ''} ${row?.error_message || ''} ${row?.report_type || ''}`.toLowerCase()
     return keywords.length === 0 || keywords.some(word => text.includes(word))
   })
-  if (!related.length) return 'ok'
+  if (!related.length) return 'warn'
   const statuses = related.map(row => normalizeStatus(row.status))
   if (statuses.includes('error')) return 'error'
   if (statuses.includes('warn')) return 'warn'
@@ -204,7 +205,7 @@ function buildTaskMatrix(farms = [], logs = [], commMap = new Map()) {
   return farms.map((farm) => {
     const farmLogs = collectFarmLogs(logs, farm.code)
     const commStatus = commMap.get(farm.code)
-    const scadaStatus = commStatus === 'ok' ? 'ok' : commStatus === 'error' ? 'warn' : 'ok'
+    const scadaStatus = commStatus || 'warn'
     return {
       code: farm.code,
       name: shortFarmName(farm.name),
@@ -235,6 +236,7 @@ export async function getDashboardOverview({ farmCode } = {}) {
   let farms = []
   let farmMeta = []
   let logs = []
+  let scadaHealth = []
 
   try {
     const loaded = await farmService.loadAvailableFarms()
@@ -284,6 +286,13 @@ export async function getDashboardOverview({ farmCode } = {}) {
     logs = []
   }
 
+  try {
+    const health = await getScadaHealth()
+    scadaHealth = Array.isArray(health?.connections) ? health.connections : []
+  } catch (error) {
+    scadaHealth = []
+  }
+
   const compareList = await Promise.all(
     selectedFarms.map(async (farm) => {
       try {
@@ -316,7 +325,14 @@ export async function getDashboardOverview({ farmCode } = {}) {
     })
   )
 
-  const commMap = new Map(compareList.map(item => [item.code, item.online ? 'ok' : 'error']))
+  const commMap = new Map(scadaHealth.map((item) => {
+    const status = item.status === 'healthy'
+      ? 'ok'
+      : item.status === 'degraded' || item.status === 'connecting' || item.status === 'no_data'
+        ? 'warn'
+        : 'error'
+    return [item.farm_code, status]
+  }))
 
   const shortAcc = weightedAccuracy(compareList.map(item => ({ acc: item.shortAcc, weight: item.shortWeight })))
   const ultraAcc = weightedAccuracy(compareList.map(item => ({ acc: item.ultraAcc, weight: item.ultraWeight })))
@@ -325,7 +341,10 @@ export async function getDashboardOverview({ farmCode } = {}) {
   const totalCapacity = selectedFarms.reduce((sum, farm) => sum + safeNumber(farm.capacity, 0), 0)
   const loadRate = totalCapacity > 0 ? (totalCurrentPower / totalCapacity) * 100 : 0
 
-  const onlineFarms = compareList.filter(item => item.online).length
+  const onlineFarms = selectedFarms.filter((farm) => {
+    const state = commMap.get(farm.code)
+    return state === 'ok' || state === 'warn'
+  }).length
   const totalFarms = compareList.length
 
   const estimatedDailyEnergy = totalCurrentPower * (new Date().getHours() + new Date().getMinutes() / 60)
