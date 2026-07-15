@@ -93,43 +93,45 @@ FARMS = [
 
 
 def ensure_tables():
-    """确保所有表存在，并补建 ON CONFLICT 所需的唯一约束"""
-    from db_models.base import Base
-    Base.metadata.create_all(engine)
-    print("[OK] 数据库表检查完成")
+    """检查种子数据依赖的表和唯一索引。"""
+    inspector = inspect(engine)
+    required_tables = {
+        "wind_farms",
+        "farm_profile_configs",
+        "actual_power",
+        "supershortl_power",
+        "shortl_power",
+    }
+    missing_tables = sorted(required_tables - set(inspector.get_table_names()))
+    if missing_tables:
+        raise RuntimeError(
+            "数据库结构未准备完成，缺少表: " + ", ".join(missing_tables)
+        )
 
-    # 补建唯一约束（create_all 不会给已有表加约束）
-    constraints = [
-        ("uq_actual_power_farm_ts", "actual_power", "farm_code, timestamp"),
-        ("uq_supershortl_power_farm_ts", "supershortl_power", "farm_code, timestamp"),
-        ("uq_shortl_power_farm_ts_pre", "shortl_power", "farm_code, timestamp, pre_at, pre_num"),
-    ]
-    with engine.connect() as conn:
-        for cname, table, cols in constraints:
-            col_list = [c.strip() for c in cols.split(",")]
-            try:
-                conn.execute(text(
-                    f"CREATE UNIQUE INDEX IF NOT EXISTS {cname} ON {table} ({cols})"
-                ))
-                conn.commit()
-            except Exception:
-                # 可能有重复行，先去重再建索引
-                conn.rollback()
-                try:
-                    dedup_cols = ', '.join(col_list)
-                    conn.execute(text(
-                        f"DELETE FROM {table} a USING {table} b "
-                        f"WHERE a.id < b.id AND "
-                        + " AND ".join(f"a.{c} = b.{c}" for c in col_list)
-                    ))
-                    conn.commit()
-                    conn.execute(text(
-                        f"CREATE UNIQUE INDEX IF NOT EXISTS {cname} ON {table} ({cols})"
-                    ))
-                    conn.commit()
-                except Exception as e2:
-                    print(f"  [WARN] 约束 {cname}: {e2}")
-                    conn.rollback()
+    required_unique = {
+        "actual_power": "uq_actual_power_farm_ts",
+        "supershortl_power": "uq_supershortl_power_farm_ts",
+        "shortl_power": "uq_shortl_power_farm_ts_pre",
+    }
+    missing_indexes = []
+    for table_name, index_name in required_unique.items():
+        names = {
+            item.get("name")
+            for item in inspector.get_indexes(table_name)
+            if item.get("unique")
+        }
+        names.update(
+            item.get("name")
+            for item in inspector.get_unique_constraints(table_name)
+        )
+        if index_name not in names:
+            missing_indexes.append(index_name)
+
+    if missing_indexes:
+        raise RuntimeError(
+            "数据库缺少种子数据所需唯一索引: " + ", ".join(missing_indexes)
+        )
+    print("[OK] 数据库结构检查完成")
 
 
 def seed_farms(db):

@@ -2,10 +2,8 @@
 chcp 65001 > nul
 setlocal
 
-pushd "%~dp0.."
-docker compose exec backend python manage_db.py upgrade
+call "%~dp0db.bat" status
 set "EXIT_CODE=%ERRORLEVEL%"
-popd
 
 if not "%DB_NO_PAUSE%"=="true" pause
 exit /b %EXIT_CODE%

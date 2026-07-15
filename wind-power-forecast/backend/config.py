@@ -83,6 +83,7 @@ class Config:
         'PHYSICAL_SIMULATION_ENABLED', 'false'
     ).lower() == 'true'
     REPORT_SCHEDULER_MODE = _env('REPORT_SCHEDULER_MODE', 'embedded').lower()
+    DB_SCHEMA_STRICT = _env('DB_SCHEMA_STRICT', 'true').lower() == 'true'
 
     KINGBASE_CONFIG = KINGBASE_CONFIG
 

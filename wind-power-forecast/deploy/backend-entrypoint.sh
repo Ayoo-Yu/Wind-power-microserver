@@ -42,6 +42,26 @@ for i in $(seq 1 30); do
     sleep 2
 done
 
+SCHEMA_ACTION="${DB_SCHEMA_ACTION:-prepare}"
+case "${SCHEMA_ACTION}" in
+    prepare)
+        python manage_db.py prepare
+        ;;
+    upgrade)
+        python manage_db.py upgrade
+        ;;
+    check)
+        python manage_db.py check
+        ;;
+    skip)
+        echo "Database schema check skipped by configuration."
+        ;;
+    *)
+        echo "Unsupported DB_SCHEMA_ACTION: ${SCHEMA_ACTION}" >&2
+        exit 2
+        ;;
+esac
+
 echo "Initializing users and permissions..."
 python -m init_users
 python -m fix_admin_permissions

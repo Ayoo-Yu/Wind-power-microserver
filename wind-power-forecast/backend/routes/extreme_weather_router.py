@@ -16,6 +16,7 @@ from flask import Blueprint, jsonify, request
 from db_session import db_session
 from db_models import SystemSetting
 from services.extreme_weather_detector import DEFAULT_THRESHOLDS
+from utils.database_schema import require_model_tables
 
 logger = logging.getLogger(__name__)
 
@@ -31,9 +32,7 @@ extreme_weather_bp = Blueprint("extreme_weather", __name__)
 
 
 def _ensure_settings_table(session):
-    bind = session.get_bind()
-    if bind is not None:
-        SystemSetting.__table__.create(bind=bind, checkfirst=True)
+    require_model_tables(session, SystemSetting.__table__)
 
 
 def _load_thresholds() -> dict[str, float]:

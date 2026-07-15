@@ -1,12 +1,15 @@
-from database_config import engine
-from db_models import Base
-# 修改导入路径。如果scripts.init_users路径不正确，请调整为正确的路径
+"""旧初始化入口，转发到统一数据库管理命令。"""
+
+import sys
+
 from init_users import init_users_and_roles
+from manage_db import main as manage_database
 
-# 创建所有表
-Base.metadata.create_all(bind=engine)
 
-# 初始化用户和角色
-init_users_and_roles()
-
-print("数据库初始化完成") 
+if __name__ == "__main__":
+    sys.argv = [sys.argv[0], "prepare"]
+    exit_code = manage_database()
+    if exit_code:
+        raise SystemExit(exit_code)
+    init_users_and_roles()
+    print("数据库初始化完成")

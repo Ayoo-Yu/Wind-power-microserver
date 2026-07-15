@@ -27,6 +27,8 @@ services:
       - DB_USER=system         # 闁叉垳绮ㄦ妯款吇閻劍鍩?
       - DB_PASSWORD=${DB_PASSWORD:-change-me-in-production}
       - DB_NAME=windpower      # 鏉╃偞甯撮崚鐨恑ndpower閺佺増宓佹惔?
+      - DB_SCHEMA_ACTION=${DB_SCHEMA_ACTION:-prepare}
+      - DB_SCHEMA_STRICT=${DB_SCHEMA_STRICT:-true}
       - TZ=Asia/Shanghai # Set Timezone to Beijing Time
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
       - REDIS_HOST=redis

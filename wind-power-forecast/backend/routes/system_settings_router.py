@@ -7,16 +7,14 @@ from flask_jwt_extended import jwt_required
 
 from db_session import db_session
 from models import SystemSetting
+from utils.database_schema import require_model_tables
 
 
 system_settings_bp = Blueprint('system_settings', __name__)
 
 
 def _ensure_system_settings_table(session):
-    bind = session.get_bind()
-    if bind is None:
-        return
-    SystemSetting.__table__.create(bind=bind, checkfirst=True)
+    require_model_tables(session, SystemSetting.__table__)
 
 
 DEFAULT_SYSTEM_SETTINGS = {

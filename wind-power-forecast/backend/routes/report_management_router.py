@@ -2126,10 +2126,9 @@ def _parse_marker_datetime(value):
 
 
 def _ensure_quality_marker_table(session):
-    bind = session.get_bind()
-    if bind is None:
-        return
-    DataQualityMarker.__table__.create(bind=bind, checkfirst=True)
+    from utils.database_schema import require_model_tables
+
+    require_model_tables(session, DataQualityMarker.__table__)
 
 
 def _serialize_quality_marker(session, marker):

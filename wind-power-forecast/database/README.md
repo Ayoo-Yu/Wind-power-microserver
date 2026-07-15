@@ -1,63 +1,49 @@
-# 风电功率预测系统数据库
+# 风电功率预测系统数据库管理
 
-本目录包含风电功率预测系统的数据库配置和迁移脚本。
+数据库结构由 Alembic 迁移统一管理。应用启动和业务接口只检查结构版本，不再负责自动建表。
 
-## 数据库配置
+## Windows 本地开发
 
-数据库使用PostgreSQL，通过Docker容器运行。配置文件为`docker-compose.yaml`。
+查看数据库状态：
 
-## 数据库迁移
-
-当数据库结构发生变化时，需要执行数据库迁移。本目录提供了几种执行迁移的方式：
-
-### 方法1：直接在Docker容器中执行迁移（推荐）
-
-这种方法适用于已经运行的Docker容器，不需要停止容器，也不会丢失现有数据。
-
-1. 确保Docker容器正在运行
-2. 运行`docker_apply_migrations.bat`脚本
-
-```
-cd wind-power-forecast/database
-docker_apply_migrations.bat
+```bat
+database\database_status.bat
 ```
 
-### 方法2：在本地执行迁移
+模型发生变化后生成迁移：
 
-如果您已经在本地安装了PostgreSQL客户端，可以使用这种方法。
-
-1. 确保PostgreSQL客户端已安装
-2. 运行`apply_migrations.bat`脚本（Windows）或`apply_migrations.sh`脚本（Linux/Mac）
-
-```
-cd wind-power-forecast/database
-apply_migrations.bat
+```bat
+database\create_migration.bat "增加测点映射表"
 ```
 
-### 方法3：重新创建数据库容器
+检查生成的 Python 迁移文件后执行升级：
 
-如果您不需要保留现有数据，可以直接重新创建数据库容器。
-
-1. 停止并删除现有容器
-```
-docker-compose down -v
+```bat
+database\apply_migrations.bat
 ```
 
-2. 重新创建并启动容器
+脚本不保存数据库密码。请通过项目 `.env` 或当前终端环境变量提供连接配置。
+
+## Linux 内网部署
+
+```bash
+./database/db.sh status
+./database/db.sh prepare
+./database/db.sh upgrade
 ```
-docker-compose up -d
+
+首次接管已有数据库时，`prepare` 会先核对全部模型表。只有结构完整时才会写入基线版本。全新数据库执行 `prepare` 会创建模型表并记录基线。
+
+## Docker 部署
+
+```bash
+docker compose exec backend python manage_db.py status
+docker compose exec backend python manage_db.py upgrade
 ```
 
-3. 执行迁移脚本
-```
-docker_apply_migrations.bat
-```
+## 安全约束
 
-## 默认用户
-
-迁移脚本会创建一个默认的管理员用户：
-
-- 用户名：admin
-- 密码：admin123
-
-首次登录后，系统会要求修改密码。 
+1. 生产升级前必须备份数据库。
+2. 自动生成的迁移必须人工检查。
+3. 表删除和字段删除必须手工编写迁移。
+4. 前端数据库治理页面只提供状态和容量监控，不执行任意 SQL。

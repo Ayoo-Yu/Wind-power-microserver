@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 chcp 65001 > nul
 setlocal
 
@@ -19,6 +19,7 @@ set "DB_PORT=%LOCAL_DB_PORT%"
 set "DB_USER=%LOCAL_DB_USER%"
 set "DB_PASSWORD=%LOCAL_DB_PASSWORD%"
 set "DB_NAME=windpower"
+set "DB_SCHEMA_STRICT=true"
 set "METRICS_ENABLED=false"
 if not defined LOCAL_SECRET_KEY set "LOCAL_SECRET_KEY=local-dev-secret-key-do-not-use-in-prod"
 set "SECRET_KEY=%LOCAL_SECRET_KEY%"
@@ -48,6 +49,14 @@ set "NODE_OPTIONS=--trace-deprecation"
 
 call :resolve_python MAIN_PY "%BACKEND_DIR%\wind-power-env\python.exe"
 if errorlevel 1 exit /b 1
+
+"%MAIN_PY%" -c "import alembic" > nul 2>&1
+if errorlevel 1 (
+  echo [ERROR] Alembic is missing from the selected Python environment.
+  echo         Run: "%MAIN_PY%" -m pip install alembic==1.14.1
+  pause
+  exit /b 1
+)
 
 set "FRONTEND_CMD="
 if exist "%FRONTEND_DIR%\package.json" (
@@ -116,6 +125,23 @@ REM 启动本地基础设施并等待健康检查通过。
 CALL :ensure_local_infra
 IF ERRORLEVEL 1 (
   echo [ERROR] Local infrastructure is not ready. Abort startup.
+  pause
+  exit /b 1
+)
+
+REM 在启动业务进程前完成数据库初始化、纳管或版本升级。
+echo [INFO] Preparing database schema...
+cd /D "%BACKEND_DIR%" && set DB_HOST=%DB_HOST% && set DB_PORT=%DB_PORT% && set DB_USER=%DB_USER% && set DB_PASSWORD=%DB_PASSWORD% && set DB_NAME=%DB_NAME% && ""%MAIN_PY%"" manage_db.py prepare
+IF ERRORLEVEL 1 (
+  echo [ERROR] Database schema preparation failed.
+  pause
+  exit /b 1
+)
+
+echo [INFO] Initializing local roles and administrator...
+cd /D "%BACKEND_DIR%" && set DB_HOST=%DB_HOST% && set DB_PORT=%DB_PORT% && set DB_USER=%DB_USER% && set DB_PASSWORD=%DB_PASSWORD% && set DB_NAME=%DB_NAME% && ""%MAIN_PY%"" -m init_users
+IF ERRORLEVEL 1 (
+  echo [ERROR] Local user initialization failed.
   pause
   exit /b 1
 )

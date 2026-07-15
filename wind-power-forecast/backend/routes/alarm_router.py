@@ -8,21 +8,19 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from db_session import db_session
 from models import AlarmNotificationPolicy, AlarmRecord, AlarmRule, User
+from utils.database_schema import require_model_tables
 
 
 alarm_bp = Blueprint('alarm', __name__)
 
 
 def _ensure_alarm_tables(session):
-    bind = session.get_bind()
-    if bind is None:
-        return
-    for table in (
+    require_model_tables(
+        session,
         AlarmRecord.__table__,
         AlarmRule.__table__,
         AlarmNotificationPolicy.__table__,
-    ):
-        table.create(bind=bind, checkfirst=True)
+    )
 
 
 def _normalize_level(value):

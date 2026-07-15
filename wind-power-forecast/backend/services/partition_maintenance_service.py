@@ -25,6 +25,7 @@ from db_models.ecmwf_grid_model import ensure_ecmwf_grid_table
 logger = logging.getLogger(__name__)
 
 PARTITION_MONTHS_AHEAD = int(os.environ.get("PARTITION_MONTHS_AHEAD", "6"))
+NWP_INGESTION_ENABLED = os.environ.get("NWP_INGESTION_ENABLED", "false").lower() == "true"
 
 
 @dataclass(frozen=True)
@@ -238,35 +239,37 @@ def ensure_future_partitions(
                 )
             )
 
-        # Per-farm ECMWF grid tables
-        for fc in farm_codes:
-            ensure_ecmwf_grid_table(connection, fc)
-            ecmwf_table = ecmwf_grid_table_name(fc)
-            if not table_exists(connection, ecmwf_table):
-                results.append({"table": ecmwf_table, "skipped": "table_missing"})
-                continue
-            if not is_partitioned(connection, ecmwf_table):
-                results.append({"table": ecmwf_table, "skipped": "not_partitioned"})
-                continue
+        # NWP 接入关闭时不创建任何 ECMWF 场站表和月分区。
+        if NWP_INGESTION_ENABLED:
+            for fc in farm_codes:
+                ensure_ecmwf_grid_table(connection, fc)
+                ecmwf_table = ecmwf_grid_table_name(fc)
+                if not table_exists(connection, ecmwf_table):
+                    results.append({"table": ecmwf_table, "skipped": "table_missing"})
+                    continue
+                if not is_partitioned(connection, ecmwf_table):
+                    results.append({"table": ecmwf_table, "skipped": "not_partitioned"})
+                    continue
 
-            created = []
-            for month in months:
-                if _create_month_partition(connection, ecmwf_table, month):
-                    created.append(f"{ecmwf_table}_p{month:%Y%m}")
+                created = []
+                for month in months:
+                    if _create_month_partition(connection, ecmwf_table, month):
+                        created.append(f"{ecmwf_table}_p{month:%Y%m}")
 
-            ecmwf_pt = PartitionedTable(ecmwf_table, "forecast_source")
-            moved_default_rows = _move_default_rows(connection, ecmwf_pt)
-            results.append(
-                {
-                    "table": ecmwf_table,
-                    "created_partitions": created,
-                    "moved_default_rows": moved_default_rows,
-                    "skipped": None,
-                }
-            )
+                ecmwf_pt = PartitionedTable(ecmwf_table, "forecast_source")
+                moved_default_rows = _move_default_rows(connection, ecmwf_pt)
+                results.append(
+                    {
+                        "table": ecmwf_table,
+                        "created_partitions": created,
+                        "moved_default_rows": moved_default_rows,
+                        "skipped": None,
+                    }
+                )
 
     logger.info("Partition maintenance complete: %s", results)
     return {
         "months_ahead": months_ahead,
+        "nwp_ingestion_enabled": NWP_INGESTION_ENABLED,
         "tables": results,
     }

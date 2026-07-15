@@ -1,5 +1,5 @@
-from database_config import get_db, engine
-from db_models import Base, User, Role
+from database_config import get_db
+from db_models import User, Role
 from utils.password_utils import generate_password_hash
 from datetime import datetime
 import logging
@@ -11,10 +11,7 @@ def init_users_and_roles():
     """初始化默认角色和管理员用户"""
     try:
         # 添加调试信息
-        print("初始化数据库表和用户...")
-        
-        # 创建数据库表
-        Base.metadata.create_all(bind=engine)
+        print("初始化默认角色和用户...")
         
         # 使用get_db获取数据库会话
         db = next(get_db())
@@ -152,4 +149,4 @@ def init_admin_user(db):
     logger.info(f"初始化完成，创建了管理员用户: {admin_user.username}")
 
 if __name__ == "__main__":
-    init_users_and_roles() 
+    init_users_and_roles()

@@ -2,7 +2,7 @@ import os
 import time
 import threading
 
-from sqlalchemy import create_engine, event, inspect, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import QueuePool
@@ -149,89 +149,6 @@ def cleanup_idle_connections(db_engine, idle_timeout=120):
             print("[OK] cleaned idle database connections")
     except Exception as exc:
         print(f"warning: cleanup idle connections failed: {exc}")
-
-
-LEGACY_POWER_TABLES = {
-    "actual_power": "ix_actual_power_farm_code_farm_part",
-    "supershortl_power": "ix_supershortl_power_farm_code_farm_part",
-    "shortl_power": "ix_shortl_power_farm_code_farm_part",
-    "mid_power": "ix_mid_power_farm_code_farm_part",
-}
-
-DEFAULT_FARM_CODE = os.environ.get("DEFAULT_FARM_CODE", "")
-
-
-def upgrade_legacy_power_tables():
-    eng = ensure_engine()
-    _sync_legacy_refs()
-    if eng is None:
-        return
-
-    inspector = inspect(eng)
-
-    with eng.begin() as connection:
-        for table_name, index_name in LEGACY_POWER_TABLES.items():
-            if not inspector.has_table(table_name):
-                continue
-
-            existing_columns = {
-                column["name"].lower() for column in inspector.get_columns(table_name)
-            }
-            existing_indexes = {
-                index["name"].lower() for index in inspector.get_indexes(table_name)
-            }
-
-            if "farm_code" not in existing_columns:
-                connection.execute(
-                    text(f'ALTER TABLE "{table_name}" ADD COLUMN farm_code VARCHAR(50)')
-                )
-                connection.execute(
-                    text(
-                        f'UPDATE "{table_name}" '
-                        "SET farm_code = :default_farm_code "
-                        "WHERE farm_code IS NULL"
-                    ),
-                    {"default_farm_code": DEFAULT_FARM_CODE},
-                )
-                connection.execute(
-                    text(
-                        f'ALTER TABLE "{table_name}" '
-                        "ALTER COLUMN farm_code SET NOT NULL"
-                    )
-                )
-                print(f"[OK] upgraded {table_name}.farm_code to current schema")
-
-            if index_name.lower() not in existing_indexes:
-                connection.execute(
-                    text(
-                        f'CREATE INDEX IF NOT EXISTS "{index_name}" '
-                        f'ON "{table_name}" (farm_code)'
-                    )
-                )
-                print(f"[OK] created index {index_name}")
-
-
-def check_migrations():
-    eng = ensure_engine()
-    _sync_legacy_refs()
-    if eng is None:
-        print("warning: database engine unavailable, skip migration check")
-        return
-
-    try:
-        Base.metadata.create_all(eng)
-        print("[OK] ensured missing database tables exist")
-        upgrade_legacy_power_tables()
-    except Exception as exc:
-        invalidate_engine()
-        _sync_legacy_refs()
-        print(f"warning: migration check failed: {exc}")
-
-
-try:
-    check_migrations()
-except Exception as exc:
-    print(f"warning: migration check failed: {exc}")
 
 
 def get_db():

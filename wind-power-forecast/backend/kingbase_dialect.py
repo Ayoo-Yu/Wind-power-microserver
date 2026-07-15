@@ -2,7 +2,10 @@ from sqlalchemy.dialects.postgresql.psycopg2 import PGDialect_psycopg2
 from sqlalchemy.dialects.postgresql.base import PGDialect
 from sqlalchemy.engine import reflection
 from sqlalchemy import types
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 class KingbaseDialect(PGDialect_psycopg2):
     """
@@ -83,7 +86,12 @@ class KingbaseDialect(PGDialect_psycopg2):
                 if not isinstance(column['type'].length, int):
                     extracted_length = self._extract_length_value(column['type'].length)
                     if extracted_length != 255 or str(column['type'].length).strip() != str(extracted_length):
-                        print(f"信息: 列 {column['name']} 的长度值 '{column['type'].length}' 已转换为整数 {extracted_length}")
+                        logger.debug(
+                            "列 %s 的长度值 %s 已转换为整数 %s",
+                            column['name'],
+                            column['type'].length,
+                            extracted_length,
+                        )
                     column['type'].length = extracted_length
         return columns
         
@@ -94,7 +102,12 @@ class KingbaseDialect(PGDialect_psycopg2):
             if not isinstance(column_info['type'].length, int):
                 extracted_length = self._extract_length_value(column_info['type'].length)
                 if extracted_length != 255 or str(column_info['type'].length).strip() != str(extracted_length):
-                    print(f"信息: 列 {column_info.get('name', 'unknown')} 的长度值 '{column_info['type'].length}' 已转换为整数 {extracted_length}")
+                    logger.debug(
+                        "列 %s 的长度值 %s 已转换为整数 %s",
+                        column_info.get('name', 'unknown'),
+                        column_info['type'].length,
+                        extracted_length,
+                    )
                 column_info['type'].length = extracted_length
         return column_info
     
@@ -107,7 +120,12 @@ class KingbaseDialect(PGDialect_psycopg2):
             if not isinstance(typeobj.length, int):
                 extracted_length = self._extract_length_value(typeobj.length)
                 if extracted_length != 255 or str(typeobj.length).strip() != str(extracted_length):
-                    print(f"信息: 类型 {typeobj.__class__.__name__} 的长度值 '{typeobj.length}' 已转换为整数 {extracted_length}")
+                    logger.debug(
+                        "类型 %s 的长度值 %s 已转换为整数 %s",
+                        typeobj.__class__.__name__,
+                        typeobj.length,
+                        extracted_length,
+                    )
                 typeobj.length = extracted_length
         return super().type_descriptor(typeobj)
         
@@ -128,7 +146,12 @@ for type_class in original_string_types:
                     dialect = KingbaseDialect()
                     extracted_length = dialect._extract_length_value(self.length)
                     if extracted_length != 255 or str(self.length).strip() != str(extracted_length):
-                        print(f"信息: {self.__class__.__name__} 初始化时的长度值 '{self.length}' 已转换为整数 {extracted_length}")
+                        logger.debug(
+                            "%s 初始化时的长度值 %s 已转换为整数 %s",
+                            self.__class__.__name__,
+                            self.length,
+                            extracted_length,
+                        )
                     self.length = extracted_length
         return safe_init
     
@@ -136,4 +159,4 @@ for type_class in original_string_types:
 
 # 注册方言
 from sqlalchemy.dialects import registry
-registry.register("postgresql.kingbase", __name__, "KingbaseDialect") 
+registry.register("postgresql.kingbase", __name__, "KingbaseDialect")

@@ -29,6 +29,12 @@ from .operational_data import (
     InstalledCapacityData, AvailableCapacityData,
     TheoreticalPowerData, AvailablePowerData
 )
+from .weather_fetch import (
+    WeatherConnection,
+    WeatherTask,
+    WeatherLog,
+    WeatherData as WeatherDataRecord,
+)
 # 其他模型 - 确保导入被遗漏的模型
 from .task import TaskHistory
 from .training_history import TrainingHistory
@@ -74,6 +80,7 @@ __all__ = [
     'WindSpeedData', 'TurbinePowerData', 'WeatherData',
     'InstalledCapacityData', 'AvailableCapacityData',
     'TheoreticalPowerData', 'AvailablePowerData',
+    'WeatherConnection', 'WeatherTask', 'WeatherLog', 'WeatherDataRecord',
     # 其他模型
     'TaskHistory', 'TrainingHistory', 'UserRole',
     # 自动预测模型

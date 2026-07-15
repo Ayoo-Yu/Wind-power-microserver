@@ -3,3 +3,6 @@
 
 # Windows 批处理文件必须使用 CRLF，避免 cmd.exe 拆分命令。
 *.bat text eol=crlf
+
+# Linux 与容器启动脚本固定使用 LF，避免解释器读取到多余回车。
+*.sh text eol=lf

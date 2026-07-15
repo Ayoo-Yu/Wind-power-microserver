@@ -6,7 +6,7 @@ from flask import Flask, request, jsonify, current_app
 from flask_cors import CORS
 from flask_socketio import SocketIO
 from dotenv import load_dotenv
-from database_config import Base, engine
+from database_config import ensure_engine
 from config import Config
 from db_models import Dataset
 from datetime import datetime,timedelta
@@ -149,6 +149,34 @@ app.register_blueprint(integration_bp)  # 跨区统一数据接入
 app.register_blueprint(report_outbox_bp)  # 可靠上报队列运维接口
 app.register_blueprint(capability_bp)  # 系统能力事实表
 
+
+def validate_database_schema():
+    """启动业务组件前核对数据库结构版本。"""
+    from services.database_migration_service import (
+        inspect_schema_status,
+        schema_state_message,
+    )
+
+    active_engine = ensure_engine()
+    if active_engine is None:
+        app.logger.warning("数据库暂不可用，启动阶段无法检查结构版本")
+        return
+
+    status = inspect_schema_status(active_engine)
+    app.config["DATABASE_SCHEMA_STATUS"] = status
+    message = schema_state_message(status)
+    if status["ready"]:
+        app.logger.info("数据库结构检查通过: %s", message)
+        return
+
+    strict = os.environ.get("DB_SCHEMA_STRICT", "true").lower() == "true"
+    if strict:
+        raise RuntimeError(f"数据库结构检查失败: {message}")
+    app.logger.warning("数据库结构检查未通过: %s", message)
+
+
+validate_database_schema()
+
 try:
     from services.scheduler_service import init_scheduler
     db_host = os.environ.get('DB_HOST', 'localhost')
@@ -283,53 +311,6 @@ def metrics():
 @app.route('/<path:path>', methods=['OPTIONS'])
 def handle_options(path):
     return '', 200
-
-def initialize():
-    with app.app_context():
-        if engine is not None:
-            try:
-                Base.metadata.create_all(bind=engine)
-                from db_models import (
-                    AlarmNotificationPolicy,
-                    AlarmRecord,
-                    AlarmRule,
-                    DataQualityMarker,
-                    FarmProfileConfig,
-                    ManualInterventionVersion,
-                    OperationAuditLog,
-                    ReportConfigMeta,
-                    SystemSetting,
-                    UserProfileMeta
-                )
-
-                runtime_tables = [
-                    AlarmRecord.__table__,
-                    AlarmRule.__table__,
-                    AlarmNotificationPolicy.__table__,
-                    DataQualityMarker.__table__,
-                    UserProfileMeta.__table__,
-                    OperationAuditLog.__table__,
-                    SystemSetting.__table__,
-                    ManualInterventionVersion.__table__,
-                    FarmProfileConfig.__table__,
-                    ReportConfigMeta.__table__
-                ]
-
-                for table in runtime_tables:
-                    table.create(bind=engine, checkfirst=True)
-                print("数据库表初始化成功")
-                try:
-                    from init_users import init_users_and_roles
-                    init_users_and_roles()
-                    print("默认用户与角色初始化成功")
-                except Exception as e:
-                    print(f"默认用户与角色初始化失败: {e}")
-            except Exception as e:
-                print(f"数据库初始化失败: {e}")
-        else:
-            print("数据库引擎不可用，跳过数据库初始化")
-
-initialize()
 
 # SCADA连接自动恢复：后端启动时重新启动之前运行中的Worker
 try:

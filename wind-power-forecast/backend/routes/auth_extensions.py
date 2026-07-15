@@ -9,17 +9,18 @@ from sqlalchemy.exc import ProgrammingError
 
 from db_session import db_session
 from models import OperationAuditLog, User, UserProfileMeta
+from utils.database_schema import require_model_tables
 
 
 auth_extensions_bp = Blueprint('auth_extensions', __name__)
 
 
 def _ensure_extension_tables(session):
-    bind = session.get_bind()
-    if bind is None:
-        return
-    UserProfileMeta.__table__.create(bind=bind, checkfirst=True)
-    OperationAuditLog.__table__.create(bind=bind, checkfirst=True)
+    require_model_tables(
+        session,
+        UserProfileMeta.__table__,
+        OperationAuditLog.__table__,
+    )
 
 
 def _get_permissions(user):
