@@ -17,9 +17,9 @@ TCP 故障代理 2405
         ↓
 生产 scada_worker.py
         ↓
-模拟 actual_power 接收端
+SCADA 样本接入接口或验收模拟接收端
         ↓
-自动验收报告
+质量审计、实际功率入库或自动验收报告
 ```
 
 测试环境划分了场站仿真网络、采集测试网络和控制网络。开发程序默认连接故障代理暴露到本机的 `127.0.0.1:12404`。调试时可以通过 `127.0.0.1:12405` 绕过故障代理直连仿真器。
@@ -39,7 +39,9 @@ start-scada-test.bat
 start-scada-dev.bat
 ```
 
-该命令依次启动仿真器、故障代理、本地 KingBase、Redis、Flask、Celery、Vue，并通过本地后端 API 写入版本化点表。Worker 在开发模式下使用 `floor_quarter` 时间策略，同一十五分钟内的数据更新同一条本地记录。
+该命令依次启动仿真器、故障代理、本地 KingBase、Redis、Flask、Celery、Vue，并通过本地后端 API 写入版本化点表。Worker 在开发模式下使用 `floor_quarter` 时间策略，同一十五分钟内的数据更新同一条本地记录。每个样本会先进入 `/api/v1/scada/ingest`，完成质量校验和来源审计。运行状态可通过 `/api/v1/scada/health` 查询。
+
+业务闭环、状态含义和生产配置详见 `SCADA_CLOSED_LOOP.md`。
 
 停止完整开发环境：
 

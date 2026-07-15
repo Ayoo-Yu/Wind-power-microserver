@@ -14,6 +14,10 @@ stop-scada-dev.bat
 
 Detailed Chinese documentation is available in
 [`docs/productization/SCADA_TEST_ENVIRONMENT.md`](docs/productization/SCADA_TEST_ENVIRONMENT.md).
+The runtime ingest and health contract is documented in
+[`docs/productization/SCADA_CLOSED_LOOP.md`](docs/productization/SCADA_CLOSED_LOOP.md).
+The prioritized code audit is available in
+[`docs/productization/CODEBASE_INTEGRATION_AUDIT.md`](docs/productization/CODEBASE_INTEGRATION_AUDIT.md).
 
 ## Local development
 

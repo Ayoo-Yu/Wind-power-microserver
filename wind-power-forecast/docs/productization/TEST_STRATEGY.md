@@ -15,6 +15,7 @@
 5. 上报发件箱幂等创建、成功、重试、死信和进程中断恢复。
 6. 能力事实表和前端生产构建。
 7. Compose 展开、PowerShell 解析和 Linux 脚本语法。
+8. SCADA 样本质量、幂等入库、数据新鲜度、预测消费状态和上报状态。
 
 ## SCADA 独立测试床
 
@@ -22,7 +23,7 @@
 .\scripts\scada-test.ps1 -Action test
 ```
 
-该套件使用真实 `scada_worker.py`，验证 25 个 C104 点位、质量码、五场站上送、网络延迟、断线重连、限功率一致性和陈旧数据。完整说明见 `SCADA_TEST_ENVIRONMENT.md`。
+该套件使用真实 `scada_worker.py`，验证 25 个 C104 点位、质量码、五场站上送、网络延迟、断线重连、限功率一致性和陈旧数据。完整开发环境还会将样本送入真实后端，验证拒绝、降级和自动恢复。详细说明见 `SCADA_TEST_ENVIRONMENT.md` 与 `SCADA_CLOSED_LOOP.md`。
 
 ## 故障演练
 
