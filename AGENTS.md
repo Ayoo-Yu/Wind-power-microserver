@@ -128,3 +128,4 @@ The system uses operational data tables:
 - The auto-reporting scheduler runs on precise 15-minute intervals (XX:14:30, XX:29:30, XX:44:30, XX:59:30)
 - CSV uploads require UTF-8 encoding and specific timestamp format (YYYY-MM-DD HH:MM:SS)
 - KingBase database requires specific connection parameters and schema adjustments
+- Windows batch files (`*.bat`) must use UTF-8 encoding with CRLF line endings. After every creation or modification, verify the line endings with `git ls-files --eol` and run the script through `cmd.exe /d /c` before delivery.
