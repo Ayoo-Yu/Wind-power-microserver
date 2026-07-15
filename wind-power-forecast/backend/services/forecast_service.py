@@ -20,6 +20,12 @@ warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 from sklearn.metrics import mean_absolute_error, r2_score
 
 from farm_registry.farms_config import get_farm
+from services.forecast_contract import (
+    ForecastContractError,
+    SHORT_MID_FEATURE_CONTRACT_VERSION,
+    validate_model_bundle,
+    validate_runtime_features,
+)
 
 # Allow importing src feature modules from the parent project directory
 _project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -547,6 +553,7 @@ def train_ensemble(
 
     meta = {
         "train_date": datetime.now().isoformat(),
+        "feature_contract_version": SHORT_MID_FEATURE_CONTRACT_VERSION,
         "n_samples": int(len(X_tr)),
         "n_val_samples": int(len(X_va)),
         "n_test_samples": int(len(X_te)),
@@ -570,17 +577,13 @@ def predict_with_ensemble(
     df: pd.DataFrame,
     cap: float,
 ) -> np.ndarray:
-    """Return clipped ensemble predictions (mean of three models).
-
-    Missing feature columns are filled with 0; extra columns are ignored.
-    """
+    """按训练特征顺序生成集成预测，缺失特征时拒绝继续。"""
     preds: List[np.ndarray] = []
 
-    # Build X with exact feature_columns order; fill missing with 0
-    X = pd.DataFrame(0, index=df.index, columns=feature_columns)
-    for col in feature_columns:
-        if col in df.columns:
-            X[col] = df[col].values
+    # 预测输入必须完整覆盖训练特征，避免缺失字段被静默填零。
+    validated_features = validate_model_bundle(models, feature_columns)
+    ordered_features = validate_runtime_features(validated_features, df.columns)
+    X = df.loc[:, ordered_features].copy()
     X = X.fillna(0).replace([np.inf, -np.inf], 0)
 
     for key in ("lgb", "xgb", "cb"):
@@ -1443,15 +1446,31 @@ def run_daily_prediction(
     if predict_df.empty:
         return {"status": "error", "message": "No rows after feature engineering for target day"}
 
-    # Load models
-    saved = model_manager.load(farm_code, forecast_type)
+    # 加载模型并校验训练特征契约。
+    try:
+        saved = model_manager.load(farm_code, forecast_type)
+    except ForecastContractError as exc:
+        logger.error("模型特征契约校验失败: %s/%s: %s", farm_code, forecast_type, exc)
+        return {
+            "status": "error",
+            "code": "model_contract_mismatch",
+            "message": str(exc),
+        }
     if saved is None:
         return {"status": "error", "message": f"No trained model for {farm_code}/{forecast_type}"}
 
     models = {k: saved[k] for k in ("lgb", "xgb", "cb") if k in saved}
     feature_columns = saved.get("feature_columns", [])
 
-    raw_preds = predict_with_ensemble(models, feature_columns, predict_df, cap)
+    try:
+        raw_preds = predict_with_ensemble(models, feature_columns, predict_df, cap)
+    except ForecastContractError as exc:
+        logger.error("预测输入特征契约校验失败: %s/%s: %s", farm_code, forecast_type, exc)
+        return {
+            "status": "error",
+            "code": "prediction_feature_mismatch",
+            "message": str(exc),
+        }
     calibrated_preds = raw_preds.copy()
 
     # Calibrate if enabled

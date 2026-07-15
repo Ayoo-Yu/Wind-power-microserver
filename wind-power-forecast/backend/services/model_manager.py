@@ -16,6 +16,11 @@ import os
 import pickle
 from typing import Dict, List, Optional
 
+from services.forecast_contract import (
+    infer_feature_contract_version,
+    validate_model_bundle,
+)
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_DIR = os.path.join(
@@ -51,6 +56,14 @@ class ModelManager:
         feature_columns: List[str],
         meta: dict,
     ) -> None:
+        normalized_features = validate_model_bundle(models, feature_columns)
+        normalized_meta = dict(meta)
+        normalized_meta.setdefault(
+            "feature_contract_version",
+            infer_feature_contract_version(normalized_features),
+        )
+        normalized_meta["feature_count"] = len(normalized_features)
+
         d = self._dir(farm_code, forecast_type)
         os.makedirs(d, exist_ok=True)
 
@@ -65,10 +78,10 @@ class ModelManager:
                     pickle.dump(models[key], f)
 
         with open(os.path.join(d, "feature_columns.json"), "w", encoding="utf-8") as f:
-            json.dump(feature_columns, f, ensure_ascii=False, indent=2)
+            json.dump(normalized_features, f, ensure_ascii=False, indent=2)
 
         with open(os.path.join(d, "meta.json"), "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2, default=str)
+            json.dump(normalized_meta, f, ensure_ascii=False, indent=2, default=str)
 
         logger.info("Saved models for %s/%s to %s", farm_code, forecast_type, d)
 
@@ -101,5 +114,14 @@ class ModelManager:
 
         if not any(k in result for k in ("lgb", "xgb", "cb")):
             return None
+
+        feature_columns = result.get("feature_columns")
+        validate_model_bundle(result, feature_columns)
+        meta = result.setdefault("meta", {})
+        meta.setdefault(
+            "feature_contract_version",
+            infer_feature_contract_version(feature_columns),
+        )
+        meta.setdefault("feature_count", len(feature_columns))
 
         return result
