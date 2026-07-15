@@ -9,28 +9,9 @@ $repositoryDir = Split-Path -Parent $projectDir
 $backendDir = Join-Path $projectDir "backend"
 $frontendDir = Join-Path $projectDir "frontend"
 
-$testFiles = @(
-    "tests/test_integration_contracts.py",
-    "tests/test_integration_spool.py",
-    "tests/test_integration_agent.py",
-    "tests/test_integration_ingress.py",
-    "tests/test_integration_router.py",
-    "tests/test_report_outbox_service.py",
-    "tests/test_capability_service.py",
-    "tests/test_celery_static_schedules.py",
-    "tests/test_scada_worker_timestamp.py",
-    "tests/test_scada_closed_loop.py",
-    "tests/test_scada_security.py",
-    "tests/test_integration_processor.py",
-    "tests/test_prediction_lineage_service.py",
-    "tests/test_model_registry_governance.py",
-    "tests/test_operations_overview_service.py",
-    "tests/test_sbom_generator.py"
-)
-
 Push-Location $backendDir
 try {
-    & python -m pytest @testFiles -q
+    & python -m pytest tests -q
     if ($LASTEXITCODE -ne 0) {
         throw "Backend productization tests failed"
     }

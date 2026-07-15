@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -53,12 +54,18 @@ class BusinessPackageProcessor:
         nwp_importer: Callable = import_ecmwf_grid_csv,
         retry_base_seconds: float = 5.0,
         retry_max_seconds: float = 300.0,
+        nwp_enabled: bool | None = None,
     ) -> None:
         self.spool = DurableSpool(spool_dir)
         self.session_context = session_context
         self.nwp_importer = nwp_importer
         self.retry_base_seconds = retry_base_seconds
         self.retry_max_seconds = retry_max_seconds
+        self.nwp_enabled = (
+            nwp_enabled
+            if nwp_enabled is not None
+            else os.environ.get("NWP_INGESTION_ENABLED", "false").lower() == "true"
+        )
 
     def _start_batch(self, manifest: IntegrationManifest) -> tuple[int, bool]:
         now = datetime.now()
@@ -164,6 +171,8 @@ class BusinessPackageProcessor:
                 return ProcessingResult(status="duplicate", message_id=message_id)
             if manifest.data_type != "nwp":
                 raise ValueError(f"业务处理器尚未配置 {manifest.data_type} 适配器")
+            if not self.nwp_enabled:
+                raise RuntimeError("NWP 业务接入当前未启用，数据包保留等待配置启用")
 
             totals = self._process_nwp(manifest, payload_path)
             quality_status = "good" if totals["rejected_count"] == 0 else "degraded"

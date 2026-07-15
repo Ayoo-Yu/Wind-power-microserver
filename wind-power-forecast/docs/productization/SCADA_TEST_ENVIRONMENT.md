@@ -20,6 +20,14 @@ TCP 故障代理 2405
 SCADA 样本接入接口或验收模拟接收端
         ↓
 质量审计、实际功率入库或自动验收报告
+
+NWP 确定性文件仿真器
+        ↓
+五场站长格式 CSV 与异常文件
+        ↓
+可靠接入目录与业务处理器
+        ↓
+接入批次、格点表与预测输入快照
 ```
 
 测试环境划分了场站仿真网络、采集测试网络和控制网络。开发程序默认连接故障代理暴露到本机的 `127.0.0.1:12404`。调试时可以通过 `127.0.0.1:12405` 绕过故障代理直连仿真器。
@@ -39,7 +47,7 @@ start-scada-test.bat
 start-scada-dev.bat
 ```
 
-该命令依次启动仿真器、故障代理、本地 KingBase、Redis、Flask、Celery、Vue，并通过本地后端 API 写入版本化点表。Worker 在开发模式下使用 `floor_quarter` 时间策略，同一十五分钟内的数据更新同一条本地记录。每个样本会先进入 `/api/v1/scada/ingest`，完成质量校验和来源审计。运行状态可通过 `/api/v1/scada/health` 查询。
+该命令依次启动 C104 仿真器、NWP 仿真器、故障代理、本地 KingBase、Redis、Flask、独立 SCADA Manager、接入处理器、Celery 和 Vue，并通过本地后端 API 写入版本化点表。Worker 在开发模式下使用 `floor_quarter` 时间策略，同一十五分钟内的数据更新同一条本地记录。每个样本会先进入 `/api/v1/scada/ingest`，完成质量校验、规范观测和业务投影。运行状态可通过 `/api/v1/scada/health` 和前端运行控制中心查询。
 
 业务闭环、状态含义和生产配置详见 `SCADA_CLOSED_LOOP.md`。
 
@@ -71,16 +79,17 @@ PowerShell：
 .\wind-power-forecast\scripts\scada-test.ps1 -Action test
 ```
 
-验收套件当前检查八项能力：
+验收套件当前检查九项能力：
 
 1. 仿真器、故障代理和接收端健康状态。
 2. CASDU、25 个 IOA 和正常质量码。
-3. 五个真实生产 `scada_worker.py` 进程的端到端上送。
+3. 五个真实生产 `scada_worker.py` 进程对五类规范指标的端到端上送。
 4. C104 无效质量码注入与读取。
 5. TCP 延迟注入是否真实生效。
 6. 链路断开后 Worker 是否自动重连并继续上送。
 7. 限功率场景中风速、理论功率、可用功率与实发功率的一致性。
 8. 陈旧数据场景是否冻结序号并停止主动发送。
+9. NWP 五场站文件结构，以及缺失值、非法时间和陈旧批次场景。
 
 报告生成在：
 
@@ -116,6 +125,8 @@ Invoke-RestMethod http://127.0.0.1:18082/scenarios
 8. `clock_skew`，源时间向前偏移五分钟。
 
 每个场景都有固定随机种子。重置场景后会生成完全相同的数据序列，适合回归测试。
+
+NWP 控制接口位于 `127.0.0.1:18084`，支持 `normal`、`missing`、`malformed` 和 `stale` 四种场景。文件写入 `simulation/scada-test/artifacts/nwp-inbox/<farm_code>`，开发接入处理器持续抢占并入库。
 
 场景定义位于：
 
@@ -191,8 +202,9 @@ simulation/scada-test/config/point-catalog.json
 3. `18081`，故障代理控制接口。
 4. `18082`，仿真场景控制接口。
 5. `18083`，验收期间使用的模拟接收端。
-6. `15433`，可选隔离 KingBase。
-7. `6380`，可选隔离 Redis。
+6. `18084`，NWP 仿真器控制接口。
+7. `15433`，可选隔离 KingBase。
+8. `6380`，可选隔离 Redis。
 
 端口可以通过 `simulation/scada-test/scada-test.env.example` 中的同名环境变量覆盖。
 

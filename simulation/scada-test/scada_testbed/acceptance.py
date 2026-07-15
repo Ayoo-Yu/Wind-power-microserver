@@ -163,9 +163,9 @@ class AcceptanceSuite:
         request_json("POST", f"{self.ingress_url}/reset", {})
         expected_farms = sorted(farm["farm_code"] for farm in self.catalog["farms"])
         expected_metrics = sorted({
-            point["metric"]
+            metric
             for farm in self.catalog["farms"]
-            for point in farm["points"]
+            for metric in farm["points"]
         })
 
         def worker_snapshot() -> dict[str, Any]:

@@ -1,5 +1,7 @@
 FROM continuumio/miniconda3
 
+ARG PIP_INDEX_URL=https://pypi.org/simple
+
 RUN apt-get update && apt-get install -y curl postgresql-client && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -10,9 +12,8 @@ RUN conda create -n wind-power-env python=3.9 pip -y && conda clean --all --yes
 
 ENV PATH /opt/conda/envs/wind-power-env/bin:$PATH
 
-# Configure pip with Tsinghua mirror and long timeout
-RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple/ && \
-    pip config set global.trusted-host pypi.tuna.tsinghua.edu.cn && \
+# 受控构建机可以通过构建参数切换到内部软件源
+RUN pip config set global.index-url ${PIP_INDEX_URL} && \
     pip config set global.timeout 600
 
 # Copy requirements and install in stages (large ML packages separately)
@@ -37,7 +38,7 @@ RUN pip install --no-cache-dir --retries 5 \
     typing-extensions==4.12.2 tzdata==2024.2 urllib3==2.3.0 \
     werkzeug==2.3.3 wsproto==1.2.0 zipp==3.21.0 \
     gunicorn==20.1.0 flask-jwt-extended==4.7.1 apscheduler==3.11.0 \
-    psutil==5.9.0 gevent gevent-websocket==0.10.1
+    psutil==5.9.0 gevent==23.9.1 gevent-websocket==0.10.1
 
 # Install numpy + scipy + pandas (medium-large, ~70MB combined)
 RUN pip install --no-cache-dir --retries 5 \

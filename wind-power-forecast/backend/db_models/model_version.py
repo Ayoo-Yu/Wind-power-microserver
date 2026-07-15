@@ -18,7 +18,7 @@ class ModelVersion(Base):
     val_rmse = Column(Float)
     val_mae = Column(Float)
     val_accuracy = Column(Float)  # 1 - rmse/capacity
-    is_active = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=False)
     local_path = Column(String(500))
     scaler_path = Column(String(500))
     feature_cols = Column(JSON)

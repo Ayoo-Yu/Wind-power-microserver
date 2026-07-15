@@ -30,6 +30,31 @@ inbox → processing → processed
 
 `inbox` 表示已完整落盘。`processing` 表示某个工作进程已原子抢占。临时故障回到 `inbox` 并写入下一次尝试时间。契约错误、鉴权错误和同编号不同内容冲突进入 `quarantine`。
 
+## 业务接入批次
+
+可靠传输完成后，`python -m integration.processor` 抢占数据包并记录 `ingestion_batches`。当前生产适配器支持 `data_type=nwp` 的长格式 CSV，写入场站 ECMWF 格点表。处理结果包括：
+
+1. `completed`，业务数据已提交，记录接受数、拒绝数和质量状态。
+2. `retry`，数据库等临时依赖不可用，数据包回到待处理目录。
+3. `quarantined`，数据类型、字段或时间格式不符合契约，数据包进入隔离目录。
+4. `duplicate`，相同 `message_id` 已成功处理，不重复写入业务数据。
+
+每个批次保存来源、场站、契约版本、业务时间、载荷摘要和错误原因。预测输入快照通过批次编号引用实际使用的 NWP 数据。
+
+## SCADA 实时观测契约
+
+实时样本使用 `scada-point-v2`，包含 `connection_id`、`farm_code`、`metric`、`value`、`unit`、`quality`、`source_timestamp`、`ioa` 和来源编号。必须支持以下五类规范指标：
+
+| metric | 单位 | 业务投影 |
+| --- | --- | --- |
+| `active_power_mw` | MW | actual_power |
+| `wind_speed_mps` | m/s | weather_data |
+| `theoretical_power_mw` | MW | theoretical_power_data |
+| `available_power_mw` | MW | available_power_data |
+| `availability_pct` | % | available_capacity_data |
+
+所有有效样本先写入 `source_observations`，随后更新业务投影。观测编号由来源、点位、时间、指标和值生成，重复投递保持幂等。
+
 ## 幂等规则
 
 1. 相同 `message_id`、来源、场站、类型、业务时间、文件名、大小和摘要视为重复成功。

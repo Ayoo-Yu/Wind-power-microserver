@@ -63,6 +63,7 @@ def test_processor_records_lineage_and_completes_spool(tmp_path):
         spool_dir,
         session_context=context,
         nwp_importer=importer,
+        nwp_enabled=True,
     )
     result = processor.run_once()
 
@@ -79,6 +80,30 @@ def test_processor_records_lineage_and_completes_spool(tmp_path):
         assert batch.quality_status == "good"
         assert batch.accepted_count == 1
         assert batch.payload_sha256 == manifest.payload_sha256
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_processor_retries_nwp_package_while_capability_is_disabled(tmp_path):
+    spool_dir = tmp_path / "spool"
+    _enqueue_nwp(spool_dir)
+    context, factory, engine = _session_context(tmp_path)
+    processor = BusinessPackageProcessor(
+        spool_dir,
+        session_context=context,
+        nwp_enabled=False,
+        retry_base_seconds=0.01,
+    )
+
+    result = processor.run_once()
+
+    assert result.status == "retry"
+    assert "未启用" in result.error
+    session = factory()
+    try:
+        batch = session.query(IngestionBatch).one()
+        assert batch.status == "retry"
     finally:
         session.close()
         engine.dispose()
