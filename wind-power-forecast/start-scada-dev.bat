@@ -27,4 +27,9 @@ echo [OK] 风电预测开发环境与 SCADA 测试链路均已启动。
 echo C104:   127.0.0.1:12404
 echo Backend: http://127.0.0.1:18080
 echo Frontend: http://127.0.0.1:8080
+echo.
+if /I not "%SCADA_DEV_NO_PAUSE%"=="true" (
+  echo 按任意键关闭启动窗口，后台服务会继续运行。
+  pause > nul
+)
 exit /b 0

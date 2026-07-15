@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Windows 批处理文件必须使用 CRLF，避免 cmd.exe 拆分命令。
+*.bat text eol=crlf
