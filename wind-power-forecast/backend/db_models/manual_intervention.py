@@ -8,7 +8,7 @@ from .base import Base
 class ManualInterventionVersion(Base):
     __tablename__ = 'manual_intervention_versions'
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     config_id = Column(Integer, nullable=False, index=True)
     farm_code = Column(String(50), nullable=False, index=True)
     report_type = Column(String(50), nullable=False, index=True)

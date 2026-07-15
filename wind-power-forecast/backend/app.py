@@ -80,7 +80,6 @@ else:
 
 from routes.upload import upload_bp
 from routes.download import download_bp
-from routes.autotask import autotask_bp
 from routes.actual_power_router import actual_power_bp
 from routes.prediction2database import prediction2database_bp
 from routes.power_compare import bp as power_compare_bp
@@ -110,7 +109,6 @@ from routes.database_governance_router import database_governance_bp
 
 # app.register_blueprint(upload_bp, url_prefix='/')
 app.register_blueprint(download_bp, url_prefix='/')
-app.register_blueprint(autotask_bp, url_prefix='/')
 app.register_blueprint(actual_power_bp)
 app.register_blueprint(prediction2database_bp)
 app.register_blueprint(power_compare_bp)
@@ -123,9 +121,6 @@ app.register_blueprint(auth_extensions_bp, url_prefix='/api/v1/auth', name='auth
 app.register_blueprint(user_bp, url_prefix='/api/user')
 app.register_blueprint(example_bp, url_prefix='/api/example')
 app.register_blueprint(feature_upload_bp)
-if app.config.get('PHYSICAL_SIMULATION_ENABLED', False):
-    from routes.physical_simulation_router import physical_simulation_bp
-    app.register_blueprint(physical_simulation_bp)
 app.register_blueprint(system_info_bp, url_prefix='/system')
 app.register_blueprint(system_settings_bp, url_prefix='/system')
 app.register_blueprint(alarm_bp, url_prefix='/system')

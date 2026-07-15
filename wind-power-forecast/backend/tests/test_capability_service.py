@@ -12,7 +12,7 @@ def test_capability_manifest_exposes_unavailable_placeholders():
     assert capabilities["forecasting"]["availability"] == "available"
     assert capabilities["extreme_weather"]["availability"] == "unavailable"
     assert capabilities["extreme_weather"]["maturity"] == "placeholder"
-    assert manifest["counts"]["unavailable"] == 2
+    assert manifest["counts"]["unavailable"] == 1
 
 
 def test_capability_manifest_reflects_deployment_flags():
@@ -23,7 +23,6 @@ def test_capability_manifest_reflects_deployment_flags():
             "SCADA_REALTIME_ENABLED": True,
             "NWP_INGESTION_ENABLED": True,
             "EXTREME_WEATHER_LIVE_ENABLED": True,
-            "PHYSICAL_SIMULATION_ENABLED": True,
         }
     )
     capabilities = _by_id(manifest)
@@ -64,4 +63,3 @@ def test_optional_placeholders_do_not_request_banner_attention():
     assert capabilities["integration_ingest"]["attention_required"] is False
     assert capabilities["nwp_ingestion"]["attention_required"] is False
     assert capabilities["extreme_weather"]["attention_required"] is False
-    assert capabilities["physical_simulation"]["attention_required"] is False

@@ -6,7 +6,7 @@ class WindSpeedData(Base):
     """单机风速数据模型"""
     __tablename__ = "wind_speed_data"
     
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     timestamp = Column(DateTime, nullable=False, index=True)
     turbine_id = Column(String(50), nullable=False, index=True)  # 单机编号
     farm_code = Column(String(50), nullable=False, index=True)  # 场站编码
@@ -19,7 +19,7 @@ class TurbinePowerData(Base):
     """单机功率数据模型"""
     __tablename__ = "turbine_power_data"
     
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     timestamp = Column(DateTime, nullable=False, index=True)
     turbine_id = Column(String(50), nullable=False, index=True)  # 单机编号
     farm_code = Column(String(50), nullable=False, index=True)  # 场站编码
@@ -36,7 +36,7 @@ class WeatherData(Base):
     """气象信息数据模型"""
     __tablename__ = "weather_data"
     
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     timestamp = Column(DateTime, nullable=False, index=True)
     farm_code = Column(String(50), nullable=False, index=True)  # 场站编码
     temperature = Column(Float, nullable=True)  # 温度 (℃)
@@ -54,7 +54,7 @@ class InstalledCapacityData(Base):
     """装机容量数据模型"""
     __tablename__ = "installed_capacity_data"
     
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     timestamp = Column(DateTime, nullable=False, index=True)
     farm_code = Column(String(50), nullable=False, index=True)  # 场站编码
     total_capacity = Column(Float, nullable=False)  # 总装机容量 (MW)
@@ -68,7 +68,7 @@ class AvailableCapacityData(Base):
     """可用容量数据模型"""
     __tablename__ = "available_capacity_data"
     
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     timestamp = Column(DateTime, nullable=False, index=True)
     farm_code = Column(String(50), nullable=False, index=True)  # 场站编码
     available_capacity = Column(Float, nullable=False)  # 可用容量 (MW)
@@ -84,7 +84,7 @@ class TheoreticalPowerData(Base):
     """理论功率数据模型"""
     __tablename__ = "theoretical_power_data"
     
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     timestamp = Column(DateTime, nullable=False, index=True)
     farm_code = Column(String(50), nullable=False, index=True)  # 场站编码
     theoretical_power = Column(Float, nullable=False)  # 理论功率 (MW)
@@ -99,7 +99,7 @@ class AvailablePowerData(Base):
     """可用功率数据模型"""
     __tablename__ = "available_power_data"
     
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     timestamp = Column(DateTime, nullable=False, index=True)
     farm_code = Column(String(50), nullable=False, index=True)  # 场站编码
     available_power = Column(Float, nullable=False)  # 可用功率 (MW)
@@ -109,4 +109,4 @@ class AvailablePowerData(Base):
     operational_constraint = Column(Float, nullable=True)  # 运行约束 (MW)
     grid_availability = Column(Float, nullable=True)  # 电网可用率 (%)
     constraint_reason = Column(Text, nullable=True)  # 约束原因
-    created_at = Column(DateTime, default=datetime.now) 
+    created_at = Column(DateTime, default=datetime.now)

@@ -5,7 +5,7 @@ from .base import Base, TimeStampMixin
 # 核心模型
 from .dataset import Dataset
 from .power import ActualPower, SupershortlPower, ShortlPower, MidPower
-from .training import Model, TrainingRecord, EvaluationMetrics, PredictionRecord, AutoPredictionTask, DailyMetrics
+from .training import Model, EvaluationMetrics, DailyMetrics
 from .user import User, Role, LoginHistory
 from .system_settings import SystemSetting
 from .auth_extensions import UserProfileMeta, OperationAuditLog
@@ -16,8 +16,6 @@ from .report_config_meta import ReportConfigMeta
 from .report_outbox import ReportOutbox
 # 新增导入特征模型
 from .features import TrainPreSupershort
-# 物理仿真模型
-from .physical_simulation import Condition, Turbine, Reading
 # 上报管理模型
 from .report_config import WindFarm, ReportConfig, ReportLog, ReportQualityStatistics, DataQualityMarker
 # SCADA连接管理模型
@@ -37,8 +35,6 @@ from .weather_fetch import (
 )
 # 其他模型 - 确保导入被遗漏的模型
 from .task import TaskHistory
-from .training_history import TrainingHistory
-from .user_roles import UserRole
 from .features import TrainPreShort, TrainPreMiddle
 # 自动预测模型
 from .prediction_task import PredictionTask
@@ -59,7 +55,7 @@ __all__ = [
     # 核心模型
     'Dataset',
     'ActualPower', 'SupershortlPower', 'ShortlPower', 'MidPower',
-    'Model', 'TrainingRecord', 'EvaluationMetrics', 'PredictionRecord', 'AutoPredictionTask', 'DailyMetrics',
+    'Model', 'EvaluationMetrics', 'DailyMetrics',
     'User', 'Role', 'LoginHistory',
     'SystemSetting',
     'AlarmRecord', 'AlarmRule', 'AlarmNotificationPolicy',
@@ -71,8 +67,6 @@ __all__ = [
     # 特征模型
     'TrainPreShort', 'TrainPreMiddle', 'TrainPreSupershort',
     'ecmwf_grid_table_name', 'ensure_ecmwf_grid_table', 'ensure_ecmwf_grid_month_partitions', 'META_COLUMNS', 'WIND_DERIVE_RULES',
-    # 物理仿真模型
-    'Condition', 'Turbine', 'Reading',
     # 上报管理模型
     'WindFarm', 'ReportConfig', 'ReportLog', 'ReportQualityStatistics', 'DataQualityMarker',
     'ScadaConnection', 'ScadaIngestRecord',
@@ -82,7 +76,7 @@ __all__ = [
     'TheoreticalPowerData', 'AvailablePowerData',
     'WeatherConnection', 'WeatherTask', 'WeatherLog', 'WeatherDataRecord',
     # 其他模型
-    'TaskHistory', 'TrainingHistory', 'UserRole',
+    'TaskHistory',
     # 自动预测模型
     'PredictionTask', 'PredictionRun', 'ModelVersion',
 ] 

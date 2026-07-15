@@ -7,7 +7,7 @@ class ScadaConnection(Base):
     """SCADA数据源连接配置模型 - 每个场站对应一个C104/HTTP连接"""
     __tablename__ = "scada_connections"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     farm_code = Column(String(50), nullable=False, unique=True, index=True)
     name = Column(String(100), nullable=False)
 

@@ -1,4 +1,4 @@
-from flask import Blueprint, current_app, jsonify
+from flask import Blueprint
 
 from routes.farm_management import get_farms, get_farm_by_code, get_farm_stats
 from routes.power_compare import get_fleet_metrics, get_fleet_series, get_power_data
@@ -26,14 +26,6 @@ from routes.report_management_router import (
     start_scheduler,
     stop_scheduler,
     get_scheduler_status
-)
-from routes.physical_simulation_router import (
-    batch_add_turbines,
-    batch_add_conditions,
-    batch_add_readings,
-    get_turbines,
-    get_conditions,
-    get_readings
 )
 from routes.system_info_router import (
     get_hardware_info,
@@ -67,15 +59,6 @@ from routes.weather_fetch_router import (
 )
 
 v1_compat_bp = Blueprint("v1_compat", __name__, url_prefix="/api/v1")
-
-
-def _physical_simulation_guard():
-    if current_app.config.get("PHYSICAL_SIMULATION_ENABLED", False):
-        return None
-    return jsonify({
-        "error": "physical_simulation_unavailable",
-        "message": "物理仿真尚未通过生产验收，当前部署未启用",
-    }), 503
 
 
 @v1_compat_bp.route("/farms", methods=["GET"])
@@ -248,54 +231,6 @@ def stop_report_scheduler_v1():
 @v1_compat_bp.route("/report/scheduler/status", methods=["GET"])
 def get_report_scheduler_status_v1():
     return get_scheduler_status()
-
-
-@v1_compat_bp.route("/physical-simulation/turbines/batch", methods=["POST"])
-def batch_add_turbines_v1():
-    blocked = _physical_simulation_guard()
-    if blocked:
-        return blocked
-    return batch_add_turbines()
-
-
-@v1_compat_bp.route("/physical-simulation/conditions/batch", methods=["POST"])
-def batch_add_conditions_v1():
-    blocked = _physical_simulation_guard()
-    if blocked:
-        return blocked
-    return batch_add_conditions()
-
-
-@v1_compat_bp.route("/physical-simulation/readings/batch", methods=["POST"])
-def batch_add_readings_v1():
-    blocked = _physical_simulation_guard()
-    if blocked:
-        return blocked
-    return batch_add_readings()
-
-
-@v1_compat_bp.route("/physical-simulation/turbines", methods=["GET"])
-def get_turbines_v1():
-    blocked = _physical_simulation_guard()
-    if blocked:
-        return blocked
-    return get_turbines()
-
-
-@v1_compat_bp.route("/physical-simulation/conditions", methods=["GET"])
-def get_conditions_v1():
-    blocked = _physical_simulation_guard()
-    if blocked:
-        return blocked
-    return get_conditions()
-
-
-@v1_compat_bp.route("/physical-simulation/readings", methods=["GET"])
-def get_readings_v1():
-    blocked = _physical_simulation_guard()
-    if blocked:
-        return blocked
-    return get_readings()
 
 
 @v1_compat_bp.route("/system/hardware", methods=["GET"])

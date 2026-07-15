@@ -16,6 +16,7 @@ from services.database_migration_service import (
     inspect_schema_status,
     schema_state_message,
 )
+from services.database_cleanup_service import cleanup_empty_nwp_tables
 
 
 def _engine():
@@ -156,6 +157,26 @@ def history_command(args) -> int:
     return 0
 
 
+def cleanup_nwp_command(args) -> int:
+    result = cleanup_empty_nwp_tables(_engine(), apply=args.apply)
+    print(f"状态: {result['reason']}")
+    print(
+        f"候选: 父表 {result['parent_count']} 张，"
+        f"月分区 {result['partition_count']} 张"
+    )
+    if result["data_tables"]:
+        print("包含数据的表: " + ", ".join(result["data_tables"]))
+    if result["applied"]:
+        print(f"已清理 {len(result['dropped_tables'])} 张空 NWP 动态表。")
+        return 0
+    if result["table_count"] == 0:
+        return 0
+    if result["allowed"]:
+        print("当前为预检模式，确认后添加 --apply 执行。")
+        return 0
+    return 2
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="数据库结构版本管理")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -189,6 +210,17 @@ def _build_parser() -> argparse.ArgumentParser:
     history_parser = subparsers.add_parser("history", help="查看迁移历史")
     history_parser.add_argument("--verbose", action="store_true", help="显示详细信息")
     history_parser.set_defaults(handler=history_command)
+
+    cleanup_parser = subparsers.add_parser(
+        "cleanup-nwp",
+        help="预检或清理 NWP 关闭时遗留的空动态表",
+    )
+    cleanup_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="通过全部安全检查后执行清理",
+    )
+    cleanup_parser.set_defaults(handler=cleanup_nwp_command)
     return parser
 
 

@@ -10,30 +10,12 @@ from sqlalchemy import text
 from services.database_migration_service import inspect_schema_status, model_table_names
 
 
-LEGACY_CANDIDATE_TABLES = {
-    "training_history",
-    "training_records",
-    "prediction_records",
-    "auto_prediction_tasks",
-    "user_roles",
-}
-
-DEMO_CANDIDATE_TABLES = {
-    "conditions",
-    "turbines",
-    "readings",
-}
-
 NWP_PARTITION_PATTERN = re.compile(r"^ecmwf_grid_.+_p\d{6}$")
 NWP_PARENT_PATTERN = re.compile(r"^ecmwf_grid_.+$")
 
 
 def classify_table(table_name: str, managed_tables: set[str]) -> str:
     """按照结构来源对数据库表分类。"""
-    if table_name in LEGACY_CANDIDATE_TABLES:
-        return "legacy_candidate"
-    if table_name in DEMO_CANDIDATE_TABLES:
-        return "demo_candidate"
     if NWP_PARTITION_PATTERN.match(table_name):
         return "nwp_partition"
     if NWP_PARENT_PATTERN.match(table_name):
@@ -205,14 +187,6 @@ def _recommendations(
             "level": "warning",
             "title": f"发现 {empty_nwp} 张空的 NWP 月分区",
             "detail": "NWP 接入当前关闭，系统已停止继续预建，历史空分区可在备份后分批清理。",
-        })
-
-    legacy_count = sum(1 for table in tables if table["category"] == "legacy_candidate")
-    if legacy_count:
-        recommendations.append({
-            "level": "warning",
-            "title": f"发现 {legacy_count} 张旧链路候选表",
-            "detail": "请先确认生产查询和写入记录，再通过独立迁移执行退役。",
         })
 
     if duplicate_indexes:

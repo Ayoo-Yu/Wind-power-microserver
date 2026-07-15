@@ -6,7 +6,7 @@ from .base import Base
 class PredictionRun(Base):
     __tablename__ = "prediction_runs"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     task_id = Column(Integer, ForeignKey("prediction_tasks.id"), index=True)
     celery_task_id = Column(String(100))
     action = Column(String(20))

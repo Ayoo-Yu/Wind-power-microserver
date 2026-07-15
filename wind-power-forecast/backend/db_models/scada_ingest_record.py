@@ -12,7 +12,7 @@ class ScadaIngestRecord(Base):
 
     __tablename__ = "scada_ingest_records"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     connection_id = Column(Integer, nullable=False, index=True)
     farm_code = Column(String(50), nullable=False, index=True)
     ioa = Column(Integer, nullable=True)

@@ -5,7 +5,7 @@ class Dataset(Base):
     """数据集模型，存储上传的数据文件信息"""
     __tablename__ = "datasets"
     
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     filename = Column(String(255), nullable=False)
     file_path = Column(String(255), nullable=False)
     upload_time = Column(DateTime, nullable=False)
@@ -18,4 +18,4 @@ class Dataset(Base):
     wind_farm = Column(String(100))
     
     def __repr__(self):
-        return f"<Dataset {self.filename} ({self.file_id})>" 
+        return f"<Dataset {self.filename} ({self.file_id})>"

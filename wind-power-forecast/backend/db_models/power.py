@@ -9,7 +9,7 @@ class ActualPower(Base):
         UniqueConstraint('farm_code', 'timestamp', name='uq_actual_power_farm_ts'),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     timestamp = Column(DateTime, nullable=False, index=True)
     farm_code = Column(String(50), nullable=False, index=True)  # 场站编码
     wp_true = Column(Float, nullable=True)
@@ -22,7 +22,7 @@ class SupershortlPower(Base):
         UniqueConstraint('farm_code', 'timestamp', name='uq_supershortl_power_farm_ts'),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     timestamp = Column(DateTime, nullable=False, index=True)
     farm_code = Column(String(50), nullable=False, index=True)  # 场站编码
     wp_pred2 = Column(Float, nullable=False)
@@ -100,7 +100,7 @@ class ShortlPower(Base):
         UniqueConstraint('farm_code', 'timestamp', 'pre_at', 'pre_num', name='uq_shortl_power_farm_ts_pre'),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     timestamp = Column(DateTime, nullable=False, index=True)
     farm_code = Column(String(50), nullable=False, index=True)  # 场站编码
     wp_pred = Column(Float, nullable=False)
@@ -115,7 +115,7 @@ class MidPower(Base):
     """中期预测功率数据模型"""
     __tablename__ = "mid_power"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     timestamp = Column(DateTime, nullable=False, index=True)
     farm_code = Column(String(50), nullable=False, index=True)  # 场站编码
     wp_pred = Column(Float, nullable=False)

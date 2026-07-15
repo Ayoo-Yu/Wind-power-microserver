@@ -79,9 +79,6 @@ class Config:
     EXTREME_WEATHER_LIVE_ENABLED = _env(
         'EXTREME_WEATHER_LIVE_ENABLED', 'false'
     ).lower() == 'true'
-    PHYSICAL_SIMULATION_ENABLED = _env(
-        'PHYSICAL_SIMULATION_ENABLED', 'false'
-    ).lower() == 'true'
     REPORT_SCHEDULER_MODE = _env('REPORT_SCHEDULER_MODE', 'embedded').lower()
     DB_SCHEMA_STRICT = _env('DB_SCHEMA_STRICT', 'true').lower() == 'true'
 

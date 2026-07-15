@@ -37,7 +37,6 @@ def build_capability_manifest(config: Mapping, runtime: Mapping | None = None) -
     integration_enabled = bool(config.get("INTEGRATION_API_ENABLED", False))
     scada_enabled = bool(config.get("SCADA_REALTIME_ENABLED", False))
     nwp_enabled = bool(config.get("NWP_INGESTION_ENABLED", False))
-    simulation_enabled = bool(config.get("PHYSICAL_SIMULATION_ENABLED", False))
     integration_required = bool(config.get("INTEGRATION_API_REQUIRED", False))
     scada_required = bool(config.get("SCADA_REQUIRED", False)) or scada_enabled
     nwp_required = bool(config.get("NWP_INGESTION_REQUIRED", False))
@@ -111,18 +110,6 @@ def build_capability_manifest(config: Mapping, runtime: Mapping | None = None) -
             maturity="placeholder",
             reason="阈值配置已实现，实时天气输入和历史事件持久化尚未接通",
             action="接通实时天气输入和告警事件存储后再启用",
-        ),
-        _capability(
-            "physical_simulation",
-            "物理仿真",
-            availability="available" if simulation_enabled else "unavailable",
-            maturity="beta" if simulation_enabled else "demo",
-            reason=(
-                "当前部署声明已启用物理仿真"
-                if simulation_enabled
-                else "当前功能仅保留研发演示代码，未纳入生产业务菜单"
-            ),
-            action=None if simulation_enabled else "完成算法验收和输入数据校验后再启用",
         ),
     ]
     counts = {

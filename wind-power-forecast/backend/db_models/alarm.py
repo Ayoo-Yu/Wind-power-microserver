@@ -8,7 +8,7 @@ from .base import Base
 class AlarmRecord(Base):
     __tablename__ = 'alarm_records'
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     source = Column(String(50), nullable=False, default='system')
     farm_code = Column(String(50), nullable=True, index=True)
     module = Column(String(100), nullable=True)
@@ -30,7 +30,7 @@ class AlarmRecord(Base):
 class AlarmRule(Base):
     __tablename__ = 'alarm_rules'
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     rule_name = Column(String(100), nullable=False, unique=True)
     module = Column(String(100), nullable=False, default='system')
     level = Column('level', String(20), nullable=False, default='warning', quote=True)
@@ -46,7 +46,7 @@ class AlarmRule(Base):
 class AlarmNotificationPolicy(Base):
     __tablename__ = 'alarm_notification_policies'
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     policy_name = Column(String(100), nullable=False, unique=True)
     channel = Column(String(20), nullable=False, default='sound')
     target = Column(String(200), nullable=True)

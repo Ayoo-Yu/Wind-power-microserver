@@ -7,7 +7,7 @@ from .base import Base
 class SystemSetting(Base):
     __tablename__ = "system_settings"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     settings_key = Column(String(100), nullable=False, unique=True, index=True)
     payload = Column(Text, nullable=False)
     updated_by = Column(String(100), nullable=True)

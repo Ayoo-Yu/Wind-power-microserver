@@ -6,7 +6,7 @@ class WindFarm(Base):
     """风电场站信息模型"""
     __tablename__ = "wind_farms"
     
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     farm_code = Column(String(50), nullable=False, unique=True, index=True)  # 场站编码
     farm_name = Column(String(100), nullable=False)  # 场站名称
     capacity = Column(Float, nullable=True)  # 装机容量(MW)
@@ -19,7 +19,7 @@ class ReportConfig(Base):
     """上报配置模型"""
     __tablename__ = "report_configs"
     
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     farm_id = Column(Integer, nullable=False, index=True)  # 关联风电场站ID
     report_type = Column(String(50), nullable=False)  # 上报类型: 'actual', 'forecast_short', 'forecast_long'
     target_ip = Column(String(100), nullable=False)  # 目标IP地址
@@ -38,7 +38,7 @@ class ReportLog(Base):
     """上报日志模型"""
     __tablename__ = "report_logs"
     
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     config_id = Column(Integer, nullable=False, index=True)  # 关联配置ID
     farm_code = Column(String(50), nullable=False)  # 场站编码
     report_type = Column(String(50), nullable=False)  # 上报类型
@@ -56,7 +56,7 @@ class ReportQualityStatistics(Base):
     """上报数据质量统计模型 - 按类型分别统计"""
     __tablename__ = "report_quality_statistics"
     
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     farm_code = Column(String(50), nullable=False, index=True)  # 场站编码
     report_type = Column(String(50), nullable=False, index=True)  # 上报类型: 'actual', 'forecast_short', 'forecast_long'
     date = Column(String(10), nullable=False, index=True)  # 统计日期 (YYYY-MM-DD)
@@ -73,7 +73,7 @@ class ReportQualityStatistics(Base):
 class DataQualityMarker(Base):
     __tablename__ = "data_quality_markers"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     farm_code = Column(String(50), nullable=False, index=True)
     start_time = Column(DateTime, nullable=False, index=True)
     end_time = Column(DateTime, nullable=False, index=True)

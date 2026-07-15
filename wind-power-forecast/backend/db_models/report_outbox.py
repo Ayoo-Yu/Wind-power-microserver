@@ -16,7 +16,7 @@ class ReportOutbox(Base):
 
     __tablename__ = "report_outbox"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     idempotency_key = Column(String(128), nullable=False, unique=True, index=True)
     config_id = Column(Integer, nullable=False, index=True)
     farm_code = Column(String(50), nullable=False, index=True)

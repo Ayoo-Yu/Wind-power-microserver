@@ -13,7 +13,7 @@ class PredictionTask(Base):
         UniqueConstraint("farm_code", "task_type", name="uq_prediction_tasks_farm_type"),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     farm_code = Column(String(50), nullable=False, index=True)
     task_type = Column(String(20), nullable=False)
     enabled = Column(Boolean, default=False)
