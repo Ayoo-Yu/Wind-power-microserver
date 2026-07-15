@@ -33,6 +33,10 @@ raw_data/
 *.pkl
 *.parquet
 
+# SCADA 测试环境的版本化契约与确定性场景属于源代码。
+!simulation/scada-test/config/
+!simulation/scada-test/config/*.json
+
 # 忽略大型压缩包
 *.zip
 *.rar

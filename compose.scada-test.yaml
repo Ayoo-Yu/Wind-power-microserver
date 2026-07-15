@@ -1,0 +1,224 @@
+name: wind-power-scada-test
+
+x-testbed-image: &testbed-image
+  image: wind-power-scada-testbed:dev
+
+x-testbed-runtime: &testbed-runtime
+  init: true
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  environment:
+    PYTHONUNBUFFERED: "1"
+    PYTHONDONTWRITEBYTECODE: "1"
+    TZ: Asia/Shanghai
+    SCADA_CATALOG_PATH: /app/config/point-catalog.json
+    SCADA_SCENARIOS_PATH: /app/config/scenarios.json
+  volumes:
+    - ./simulation/scada-test/config:/app/config:ro
+    - ./simulation/scada-test/artifacts:/artifacts
+
+services:
+  scada-simulator:
+    <<: [*testbed-image, *testbed-runtime]
+    build:
+      context: .
+      dockerfile: simulation/scada-test/Dockerfile
+    command: ["python3", "-m", "scada_testbed.simulator"]
+    environment:
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      TZ: Asia/Shanghai
+      SCADA_CATALOG_PATH: /app/config/point-catalog.json
+      SCADA_SCENARIOS_PATH: /app/config/scenarios.json
+      SCADA_SCENARIO: ${SCADA_TEST_SCENARIO:-normal}
+      SCADA_PORT: "2404"
+      SCADA_CONTROL_PORT: "8080"
+      SCADA_UPDATE_INTERVAL_SECONDS: ${SCADA_TEST_UPDATE_INTERVAL_SECONDS:-2}
+    ports:
+      - "127.0.0.1:${SCADA_TEST_DIRECT_PORT:-12405}:2404"
+      - "127.0.0.1:${SCADA_TEST_SIMULATOR_CONTROL_PORT:-18082}:8080"
+    networks:
+      - field-simulation
+      - test-control
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/ready', timeout=2)
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  fault-proxy:
+    <<: [*testbed-image, *testbed-runtime]
+    command: ["python3", "-m", "scada_testbed.fault_proxy"]
+    environment:
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      TZ: Asia/Shanghai
+      PROXY_LISTEN_HOST: 0.0.0.0
+      PROXY_LISTEN_PORT: "2405"
+      PROXY_UPSTREAM_HOST: scada-simulator
+      PROXY_UPSTREAM_PORT: "2404"
+      PROXY_CONTROL_PORT: "8081"
+    ports:
+      - "127.0.0.1:${SCADA_TEST_C104_PORT:-12404}:2405"
+      - "127.0.0.1:${SCADA_TEST_PROXY_CONTROL_PORT:-18081}:8081"
+    networks:
+      - field-simulation
+      - acquisition-test
+      - test-control
+    depends_on:
+      scada-simulator:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/live', timeout=2)
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 3s
+
+  mock-ingress:
+    <<: [*testbed-image, *testbed-runtime]
+    profiles: ["acceptance"]
+    command: ["python3", "-m", "scada_testbed.mock_ingress"]
+    environment:
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      TZ: Asia/Shanghai
+      MOCK_INGRESS_PORT: "8090"
+      MOCK_INGRESS_EVENT_PATH: /artifacts/ingress-events.jsonl
+    ports:
+      - "127.0.0.1:${SCADA_TEST_INGRESS_PORT:-18083}:8090"
+    networks:
+      - acquisition-test
+      - test-control
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=2)
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 3s
+
+  worker-harness:
+    <<: [*testbed-image, *testbed-runtime]
+    profiles: ["acceptance"]
+    command: ["python3", "-m", "scada_testbed.worker_harness"]
+    environment:
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      TZ: Asia/Shanghai
+      SCADA_CATALOG_PATH: /app/config/point-catalog.json
+      SCADA_WORKER_PATH: /app/production/scada_worker.py
+      SCADA_WORKER_SERVER_HOST: fault-proxy
+      SCADA_WORKER_SERVER_PORT: "2405"
+      SCADA_WORKER_BACKEND_URL: http://mock-ingress:8090
+      SCADA_WORKER_FETCH_INTERVAL: "2"
+    networks:
+      - acquisition-test
+    depends_on:
+      fault-proxy:
+        condition: service_healthy
+      mock-ingress:
+        condition: service_healthy
+
+  acceptance-runner:
+    <<: *testbed-image
+    profiles: ["acceptance"]
+    init: true
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    command: ["python3", "-m", "scada_testbed.acceptance"]
+    environment:
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      TZ: Asia/Shanghai
+      SCADA_CATALOG_PATH: /app/config/point-catalog.json
+      SCADA_SIMULATOR_CONTROL_URL: http://scada-simulator:8080
+      SCADA_PROXY_CONTROL_URL: http://fault-proxy:8081
+      SCADA_MOCK_INGRESS_URL: http://mock-ingress:8090
+      SCADA_PROBE_HOST: fault-proxy
+      SCADA_PROBE_PORT: "2405"
+      SCADA_ACCEPTANCE_REPORT: /artifacts/acceptance-report.json
+    volumes:
+      - ./simulation/scada-test/config:/app/config:ro
+      - ./simulation/scada-test/artifacts:/artifacts
+    networks:
+      - acquisition-test
+      - test-control
+    depends_on:
+      scada-simulator:
+        condition: service_healthy
+      fault-proxy:
+        condition: service_healthy
+      mock-ingress:
+        condition: service_healthy
+      worker-harness:
+        condition: service_started
+
+  test-kingbase:
+    image: kingbase_v009r001c002b0014_single_x86:v1
+    profiles: ["infra"]
+    privileged: true
+    environment:
+      NEED_START: "yes"
+      DB_USER: ${SCADA_TEST_DB_USER:-system}
+      DB_PASSWORD: ${SCADA_TEST_DB_PASSWORD:-scada_test_only_123456}
+      DB_MODE: oracle
+      ENCODING: UTF8
+      TZ: Asia/Shanghai
+    command: /usr/sbin/init
+    ports:
+      - "127.0.0.1:${SCADA_TEST_DB_PORT:-15433}:54321"
+    volumes:
+      - scada-test-kingbase-data:/home/kingbase/userdata
+    networks:
+      - test-infrastructure
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ls", "/home/kingbase/userdata/data"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 30s
+
+  test-redis:
+    image: redis:7-alpine
+    profiles: ["infra"]
+    command: redis-server --appendonly yes --appendfsync everysec
+    ports:
+      - "127.0.0.1:${SCADA_TEST_REDIS_PORT:-6380}:6379"
+    volumes:
+      - scada-test-redis-data:/data
+    networks:
+      - test-infrastructure
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  scada-test-kingbase-data:
+  scada-test-redis-data:
+
+networks:
+  field-simulation:
+    internal: true
+  acquisition-test:
+    internal: true
+  test-control:
+  test-infrastructure:

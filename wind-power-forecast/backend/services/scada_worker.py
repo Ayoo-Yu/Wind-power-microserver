@@ -36,6 +36,13 @@ running = True
 
 # Minutes before each 15-min boundary to accept data (inclusive)
 WINDOW_BEFORE_MINUTES = 2
+SUPPORTED_TIMESTAMP_POLICIES = {
+    'quarter_window',
+    'receive_time',
+    'floor_quarter',
+    'source_time',
+    'source_quarter_window',
+}
 
 
 def resolve_c104_ip(server_ip: str) -> str:
@@ -96,6 +103,39 @@ def round_to_quarter_hour(now: datetime) -> datetime | None:
         )
     else:
         return None
+
+
+def select_sample_timestamp(
+    now: datetime,
+    config: dict,
+    source_time: datetime | None = None,
+) -> datetime | None:
+    """根据部署策略选择数据时间，默认保持原有十五分钟窗口逻辑。"""
+
+    policy = str(
+        config.get('timestamp_policy')
+        or os.environ.get('SCADA_TIMESTAMP_POLICY', 'quarter_window')
+    ).strip().lower()
+    if policy not in SUPPORTED_TIMESTAMP_POLICIES:
+        raise ValueError(f'Unsupported timestamp_policy: {policy}')
+
+    candidate = now
+    if policy.startswith('source') and source_time is not None:
+        candidate = source_time
+    if candidate.tzinfo is None:
+        candidate = candidate.replace(tzinfo=BEIJING_TZ)
+
+    if policy in ('quarter_window', 'source_quarter_window'):
+        return round_to_quarter_hour(candidate)
+    if policy == 'floor_quarter':
+        candidate_bj = candidate.astimezone(BEIJING_TZ)
+        return candidate_bj.replace(
+            minute=(candidate_bj.minute // 15) * 15,
+            second=0,
+            microsecond=0,
+            tzinfo=None,
+        )
+    return candidate.astimezone(BEIJING_TZ).replace(tzinfo=None)
 
 
 def signal_handler(signum, frame):
@@ -202,7 +242,7 @@ def run_http_poll(config: dict):
 
             power = round(factor * capacity, 2)
 
-            rounded = round_to_quarter_hour(now)
+            rounded = select_sample_timestamp(now, config)
             if rounded is None:
                 logger.debug(
                     f"[{farm_code}] {power:.2f} MW skipped "
@@ -267,7 +307,8 @@ def run_c104(config: dict):
         if value is not None:
             power = float(value)
             now = datetime.now(BEIJING_TZ)
-            rounded = round_to_quarter_hour(now)
+            source_time = getattr(point, 'recorded_at', None)
+            rounded = select_sample_timestamp(now, config, source_time)
             if rounded is None:
                 logger.debug(
                     f"IOA={point.io_address}: {power} MW skipped "

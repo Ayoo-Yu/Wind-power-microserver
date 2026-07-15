@@ -1,0 +1,71 @@
+{
+  "schema_version": "1.0.0",
+  "catalog_id": "wind-power-local-scada-v1",
+  "source": "scada-testbed",
+  "common_address": 1,
+  "originator_address": 0,
+  "expected_cadence_seconds": 2,
+  "timestamp_semantics": "reception_time",
+  "farms": [
+    {
+      "farm_code": "CF",
+      "name": "仓房",
+      "capacity_mw": 48.0,
+      "points": {
+        "active_power_mw": {"ioa": 16385, "type": "M_ME_NC_1", "unit": "MW"},
+        "wind_speed_mps": {"ioa": 17385, "type": "M_ME_NC_1", "unit": "m/s"},
+        "theoretical_power_mw": {"ioa": 18385, "type": "M_ME_NC_1", "unit": "MW"},
+        "available_power_mw": {"ioa": 19385, "type": "M_ME_NC_1", "unit": "MW"},
+        "availability_pct": {"ioa": 20385, "type": "M_ME_NC_1", "unit": "%"}
+      }
+    },
+    {
+      "farm_code": "BNJ",
+      "name": "白泥井",
+      "capacity_mw": 32.0,
+      "points": {
+        "active_power_mw": {"ioa": 16386, "type": "M_ME_NC_1", "unit": "MW"},
+        "wind_speed_mps": {"ioa": 17386, "type": "M_ME_NC_1", "unit": "m/s"},
+        "theoretical_power_mw": {"ioa": 18386, "type": "M_ME_NC_1", "unit": "MW"},
+        "available_power_mw": {"ioa": 19386, "type": "M_ME_NC_1", "unit": "MW"},
+        "availability_pct": {"ioa": 20386, "type": "M_ME_NC_1", "unit": "%"}
+      }
+    },
+    {
+      "farm_code": "SDS",
+      "name": "石洞山",
+      "capacity_mw": 193.5,
+      "points": {
+        "active_power_mw": {"ioa": 16387, "type": "M_ME_NC_1", "unit": "MW"},
+        "wind_speed_mps": {"ioa": 17387, "type": "M_ME_NC_1", "unit": "m/s"},
+        "theoretical_power_mw": {"ioa": 18387, "type": "M_ME_NC_1", "unit": "MW"},
+        "available_power_mw": {"ioa": 19387, "type": "M_ME_NC_1", "unit": "MW"},
+        "availability_pct": {"ioa": 20387, "type": "M_ME_NC_1", "unit": "%"}
+      }
+    },
+    {
+      "farm_code": "DPLZ",
+      "name": "陡坡梁子",
+      "capacity_mw": 47.5,
+      "points": {
+        "active_power_mw": {"ioa": 16388, "type": "M_ME_NC_1", "unit": "MW"},
+        "wind_speed_mps": {"ioa": 17388, "type": "M_ME_NC_1", "unit": "m/s"},
+        "theoretical_power_mw": {"ioa": 18388, "type": "M_ME_NC_1", "unit": "MW"},
+        "available_power_mw": {"ioa": 19388, "type": "M_ME_NC_1", "unit": "MW"},
+        "availability_pct": {"ioa": 20388, "type": "M_ME_NC_1", "unit": "%"}
+      }
+    },
+    {
+      "farm_code": "ZYX",
+      "name": "竹园西",
+      "capacity_mw": 453.5,
+      "points": {
+        "active_power_mw": {"ioa": 16389, "type": "M_ME_NC_1", "unit": "MW"},
+        "wind_speed_mps": {"ioa": 17389, "type": "M_ME_NC_1", "unit": "m/s"},
+        "theoretical_power_mw": {"ioa": 18389, "type": "M_ME_NC_1", "unit": "MW"},
+        "available_power_mw": {"ioa": 19389, "type": "M_ME_NC_1", "unit": "MW"},
+        "availability_pct": {"ioa": 20389, "type": "M_ME_NC_1", "unit": "%"}
+      }
+    }
+  ]
+}

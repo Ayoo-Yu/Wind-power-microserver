@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0.0",
+  "default_scenario": "normal",
+  "scenarios": {
+    "normal": {
+      "description": "确定性正常运行，功率由风速、可用率和功率曲线共同决定",
+      "kind": "normal",
+      "seed": 20260715,
+      "cycle_length": 120
+    },
+    "ramp_up": {
+      "description": "风速从切入风速逐步升至额定风速",
+      "kind": "ramp_up",
+      "seed": 20260716,
+      "cycle_length": 30
+    },
+    "curtailment": {
+      "description": "高风速条件下施加百分之四十装机容量的限功率",
+      "kind": "curtailment",
+      "seed": 20260717,
+      "cycle_length": 60,
+      "curtailment_fraction": 0.4
+    },
+    "turbine_trip": {
+      "description": "石洞山场站在第五个周期后停机",
+      "kind": "turbine_trip",
+      "seed": 20260718,
+      "cycle_length": 60,
+      "target_farm": "SDS",
+      "trigger_cycle": 5
+    },
+    "invalid_quality": {
+      "description": "所有遥测值携带无效质量码",
+      "kind": "invalid_quality",
+      "seed": 20260719,
+      "cycle_length": 60
+    },
+    "stale": {
+      "description": "前三个周期正常发送，随后停止更新和主动上送",
+      "kind": "stale",
+      "seed": 20260720,
+      "cycle_length": 60,
+      "trigger_cycle": 3
+    },
+    "zero_output": {
+      "description": "低于切入风速，所有场站保持零功率",
+      "kind": "zero_output",
+      "seed": 20260721,
+      "cycle_length": 60
+    },
+    "clock_skew": {
+      "description": "仿真源时间比接收侧快五分钟，用于校验双时间戳处理",
+      "kind": "normal",
+      "seed": 20260722,
+      "cycle_length": 120,
+      "source_time_offset_seconds": 300
+    }
+  }
+}

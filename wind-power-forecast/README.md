@@ -1,5 +1,20 @@
 # wind-power-forecast
 
+## SCADA testbed development
+
+The independent SCADA testbed provides deterministic IEC 60870-5-104 data,
+versioned point mappings, network fault injection and automated acceptance using
+the production `scada_worker.py` implementation.
+
+```bat
+start-scada-dev.bat
+test-scada-test.bat
+stop-scada-dev.bat
+```
+
+Detailed Chinese documentation is available in
+[`docs/productization/SCADA_TEST_ENVIRONMENT.md`](docs/productization/SCADA_TEST_ENVIRONMENT.md).
+
 ## Local development
 
 Local development uses Docker for KingBase and Redis. Flask, Celery and Vue run

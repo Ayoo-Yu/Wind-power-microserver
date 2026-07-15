@@ -16,6 +16,14 @@
 6. 能力事实表和前端生产构建。
 7. Compose 展开、PowerShell 解析和 Linux 脚本语法。
 
+## SCADA 独立测试床
+
+```powershell
+.\scripts\scada-test.ps1 -Action test
+```
+
+该套件使用真实 `scada_worker.py`，验证 25 个 C104 点位、质量码、五场站上送、网络延迟、断线重连、限功率一致性和陈旧数据。完整说明见 `SCADA_TEST_ENVIRONMENT.md`。
+
 ## 故障演练
 
 | 故障 | 操作 | 通过标准 |

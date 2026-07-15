@@ -5,6 +5,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $projectDir = Split-Path -Parent $PSScriptRoot
+$repositoryDir = Split-Path -Parent $projectDir
 $backendDir = Join-Path $projectDir "backend"
 $frontendDir = Join-Path $projectDir "frontend"
 
@@ -16,7 +17,8 @@ $testFiles = @(
     "tests/test_integration_router.py",
     "tests/test_report_outbox_service.py",
     "tests/test_capability_service.py",
-    "tests/test_celery_static_schedules.py"
+    "tests/test_celery_static_schedules.py",
+    "tests/test_scada_worker_timestamp.py"
 )
 
 Push-Location $backendDir
@@ -24,6 +26,16 @@ try {
     & python -m pytest @testFiles -q
     if ($LASTEXITCODE -ne 0) {
         throw "Backend productization tests failed"
+    }
+} finally {
+    Pop-Location
+}
+
+Push-Location $repositoryDir
+try {
+    & python -m unittest discover -s "simulation/scada-test/tests" -p "test_*.py" -v
+    if ($LASTEXITCODE -ne 0) {
+        throw "SCADA testbed unit tests failed"
     }
 } finally {
     Pop-Location
@@ -60,6 +72,10 @@ if (-not $SkipCompose) {
             throw "Compose validation failed: $composeFile"
         }
     }
+    & docker compose -p wind-power-scada-test -f (Join-Path $repositoryDir "compose.scada-test.yaml") --profile acceptance --profile infra config --quiet
+    if ($LASTEXITCODE -ne 0) {
+        throw "Compose validation failed: compose.scada-test.yaml"
+    }
 }
 
 $schemaPath = Join-Path $backendDir "integration/schemas/manifest-v1.schema.json"
@@ -75,6 +91,22 @@ if ($parseErrors.Count -gt 0) {
     throw "Release script syntax validation failed"
 }
 
+$scadaPowerShellFiles = @(
+    "scripts/scada-test.ps1",
+    "scripts/configure-scada-test.ps1"
+)
+foreach ($scadaPowerShellFile in $scadaPowerShellFiles) {
+    $parseErrors = $null
+    [System.Management.Automation.Language.Parser]::ParseFile(
+        (Join-Path $projectDir $scadaPowerShellFile),
+        [ref]$null,
+        [ref]$parseErrors
+    ) | Out-Null
+    if ($parseErrors.Count -gt 0) {
+        throw "SCADA PowerShell syntax validation failed: $scadaPowerShellFile"
+    }
+}
+
 if (Get-Command bash -ErrorAction SilentlyContinue) {
     Push-Location $projectDir
     try {
@@ -82,7 +114,8 @@ if (Get-Command bash -ErrorAction SilentlyContinue) {
             "deploy/deploy.sh",
             "deploy/verify-release.sh",
             "deploy/zone-agent/install-zone-agent.sh",
-            "deploy/zone-agent/run-agent.sh"
+            "deploy/zone-agent/run-agent.sh",
+            "scripts/scada-test.sh"
         )
         foreach ($shellFile in $shellFiles) {
             & bash -n $shellFile
