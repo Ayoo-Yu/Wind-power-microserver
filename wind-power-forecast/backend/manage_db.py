@@ -41,7 +41,10 @@ def _print_status(status: dict, as_json: bool = False) -> None:
     if status["missing_tables"]:
         print("缺失模型表: " + ", ".join(status["missing_tables"]))
     if status["unmanaged_tables"]:
-        print("动态或历史表: " + ", ".join(status["unmanaged_tables"]))
+        unmanaged = status["unmanaged_tables"]
+        preview = ", ".join(unmanaged[:10])
+        suffix = f" 等 {len(unmanaged)} 张" if len(unmanaged) > 10 else ""
+        print("动态或历史表: " + preview + suffix)
 
 
 def status_command(args) -> int:

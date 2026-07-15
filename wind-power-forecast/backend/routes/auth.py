@@ -93,6 +93,10 @@ def permission_required(required_permission):
                     print(f"权限检查失败：用户 {username_for_logs} 已被禁用，要求权限: {required_permission}")
                     return jsonify({"message": "操作用户账户已被禁用"}), 403
 
+                if is_admin_role(user_to_check.role):
+                    g.acting_user = user_to_check
+                    return f(*args, **kwargs)
+
                 if not user_to_check.role or not user_to_check.role.permissions:
                     print(f"权限检查失败：用户 {username_for_logs} 没有角色或权限为空，要求权限: {required_permission}")
                     return jsonify({"message": "用户没有任何权限"}), 403
@@ -790,4 +794,4 @@ def debug_permissions():
             })
     except Exception as e:
         print(f"调试权限异常: {e}")
-        return jsonify({"message": "服务器内部错误"}), 500 
+        return jsonify({"message": "服务器内部错误"}), 500

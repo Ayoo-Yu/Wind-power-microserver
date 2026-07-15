@@ -86,6 +86,9 @@
           <el-menu-item index="/system-settings" v-if="hasPermission('manage_system_settings') || hasPermission('system_maintenance')">
             系统基础配置
           </el-menu-item>
+          <el-menu-item index="/database-governance" v-if="hasPermission('system_maintenance')">
+            数据库治理
+          </el-menu-item>
           <el-menu-item index="/users/audit-logs" v-if="hasPermission('manage_users') || hasPermission('view_audit_logs')">
             操作日志审计
           </el-menu-item>

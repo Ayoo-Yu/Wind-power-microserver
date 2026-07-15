@@ -106,6 +106,7 @@ from routes.etext_pipeline_router import etext_pipeline_bp
 from routes.integration_router import integration_bp
 from routes.report_outbox_router import report_outbox_bp
 from routes.capability_router import capability_bp
+from routes.database_governance_router import database_governance_bp
 
 # app.register_blueprint(upload_bp, url_prefix='/')
 app.register_blueprint(download_bp, url_prefix='/')
@@ -148,6 +149,12 @@ app.register_blueprint(etext_pipeline_bp)  # E text pipeline config & trigger
 app.register_blueprint(integration_bp)  # 跨区统一数据接入
 app.register_blueprint(report_outbox_bp)  # 可靠上报队列运维接口
 app.register_blueprint(capability_bp)  # 系统能力事实表
+app.register_blueprint(database_governance_bp, url_prefix='/system')
+app.register_blueprint(
+    database_governance_bp,
+    url_prefix='/api/v1/system',
+    name='database_governance_v1',
+)
 
 
 def validate_database_schema():

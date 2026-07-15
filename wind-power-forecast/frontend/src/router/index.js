@@ -20,6 +20,7 @@ const FarmManagement = () => import('../components/FarmManagement.vue')
 const PowerCurveAnalysis = () => import('../components/PowerCurveAnalysis.vue')
 const ScadaConnection = () => import('../components/ScadaConnection.vue')
 const DataPopulation = () => import('../views/DataPopulation.vue')
+const DatabaseGovernance = () => import('../components/DatabaseGovernance.vue')
 
 const routes = [
   {
@@ -141,6 +142,12 @@ const routes = [
         name: 'SystemSettings',
         component: SystemSettings,
         meta: { requiredPermissions: ['manage_system_settings', 'system_maintenance'], keepAlive: true }
+      },
+      {
+        path: 'database-governance',
+        name: 'DatabaseGovernance',
+        component: DatabaseGovernance,
+        meta: { requiredPermissions: ['system_maintenance'], keepAlive: true }
       }
     ]
   }

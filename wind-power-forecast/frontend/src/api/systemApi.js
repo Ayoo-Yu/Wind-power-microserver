@@ -148,3 +148,10 @@ export function resetSystemSettings(payload = {}) {
     () => axiosInstance.post('/api/system/settings/reset', payload)
   )
 }
+
+export function getDatabaseOverview() {
+  return withLegacyFallback(
+    () => axiosInstance.get('/api/v1/system/database/overview'),
+    () => axiosInstance.get('/system/database/overview')
+  )
+}
