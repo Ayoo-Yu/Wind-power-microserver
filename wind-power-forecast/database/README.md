@@ -41,9 +41,19 @@ docker compose exec backend python manage_db.py status
 docker compose exec backend python manage_db.py upgrade
 ```
 
+NWP 接入关闭且动态表全部为空时，可以先预检再显式清理：
+
+```bash
+python backend/manage_db.py cleanup-nwp
+python backend/manage_db.py cleanup-nwp --apply
+```
+
+该命令发现任意 NWP 表已有数据或接入开关已启用时会拒绝执行。
+
 ## 安全约束
 
 1. 生产升级前必须备份数据库。
 2. 自动生成的迁移必须人工检查。
 3. 表删除和字段删除必须手工编写迁移。
 4. 前端数据库治理页面只提供状态和容量监控，不执行任意 SQL。
+5. 动态表清理必须先执行预检，并通过独立数据库备份保留恢复点。

@@ -727,6 +727,28 @@ export default {
     display: none;
   }
 }
+
+@media (max-width: 1100px) {
+  .header {
+    padding: 0 14px;
+  }
+
+  .header-left,
+  .header-right {
+    gap: 10px;
+  }
+
+  .header-title,
+  .username,
+  .system-time-chip,
+  .capability-chip {
+    display: none;
+  }
+
+  .user-profile {
+    padding: 5px;
+  }
+}
 </style>
 
 

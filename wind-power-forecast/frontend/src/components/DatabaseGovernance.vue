@@ -1,15 +1,25 @@
 <template>
   <div class="database-governance page-shell" v-loading="loading">
     <header class="page-header">
-      <div>
-        <p class="eyebrow">DATABASE GOVERNANCE</p>
+      <div class="title-block">
+        <div class="eyebrow">
+          <el-icon><DataBoard /></el-icon>
+          <span>DATABASE GOVERNANCE</span>
+        </div>
         <h1>数据库治理</h1>
-        <p class="subtitle">查看结构版本、容量、分区和数据增长情况。结构变更通过迁移文件完成。</p>
+        <p class="subtitle">集中查看结构版本、表资产、索引健康和实时数据增长。</p>
       </div>
-      <el-button type="primary" :loading="loading" @click="loadOverview">
-        <el-icon><Refresh /></el-icon>
-        刷新状态
-      </el-button>
+
+      <div class="header-actions">
+        <div class="refresh-mode" :class="{ paused: !autoRefresh }">
+          <span class="live-dot"></span>
+          <span>{{ autoRefresh ? '60 秒自动刷新' : '自动刷新已暂停' }}</span>
+          <el-switch v-model="autoRefresh" aria-label="自动刷新数据库状态" />
+        </div>
+        <el-button type="primary" :icon="Refresh" :loading="loading" @click="loadOverview()">
+          刷新状态
+        </el-button>
+      </div>
     </header>
 
     <el-alert
@@ -22,56 +32,95 @@
       :description="migrationDescription"
     />
 
-    <section class="metric-grid">
-      <article class="metric-card version-card">
-        <span class="metric-label">结构版本</span>
-        <strong>{{ migrationRevision }}</strong>
-        <el-tag :type="overview?.migration?.ready ? 'success' : 'danger'" effect="dark">
-          {{ overview?.migration?.ready ? '已同步' : '待处理' }}
-        </el-tag>
+    <section class="overview-grid">
+      <article :class="['health-card', `health-${structureHealth.state}`]">
+        <div class="health-heading">
+          <div class="health-icon">
+            <el-icon><component :is="structureHealth.icon" /></el-icon>
+          </div>
+          <div>
+            <span class="section-kicker">结构健康</span>
+            <h2>{{ structureHealth.label }}</h2>
+          </div>
+          <el-tag :type="structureHealth.tagType" effect="dark" round>
+            {{ structureHealth.tagText }}
+          </el-tag>
+        </div>
+
+        <p class="health-description">{{ structureHealth.description }}</p>
+
+        <div class="status-meta">
+          <div>
+            <span>数据库</span>
+            <strong>{{ overview?.database?.name || '未知' }}</strong>
+          </div>
+          <div>
+            <span>Schema</span>
+            <strong>{{ overview?.database?.schema || 'public' }}</strong>
+          </div>
+          <div>
+            <span>结构版本</span>
+            <strong class="mono">{{ migrationRevision }}</strong>
+          </div>
+        </div>
+
+        <div class="coverage-row">
+          <div>
+            <span>模型纳管覆盖率</span>
+            <strong>{{ managedCoverage }}%</strong>
+          </div>
+          <el-progress
+            :percentage="managedCoverage"
+            :show-text="false"
+            :stroke-width="7"
+            :color="coverageColor"
+          />
+        </div>
       </article>
-      <article class="metric-card">
-        <span class="metric-label">业务表</span>
-        <strong>{{ summary.total_tables }}</strong>
-        <small>模型管理 {{ summary.managed_tables }} 张</small>
-      </article>
-      <article class="metric-card">
-        <span class="metric-label">空表</span>
-        <strong>{{ summary.empty_estimate_tables }}</strong>
-        <small>通过统计信息和存在性检查识别</small>
-      </article>
-      <article class="metric-card">
-        <span class="metric-label">数据库占用</span>
-        <strong>{{ formatBytes(summary.total_size_bytes) }}</strong>
-        <small>包含业务表及索引</small>
-      </article>
-      <article class="metric-card attention-card">
-        <span class="metric-label">SCADA 最近一小时</span>
-        <strong>{{ formatInteger(overview?.scada_growth?.last_hour_rows) }}</strong>
-        <small>按当前速度 30 天约 {{ formatInteger(overview?.scada_growth?.projected_30d_rows) }} 行</small>
-      </article>
+
+      <div class="signal-grid">
+        <article v-for="item in signalCards" :key="item.key" class="signal-card">
+          <div :class="['signal-icon', `tone-${item.tone}`]">
+            <el-icon><component :is="item.icon" /></el-icon>
+          </div>
+          <div class="signal-copy">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+            <small>{{ item.detail }}</small>
+          </div>
+        </article>
+      </div>
     </section>
 
-    <section class="content-grid">
+    <section class="insight-grid">
       <el-card class="governance-card recommendation-card" shadow="never">
         <template #header>
           <div class="card-title-row">
             <div>
-              <span class="card-title">治理建议</span>
-              <small>只读诊断，不会修改数据库</small>
+              <span class="card-title">治理关注项</span>
+              <small>按影响程度排序，所有诊断均为只读</small>
             </div>
-            <span class="generated-time">更新于 {{ formatDateTime(overview?.generated_at) }}</span>
+            <div class="attention-summary">
+              <strong>{{ attentionCount }}</strong>
+              <span>项需关注</span>
+            </div>
           </div>
         </template>
+
         <div class="recommendation-list">
           <div
-            v-for="item in overview?.recommendations || []"
+            v-for="item in visibleRecommendations"
             :key="`${item.title}-${item.detail}`"
             :class="['recommendation-item', `level-${item.level}`]"
           >
-            <span class="status-dot"></span>
-            <div>
-              <strong>{{ item.title }}</strong>
+            <div class="recommendation-icon">
+              <el-icon><component :is="recommendationIcon(item.level)" /></el-icon>
+            </div>
+            <div class="recommendation-copy">
+              <div>
+                <strong>{{ item.title }}</strong>
+                <span>{{ recommendationLevel(item.level) }}</span>
+              </div>
               <p>{{ item.detail }}</p>
             </div>
           </div>
@@ -80,84 +129,120 @@
 
       <el-card class="governance-card structure-card" shadow="never">
         <template #header>
-          <span class="card-title">结构约束</span>
+          <div class="card-title-row">
+            <div>
+              <span class="card-title">结构约束</span>
+              <small>快速定位会影响一致性和性能的结构问题</small>
+            </div>
+            <span class="generated-time">{{ formatDateTime(overview?.generated_at) }}</span>
+          </div>
         </template>
+
         <div class="constraint-grid">
-          <div><strong>{{ summary.primary_keys }}</strong><span>主键约束</span></div>
-          <div><strong>{{ summary.foreign_keys }}</strong><span>外键约束</span></div>
-          <div><strong>{{ summary.unique_constraints }}</strong><span>唯一约束</span></div>
-          <div><strong>{{ summary.without_primary_key_tables }}</strong><span>无主键表</span></div>
-          <div><strong>{{ summary.duplicate_index_groups }}</strong><span>重复索引组</span></div>
-          <div><strong>{{ summary.dynamic_tables }}</strong><span>NWP 动态表</span></div>
+          <div v-for="item in constraintItems" :key="item.label" :class="item.state">
+            <span>{{ item.label }}</span>
+            <strong>{{ formatInteger(item.value) }}</strong>
+            <small>{{ item.detail }}</small>
+          </div>
         </div>
       </el-card>
     </section>
 
     <el-card class="governance-card table-card" shadow="never">
       <template #header>
-        <div class="card-title-row table-toolbar">
+        <div class="table-heading">
           <div>
-            <span class="card-title">数据表清单</span>
-            <small>行数为数据库统计估算，空表状态经过存在性检查</small>
+            <span class="card-title">数据表资产</span>
+            <small>空表经过存在性检查，行数使用数据库统计估算</small>
           </div>
-          <div class="filters">
-            <el-input v-model.trim="keyword" clearable placeholder="搜索表名" style="width: 220px" />
-            <el-select v-model="category" style="width: 170px">
-              <el-option label="全部分类" value="all" />
-              <el-option label="模型管理" value="managed" />
-              <el-option label="旧链路候选" value="legacy_candidate" />
-              <el-option label="演示功能候选" value="demo_candidate" />
-              <el-option label="NWP 父表" value="nwp_parent" />
-              <el-option label="NWP 月分区" value="nwp_partition" />
-              <el-option label="未纳入模型" value="unmanaged" />
-            </el-select>
-            <el-checkbox v-model="emptyOnly">只看空表</el-checkbox>
+          <div class="result-count">
+            <strong>{{ filteredTables.length }}</strong>
+            <span>/ {{ summary.total_tables }} 张表</span>
           </div>
         </div>
       </template>
 
-      <el-table :data="pagedTables" stripe height="520" empty-text="没有符合条件的数据表">
-        <el-table-column prop="table_name" label="表名" min-width="250" fixed />
-        <el-table-column label="分类" width="140">
+      <div class="table-toolbar">
+        <el-input v-model.trim="keyword" clearable placeholder="按表名搜索" class="search-input">
+          <template #prefix><el-icon><Search /></el-icon></template>
+        </el-input>
+
+        <div class="category-tabs" role="group" aria-label="数据表分类筛选">
+          <button
+            v-for="item in categoryTabs"
+            :key="item.value"
+            type="button"
+            :class="{ active: category === item.value }"
+            :aria-pressed="category === item.value"
+            @click="category = item.value"
+          >
+            <span>{{ item.label }}</span>
+            <strong>{{ item.count }}</strong>
+          </button>
+        </div>
+
+        <div class="toolbar-tail">
+          <el-switch v-model="emptyOnly" active-text="只看空表" />
+          <el-button v-if="filtersActive" text @click="resetFilters">清除筛选</el-button>
+        </div>
+      </div>
+
+      <el-table
+        :data="pagedTables"
+        row-key="table_name"
+        height="450"
+        empty-text="没有符合条件的数据表"
+      >
+        <el-table-column label="表名" min-width="250">
           <template #default="{ row }">
-            <el-tag :type="categoryTag(row.category)" effect="plain">
+            <div class="table-name-cell">
+              <strong class="mono">{{ row.table_name }}</strong>
+              <small>{{ partitionLabel(row) }}</small>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="归属" width="130">
+          <template #default="{ row }">
+            <el-tag :type="categoryTag(row.category)" effect="plain" round>
               {{ categoryLabel(row.category) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="数据状态" width="110">
+        <el-table-column label="数据状态" width="120">
           <template #default="{ row }">
             <span :class="['data-state', row.has_data ? 'has-data' : 'is-empty']">
-              {{ row.has_data ? '有数据' : '空表' }}
+              <i></i>{{ row.has_data ? '有数据' : '空表' }}
             </span>
           </template>
         </el-table-column>
         <el-table-column label="估算行数" width="130" align="right">
           <template #default="{ row }">
-            {{ row.row_estimate_available ? formatInteger(row.estimated_rows) : (row.has_data ? '≥ 1' : '0') }}
+            <span class="mono table-number">
+              {{ row.row_estimate_available ? formatInteger(row.estimated_rows) : (row.has_data ? '≥ 1' : '0') }}
+            </span>
           </template>
         </el-table-column>
         <el-table-column label="占用空间" width="130" align="right">
-          <template #default="{ row }">{{ formatBytes(row.total_size_bytes) }}</template>
-        </el-table-column>
-        <el-table-column label="主键" width="90" align="center">
           <template #default="{ row }">
-            <el-tag size="small" :type="row.has_primary_key ? 'success' : 'warning'">
-              {{ row.has_primary_key ? '有' : '无' }}
-            </el-tag>
+            <span class="mono table-number">{{ formatBytes(row.total_size_bytes) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="分区角色" width="120">
-          <template #default="{ row }">{{ partitionLabel(row) }}</template>
+        <el-table-column label="主键状态" width="120" align="center">
+          <template #default="{ row }">
+            <span :class="['key-state', row.has_primary_key ? 'ready' : 'attention']">
+              {{ row.has_primary_key ? '已定义' : '待补充' }}
+            </span>
+          </template>
         </el-table-column>
       </el-table>
 
       <div class="pagination-row">
-        <span>共 {{ filteredTables.length }} 张表</span>
+        <span>当前显示 {{ pagedTables.length }} 张表</span>
         <el-pagination
           v-model:current-page="currentPage"
-          :page-size="pageSize"
-          layout="prev, pager, next"
+          v-model:page-size="pageSize"
+          :page-sizes="[15, 30, 50]"
+          layout="total, sizes, prev, pager, next"
           :total="filteredTables.length"
         />
       </div>
@@ -165,15 +250,22 @@
 
     <el-card v-if="overview?.duplicate_indexes?.length" class="governance-card duplicate-card" shadow="never">
       <template #header>
-        <div>
-          <span class="card-title">潜在重复索引</span>
-          <small>此处只提示候选项，仍需检查约束用途和执行计划</small>
+        <div class="table-heading">
+          <div>
+            <span class="card-title">潜在重复索引</span>
+            <small>候选项仍需结合约束用途和查询计划确认</small>
+          </div>
+          <el-tag type="warning" effect="dark" round>
+            {{ overview.duplicate_indexes.length }} 组
+          </el-tag>
         </div>
       </template>
       <el-table :data="overview.duplicate_indexes" size="small" max-height="320">
-        <el-table-column prop="table_name" label="表名" width="220" />
+        <el-table-column prop="table_name" label="表名" width="240" />
         <el-table-column label="索引">
-          <template #default="{ row }">{{ row.index_names.join('，') }}</template>
+          <template #default="{ row }">
+            <span class="mono">{{ row.index_names.join('，') }}</span>
+          </template>
         </el-table-column>
       </el-table>
     </el-card>
@@ -181,9 +273,20 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh } from '@element-plus/icons-vue'
+import {
+  CircleCheckFilled,
+  CircleCloseFilled,
+  Coin,
+  DataBoard,
+  Files,
+  Refresh,
+  Search,
+  Timer,
+  TrendCharts,
+  WarningFilled
+} from '@element-plus/icons-vue'
 import { getDatabaseOverview } from '../api/systemApi'
 
 const loading = ref(false)
@@ -191,8 +294,10 @@ const overview = ref(null)
 const keyword = ref('')
 const category = ref('all')
 const emptyOnly = ref(false)
+const autoRefresh = ref(true)
 const currentPage = ref(1)
-const pageSize = 20
+const pageSize = ref(15)
+let refreshTimer = null
 
 const summary = computed(() => overview.value?.summary || {
   total_tables: 0,
@@ -207,6 +312,11 @@ const summary = computed(() => overview.value?.summary || {
   primary_keys: 0
 })
 
+const dataTableCount = computed(() => Math.max(
+  summary.value.total_tables - summary.value.empty_estimate_tables,
+  0
+))
+
 const migrationRevision = computed(() => {
   const revisions = overview.value?.migration?.current_revisions || []
   return revisions.length ? revisions.join(', ') : '未记录'
@@ -220,24 +330,174 @@ const migrationDescription = computed(() => {
   return '请检查数据库迁移状态。'
 })
 
+const managedCoverage = computed(() => {
+  if (!summary.value.total_tables) return 0
+  return Math.round((summary.value.managed_tables / summary.value.total_tables) * 100)
+})
+
+const coverageColor = computed(() => {
+  if (managedCoverage.value >= 100) return '#2dd36f'
+  if (managedCoverage.value >= 90) return '#12d7ff'
+  return '#f6b73c'
+})
+
+const structureHealth = computed(() => {
+  if (overview.value && !overview.value.migration?.ready) {
+    return {
+      state: 'critical',
+      label: '结构未同步',
+      description: '数据库版本与当前代码不一致，业务服务启动前需要先完成迁移。',
+      tagText: '需立即处理',
+      tagType: 'danger',
+      icon: CircleCloseFilled
+    }
+  }
+  const structureIssues = summary.value.without_primary_key_tables + summary.value.duplicate_index_groups
+  const unmanaged = Number(overview.value?.categories?.unmanaged || 0)
+  if (structureIssues || unmanaged) {
+    return {
+      state: 'attention',
+      label: '存在治理项',
+      description: `发现 ${structureIssues + unmanaged} 项结构问题，建议按下方清单逐项处理。`,
+      tagText: '需要关注',
+      tagType: 'warning',
+      icon: WarningFilled
+    }
+  }
+  return {
+    state: 'healthy',
+    label: '结构健康',
+    description: '迁移版本、模型表、主键与索引检查均已通过。',
+    tagText: '运行正常',
+    tagType: 'success',
+    icon: CircleCheckFilled
+  }
+})
+
+const signalCards = computed(() => [
+  {
+    key: 'tables',
+    label: '业务数据表',
+    value: formatInteger(summary.value.total_tables),
+    detail: `${formatInteger(dataTableCount.value)} 张有数据 · ${formatInteger(summary.value.empty_estimate_tables)} 张空表`,
+    icon: Files,
+    tone: 'cyan'
+  },
+  {
+    key: 'storage',
+    label: '数据库占用',
+    value: formatBytes(summary.value.total_size_bytes),
+    detail: `模型纳管 ${formatInteger(summary.value.managed_tables)} 张表`,
+    icon: Coin,
+    tone: 'violet'
+  },
+  {
+    key: 'scada-hour',
+    label: 'SCADA 最近一小时',
+    value: formatInteger(overview.value?.scada_growth?.last_hour_rows),
+    detail: overview.value?.scada_growth?.latest_received_at
+      ? `最近接收 ${formatDateTime(overview.value.scada_growth.latest_received_at)}`
+      : '暂未收到实时数据',
+    icon: Timer,
+    tone: 'green'
+  },
+  {
+    key: 'scada-month',
+    label: 'SCADA 30 天预测',
+    value: formatInteger(overview.value?.scada_growth?.projected_30d_rows),
+    detail: '按最近一小时接收速度估算',
+    icon: TrendCharts,
+    tone: 'amber'
+  }
+])
+
+const attentionCount = computed(() => (
+  (overview.value?.recommendations || []).filter(item => ['error', 'warning'].includes(item.level)).length
+))
+
+const visibleRecommendations = computed(() => (
+  (overview.value?.recommendations || []).slice(0, 4)
+))
+
+const constraintItems = computed(() => [
+  {
+    label: '主键约束',
+    value: summary.value.primary_keys,
+    detail: summary.value.without_primary_key_tables ? '存在缺口' : '覆盖完整',
+    state: summary.value.without_primary_key_tables ? 'warning' : 'healthy'
+  },
+  {
+    label: '外键约束',
+    value: summary.value.foreign_keys,
+    detail: '关系完整性',
+    state: 'neutral'
+  },
+  {
+    label: '唯一约束',
+    value: summary.value.unique_constraints,
+    detail: '业务去重',
+    state: 'neutral'
+  },
+  {
+    label: '无主键表',
+    value: summary.value.without_primary_key_tables,
+    detail: summary.value.without_primary_key_tables ? '建议补充' : '无异常',
+    state: summary.value.without_primary_key_tables ? 'warning' : 'healthy'
+  },
+  {
+    label: '重复索引组',
+    value: summary.value.duplicate_index_groups,
+    detail: summary.value.duplicate_index_groups ? '可释放空间' : '无冗余',
+    state: summary.value.duplicate_index_groups ? 'warning' : 'healthy'
+  },
+  {
+    label: 'NWP 动态表',
+    value: summary.value.dynamic_tables,
+    detail: summary.value.dynamic_tables ? '按接入策略管理' : '当前未创建',
+    state: 'neutral'
+  }
+])
+
+const categoryTabs = computed(() => {
+  const categories = overview.value?.categories || {}
+  return [
+    { label: '全部', value: 'all', count: summary.value.total_tables },
+    { label: '模型纳管', value: 'managed', count: Number(categories.managed || 0) },
+    {
+      label: 'NWP 动态',
+      value: 'nwp',
+      count: Number(categories.nwp_parent || 0) + Number(categories.nwp_partition || 0)
+    },
+    { label: '未纳管', value: 'unmanaged', count: Number(categories.unmanaged || 0) }
+  ]
+})
+
 const filteredTables = computed(() => {
   const normalized = keyword.value.toLowerCase()
   return (overview.value?.tables || []).filter((table) => {
     const matchesKeyword = !normalized || table.table_name.toLowerCase().includes(normalized)
-    const matchesCategory = category.value === 'all' || table.category === category.value
+    const matchesCategory = category.value === 'all'
+      || table.category === category.value
+      || (category.value === 'nwp' && ['nwp_parent', 'nwp_partition'].includes(table.category))
     const matchesEmpty = !emptyOnly.value || table.empty_estimate
     return matchesKeyword && matchesCategory && matchesEmpty
   })
 })
 
 const pagedTables = computed(() => {
-  const start = (currentPage.value - 1) * pageSize
-  return filteredTables.value.slice(start, start + pageSize)
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredTables.value.slice(start, start + pageSize.value)
 })
 
-watch([keyword, category, emptyOnly], () => {
+const filtersActive = computed(() => Boolean(
+  keyword.value || category.value !== 'all' || emptyOnly.value
+))
+
+watch([keyword, category, emptyOnly, pageSize], () => {
   currentPage.value = 1
 })
+
+watch(autoRefresh, configureAutoRefresh)
 
 function formatInteger(value) {
   return Number(value || 0).toLocaleString('zh-CN')
@@ -262,53 +522,91 @@ function formatDateTime(value) {
 
 function categoryLabel(value) {
   return {
-    managed: '模型管理',
-    legacy_candidate: '旧链路候选',
-    demo_candidate: '演示功能候选',
+    managed: '模型纳管',
     nwp_parent: 'NWP 父表',
     nwp_partition: 'NWP 月分区',
-    unmanaged: '未纳入模型'
+    unmanaged: '未纳管'
   }[value] || value
 }
 
 function categoryTag(value) {
   return {
     managed: 'success',
-    legacy_candidate: 'warning',
-    demo_candidate: 'warning',
     nwp_parent: 'info',
     nwp_partition: 'info',
-    unmanaged: 'danger'
+    unmanaged: 'warning'
   }[value] || 'info'
 }
 
 function partitionLabel(row) {
-  if (row.is_partition) return '子分区'
+  if (row.is_partition) return '月度子分区'
   if (row.is_partitioned) return '分区父表'
-  return '普通表'
+  return '普通业务表'
 }
 
-async function loadOverview() {
-  loading.value = true
+function recommendationIcon(level) {
+  if (level === 'error') return CircleCloseFilled
+  if (level === 'warning') return WarningFilled
+  return CircleCheckFilled
+}
+
+function recommendationLevel(level) {
+  if (level === 'error') return '阻断'
+  if (level === 'warning') return '关注'
+  if (level === 'success') return '正常'
+  return '建议'
+}
+
+function resetFilters() {
+  keyword.value = ''
+  category.value = 'all'
+  emptyOnly.value = false
+}
+
+function configureAutoRefresh() {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
+  if (autoRefresh.value) {
+    refreshTimer = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadOverview(true)
+      }
+    }, 60000)
+  }
+}
+
+async function loadOverview(silent = false) {
+  if (!silent) loading.value = true
   try {
     const response = await getDatabaseOverview()
     overview.value = response.data
   } catch (error) {
     console.error('获取数据库治理概览失败:', error)
-    ElMessage.error(error.response?.data?.message || '获取数据库治理概览失败')
+    if (!silent) {
+      ElMessage.error(error.response?.data?.message || '获取数据库治理概览失败')
+    }
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
 }
 
-onMounted(loadOverview)
+onMounted(() => {
+  loadOverview()
+  configureAutoRefresh()
+})
+
+onBeforeUnmount(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
+})
 </script>
 
 <style scoped>
 .database-governance {
   min-height: 100%;
-  padding: 28px;
-  color: #e8f4ff;
+  padding: 24px 26px 32px;
+  color: var(--text-primary);
 }
 
 .page-header {
@@ -316,15 +614,26 @@ onMounted(loadOverview)
   align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 22px;
+  margin-bottom: 20px;
+}
+
+.title-block {
+  min-width: 0;
 }
 
 .eyebrow {
-  margin: 0 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 7px;
   color: #52d6c5;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 2.4px;
+  letter-spacing: 2.1px;
+}
+
+.eyebrow .el-icon {
+  font-size: 15px;
 }
 
 h1 {
@@ -332,220 +641,675 @@ h1 {
   color: #fff;
   font-size: 30px;
   line-height: 1.2;
+  letter-spacing: -0.4px;
 }
 
 .subtitle {
-  margin: 10px 0 0;
-  color: rgba(222, 239, 251, 0.72);
+  margin: 9px 0 0;
+  color: var(--text-secondary);
   font-size: 14px;
 }
 
+.header-actions,
+.refresh-mode {
+  display: flex;
+  align-items: center;
+}
+
+.header-actions {
+  gap: 10px;
+}
+
+.refresh-mode {
+  gap: 8px;
+  min-height: 34px;
+  padding: 5px 10px;
+  border: 1px solid rgba(45, 211, 111, 0.28);
+  border-radius: 999px;
+  background: rgba(45, 211, 111, 0.07);
+  color: #a9c9ba;
+  font-size: 12px;
+}
+
+.refresh-mode.paused {
+  border-color: var(--border-color);
+  background: rgba(159, 182, 204, 0.05);
+  color: var(--text-muted);
+}
+
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-2);
+  box-shadow: var(--glow-success);
+}
+
+.paused .live-dot {
+  background: var(--text-muted);
+  box-shadow: none;
+}
+
 .schema-alert {
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 
-.metric-grid {
+.overview-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: minmax(320px, 0.82fr) minmax(0, 1.65fr);
   gap: 14px;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 
-.metric-card {
-  min-height: 128px;
+.health-card,
+.signal-card {
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.health-card {
+  position: relative;
+  overflow: hidden;
+  min-height: 218px;
   padding: 20px;
-  border: 1px solid rgba(119, 190, 226, 0.18);
-  border-radius: 14px;
-  background: linear-gradient(145deg, rgba(15, 46, 67, 0.92), rgba(8, 27, 43, 0.86));
-  box-shadow: 0 12px 34px rgba(1, 12, 23, 0.2);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(18, 215, 255, 0.12), transparent 42%),
+    var(--gradient-card);
 }
 
-.metric-card strong {
-  display: block;
-  margin: 11px 0 7px;
-  color: #fff;
-  font-size: 28px;
-  line-height: 1;
+.health-card::before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--accent-2);
+  content: '';
 }
 
-.metric-card small,
-.metric-label {
-  color: rgba(217, 237, 249, 0.66);
-}
+.health-attention::before { background: var(--warning); }
+.health-critical::before { background: var(--danger); }
 
-.version-card strong {
-  font-size: 20px;
-}
-
-.version-card .el-tag {
-  margin-top: 4px;
-}
-
-.attention-card {
-  border-color: rgba(247, 184, 86, 0.28);
-  background: linear-gradient(145deg, rgba(62, 48, 31, 0.88), rgba(21, 31, 41, 0.9));
-}
-
-.content-grid {
+.health-heading {
   display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(330px, 0.75fr);
-  gap: 16px;
-  margin-bottom: 16px;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
 }
 
-.governance-card {
-  border: 1px solid rgba(119, 190, 226, 0.16);
-  border-radius: 14px;
-  background: rgba(7, 27, 43, 0.86);
+.health-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid rgba(45, 211, 111, 0.28);
+  border-radius: 12px;
+  background: rgba(45, 211, 111, 0.1);
+  color: var(--accent-2);
+  font-size: 22px;
 }
 
-:deep(.governance-card .el-card__header) {
-  border-bottom-color: rgba(119, 190, 226, 0.14);
+.health-attention .health-icon {
+  border-color: rgba(246, 183, 60, 0.3);
+  background: rgba(246, 183, 60, 0.1);
+  color: var(--warning);
 }
 
-:deep(.governance-card .el-card__body),
-:deep(.governance-card .el-card__header) {
-  color: #deeffa;
+.health-critical .health-icon {
+  border-color: rgba(255, 93, 115, 0.3);
+  background: rgba(255, 93, 115, 0.1);
+  color: var(--danger);
 }
 
-.card-title-row,
-.table-toolbar {
+.section-kicker {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.health-heading h2 {
+  margin: 2px 0 0;
+  color: #fff;
+  font-size: 21px;
+}
+
+.health-description {
+  min-height: 38px;
+  margin: 14px 0 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.status-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.75fr) minmax(0, 1.25fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.status-meta div {
+  min-width: 0;
+  padding: 9px 8px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.status-meta span,
+.status-meta strong {
+  display: block;
+}
+
+.status-meta span {
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.status-meta strong {
+  overflow: hidden;
+  color: #eaf4ff;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coverage-row > div {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
+  margin-bottom: 7px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.coverage-row strong {
+  color: #eaf4ff;
+  font-size: 12px;
+}
+
+.signal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.signal-card {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  min-height: 102px;
+  padding: 17px;
+  background: var(--gradient-card);
+}
+
+.signal-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 12px;
+  font-size: 20px;
+}
+
+.tone-cyan { background: rgba(18, 215, 255, 0.1); color: var(--accent); }
+.tone-violet { background: rgba(167, 139, 250, 0.1); color: #a78bfa; }
+.tone-green { background: rgba(45, 211, 111, 0.1); color: var(--accent-2); }
+.tone-amber { background: rgba(246, 183, 60, 0.1); color: var(--warning); }
+
+.signal-copy span,
+.signal-copy strong,
+.signal-copy small {
+  display: block;
+}
+
+.signal-copy span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.signal-copy strong {
+  margin: 5px 0;
+  color: #fff;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.signal-copy small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.insight-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(390px, 0.88fr);
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.governance-card {
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--gradient-card);
+}
+
+:deep(.governance-card .el-card__header) {
+  padding: 15px 18px;
+  border-bottom-color: var(--border-color);
+}
+
+:deep(.governance-card .el-card__body) {
+  padding: 16px 18px;
+  color: var(--text-primary);
+}
+
+.card-title-row,
+.table-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .card-title {
   display: block;
   color: #fff;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 650;
 }
 
 .card-title + small,
-.card-title-row small {
+.card-title-row small,
+.table-heading small {
   display: block;
   margin-top: 4px;
-  color: rgba(215, 235, 247, 0.58);
+  color: var(--text-muted);
+  font-size: 11px;
 }
 
-.generated-time {
-  color: rgba(215, 235, 247, 0.5);
-  font-size: 12px;
+.attention-summary,
+.result-count {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.attention-summary strong,
+.result-count strong {
+  color: var(--accent);
+  font-size: 22px;
+}
+
+.attention-summary span,
+.result-count span {
+  color: var(--text-muted);
+  font-size: 11px;
 }
 
 .recommendation-list {
   display: grid;
-  gap: 10px;
+  gap: 9px;
 }
 
 .recommendation-item {
   display: grid;
-  grid-template-columns: 10px 1fr;
-  gap: 12px;
-  padding: 12px 14px;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px 11px;
+  border: 1px solid rgba(146, 186, 220, 0.08);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.035);
+  background: rgba(255, 255, 255, 0.025);
 }
 
-.recommendation-item strong {
-  color: #f5fbff;
-  font-size: 14px;
+.recommendation-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  background: rgba(18, 215, 255, 0.08);
+  color: var(--accent);
+  font-size: 16px;
 }
 
-.recommendation-item p {
-  margin: 5px 0 0;
-  color: rgba(220, 238, 249, 0.68);
+.level-warning .recommendation-icon {
+  background: rgba(246, 183, 60, 0.09);
+  color: var(--warning);
+}
+
+.level-error .recommendation-icon {
+  background: rgba(255, 93, 115, 0.09);
+  color: var(--danger);
+}
+
+.level-success .recommendation-icon {
+  background: rgba(45, 211, 111, 0.09);
+  color: var(--accent-2);
+}
+
+.recommendation-copy > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.recommendation-copy strong {
+  color: #f3f9fd;
   font-size: 13px;
-  line-height: 1.55;
 }
 
-.status-dot {
-  width: 8px;
-  height: 8px;
-  margin-top: 6px;
-  border-radius: 50%;
-  background: #52d6c5;
+.recommendation-copy span {
+  color: var(--text-muted);
+  font-size: 10px;
 }
 
-.level-warning .status-dot { background: #e6a23c; }
-.level-error .status-dot { background: #f56c6c; }
-.level-info .status-dot { background: #409eff; }
+.recommendation-copy p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.generated-time {
+  color: var(--text-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
 
 .constraint-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
 }
 
-.constraint-grid div {
-  padding: 14px;
+.constraint-grid > div {
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid rgba(146, 186, 220, 0.08);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.035);
+  background: rgba(255, 255, 255, 0.025);
 }
 
-.constraint-grid strong {
+.constraint-grid span,
+.constraint-grid strong,
+.constraint-grid small {
   display: block;
-  margin-bottom: 4px;
-  color: #fff;
-  font-size: 22px;
 }
 
 .constraint-grid span {
-  color: rgba(217, 237, 249, 0.62);
-  font-size: 12px;
+  color: var(--text-muted);
+  font-size: 10px;
 }
+
+.constraint-grid strong {
+  margin: 5px 0 3px;
+  color: #fff;
+  font-size: 20px;
+}
+
+.constraint-grid small {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.constraint-grid .healthy strong,
+.constraint-grid .healthy small { color: var(--accent-2); }
+.constraint-grid .warning strong,
+.constraint-grid .warning small { color: var(--warning); }
 
 .table-card,
 .duplicate-card {
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 
-.filters {
+.table-toolbar {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.85fr) minmax(420px, 1.55fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.search-input {
+  width: 100%;
+}
+
+.category-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(146, 186, 220, 0.15);
+  border-radius: 10px;
+  background: rgba(4, 18, 30, 0.45);
+}
+
+.category-tabs button {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.category-tabs button:hover {
+  color: #dceeff;
+  background: rgba(18, 215, 255, 0.06);
+}
+
+.category-tabs button.active {
+  background: rgba(18, 215, 255, 0.12);
+  color: #b8f3ff;
+  box-shadow: inset 0 0 0 1px rgba(18, 215, 255, 0.18);
+}
+
+.category-tabs strong {
+  min-width: 20px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  font-size: 10px;
+}
+
+.toolbar-tail {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  white-space: nowrap;
 }
 
 :deep(.el-table) {
   --el-table-bg-color: transparent;
   --el-table-tr-bg-color: transparent;
-  --el-table-row-hover-bg-color: rgba(64, 158, 255, 0.1);
-  --el-table-header-bg-color: rgba(32, 77, 103, 0.7);
-  --el-table-border-color: rgba(119, 190, 226, 0.12);
+  --el-table-row-hover-bg-color: rgba(18, 215, 255, 0.055);
+  --el-table-header-bg-color: rgba(14, 40, 61, 0.88);
+  --el-table-border-color: rgba(119, 190, 226, 0.11);
   --el-table-text-color: #dcecf6;
-  --el-table-header-text-color: #9fc5da;
+  --el-table-header-text-color: #8fb1c6;
+}
+
+:deep(.el-table th.el-table__cell) {
+  height: 42px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+:deep(.el-table td.el-table__cell) {
+  height: 48px;
+  padding: 5px 0;
+}
+
+.table-name-cell strong,
+.table-name-cell small {
+  display: block;
+}
+
+.table-name-cell strong {
+  overflow: hidden;
+  color: #e9f5fd;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-name-cell small {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.table-number {
+  color: #b9cfe0;
+  font-size: 11px;
 }
 
 .data-state {
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
 }
 
-.has-data { color: #67c23a; }
-.is-empty { color: #909399; }
+.data-state i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.has-data { color: var(--accent-2); }
+.is-empty { color: var(--text-muted); }
+
+.key-state {
+  display: inline-block;
+  min-width: 54px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+}
+
+.key-state.ready {
+  background: rgba(45, 211, 111, 0.08);
+  color: #65dc91;
+}
+
+.key-state.attention {
+  background: rgba(246, 183, 60, 0.1);
+  color: var(--warning);
+}
 
 .pagination-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 16px;
-  color: rgba(217, 237, 249, 0.58);
-  font-size: 13px;
+  gap: 16px;
+  padding-top: 14px;
+  color: var(--text-muted);
+  font-size: 11px;
 }
 
-@media (max-width: 1280px) {
-  .metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .content-grid { grid-template-columns: 1fr; }
+@media (max-width: 1160px) {
+  .overview-grid,
+  .insight-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .health-card {
+    min-height: auto;
+  }
+
+  .table-toolbar {
+    grid-template-columns: minmax(180px, 0.8fr) minmax(400px, 1.5fr);
+  }
+
+  .toolbar-tail {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 860px) {
-  .database-governance { padding: 18px; }
+  .database-governance {
+    padding: 18px;
+  }
+
   .page-header,
-  .table-toolbar,
-  .filters { align-items: stretch; flex-direction: column; }
-  .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .filters :deep(.el-input),
-  .filters :deep(.el-select) { width: 100% !important; }
+  .header-actions,
+  .pagination-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .refresh-mode {
+    justify-content: space-between;
+  }
+
+  .table-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .toolbar-tail {
+    grid-column: auto;
+    justify-content: space-between;
+  }
+
+  .pagination-row :deep(.el-pagination) {
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 680px) {
+  .signal-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .constraint-grid,
+  .status-meta,
+  .category-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .health-heading {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .health-heading .el-tag {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .card-title-row,
+  .table-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 </style>

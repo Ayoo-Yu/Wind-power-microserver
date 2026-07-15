@@ -10,7 +10,6 @@
 | SCADA 实时数据 | production | config_required | 点表、时钟、链路和数据质量验收完成，部署开关已启用 |
 | NWP 数据接入 | production | config_required | 内网数据通道和文件适配验收完成 |
 | 极端天气实时检测 | placeholder | unavailable | 实时输入与历史事件存储完成 |
-| 物理仿真 | demo | unavailable | 算法和输入输出验收完成 |
 
 ## 展示规则
 

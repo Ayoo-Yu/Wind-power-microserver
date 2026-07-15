@@ -121,7 +121,9 @@ def _load_constraint_counts(connection) -> dict[str, int]:
             COUNT(*) FILTER (WHERE con.contype = 'p') AS primary_keys
         FROM pg_constraint con
         JOIN pg_namespace n ON n.oid = con.connamespace
+        JOIN pg_class relation ON relation.oid = con.conrelid
         WHERE n.nspname = 'public'
+          AND relation.relname <> 'alembic_version'
     """)).mappings().one()
     return {
         "foreign_keys": int(row["foreign_keys"] or 0),
