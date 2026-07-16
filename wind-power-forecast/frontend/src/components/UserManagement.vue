@@ -1,7 +1,7 @@
 <template>
-  <div class="user-management page-shell">
-    <div class="page-header">
-      <h2>用户列表</h2>
+  <div class="user-management page-shell" :class="{ embedded }">
+    <div v-if="!embedded" class="page-header">
+      <h2>账号管理</h2>
       <p>管理用户基础信息、角色与数据权限（管辖场站）</p>
     </div>
 
@@ -191,6 +191,12 @@ const EMPTY_USER_FORM = () => ({
 export default {
   name: 'UserManagement',
   components: { SearchIcon },
+  props: {
+    embedded: {
+      type: Boolean,
+      default: false
+    }
+  },
   setup() {
     const loading = ref(false)
     const submitting = ref(false)
@@ -550,6 +556,10 @@ export default {
 .user-management {
   min-height: 100%;
   padding: 20px;
+}
+
+.user-management.embedded {
+  padding: 0;
 }
 
 .page-header h2 {

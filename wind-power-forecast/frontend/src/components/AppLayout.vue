@@ -15,63 +15,74 @@
       <div :style="backgroundStyle"></div>
     </div>
 
-    <el-aside :width="isCollapsed ? '64px' : '240px'" class="sidebar">
+    <el-aside ref="sidebarRef" :width="isCollapsed ? '64px' : '240px'" class="sidebar">
       <div class="brand" @click="toggleCollapse">
         <img v-if="!isCollapsed" src="@/assets/Hust_logo.png" alt="华中科技大学" class="brand-logo" />
         <el-icon v-else class="collapse-icon"><Expand /></el-icon>
       </div>
 
-      <el-menu :default-active="activeMenu" class="el-menu-vertical" :collapse="isCollapsed" @select="handleSelect">
+      <el-menu
+        ref="menuRef"
+        :default-active="activeMenu"
+        :default-openeds="defaultOpeneds"
+        :unique-opened="true"
+        class="el-menu-vertical"
+        :collapse="isCollapsed"
+        @select="handleSelect"
+      >
         <el-menu-item index="/">
           <el-icon><HomeFilled /></el-icon>
-          <template #title>首页大屏</template>
+          <template #title>首页总览</template>
         </el-menu-item>
 
         <el-sub-menu index="/group-predict" v-if="hasPermission('auto_predictions') || hasPermission('manual_intervention_workspace')">
           <template #title>
             <el-icon><Timer /></el-icon>
-            <span>预测与控制</span>
+            <span>预测运行</span>
           </template>
-          <el-menu-item index="/autopredict" v-if="hasPermission('auto_predictions')">状态监控</el-menu-item>
+          <el-menu-item index="/autopredict" v-if="hasPermission('auto_predictions')">预测任务</el-menu-item>
           <el-menu-item index="/manual-workspace" v-if="hasPermission('manual_intervention_workspace') || hasPermission('auto_predictions')">
-            人工修正工作台
+            人工修正
           </el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="/group-analysis" v-if="hasPermission('view_all_data') || hasPermission('view_accuracy_report')">
           <template #title>
             <el-icon><DataAnalysis /></el-icon>
-            <span>分析与报表</span>
+            <span>结果分析</span>
           </template>
-          <el-menu-item index="/powercompare" v-if="hasPermission('view_all_data')">功率可视化对比</el-menu-item>
+          <el-menu-item index="/powercompare" v-if="hasPermission('view_all_data')">预测曲线与考核</el-menu-item>
           <el-menu-item index="/accuracy-report" v-if="hasPermission('view_accuracy_report') || hasPermission('view_all_data')">
-            准确率/合格率报表
+            月度准确率报表
           </el-menu-item>
-          <el-menu-item index="/power-curve" v-if="hasPermission('view_all_data')">功率曲线分析</el-menu-item>
+          <el-menu-item index="/power-curve" v-if="hasPermission('view_all_data')">风速功率曲线</el-menu-item>
         </el-sub-menu>
 
-        <el-sub-menu index="/group-exchange" v-if="hasPermission('manage_weather_data') || hasPermission('manage_reports') || hasPermission('manage_data_import')">
+        <el-sub-menu
+          index="/group-exchange"
+          v-if="hasPermission('manage_weather_data') || hasPermission('manage_data_import') || hasPermission('manage_data_quality') || hasPermission('view_all_data') || (reportingEnabled && hasPermission('manage_reports'))"
+        >
           <template #title>
             <el-icon><Upload /></el-icon>
-            <span>数据交互</span>
+            <span>数据管理</span>
           </template>
-          <el-menu-item index="/weatherdatafetcher" v-if="hasPermission('manage_weather_data')">气象数据拉取</el-menu-item>
-          <el-menu-item index="/data-population" v-if="hasPermission('manage_data_import')">数据补齐</el-menu-item>
-          <el-menu-item index="/reportmanagement" v-if="hasPermission('manage_reports')">上报配置与调度</el-menu-item>
+          <el-menu-item index="/weatherdatafetcher" v-if="hasPermission('manage_weather_data')">气象数据接入</el-menu-item>
+          <el-menu-item index="/data-population" v-if="hasPermission('manage_data_import')">历史数据补齐</el-menu-item>
+          <el-menu-item index="/data-quality" v-if="hasPermission('manage_data_quality') || hasPermission('view_all_data')">
+            数据质量与限电
+          </el-menu-item>
+          <el-menu-item index="/reportmanagement" v-if="reportingEnabled && hasPermission('manage_reports')">上报配置</el-menu-item>
         </el-sub-menu>
 
-        <el-sub-menu index="/group-ops" v-if="hasPermission('view_alarm_center') || hasPermission('manage_data_quality') || hasPermission('manage_reports')">
+        <el-sub-menu index="/group-ops" v-if="hasPermission('view_alarm_center') || hasPermission('manage_reports')">
           <template #title>
             <el-icon><WarnTriangleFilled /></el-icon>
-            <span>运维与质量</span>
+            <span>运行保障</span>
           </template>
           <el-menu-item index="/operations-center" v-if="hasPermission('view_alarm_center')">
-            运行控制中心
+            链路运行状态
           </el-menu-item>
-          <el-menu-item index="/alarm-center" v-if="hasPermission('view_alarm_center') || hasPermission('manage_reports')">统一告警中心</el-menu-item>
-          <el-menu-item index="/data-quality" v-if="hasPermission('manage_data_quality') || hasPermission('view_all_data')">
-            数据质量与限电标记
-          </el-menu-item>
+          <el-menu-item index="/alarm-center" v-if="hasPermission('view_alarm_center') || hasPermission('manage_reports')">告警处置</el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu
@@ -80,12 +91,11 @@
         >
           <template #title>
             <el-icon><Setting /></el-icon>
-            <span>系统管理</span>
+            <span>系统配置</span>
           </template>
-          <el-menu-item index="/farmmanagement" v-if="hasPermission('manage_reports')">场站管理</el-menu-item>
+          <el-menu-item index="/farmmanagement" v-if="hasPermission('manage_reports')">场站配置</el-menu-item>
           <el-menu-item index="/scada-connections" v-if="hasPermission('manage_system_settings')">SCADA数据源</el-menu-item>
-          <el-menu-item index="/users" v-if="hasPermission('manage_users')">用户列表</el-menu-item>
-          <el-menu-item index="/users/roles" v-if="hasPermission('manage_roles')">用户与权限</el-menu-item>
+          <el-menu-item index="/users" v-if="hasPermission('manage_users') || hasPermission('manage_roles')">账号与权限</el-menu-item>
           <el-menu-item index="/system-settings" v-if="hasPermission('manage_system_settings') || hasPermission('system_maintenance')">
             系统基础配置
           </el-menu-item>
@@ -148,7 +158,7 @@
         </div>
       </el-header>
 
-      <el-main class="main-content">
+      <el-main ref="mainContentRef" class="main-content">
         <router-view v-slot="{ Component, route: currentRoute }">
           <keep-alive :include="keepAliveRouteNames">
             <component :is="Component" :key="currentRoute.name || currentRoute.path" />
@@ -160,7 +170,7 @@
 </template>
 
 <script>
-import { ref, computed, provide, onMounted, onUnmounted } from 'vue'
+import { ref, computed, provide, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getCurrentUser } from '../api/auth'
@@ -211,6 +221,9 @@ export default {
     const route = useRoute()
 
     const isCollapsed = ref(false)
+    const menuRef = ref(null)
+    const sidebarRef = ref(null)
+    const mainContentRef = ref(null)
     const isAnimatedBackground = ref(true)
     const currentUser = ref(null)
     const uiText = UI_TEXT.appLayout
@@ -220,6 +233,8 @@ export default {
     const capabilities = ref([])
     let timeTicker = null
     let capabilityTicker = null
+    const reportingEnabled = import.meta.env.VITE_REPORTING_ENABLED === 'true'
+    const menuGroups = ['/group-predict', '/group-analysis', '/group-exchange', '/group-ops', '/group-admin']
 
     const unsubscribeDb = dbState.onChange((val) => { dbUnavailable.value = val })
 
@@ -236,6 +251,15 @@ export default {
     }))
 
     const activeMenu = computed(() => (route.path === '/' ? '/' : route.path))
+    const activeGroup = computed(() => {
+      if (['/autopredict', '/manual-workspace'].includes(route.path)) return '/group-predict'
+      if (['/powercompare', '/accuracy-report', '/power-curve'].includes(route.path)) return '/group-analysis'
+      if (['/weatherdatafetcher', '/data-population', '/data-quality', '/reportmanagement'].includes(route.path)) return '/group-exchange'
+      if (['/operations-center', '/alarm-center'].includes(route.path)) return '/group-ops'
+      if (['/farmmanagement', '/scada-connections', '/users', '/users/roles', '/system-settings', '/database-governance', '/users/audit-logs'].includes(route.path)) return '/group-admin'
+      return ''
+    })
+    const defaultOpeneds = computed(() => (activeGroup.value ? [activeGroup.value] : []))
     const keepAliveRouteNames = computed(() =>
       router
         .getRoutes()
@@ -319,6 +343,7 @@ export default {
         localStorage.setItem('user', JSON.stringify(latestUser))
         currentUser.value = latestUser
         isAuthReady.value = true
+        await syncMenuForRoute()
       } catch {
         localStorage.removeItem('accessToken')
         localStorage.removeItem('user')
@@ -358,6 +383,22 @@ export default {
     const handleSelect = (index) => {
       router.push(index)
     }
+
+    const syncMenuForRoute = async () => {
+      await nextTick()
+      const sidebarElement = sidebarRef.value?.$el || sidebarRef.value
+      if (sidebarElement) sidebarElement.scrollTop = 0
+      const mainElement = mainContentRef.value?.$el || mainContentRef.value
+      if (mainElement) mainElement.scrollTop = 0
+
+      if (!currentUser.value || !menuRef.value) return
+      menuGroups.forEach(group => {
+        if (group !== activeGroup.value) menuRef.value.close(group)
+      })
+      if (activeGroup.value) menuRef.value.open(activeGroup.value)
+    }
+
+    watch(() => route.path, syncMenuForRoute)
 
     const handleCommand = (command) => {
       if (command === 'logout') {
@@ -399,6 +440,7 @@ export default {
       fetchCapabilities()
       capabilityTicker = setInterval(fetchCapabilities, 30000)
       document.addEventListener('visibilitychange', refreshCapabilitiesWhenVisible)
+      syncMenuForRoute()
     })
 
     onUnmounted(() => {
@@ -414,7 +456,11 @@ export default {
 
     return {
       isCollapsed,
+      menuRef,
+      sidebarRef,
+      mainContentRef,
       activeMenu,
+      defaultOpeneds,
       keepAliveRouteNames,
       dbUnavailable,
       toggleCollapse,
@@ -433,7 +479,8 @@ export default {
       isAuthReady,
       isAuthLoading,
       capabilityIssues,
-      capabilityIssueText
+      capabilityIssueText,
+      reportingEnabled
     }
   }
 }

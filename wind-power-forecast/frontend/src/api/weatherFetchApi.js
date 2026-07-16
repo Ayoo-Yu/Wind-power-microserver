@@ -1,6 +1,6 @@
 import axiosInstance from './axios'
 
-import { withLegacyReadFallback } from './legacyFallback.cjs'
+import { withLegacyReadFallback } from './legacyFallback.mjs'
 
 export function getWeatherConnections() {
   return withLegacyReadFallback(

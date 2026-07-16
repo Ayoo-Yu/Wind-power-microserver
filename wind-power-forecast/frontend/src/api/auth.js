@@ -1,6 +1,6 @@
 ﻿import axios from './axios'
 
-import { withLegacyReadFallback } from './legacyFallback.cjs'
+import { withLegacyReadFallback } from './legacyFallback.mjs'
 
 const authGet = (path) => withLegacyReadFallback(
   () => axios.get(`/api/v1/auth/${path}`),

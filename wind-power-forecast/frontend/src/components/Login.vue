@@ -2,7 +2,7 @@
   <div class="login-shell">
     <div class="visual-overlay">
       <h1>风电功率预测系统</h1>
-      <p>智慧能源 · 实时感知 · 智能决策</p>
+      <p>预测运行 · 数据治理 · 质量评估</p>
 
       <ul class="visual-metrics">
         <li>
@@ -37,7 +37,7 @@
       </ul>
 
       <div class="announcement-ticker">
-        <span class="ticker-label">系统公告</span>
+        <span class="ticker-label">登录提示</span>
         <div class="ticker-track">
           <div class="ticker-content">{{ systemNotice }}</div>
         </div>
@@ -93,7 +93,7 @@
             <input v-model="rememberMe" type="checkbox" />
             <span>记住账号</span>
           </label>
-          <a href="#" class="helper-link" @click.prevent>联系管理员</a>
+          <span class="helper-text">账号问题请联系系统管理员</span>
         </div>
 
         <div class="footer">© 2026 华中科技大学 风电功率预测系统</div>
@@ -153,7 +153,7 @@ export default {
     const showChangePasswordDialog = ref(false)
     const nowTs = ref(Date.now())
     const timerId = ref(0)
-    const systemNotice = ref('⚠️ 通知：今晚 00:00-01:00 系统进行主备切换演练，期间预测数据可能存在延迟。')
+    const systemNotice = ref('运行数据将在登录后显示。')
     const captchaText = ref('')
     const captchaAnswer = ref('')
     const lockState = reactive({
@@ -324,8 +324,8 @@ export default {
       try {
         const resp = await axios.get('/api/v1/public/overview')
         const d = resp.data?.data || resp.data || {}
-        if (d.farm_count) maskedMetrics.stationCount = d.farm_count
-        if (d.total_power) maskedMetrics.totalPower = d.total_power + ' MW'
+        if (d.farm_count != null) maskedMetrics.stationCount = d.farm_count
+        if (d.total_power != null) maskedMetrics.totalPower = d.total_power + ' MW'
         if (d.accuracy != null) maskedMetrics.accuracy = d.accuracy + '%'
       } catch {
         // keep defaults ----
@@ -685,13 +685,8 @@ export default {
   accent-color: #12d7ff;
 }
 
-.helper-link {
+.helper-text {
   color: #9fd5f7;
-  text-decoration: none;
-}
-
-.helper-link:hover {
-  color: #c4e7ff;
 }
 
 .footer {
@@ -749,10 +744,12 @@ export default {
 
 .ticker-content {
   white-space: nowrap;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: #cce4f7;
   font-size: 12px;
-  padding-left: 100%;
-  animation: tickerMove 14s linear infinite;
+  padding: 0 12px;
 }
 
 @keyframes iconBob {
@@ -785,15 +782,6 @@ export default {
   }
   to {
     transform: translateX(100%);
-  }
-}
-
-@keyframes tickerMove {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-100%);
   }
 }
 

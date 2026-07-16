@@ -7,8 +7,7 @@ const AutoPredict = () => import('../components/AutoPredict.vue')
 const PowerCompare = () => import('../components/PowerCompare.vue')
 const AccuracyReport = () => import('../components/AccuracyReport.vue')
 const Login = () => import('../components/Login.vue')
-const UserManagement = () => import('../components/UserManagement.vue')
-const RoleManagement = () => import('../components/RoleManagement.vue')
+const AccessManagement = () => import('../components/AccessManagement.vue')
 const AuditLog = () => import('../components/AuditLog.vue')
 const AlarmCenter = () => import('../components/AlarmCenter.vue')
 const DataQualityManagement = () => import('../components/DataQualityManagement.vue')
@@ -129,14 +128,14 @@ const routes = [
       {
         path: 'users',
         name: 'UserManagement',
-        component: UserManagement,
-        meta: { requiredPermissions: ['manage_users'], keepAlive: true }
+        component: AccessManagement,
+        meta: { requiredPermissions: ['manage_users', 'manage_roles'], keepAlive: true }
       },
       {
         path: 'users/roles',
         name: 'RoleManagement',
-        component: RoleManagement,
-        meta: { requiredPermissions: ['manage_roles'], keepAlive: true }
+        redirect: { path: '/users', query: { tab: 'roles' } },
+        meta: { requiredPermissions: ['manage_roles'] }
       },
       {
         path: 'users/audit-logs',

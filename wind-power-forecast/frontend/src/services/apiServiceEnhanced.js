@@ -1,7 +1,7 @@
 ﻿// src/services/apiServiceEnhanced.js
 import axiosInstance from '../api/axios'
 import { getPowerCompareData as getPowerCompareDataCompat } from '../api/powerCompareApi'
-import { withLegacyReadFallback } from '../api/legacyFallback.cjs'
+import { withLegacyReadFallback } from '../api/legacyFallback.mjs'
 import farmService from '../utils/farmService'
 
 const createFarmAwareData = (data = {}) => ({

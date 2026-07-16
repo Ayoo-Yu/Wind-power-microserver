@@ -1,6 +1,6 @@
 import axiosInstance from './axios'
 
-import { withLegacyReadFallback } from './legacyFallback.cjs'
+import { withLegacyReadFallback } from './legacyFallback.mjs'
 
 function unwrapList(payload) {
   if (Array.isArray(payload)) {

@@ -1,10 +1,14 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 
-const {
-  shouldFallbackToLegacy,
-  withLegacyReadFallback
-} = require('../src/api/legacyFallback.cjs')
+let shouldFallbackToLegacy
+let withLegacyReadFallback
+
+test.before(async () => {
+  const fallbackModule = await import('../src/api/legacyFallback.mjs')
+  shouldFallbackToLegacy = fallbackModule.shouldFallbackToLegacy
+  withLegacyReadFallback = fallbackModule.withLegacyReadFallback
+})
 
 test('旧接口只在服务端明确表示路由不兼容时启用', async () => {
   assert.equal(shouldFallbackToLegacy({ response: { status: 404 } }), true)

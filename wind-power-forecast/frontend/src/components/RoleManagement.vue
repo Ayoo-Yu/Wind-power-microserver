@@ -1,7 +1,7 @@
 <template>
-  <div class="role-management page-shell">
-    <div class="page-header">
-      <h2>角色管理</h2>
+  <div class="role-management page-shell" :class="{ embedded }">
+    <div v-if="!embedded" class="page-header">
+      <h2>角色权限</h2>
       <p>配置角色权限矩阵，覆盖左侧菜单与关键操作按钮</p>
     </div>
 
@@ -85,6 +85,12 @@ import { getStoredUser, hasPermission } from '../utils/permission'
 
 export default {
   name: 'RoleManagement',
+  props: {
+    embedded: {
+      type: Boolean,
+      default: false
+    }
+  },
   setup() {
     const loading = ref(false)
     const submitting = ref(false)
@@ -109,7 +115,12 @@ export default {
       const item = permissionTree.flatMap(group => group.children).find(node => node.id === key)
       acc[key] = item?.label || key
       return acc
-    }, {})
+    }, {
+      upload_files: '上传数据文件',
+      download_files: '下载数据文件',
+      train_models: '训练模型',
+      run_predictions: '执行预测'
+    })
 
     const rules = {
       name: [{ required: true, message: '请输入角色名称', trigger: 'blur' }],
@@ -301,6 +312,10 @@ export default {
 .role-management {
   min-height: 100%;
   padding: 20px;
+}
+
+.role-management.embedded {
+  padding: 0;
 }
 
 .page-header h2 {

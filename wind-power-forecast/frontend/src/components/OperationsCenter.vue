@@ -4,7 +4,7 @@
       <div>
         <div class="eyebrow"><el-icon><Monitor /></el-icon><span>FIELD OPERATIONS</span></div>
         <h1>运行控制中心</h1>
-        <p>统一查看实时数据、新能源天气、预测链路、上报队列和模型版本。</p>
+        <p>统一查看实时数据、新能源天气、预测链路和模型版本。</p>
       </div>
       <div class="header-actions">
         <div :class="['overall-pill', overallState]">
@@ -163,7 +163,7 @@
         </el-table>
       </el-card>
 
-      <el-card class="ops-card" shadow="never">
+      <el-card v-if="reportingEnabled" class="ops-card" shadow="never">
         <template #header>
           <div class="card-title-row">
             <div>
@@ -259,12 +259,24 @@ import { getStoredUser, hasPermission } from '../utils/permission'
 const loading = ref(false)
 const overview = ref(null)
 const currentFarm = ref(farmService.getCurrentFarm())
+const reportingEnabled = import.meta.env.VITE_REPORTING_ENABLED === 'true'
 let refreshTimer = null
 
 const canManageModels = computed(() => hasPermission(getStoredUser(), 'manage_tasks'))
-const overallState = computed(() => overview.value?.overall?.state || 'unknown')
-const issues = computed(() => overview.value?.overall?.issues || [])
-const issueCount = computed(() => overview.value?.overall?.issue_count || 0)
+const allIssues = computed(() => overview.value?.overall?.issues || [])
+const issues = computed(() => allIssues.value.filter(
+  issue => reportingEnabled || issue.domain !== 'reporting'
+))
+const overallState = computed(() => {
+  if (!overview.value) return 'unknown'
+  if (allIssues.value.length === issues.value.length) {
+    return overview.value?.overall?.state || 'unknown'
+  }
+  if (issues.value.some(issue => ['critical', 'error', 'danger'].includes(issue.severity))) return 'critical'
+  if (issues.value.length) return 'degraded'
+  return 'healthy'
+})
+const issueCount = computed(() => issues.value.length)
 const scadaConnections = computed(() => overview.value?.scada?.connections || [])
 const nwpBatches = computed(() => overview.value?.nwp?.latest_batches || [])
 const inputSnapshots = computed(() => overview.value?.prediction?.latest_input_snapshots || [])
@@ -286,7 +298,7 @@ const signals = computed(() => {
   const storageState = Number(data.storage?.used_percent || 0) >= 90
     ? 'critical'
     : (Number(data.storage?.used_percent || 0) >= 80 ? 'degraded' : 'healthy')
-  return [
+  const signalItems = [
     {
       key: 'scada',
       label: 'SCADA 实时输入',
@@ -309,13 +321,6 @@ const signals = computed(() => {
       detail: `${failed} 次失败，${data.prediction?.output_point_count || 0} 个输出点，${missingTrace} 次缺少账本`
     },
     {
-      key: 'reporting',
-      label: '可靠上报',
-      state: data.reporting?.dead_count ? 'critical' : ((data.reporting?.pending_count || 0) > 0 ? 'degraded' : 'healthy'),
-      value: `${data.reporting?.pending_count || 0} 条待处理`,
-      detail: `${data.reporting?.dead_count || 0} 条死信`
-    },
-    {
       key: 'storage',
       label: '运行磁盘',
       state: storageState,
@@ -323,6 +328,16 @@ const signals = computed(() => {
       detail: `${formatBytes(data.storage?.free_bytes)} 可用`
     }
   ]
+  if (reportingEnabled) {
+    signalItems.splice(signalItems.length - 1, 0, {
+      key: 'reporting',
+      label: '可靠上报',
+      state: data.reporting?.dead_count ? 'critical' : ((data.reporting?.pending_count || 0) > 0 ? 'degraded' : 'healthy'),
+      value: `${data.reporting?.pending_count || 0} 条待处理`,
+      detail: `${data.reporting?.dead_count || 0} 条死信`
+    })
+  }
+  return signalItems
 })
 
 function normalizeSignalState(state) {

@@ -1,6 +1,6 @@
 ﻿import axiosInstance from './axios'
 import farmService from '../utils/farmService'
-import { withLegacyReadFallback } from './legacyFallback.cjs'
+import { withLegacyReadFallback } from './legacyFallback.mjs'
 
 function resolveFarmCode(farmCode) {
   const directCode = typeof farmCode === 'string' ? farmCode.trim() : ''

@@ -2,8 +2,8 @@
   <div class="alarm-center page-shell">
     <div class="page-header">
       <div>
-        <h2>统一告警中心</h2>
-        <p>当前页面已补齐告警记录、通知记录、告警规则和通知策略四类配置能力。</p>
+        <h2>告警处置</h2>
+        <p>集中确认运行异常，查看通知结果，并维护告警规则与通知策略。</p>
       </div>
       <el-tag :type="connectionTagType" effect="dark">{{ connectionLabel }}</el-tag>
     </div>
@@ -49,27 +49,33 @@
         </div>
       </div>
 
-      <el-table :data="alerts" border stripe empty-text="暂无告警">
-        <el-table-column prop="time" label="告警时间" min-width="170" />
-        <el-table-column prop="station" label="场站" min-width="140" />
-        <el-table-column label="级别" width="100">
+      <el-table :data="alerts" border stripe empty-text="暂无告警" class="alerts-table">
+        <el-table-column prop="time" label="告警时间" width="170" />
+        <el-table-column prop="station" label="场站" width="110" show-overflow-tooltip />
+        <el-table-column label="级别" width="90">
           <template #default="{ row }">
             <el-tag :type="levelTagType(row.level)" effect="dark">{{ levelLabel(row.level) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="110">
+        <el-table-column label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="module" label="模块" min-width="130" />
-        <el-table-column prop="message" label="告警内容" min-width="320" show-overflow-tooltip />
-        <el-table-column label="通知动作" min-width="220">
+        <el-table-column label="告警内容" min-width="320">
           <template #default="{ row }">
-            <span>{{ notificationText(row) }}</span>
+            <div class="alarm-message">
+              <div class="alarm-message-meta">
+                <el-tag size="small" effect="plain">{{ row.module }}</el-tag>
+                <span v-if="notificationText(row) !== '无'">通知：{{ notificationText(row) }}</span>
+              </div>
+              <el-tooltip :content="row.message" placement="top" :show-after="500">
+                <span class="alarm-message-text">{{ row.message }}</span>
+              </el-tooltip>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="128" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link :disabled="row.status !== 'open'" @click="handleAck(row)">确认</el-button>
             <el-button type="danger" link :disabled="row.status === 'closed'" @click="handleClose(row)">关闭</el-button>
@@ -689,6 +695,30 @@ export default {
   font-size: 14px;
   font-weight: 600;
   margin-bottom: 10px;
+}
+
+.alerts-table :deep(.el-table__cell.el-table-fixed-column--right) {
+  background: #0b2234 !important;
+}
+
+.alarm-message {
+  min-width: 0;
+}
+
+.alarm-message-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.alarm-message-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .config-grid {

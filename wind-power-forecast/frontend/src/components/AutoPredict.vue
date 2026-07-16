@@ -6,38 +6,12 @@
     element-loading-text="加载中，请稍候..."
     :class="{'animated-background': isAnimatedBackground.value, 'static-background': !isAnimatedBackground.value}"
   >
-    <h1 class="page-title">自动化预测功能管理</h1>
-    <el-card class="matrix-table-card">
-      <template #header>
-        <span>预测类型运行矩阵</span>
-      </template>
-      <el-table :data="predictionTableRows" size="small" border>
-        <el-table-column prop="title" label="预测类型" min-width="180" />
-        <el-table-column label="状态" width="110">
-          <template #default="{ row }">
-            <StatusDot :active="row.status" />
-            <span class="status-text">{{ row.status ? '运行中' : '已停止' }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="启停" width="120">
-          <template #default="{ row }">
-            <el-switch
-              :model-value="row.status"
-              :disabled="!canManagePredictions"
-              :loading="isControlBusy(row.name)"
-              @change="(val) => handleSwitchToggle(row.name, val)"
-            />
-          </template>
-        </el-table-column>
-        <el-table-column label="趋势预览" min-width="160">
-          <template #default="{ row }">
-            <SparklineMini :values="row.trend" :active="row.status" />
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+    <header class="page-heading">
+      <h1 class="page-title">预测任务与状态</h1>
+      <p>集中查看各场站预测链路，批量控制任务，并处理需要人工复核的结果。</p>
+    </header>
     <div class="fleet-overview" v-loading="fleetLoading">
-      <div class="fleet-title">多场站业务状态监控矩阵</div>
+      <div class="fleet-title">场站预测状态</div>
       <div class="degrade-strategy-tip">
         失败降级策略：NWP 缺失时可使用持续法/历史相似日法，状态将标记为“降级预测中”。
       </div>
@@ -78,18 +52,18 @@
         @selection-change="handleMatrixSelectionChange"
       >
         <el-table-column type="selection" width="44" />
-        <el-table-column label="场站名称" min-width="220">
+        <el-table-column label="场站名称" min-width="180">
           <template #default="{ row }">
             <span class="fleet-name">{{ row.farm_name }}</span>
             <span class="fleet-code">({{ row.farm_code }})</span>
           </template>
         </el-table-column>
-        <el-table-column label="气象数据(NWP)状态" min-width="170">
+        <el-table-column label="NWP状态" width="120">
           <template #default="{ row }">
             <span class="biz-status" :class="`biz-${row.nwpState.level}`">{{ row.nwpState.text }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="超短期预测 (4h/15min)" min-width="210">
+        <el-table-column label="超短期 (4h/15min)" min-width="150">
           <template #default="{ row }">
             <span class="biz-status" :class="`biz-${row.supershortState.level}`">{{ row.supershortState.text }}</span>
             <div class="model-tags" v-if="row.supershortModel">
@@ -98,7 +72,7 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="短期预测 (T+1日/96点)" min-width="190">
+        <el-table-column label="短期 (T+1日)" min-width="145">
           <template #default="{ row }">
             <span class="biz-status" :class="`biz-${row.shortState.level}`">{{ row.shortState.text }}</span>
             <div class="model-tags" v-if="row.shortModel">
@@ -107,7 +81,7 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="中期预测 (T+3日/96点)" min-width="150">
+        <el-table-column label="中期 (第4日)" min-width="145">
           <template #default="{ row }">
             <span class="biz-status" :class="`biz-${row.mediumState.level}`">{{ row.mediumState.text }}</span>
             <div class="model-tags" v-if="row.mediumModel">
@@ -116,9 +90,9 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="140" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" text @click="openFarmCurve(row)">查看当前曲线</el-button>
+            <el-button size="small" text @click="openFarmCurve(row)">查看曲线</el-button>
             <el-button size="small" text type="warning" @click="openManualCorrection(row)">人工修正</el-button>
           </template>
         </el-table-column>
@@ -433,7 +407,6 @@ import farmService from '../utils/farmService'
 import { getAutoPredictStatus, getAutoPredictStatusAll, getAutoPredictOverview, controlAutoPredict, controlAutoPredictMatrix, getAutoPredictLogs, triggerAutoPredict, getAutoPredictRuns, getAutoPredictRunByTaskId } from '../api/autopredictApi'
 import { getStoredUser, hasPermission } from '../utils/permission'
 import StatusDot from './common/StatusDot.vue'
-import SparklineMini from './common/SparklineMini.vue'
 
 const isAnimatedBackground = inject('isAnimatedBackground')
 const router = useRouter()
@@ -469,11 +442,6 @@ const predictions = reactive([
     status: false
   }
 ])
-
-const predictionTableRows = computed(() => predictions.map((item) => ({
-  ...item,
-  trend: []
-})))
 
 const loading = ref(true)
 const controlBusyMap = reactive({
@@ -1167,11 +1135,6 @@ const handleControl = async (name, action) => {
   }
 }
 
-const handleSwitchToggle = (name, enabled) => {
-  const action = enabled ? 'start' : 'stop'
-  handleControl(name, action)
-}
-
 const isGlobalControlBusy = (predictionName) => {
   return !!globalControlBusyMap[predictionName]
 }
@@ -1413,29 +1376,29 @@ const handleLogTypeChange = () => {
 .page-title {
   color: var(--text-primary);
   text-shadow: none;
-  margin: 0 0 12px;
+  margin: 0;
 }
 
-.matrix-table-card {
-  margin: 8px 0 16px;
+.page-heading {
+  margin-bottom: 16px;
 }
 
-.matrix-table-card :deep(.el-table__body tr:hover > td) {
-  background: rgba(16, 54, 84, 0.45) !important;
-}
-
-.status-text {
-  margin-left: 8px;
-  color: #c8ddf1;
-  font-size: 12px;
+.page-heading p {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 14px;
 }
 
 .fleet-overview {
-  margin: 12px 0 20px;
+  margin: 0 0 20px;
   padding: 14px 16px;
   background: rgba(10, 31, 49, 0.72);
   border-radius: 12px;
   border: 1px solid rgba(128, 182, 220, 0.2);
+}
+
+.fleet-overview :deep(.el-table__cell.el-table-fixed-column--right) {
+  background: #0b2234 !important;
 }
 
 .fleet-title {

@@ -1,5 +1,9 @@
 <template>
   <div class="power-curve-analysis">
+    <div class="page-header">
+      <h2>风速功率曲线</h2>
+      <p>识别离群、限电与欠发数据，并将确认后的异常写入数据质量标记。</p>
+    </div>
     <div class="controls">
       <el-date-picker
         v-model="dateRange"
@@ -360,6 +364,16 @@ export default {
 <style scoped>
 .power-curve-analysis {
   padding: 20px;
+}
+
+.page-header h2 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.page-header p {
+  margin: 8px 0 16px;
+  color: var(--text-secondary);
 }
 .controls {
   display: flex;
