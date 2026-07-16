@@ -806,14 +806,16 @@ export default {
   display: grid;
   gap: 8px;
   margin-bottom: 12px;
-  padding: 10px;
-  border-radius: 10px;
-  background: rgba(8, 32, 48, 0.55);
+  padding: 12px 14px;
+  border: 1px solid rgba(36, 122, 82, 0.14);
+  border-radius: 12px;
+  background: var(--accent-soft);
 }
 
 .meta-item {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   gap: 12px;
   font-size: 13px;
 }
@@ -824,6 +826,7 @@ export default {
 
 .meta-value {
   color: var(--text-primary);
+  font-weight: 600;
   text-align: right;
 }
 
