@@ -1,5 +1,6 @@
 ﻿import axiosInstance from './axios'
 import farmService from '../utils/farmService'
+import { withLegacyReadFallback } from './legacyFallback.cjs'
 
 function resolveFarmCode(farmCode) {
   const directCode = typeof farmCode === 'string' ? farmCode.trim() : ''
@@ -37,25 +38,9 @@ function getFallbackFarmCode() {
   return ''
 }
 
-function shouldFallbackToLegacy(error) {
-  const status = error?.response?.status
-  return !error?.response || status === 404 || status === 405
-}
-
-async function withLegacyFallback(v1Call, legacyCall) {
-  try {
-    return await v1Call()
-  } catch (error) {
-    if (shouldFallbackToLegacy(error)) {
-      return legacyCall()
-    }
-    throw error
-  }
-}
-
 async function autopredictGet(path, legacyPath, params) {
   try {
-    return await withLegacyFallback(
+    return await withLegacyReadFallback(
       () => axiosInstance.get(`/api/v1/autopredict/${path}`, { params }),
       () => axiosInstance.get(`/api/${legacyPath || path}`, { params })
     )
@@ -73,7 +58,7 @@ async function autopredictGet(path, legacyPath, params) {
     farmService.setCurrentFarm(fallbackFarmCode)
     const fallbackParams = { ...params, farm_code: fallbackFarmCode }
 
-    return withLegacyFallback(
+    return withLegacyReadFallback(
       () => axiosInstance.get(`/api/v1/autopredict/${path}`, { params: fallbackParams }),
       () => axiosInstance.get(`/api/${legacyPath || path}`, { params: fallbackParams })
     )
@@ -81,30 +66,7 @@ async function autopredictGet(path, legacyPath, params) {
 }
 
 async function autopredictPost(path, payload = {}, legacyPath, config = {}) {
-  try {
-    return await withLegacyFallback(
-      () => axiosInstance.post(`/api/v1/autopredict/${path}`, payload, config),
-      () => axiosInstance.post(`/api/${legacyPath || path}`, payload, config)
-    )
-  } catch (error) {
-    if (!isInvalidFarmError(error)) {
-      throw error
-    }
-
-    const fallbackFarmCode = getFallbackFarmCode()
-    const requestedFarmCode = payload?.farm_code
-    if (fallbackFarmCode === requestedFarmCode) {
-      throw error
-    }
-
-    farmService.setCurrentFarm(fallbackFarmCode)
-    const fallbackPayload = { ...payload, farm_code: fallbackFarmCode }
-
-    return withLegacyFallback(
-      () => axiosInstance.post(`/api/v1/autopredict/${path}`, fallbackPayload, config),
-      () => axiosInstance.post(`/api/${legacyPath || path}`, fallbackPayload, config)
-    )
-  }
+  return axiosInstance.post(`/api/v1/autopredict/${path}`, payload, config)
 }
 
 export function getAutoPredictStatus(farmCode) {

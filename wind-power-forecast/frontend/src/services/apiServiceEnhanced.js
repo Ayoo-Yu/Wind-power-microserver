@@ -1,6 +1,7 @@
 ﻿// src/services/apiServiceEnhanced.js
 import axiosInstance from '../api/axios'
 import { getPowerCompareData as getPowerCompareDataCompat } from '../api/powerCompareApi'
+import { withLegacyReadFallback } from '../api/legacyFallback.cjs'
 import farmService from '../utils/farmService'
 
 const createFarmAwareData = (data = {}) => ({
@@ -16,22 +17,6 @@ const createFarmAwareConfig = (params = {}, config = {}) => ({
     farm_code: farmService.getCurrentFarm()
   }
 })
-
-function shouldFallbackToLegacy(error) {
-  const status = error?.response?.status
-  return !error?.response || status === 404 || status === 405
-}
-
-async function withLegacyFallback(v1Call, legacyCall) {
-  try {
-    return await v1Call()
-  } catch (error) {
-    if (shouldFallbackToLegacy(error)) {
-      return legacyCall()
-    }
-    throw error
-  }
-}
 
 export const getPowerCompareData = async (
   startTime,
@@ -67,7 +52,7 @@ export const getSystemStatus = async () => {
 }
 
 export const getFarmList = async () => {
-  return withLegacyFallback(
+  return withLegacyReadFallback(
     () => axiosInstance.get('/api/v1/farms'),
     () => axiosInstance.get('/api/farms')
   )
@@ -75,7 +60,7 @@ export const getFarmList = async () => {
 
 export const getFarmInfo = async (farmCode) => {
   const normalizedFarmCode = String(farmCode || '').trim()
-  return withLegacyFallback(
+  return withLegacyReadFallback(
     () => axiosInstance.get(`/api/v1/farms/${encodeURIComponent(normalizedFarmCode)}`),
     () => axiosInstance.get(`/api/farms/${encodeURIComponent(normalizedFarmCode)}`)
   )
@@ -84,7 +69,7 @@ export const getFarmInfo = async (farmCode) => {
 export const getFarmStatistics = async (farmCode, params = {}) => {
   const normalizedFarmCode = String(farmCode || '').trim()
   const config = createFarmAwareConfig(params)
-  return withLegacyFallback(
+  return withLegacyReadFallback(
     () => axiosInstance.get(`/api/v1/farms/${encodeURIComponent(normalizedFarmCode)}/stats`, config),
     () => axiosInstance.get(`/api/farms/${encodeURIComponent(normalizedFarmCode)}/stats`, config)
   )

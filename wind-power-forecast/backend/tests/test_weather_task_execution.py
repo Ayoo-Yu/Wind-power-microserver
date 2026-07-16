@@ -42,6 +42,7 @@ def test_weather_execution_logs_keep_farm_identity(monkeypatch):
     result = task_executor.execute_weather_task(task, connection, session)
 
     assert result["success"] is True
+    assert task.status == "not_found"
     logs = [value for value in session.added if isinstance(value, WeatherLog)]
     assert logs
     assert {log.farm_code for log in logs} == {"zyx"}

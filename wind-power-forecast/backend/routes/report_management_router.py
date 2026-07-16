@@ -1667,12 +1667,16 @@ def stop_scheduler():
 def get_scheduler_status():
     """获取调度器状态"""
     try:
+        from services.celery_beat_health import get_beat_health
+
+        heartbeat = get_beat_health()
         status = {
-            'running': None,
+            'running': heartbeat['healthy'],
             'configured': True,
             'mode': 'celery',
             'managed_externally': True,
-            'next_report_times': get_next_report_times()
+            'next_report_times': get_next_report_times(),
+            'heartbeat': heartbeat,
         }
         return jsonify(status)
     except Exception as e:

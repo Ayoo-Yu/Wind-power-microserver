@@ -1,42 +1,19 @@
 ﻿import axios from './axios'
 
-const shouldFallbackToLegacy = (error) => {
-  const status = error?.response?.status
-  return !error?.response || status === 404 || status === 405
-}
+import { withLegacyReadFallback } from './legacyFallback.cjs'
 
-const withLegacyFallback = async (v1Call, legacyCall) => {
-  try {
-    return await v1Call()
-  } catch (error) {
-    if (shouldFallbackToLegacy(error)) {
-      return legacyCall()
-    }
-    throw error
-  }
-}
-
-const authGet = (path) => withLegacyFallback(
+const authGet = (path) => withLegacyReadFallback(
   () => axios.get(`/api/v1/auth/${path}`),
   () => axios.get(`/api/auth/${path}`)
 )
 
-const authPost = (path, payload) => withLegacyFallback(
-  () => axios.post(`/api/v1/auth/${path}`, payload),
-  () => axios.post(`/api/auth/${path}`, payload)
-)
+const authPost = (path, payload) => axios.post(`/api/v1/auth/${path}`, payload)
 
-const authPut = (path, payload) => withLegacyFallback(
-  () => axios.put(`/api/v1/auth/${path}`, payload),
-  () => axios.put(`/api/auth/${path}`, payload)
-)
+const authPut = (path, payload) => axios.put(`/api/v1/auth/${path}`, payload)
 
-const authDelete = (path) => withLegacyFallback(
-  () => axios.delete(`/api/v1/auth/${path}`),
-  () => axios.delete(`/api/auth/${path}`)
-)
+const authDelete = (path) => axios.delete(`/api/v1/auth/${path}`)
 
-const authGetWithParams = (path, params = {}) => withLegacyFallback(
+const authGetWithParams = (path, params = {}) => withLegacyReadFallback(
   () => axios.get(`/api/v1/auth/${path}`, { params }),
   () => axios.get(`/api/auth/${path}`, { params })
 )

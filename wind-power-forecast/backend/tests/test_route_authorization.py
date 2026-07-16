@@ -197,6 +197,22 @@ def test_sensitive_blueprints_reject_anonymous_requests(method, path):
     assert response.status_code == 401
 
 
+def test_v1_farm_routes_cover_read_and_mutation_contracts():
+    app = _app()
+    app.register_blueprint(v1_compat_bp)
+
+    methods_by_path = {}
+    for rule in app.url_map.iter_rules():
+        if rule.rule.startswith("/api/v1/farms"):
+            methods_by_path.setdefault(rule.rule, set()).update(rule.methods)
+
+    assert {"GET", "POST"}.issubset(methods_by_path["/api/v1/farms"])
+    assert {"GET", "PUT", "DELETE"}.issubset(
+        methods_by_path["/api/v1/farms/<farm_code>"]
+    )
+    assert "POST" in methods_by_path["/api/v1/farms/<farm_code>/toggle"]
+
+
 @pytest.mark.parametrize(
     ("payload", "message"),
     [

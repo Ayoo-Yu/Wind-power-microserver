@@ -1,54 +1,34 @@
 import axiosInstance from './axios'
 
-function shouldFallbackToLegacy(error) {
-  const status = error?.response?.status
-  return !error?.response || status === 404 || status === 405
-}
-
-async function withLegacyFallback(v1Call, legacyCall) {
-  try {
-    return await v1Call()
-  } catch (error) {
-    if (shouldFallbackToLegacy(error)) {
-      return legacyCall()
-    }
-    throw error
-  }
-}
+import { withLegacyReadFallback } from './legacyFallback.cjs'
 
 export function getReportFarms() {
-  return withLegacyFallback(
+  return withLegacyReadFallback(
     () => axiosInstance.get('/api/v1/report/farms'),
     () => axiosInstance.get('/api/report/farms')
   )
 }
 
 export function getReportConfigs(params = {}) {
-  return withLegacyFallback(
+  return withLegacyReadFallback(
     () => axiosInstance.get('/api/v1/report/configs', { params }),
     () => axiosInstance.get('/api/report/configs', { params })
   )
 }
 
 export function getReportSchedulerStatus() {
-  return withLegacyFallback(
+  return withLegacyReadFallback(
     () => axiosInstance.get('/api/v1/report/scheduler/status'),
     () => axiosInstance.get('/api/report/scheduler/status')
   )
 }
 
 export function startReportScheduler() {
-  return withLegacyFallback(
-    () => axiosInstance.post('/api/v1/report/scheduler/start'),
-    () => axiosInstance.post('/api/report/scheduler/start')
-  )
+  return axiosInstance.post('/api/v1/report/scheduler/start')
 }
 
 export function stopReportScheduler() {
-  return withLegacyFallback(
-    () => axiosInstance.post('/api/v1/report/scheduler/stop'),
-    () => axiosInstance.post('/api/report/scheduler/stop')
-  )
+  return axiosInstance.post('/api/v1/report/scheduler/stop')
 }
 
 export function getReportOutboxSummary() {
@@ -65,81 +45,57 @@ export function retryReportOutboxItem(outboxId) {
 }
 
 export function getReportLogs(params = {}) {
-  return withLegacyFallback(
+  return withLegacyReadFallback(
     () => axiosInstance.get('/api/v1/report/logs', { params, _silent: true }),
     () => axiosInstance.get('/api/report/logs', { params, _silent: true })
   )
 }
 
 export function createReportFarm(payload) {
-  return withLegacyFallback(
-    () => axiosInstance.post('/api/v1/report/farms', payload),
-    () => axiosInstance.post('/api/report/farms', payload)
-  )
+  return axiosInstance.post('/api/v1/report/farms', payload)
 }
 
 export function updateReportFarm(farmId, payload) {
   const safeId = encodeURIComponent(String(farmId))
-  return withLegacyFallback(
-    () => axiosInstance.put(`/api/v1/report/farms/${safeId}`, payload),
-    () => axiosInstance.put(`/api/report/farms/${safeId}`, payload)
-  )
+  return axiosInstance.put(`/api/v1/report/farms/${safeId}`, payload)
 }
 
 export function createReportConfig(payload) {
-  return withLegacyFallback(
-    () => axiosInstance.post('/api/v1/report/configs', payload),
-    () => axiosInstance.post('/api/report/configs', payload)
-  )
+  return axiosInstance.post('/api/v1/report/configs', payload)
 }
 
 export function updateReportConfig(configId, payload) {
   const safeId = encodeURIComponent(String(configId))
-  return withLegacyFallback(
-    () => axiosInstance.put(`/api/v1/report/configs/${safeId}`, payload),
-    () => axiosInstance.put(`/api/report/configs/${safeId}`, payload)
-  )
+  return axiosInstance.put(`/api/v1/report/configs/${safeId}`, payload)
 }
 
 export function deleteReportConfig(configId) {
   const safeId = encodeURIComponent(String(configId))
-  return withLegacyFallback(
-    () => axiosInstance.delete(`/api/v1/report/configs/${safeId}`),
-    () => axiosInstance.delete(`/api/report/configs/${safeId}`)
-  )
+  return axiosInstance.delete(`/api/v1/report/configs/${safeId}`)
 }
 
 export function previewReport(configId) {
-  return withLegacyFallback(
-    () => axiosInstance.post('/api/v1/report/preview-report', { config_id: configId }),
-    () => axiosInstance.post('/api/report/preview-report', { config_id: configId })
-  )
+  return axiosInstance.post('/api/v1/report/preview-report', { config_id: configId })
 }
 
 export function manualReport(payload) {
-  return withLegacyFallback(
-    () => axiosInstance.post('/api/v1/report/manual-report', payload),
-    () => axiosInstance.post('/api/report/manual-report', payload)
-  )
+  return axiosInstance.post('/api/v1/report/manual-report', payload)
 }
 
 export function getManualInterventionVersions(params = {}) {
-  return withLegacyFallback(
+  return withLegacyReadFallback(
     () => axiosInstance.get('/api/v1/report/manual-intervention/versions', { params }),
     () => axiosInstance.get('/api/report/manual-intervention/versions', { params })
   )
 }
 
 export function createManualInterventionVersion(payload) {
-  return withLegacyFallback(
-    () => axiosInstance.post('/api/v1/report/manual-intervention/versions', payload),
-    () => axiosInstance.post('/api/report/manual-intervention/versions', payload)
-  )
+  return axiosInstance.post('/api/v1/report/manual-intervention/versions', payload)
 }
 
 export function getManualInterventionVersion(versionId) {
   const safeId = encodeURIComponent(String(versionId))
-  return withLegacyFallback(
+  return withLegacyReadFallback(
     () => axiosInstance.get(`/api/v1/report/manual-intervention/versions/${safeId}`),
     () => axiosInstance.get(`/api/report/manual-intervention/versions/${safeId}`)
   )
@@ -147,52 +103,40 @@ export function getManualInterventionVersion(versionId) {
 
 export function applyManualInterventionVersion(versionId, payload = {}) {
   const safeId = encodeURIComponent(String(versionId))
-  return withLegacyFallback(
-    () => axiosInstance.post(`/api/v1/report/manual-intervention/versions/${safeId}/apply`, payload),
-    () => axiosInstance.post(`/api/report/manual-intervention/versions/${safeId}/apply`, payload)
-  )
+  return axiosInstance.post(`/api/v1/report/manual-intervention/versions/${safeId}/apply`, payload)
 }
 
 export function getReportStatistics(params = {}) {
-  return withLegacyFallback(
+  return withLegacyReadFallback(
     () => axiosInstance.get('/api/v1/report/statistics', { params }),
     () => axiosInstance.get('/api/report/statistics', { params })
   )
 }
 
 export function getAccuracyStatistics(params = {}) {
-  return withLegacyFallback(
+  return withLegacyReadFallback(
     () => axiosInstance.get('/api/v1/report/accuracy-statistics', { params }),
     () => axiosInstance.get('/api/report/accuracy-statistics', { params })
   )
 }
 
 export function getQualityMarkers(params = {}) {
-  return withLegacyFallback(
+  return withLegacyReadFallback(
     () => axiosInstance.get('/api/v1/report/quality-markers', { params }),
     () => axiosInstance.get('/api/report/quality-markers', { params })
   )
 }
 
 export function createQualityMarker(payload) {
-  return withLegacyFallback(
-    () => axiosInstance.post('/api/v1/report/quality-markers', payload),
-    () => axiosInstance.post('/api/report/quality-markers', payload)
-  )
+  return axiosInstance.post('/api/v1/report/quality-markers', payload)
 }
 
 export function updateQualityMarker(markerId, payload) {
   const safeId = encodeURIComponent(String(markerId))
-  return withLegacyFallback(
-    () => axiosInstance.put(`/api/v1/report/quality-markers/${safeId}`, payload),
-    () => axiosInstance.put(`/api/report/quality-markers/${safeId}`, payload)
-  )
+  return axiosInstance.put(`/api/v1/report/quality-markers/${safeId}`, payload)
 }
 
 export function deleteQualityMarker(markerId) {
   const safeId = encodeURIComponent(String(markerId))
-  return withLegacyFallback(
-    () => axiosInstance.delete(`/api/v1/report/quality-markers/${safeId}`),
-    () => axiosInstance.delete(`/api/report/quality-markers/${safeId}`)
-  )
+  return axiosInstance.delete(`/api/v1/report/quality-markers/${safeId}`)
 }

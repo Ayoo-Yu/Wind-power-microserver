@@ -1,7 +1,15 @@
 from flask import Blueprint
 from flask_jwt_extended import verify_jwt_in_request
 
-from routes.farm_management import get_farms, get_farm_by_code, get_farm_stats
+from routes.farm_management import (
+    create_farm,
+    delete_farm,
+    get_farm_by_code,
+    get_farm_stats,
+    get_farms,
+    toggle_farm,
+    update_farm,
+)
 from routes.power_compare import get_fleet_metrics, get_fleet_series, get_power_data
 from routes.report_management_router import (
     get_wind_farms,
@@ -97,6 +105,26 @@ def get_farm_stats_v1(farm_code):
     - `/api/v1/farms/<farm_code>/statistics` is provided as compatibility alias.
     """
     return get_farm_stats(farm_code)
+
+
+@v1_compat_bp.route("/farms", methods=["POST"])
+def create_farm_v1():
+    return create_farm()
+
+
+@v1_compat_bp.route("/farms/<farm_code>", methods=["PUT"])
+def update_farm_v1(farm_code):
+    return update_farm(farm_code)
+
+
+@v1_compat_bp.route("/farms/<farm_code>", methods=["DELETE"])
+def delete_farm_v1(farm_code):
+    return delete_farm(farm_code)
+
+
+@v1_compat_bp.route("/farms/<farm_code>/toggle", methods=["POST"])
+def toggle_farm_v1(farm_code):
+    return toggle_farm(farm_code)
 
 
 @v1_compat_bp.route("/power-compare/fleet_metrics", methods=["POST"])

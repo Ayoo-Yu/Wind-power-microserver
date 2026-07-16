@@ -33,10 +33,16 @@ def execute_weather_task(task: WeatherTask, connection: WeatherConnection, sessi
         connection_config = build_connection_config(connection)
         
         # 1. 列出远程文件（使用动态路径）
+        path_pattern = task.path_pattern
+        if path_pattern == 'custom':
+            path_pattern = (task.custom_path_pattern or '').strip()
+            if not path_pattern:
+                raise ValueError('自定义时间目录格式不能为空')
+
         files = ssh_service.list_files_dynamic_path(
             connection_config,
             task.remote_path,
-            task.path_pattern,
+            path_pattern,
             task.time_strategy,
             task.specific_time,
             task.time_range_start,
@@ -55,7 +61,7 @@ def execute_weather_task(task: WeatherTask, connection: WeatherConnection, sessi
             session.add(log_entry)
             session.commit()
             
-            task.status = 'idle'
+            task.status = 'not_found'
             session.commit()
             
             return {
@@ -66,6 +72,8 @@ def execute_weather_task(task: WeatherTask, connection: WeatherConnection, sessi
         
         # 2. 处理和保存文件
         processed_files = 0
+        failed_files = 0
+        skipped_files = 0
         total_size = 0
         
         # 解析保存路径，支持日期变量替换
@@ -85,6 +93,7 @@ def execute_weather_task(task: WeatherTask, connection: WeatherConnection, sessi
                 
                 if 'skip_existing' in dedup_options and not ('force_reprocess' in dedup_options):
                     if _should_skip_file(session, task.id, file_info, final_file_path, dedup_options):
+                        skipped_files += 1
                         log_entry = WeatherLog(
                             task_id=task.id,
                             farm_code=task.farm_code,
@@ -108,6 +117,7 @@ def execute_weather_task(task: WeatherTask, connection: WeatherConnection, sessi
                     )
                     
                     if not download_result['success']:
+                        failed_files += 1
                         log_entry = WeatherLog(
                             task_id=task.id,
                             farm_code=task.farm_code,
@@ -129,6 +139,7 @@ def execute_weather_task(task: WeatherTask, connection: WeatherConnection, sessi
                     )
                     session.add(log_entry)
                 else:
+                    failed_files += 1
                     log_entry = WeatherLog(
                         task_id=task.id,
                         farm_code=task.farm_code,
@@ -188,6 +199,7 @@ def execute_weather_task(task: WeatherTask, connection: WeatherConnection, sessi
                         os.remove(final_file_path)
                 
             except Exception as e:
+                failed_files += 1
                 log_entry = WeatherLog(
                     task_id=task.id,
                     farm_code=task.farm_code,
@@ -199,27 +211,44 @@ def execute_weather_task(task: WeatherTask, connection: WeatherConnection, sessi
                 session.add(log_entry)
                 continue
         
-        # 更新任务状态
-        task.status = 'idle'
+        # 保留最近一次业务结果，供运行页面判断数据是否真正到达。
+        if failed_files == 0:
+            task.status = 'success'
+            completion_level = 'success'
+            completion_message = '任务执行完成'
+        elif processed_files > 0 or skipped_files > 0:
+            task.status = 'partial'
+            completion_level = 'warning'
+            completion_message = '任务执行部分失败'
+        else:
+            task.status = 'error'
+            completion_level = 'error'
+            completion_message = '任务执行失败'
         session.commit()
         
         # 记录完成日志
         log_entry = WeatherLog(
             task_id=task.id,
             farm_code=task.farm_code,
-            log_level='info',
-            message='任务执行完成',
-            details=f'保存文件数: {processed_files}, 总文件大小: {total_size} 字节, 保存路径: {save_path}',
+            log_level=completion_level,
+            message=completion_message,
+            details=(
+                f'保存文件数: {processed_files}, 跳过文件数: {skipped_files}, '
+                f'失败文件数: {failed_files}, 总文件大小: {total_size} 字节, 保存路径: {save_path}'
+            ),
             created_at=datetime.now()
         )
         session.add(log_entry)
         session.commit()
         
         return {
-            'success': True,
+            'success': failed_files == 0,
             'files_processed': processed_files,
+            'files_skipped': skipped_files,
+            'files_failed': failed_files,
             'total_size': total_size,
-            'save_path': save_path
+            'save_path': save_path,
+            **({'error': f'{failed_files} 个气象文件处理失败'} if failed_files else {}),
         }
         
     except Exception as e:

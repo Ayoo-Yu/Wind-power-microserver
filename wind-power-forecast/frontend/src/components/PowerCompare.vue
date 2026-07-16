@@ -738,6 +738,12 @@ export default {
           '中期预测': midValues,
           '短期风速预测': shortWindValues,
           '中期风速预测': midWindValues,
+          '短期预测下限': shortLowerValues,
+          '短期预测上限': shortUpperValues,
+          '中期预测下限': midLowerValues,
+          '中期预测上限': midUpperValues,
+          '超短期预测下限': supershortLowerValues,
+          '超短期预测上限': supershortUpperValues,
           '风向(°)': windDirectionValues,
           '可用容量': capacityValues
         }
@@ -1107,12 +1113,23 @@ export default {
           series.push({ name, values, color, axis, dashed })
         }
       }
+      const addInterval = (toggleName, name, values, color) => {
+        if (this.selectedTypes.includes(toggleName) && this.hasSeriesValue(values)) {
+          series.push({ name, values, color, axis: 'power', dashed: true })
+        }
+      }
       add('实测值', datasets['实测值'] || state.actualValues, '#fb7185')
       add('超短期预测', datasets['超短期预测'] || state.superValues, '#22d3ee')
       add('短期预测', datasets['短期预测'] || state.shortValues, '#60a5fa')
       add('中期预测', datasets['中期预测'] || state.midValues, '#4ade80')
       add('短期风速预测', datasets['短期风速预测'] || state.shortWindValues, '#fbbf24', 'wind', true)
       add('中期风速预测', datasets['中期风速预测'] || state.midWindValues, '#c084fc', 'wind', true)
+      addInterval('超短期预测区间', '超短期区间下限', datasets['超短期预测下限'] || state.supershortLowerValues, 'rgba(34, 211, 238, 0.55)')
+      addInterval('超短期预测区间', '超短期区间上限', datasets['超短期预测上限'] || state.supershortUpperValues, 'rgba(34, 211, 238, 0.55)')
+      addInterval('短期预测区间', '短期区间下限', datasets['短期预测下限'] || state.shortLowerValues, 'rgba(96, 165, 250, 0.55)')
+      addInterval('短期预测区间', '短期区间上限', datasets['短期预测上限'] || state.shortUpperValues, 'rgba(96, 165, 250, 0.55)')
+      addInterval('中期预测区间', '中期区间下限', datasets['中期预测下限'] || state.midLowerValues, 'rgba(74, 222, 128, 0.55)')
+      addInterval('中期预测区间', '中期区间上限', datasets['中期预测上限'] || state.midUpperValues, 'rgba(74, 222, 128, 0.55)')
       this.mainChart = this.drawLineCanvas('mainChartCanvas', labels, series, {
         leftTitle: '功率(MW)',
         rightTitle: '风速(m/s)'

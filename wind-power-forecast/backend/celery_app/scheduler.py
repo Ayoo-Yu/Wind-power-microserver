@@ -9,6 +9,10 @@ from sqlalchemy import func
 from db_session import db_session
 from db_models import PredictionTask, WeatherTask
 from services.cron_service import build_crontab
+from services.celery_beat_health import (
+    HEARTBEAT_INTERVAL_SECONDS,
+    publish_beat_heartbeat,
+)
 from services.etext_config import CONFIG_FILE, read_config
 
 logger = logging.getLogger(__name__)
@@ -214,15 +218,32 @@ class DatabaseScheduler(PersistentScheduler):
     def setup_schedule(self):
         super().setup_schedule()
         self._last_schedule_check = 0.0
+        self._last_heartbeat = 0.0
         self._schedule_revision = None
         self._reload_from_database(force=True)
+        self._publish_heartbeat(force=True)
 
     def tick(self, *args, **kwargs):
         now = time.monotonic()
+        self._publish_heartbeat(now=now)
         if now - getattr(self, "_last_schedule_check", 0.0) >= SCHEDULE_RELOAD_INTERVAL_SEC:
             self._last_schedule_check = now
             self._reload_from_database(force=False)
         return super().tick(*args, **kwargs)
+
+    def _publish_heartbeat(self, *, now=None, force=False):
+        monotonic_now = time.monotonic() if now is None else now
+        if not force and monotonic_now - getattr(self, "_last_heartbeat", 0.0) < HEARTBEAT_INTERVAL_SECONDS:
+            return
+
+        try:
+            client = getattr(self.app.backend, "client", None)
+            if client is None:
+                raise RuntimeError("Celery result backend does not expose a Redis client")
+            publish_beat_heartbeat(client, schedule_count=len(self.schedule))
+            self._last_heartbeat = monotonic_now
+        except Exception:
+            logger.exception("Failed to publish Celery beat heartbeat")
 
     def _reload_from_database(self, force: bool):
         try:

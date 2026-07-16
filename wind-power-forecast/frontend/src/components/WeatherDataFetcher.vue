@@ -5,7 +5,7 @@
 
     <div class="page-header">
       <h1 class="page-title">气象预报数据拉取</h1>
-      <p class="page-description">通道配置、任务追踪与手动补录一体化管理</p>
+      <p class="page-description">通道配置、任务调度与数据到达质量管理</p>
     </div>
 
     <div class="meta-updated">调度器状态更新时间：{{ schedulerCheckedAt || '--' }}</div>
@@ -40,7 +40,7 @@
           <div class="health-text">{{ healthBoard.arrival.text }}</div>
         </div>
         <div class="health-node" :class="`is-${healthBoard.parse.status}`">
-          <div class="health-name">解析入库</div>
+          <div class="health-name">文件校验</div>
           <div class="health-text">{{ healthBoard.parse.text }}</div>
         </div>
       </div>
@@ -48,25 +48,10 @@
 
     <EcmwfStatusCard :status="ecmwfStatus" :loading="loadingEcmwf" @refresh="refreshEcmwfStatus" />
 
-    <el-card class="manual-card" shadow="hover">
-      <template #header>
-        <div class="card-header">
-          <span class="card-title">手动气象数据补录</span>
-          <el-button type="danger" size="small" @click="openManualUploadDialog">手动上传气象文件</el-button>
-        </div>
-      </template>
-
-      <el-alert v-if="manualUploadResult.message" :type="manualUploadResult.type" :closable="true" @close="manualUploadResult.message = ''">
-        <template #title>{{ manualUploadResult.message }}</template>
-        <div v-if="manualUploadResult.detail" class="manual-result-detail">{{ manualUploadResult.detail }}</div>
-      </el-alert>
-      <el-text type="info" size="small">支持文件：`.csv`, `.txt`, `.nc`。上传后将立即触发解析引擎。</el-text>
-    </el-card>
-
     <el-card class="config-card" shadow="hover">
       <template #header>
         <div class="card-header">
-          <span class="card-title">数据源通道配置 (FTP/SFTP)</span>
+          <span class="card-title">SFTP 数据源通道配置</span>
           <el-button type="primary" size="small" @click="openConnectionDialog">添加连接</el-button>
         </div>
       </template>
@@ -74,18 +59,13 @@
       <el-table :data="connections" style="width: 100%" v-loading="loadingConnections">
         <el-table-column prop="name" label="连接名称" min-width="120" align="center" />
         <el-table-column prop="farm_code" label="归属场站" min-width="110" align="center" />
-        <el-table-column prop="protocol" label="协议" width="90" align="center">
-          <template #default="scope">
-            <el-tag type="info">{{ (scope.row.protocol || 'sftp').toUpperCase() }}</el-tag>
-          </template>
-        </el-table-column>
         <el-table-column prop="host" label="服务器地址" min-width="170" align="center" />
         <el-table-column prop="port" label="端口" width="80" align="center" />
         <el-table-column prop="username" label="用户名" min-width="100" align="center" />
-        <el-table-column label="状态" width="90" align="center">
+        <el-table-column label="验证状态" min-width="130" align="center">
           <template #default="scope">
-            <el-tag :type="scope.row.status === 'connected' ? 'success' : 'danger'">
-              {{ scope.row.status === 'connected' ? '连通' : '断连' }}
+            <el-tag :type="getConnectionStatusTag(scope.row).type">
+              {{ getConnectionStatusTag(scope.row).text }}
             </el-tag>
           </template>
         </el-table-column>
@@ -131,7 +111,7 @@
           <template #default="scope">
             <div class="action-buttons-container">
               <el-button size="small" type="info" :loading="scope.row.running" @click="runTask(scope.row)">手动触发一次</el-button>
-              <el-button size="small" type="primary" @click="viewTaskLogs(scope.row)">查看解析日志</el-button>
+              <el-button size="small" type="primary" @click="viewTaskLogs(scope.row)">查看任务日志</el-button>
               <el-button size="small" :type="scope.row.enabled ? 'warning' : 'success'" @click="toggleTask(scope.row)">
                 {{ scope.row.enabled ? '停用' : '启用' }}
               </el-button>
@@ -143,16 +123,13 @@
       </el-table>
     </el-card>
 
-    <el-dialog v-model="showConnectionDialog" :title="editingConnection ? '编辑数据源通道配置 (FTP/SFTP)' : '添加数据源通道配置 (FTP/SFTP)'" width="640px">
+    <el-dialog v-model="showConnectionDialog" :title="editingConnection ? '编辑 SFTP 数据源通道' : '添加 SFTP 数据源通道'" width="640px">
       <el-form :model="connectionForm" :rules="connectionRules" ref="connectionFormRef" label-width="130px">
         <el-form-item label="连接名称" prop="name"><el-input v-model="connectionForm.name" placeholder="例如：省调中心SFTP" /></el-form-item>
         <el-form-item label="归属场站" prop="farm_code">
           <el-select v-model="connectionForm.farm_code" placeholder="请选择场站" filterable>
             <el-option v-for="farm in farms" :key="farm.farm_code" :label="farm.farm_name" :value="farm.farm_code" />
           </el-select>
-        </el-form-item>
-        <el-form-item label="协议选择" prop="protocol">
-          <el-radio-group v-model="connectionForm.protocol"><el-radio value="ftp">FTP</el-radio><el-radio value="sftp">SFTP</el-radio></el-radio-group>
         </el-form-item>
         <el-form-item label="服务器地址" prop="host"><el-input v-model="connectionForm.host" placeholder="IP地址或域名" /></el-form-item>
         <el-form-item label="端口" prop="port"><el-input-number v-model="connectionForm.port" :min="1" :max="65535" /></el-form-item>
@@ -195,6 +172,18 @@
           </el-select>
         </el-form-item>
         <el-form-item label="远程目录路径" prop="remote_path"><el-input v-model="taskForm.remote_path" placeholder="/weather_data/export/" /></el-form-item>
+        <el-form-item label="时间目录格式" prop="path_pattern">
+          <el-select v-model="taskForm.path_pattern" placeholder="请选择目录结构">
+            <el-option label="文件直接位于远程目录" value="flat" />
+            <el-option label="YYYY_MMDDHHNN" value="YYYY_MMDDHHNN" />
+            <el-option label="YYYYMMDDHH" value="YYYYMMDDHH" />
+            <el-option label="YYYY-MM-DD/HH" value="YYYY-MM-DD/HH" />
+            <el-option label="自定义" value="custom" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="taskForm.path_pattern === 'custom'" label="自定义目录格式" prop="custom_path_pattern">
+          <el-input v-model="taskForm.custom_path_pattern" placeholder="YYYY/MM/DD/HH" />
+        </el-form-item>
         <el-form-item label="文件名动态匹配模板" prop="filename_template">
           <el-input v-model="taskForm.filename_template" placeholder="NWP_${YYYYMMDD}.csv" />
           <el-text size="small" type="info">支持模板：`${YYYYMMDD}`、`${YYYYMMDDHH}`、通配符 `*`</el-text>
@@ -213,32 +202,9 @@
       <template #footer><el-button @click="showTaskDialog = false">取消</el-button><el-button type="primary" :loading="savingTask" @click="saveTask">保存</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="showManualUploadDialog" title="手动气象数据补录" width="680px" :close-on-click-modal="false">
-      <el-form :model="manualUploadForm" :rules="manualUploadRules" ref="manualUploadFormRef" label-width="130px">
-        <el-form-item label="归属场站" prop="farm_code">
-          <el-select v-model="manualUploadForm.farm_code" placeholder="请选择场站" filterable>
-            <el-option v-for="farm in farms" :key="farm.farm_code" :label="farm.farm_name" :value="farm.farm_code" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="气象类型" prop="weather_type">
-          <el-select v-model="manualUploadForm.weather_type" placeholder="请选择类型">
-            <el-option label="NWP数据" value="nwp" /><el-option label="测风塔数据" value="mast" /><el-option label="台风预警" value="typhoon" /><el-option label="其他" value="other" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="上传文件" prop="file">
-          <el-upload class="upload-dragger" drag :auto-upload="false" :limit="1" :file-list="manualUploadFileList" accept=".csv,.txt,.nc" :on-change="handleManualFileChange" :on-remove="handleManualFileRemove">
-            <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-            <div class="el-upload__text">拖拽文件到此处，或 <em>点击上传</em></div>
-            <template #tip><div class="el-upload__tip">仅用于手动补录，上传后立即解析并覆盖今日预测基础数据</div></template>
-          </el-upload>
-        </el-form-item>
-      </el-form>
-      <template #footer><el-button @click="showManualUploadDialog = false">取消</el-button><el-button type="primary" :loading="uploadingManual" @click="submitManualUpload">上传并解析</el-button></template>
-    </el-dialog>
-
-    <el-dialog v-model="showLogsDialog" title="任务解析日志" width="1000px" :close-on-click-modal="false">
+    <el-dialog v-model="showLogsDialog" title="气象文件任务日志" width="1000px" :close-on-click-modal="false">
       <div class="logs-header">
-        <div class="logs-title"><strong>{{ currentTaskName }}</strong> 的解析日志</div>
+        <div class="logs-title"><strong>{{ currentTaskName }}</strong> 的任务日志</div>
         <div class="logs-filters">
           <el-select v-model="logLevel" @change="fetchTaskLogs" size="small" style="width: 120px">
             <el-option label="全部" value="" /><el-option label="信息" value="info" /><el-option label="成功" value="success" /><el-option label="警告" value="warning" /><el-option label="错误" value="error" />
@@ -265,7 +231,6 @@
 <script>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { UploadFilled } from '@element-plus/icons-vue'
 import EcmwfStatusCard from './EcmwfStatusCard.vue'
 import {
   getWeatherConnections,
@@ -282,7 +247,6 @@ import {
   getWeatherTaskLogs,
   getWeatherSchedulerStatus,
   restartWeatherScheduler,
-  uploadManualWeatherFile,
   getEcmwfAvailability,
   getEcmwfLatest
 } from '../api/weatherFetchApi'
@@ -294,7 +258,7 @@ function extractErrorMessage(error, fallback) {
 
 export default {
   name: 'WeatherDataFetcher',
-  components: { UploadFilled, EcmwfStatusCard },
+  components: { EcmwfStatusCard },
   setup() {
     const farms = ref([])
     const connections = ref([])
@@ -308,18 +272,15 @@ export default {
     const savingTask = ref(false)
     const checkingScheduler = ref(false)
     const restartingScheduler = ref(false)
-    const uploadingManual = ref(false)
 
     const showConnectionDialog = ref(false)
     const showTaskDialog = ref(false)
     const showLogsDialog = ref(false)
-    const showManualUploadDialog = ref(false)
     const editingConnection = ref(false)
     const editingTask = ref(false)
 
     const connectionFormRef = ref(null)
     const taskFormRef = ref(null)
-    const manualUploadFormRef = ref(null)
 
     const currentTaskId = ref(null)
     const currentTaskName = ref('')
@@ -355,7 +316,6 @@ export default {
       id: null,
       name: '',
       farm_code: '',
-      protocol: 'sftp',
       host: '',
       port: 22,
       username: '',
@@ -375,6 +335,8 @@ export default {
       farm_code: '',
       connection_id: '',
       remote_path: '/weather_data/export/',
+      path_pattern: 'flat',
+      custom_path_pattern: '',
       filename_template: 'NWP_${YYYYMMDD}.csv',
       schedule: '0 */6 * * *',
       custom_schedule: '',
@@ -384,15 +346,10 @@ export default {
       description: ''
     })
 
-    const manualUploadForm = reactive({ farm_code: '', weather_type: 'nwp', file: null })
-    const manualUploadFileList = ref([])
-    const manualUploadResult = reactive({ type: 'success', message: '', detail: '' })
-
     const connectionRules = computed(() => {
       const rules = {
         name: [{ required: true, message: '请输入连接名称', trigger: 'blur' }],
         farm_code: [{ required: true, message: '请选择场站', trigger: 'change' }],
-        protocol: [{ required: true, message: '请选择协议', trigger: 'change' }],
         host: [{ required: true, message: '请输入服务器地址', trigger: 'blur' }],
         username: [{ required: true, message: '请输入用户名', trigger: 'blur' }]
       }
@@ -405,20 +362,24 @@ export default {
       return rules
     })
 
-    const taskRules = {
-      name: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
-      farm_code: [{ required: true, message: '请选择场站', trigger: 'change' }],
-      connection_id: [{ required: true, message: '请选择连接', trigger: 'change' }],
-      remote_path: [{ required: true, message: '请输入远程目录路径', trigger: 'blur' }],
-      filename_template: [{ required: true, message: '请输入文件名动态匹配模板', trigger: 'blur' }],
-      save_path: [{ required: true, message: '请输入本地保存路径', trigger: 'blur' }]
-    }
-
-    const manualUploadRules = {
-      farm_code: [{ required: true, message: '请选择场站', trigger: 'change' }],
-      weather_type: [{ required: true, message: '请选择气象类型', trigger: 'change' }],
-      file: [{ required: true, message: '请上传文件', trigger: 'change' }]
-    }
+    const taskRules = computed(() => {
+      const rules = {
+        name: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
+        farm_code: [{ required: true, message: '请选择场站', trigger: 'change' }],
+        connection_id: [{ required: true, message: '请选择连接', trigger: 'change' }],
+        remote_path: [{ required: true, message: '请输入远程目录路径', trigger: 'blur' }],
+        path_pattern: [{ required: true, message: '请选择时间目录格式', trigger: 'change' }],
+        filename_template: [{ required: true, message: '请输入文件名动态匹配模板', trigger: 'blur' }],
+        save_path: [{ required: true, message: '请输入本地保存路径', trigger: 'blur' }]
+      }
+      if (taskForm.path_pattern === 'custom') {
+        rules.custom_path_pattern = [{ required: true, message: '请输入自定义目录格式', trigger: 'blur' }]
+      }
+      if (taskForm.schedule === 'custom') {
+        rules.custom_schedule = [{ required: true, message: '请输入 Cron 表达式', trigger: 'blur' }]
+      }
+      return rules
+    })
 
     const isToday = (timeStr) => {
       if (!timeStr) return false
@@ -428,35 +389,61 @@ export default {
       return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
     }
 
+    const isRecent = (timeStr, maxAgeHours = 24) => {
+      if (!timeStr) return false
+      const timestamp = new Date(timeStr).getTime()
+      return Number.isFinite(timestamp) && Date.now() - timestamp <= maxAgeHours * 60 * 60 * 1000
+    }
+
     const healthBoard = computed(() => {
       const totalChannels = connections.value.length
-      const connectedChannels = connections.value.filter((item) => item.status === 'connected').length
-      const channelOk = totalChannels > 0 && totalChannels === connectedChannels
       const schedulerManagedExternally = !!schedulerInfo.value?.managed_externally
-      const schedulerRunning = schedulerManagedExternally || !!schedulerInfo.value?.is_running
-      const farmKeys = tasks.value.map((item) => item.farm_code || `task-${item.id}`)
+      const schedulerRunning = schedulerInfo.value?.is_running === true
+      const heartbeatStatus = schedulerInfo.value?.heartbeat?.status || 'unknown'
+      const enabledTasks = tasks.value.filter((item) => item.enabled)
+      const farmKeys = enabledTasks.map((item) => item.farm_code || `task-${item.id}`)
       const totalStations = new Set(farmKeys).size
-      const readyStations = new Set(tasks.value.filter((item) => isToday(item.last_run) && ['success', 'parsed', 'completed'].includes((item.status || '').toLowerCase())).map((item) => item.farm_code || `task-${item.id}`)).size
+      const readyStations = new Set(enabledTasks.filter((item) => isToday(item.last_run) && ['success', 'parsed', 'completed'].includes((item.status || '').toLowerCase())).map((item) => item.farm_code || `task-${item.id}`)).size
       const arrivalPercent = totalStations > 0 ? Math.round((readyStations / totalStations) * 100) : 0
-      const todayRuns = tasks.value.filter((item) => isToday(item.last_run))
+      const todayRuns = enabledTasks.filter((item) => isToday(item.last_run))
       const parseOkRuns = todayRuns.filter((item) => ['success', 'parsed', 'completed'].includes((item.status || '').toLowerCase()))
-      const parsePercent = todayRuns.length ? Math.round((parseOkRuns.length / todayRuns.length) * 100) : 100
+      const parsePercent = todayRuns.length ? Math.round((parseOkRuns.length / todayRuns.length) * 100) : null
+      const successfulConnectionIds = new Set(parseOkRuns.map((item) => item.connection_id))
+      const connectedChannels = connections.value.filter((item) => (
+        successfulConnectionIds.has(item.id) || (item.status === 'connected' && isRecent(item.last_test_at))
+      )).length
+      const channelOk = totalChannels > 0 && totalChannels === connectedChannels
+
+      let schedulerText = '🔴 未检测到 Celery Beat 心跳'
+      if (schedulerRunning) schedulerText = '🟢 Celery Beat 心跳正常'
+      else if (heartbeatStatus === 'unavailable') schedulerText = '🔴 Redis 不可用，无法确认调度状态'
+      else if (!schedulerManagedExternally) schedulerText = '🔴 调度器已停止'
+
+      const arrivalReady = totalStations > 0 && arrivalPercent >= 90
+      const arrivalStatus = totalStations === 0 ? 'warning' : (arrivalReady ? 'ready' : (arrivalPercent >= 60 ? 'warning' : 'danger'))
+      const arrivalText = totalStations === 0
+        ? '暂无启用的场站任务'
+        : `${arrivalReady ? '🟢' : '🔴'} ${readyStations}/${totalStations} 个场站今日已就绪`
+      const parseStatus = parsePercent === null ? 'warning' : (parsePercent >= 95 ? 'ready' : (parsePercent >= 70 ? 'warning' : 'danger'))
+      const parseText = parsePercent === null
+        ? '今日尚无执行记录'
+        : (parsePercent === 100 ? '🟢 100% 成功无报错' : `${parsePercent}% 成功`)
 
       return {
-        channel: { status: channelOk ? 'ready' : 'warning', text: channelOk ? '🟢 所有SFTP配置正常' : `🔴 存在断连通道 (${connectedChannels}/${totalChannels || 0})` },
+        channel: { status: channelOk ? 'ready' : 'warning', text: channelOk ? '🟢 所有SFTP配置正常' : (totalChannels ? `🔴 存在断连通道 (${connectedChannels}/${totalChannels})` : '尚未配置 SFTP 通道') },
         scheduler: {
           status: schedulerRunning ? 'ready' : 'warning',
-          text: schedulerManagedExternally ? '🟢 Celery Beat 托管' : (schedulerRunning ? '🟢 运行中' : '🔴 已停止')
+          text: schedulerText
         },
         arrival: {
-          status: arrivalPercent >= 90 ? 'ready' : (arrivalPercent >= 60 ? 'warning' : 'danger'),
+          status: arrivalStatus,
           percent: arrivalPercent,
           ready: readyStations,
           total: totalStations,
           color: arrivalPercent >= 90 ? '#67c23a' : (arrivalPercent >= 60 ? '#e6a23c' : '#f56c6c'),
-          text: totalStations ? `🟢 ${readyStations}/${totalStations} 个场站已就绪` : '暂无场站任务'
+          text: arrivalText
         },
-        parse: { status: parsePercent >= 95 ? 'ready' : (parsePercent >= 70 ? 'warning' : 'danger'), text: parsePercent === 100 ? '🟢 100% 成功无报错' : `${parsePercent}% 成功` }
+        parse: { status: parseStatus, text: parseText }
       }
     })
 
@@ -479,11 +466,25 @@ export default {
       if (backendText) return { type: task.today_status_type || 'info', text: backendText }
       const status = (task.status || '').toLowerCase()
       const runTime = formatShortTime(task.last_run)
-      if (status === 'success' || status === 'parsed' || status === 'completed') return { type: 'success', text: `🟢 已获取并解析${runTime ? ` (${runTime})` : ''}` }
-      if (status === 'error' || status.includes('parse_failed')) return { type: 'danger', text: '🟡 获取成功但解析失败' }
+      if (status === 'success' || status === 'parsed' || status === 'completed') return { type: 'success', text: `🟢 已获取并校验${runTime ? ` (${runTime})` : ''}` }
+      if (status === 'partial') return { type: 'warning', text: '🟡 部分文件处理失败' }
+      if (status === 'error' || status.includes('parse_failed')) return { type: 'danger', text: '🔴 文件处理失败' }
       if (status.includes('not_found')) return { type: 'danger', text: '🔴 文件未找到' }
       if (!task.enabled) return { type: 'info', text: '⏸ 已停用' }
       return { type: 'warning', text: '🟡 等待执行' }
+    }
+
+    const getConnectionStatusTag = (connection) => {
+      const hasSuccessfulTaskToday = tasks.value.some((task) => (
+        task.connection_id === connection.id &&
+        isToday(task.last_run) &&
+        ['success', 'parsed', 'completed'].includes((task.status || '').toLowerCase())
+      ))
+      if (hasSuccessfulTaskToday) return { type: 'success', text: '今日任务已验证' }
+      if (connection.status === 'connected' && isRecent(connection.last_test_at)) {
+        return { type: 'success', text: '24小时内测试通过' }
+      }
+      return { type: 'warning', text: '等待重新验证' }
     }
 
     const getScheduleDescription = (cronExpression) => {
@@ -504,7 +505,7 @@ export default {
       loadingConnections.value = true
       try {
         const response = await getWeatherConnections()
-        connections.value = (response.data || []).map((item) => ({ ...item, protocol: item.protocol || 'sftp' }))
+        connections.value = response.data || []
       } catch (error) {
         ElMessage.error(extractErrorMessage(error, '获取连接列表失败'))
       } finally {
@@ -555,13 +556,13 @@ export default {
 
     const openConnectionDialog = () => {
       editingConnection.value = false
-      Object.assign(connectionForm, { id: null, name: '', farm_code: farms.value[0]?.farm_code || '', protocol: 'sftp', host: '', port: 22, username: '', auth_type: 'password', password: '', password_set: false, private_key_path: '', key_passphrase: '', key_passphrase_set: false })
+      Object.assign(connectionForm, { id: null, name: '', farm_code: farms.value[0]?.farm_code || '', host: '', port: 22, username: '', auth_type: 'password', password: '', password_set: false, private_key_path: '', key_passphrase: '', key_passphrase_set: false })
       showConnectionDialog.value = true
     }
 
     const editConnection = (row) => {
       editingConnection.value = true
-      Object.assign(connectionForm, { id: row.id, name: row.name, farm_code: row.farm_code || '', protocol: row.protocol || 'sftp', host: row.host, port: row.port || 22, username: row.username, auth_type: row.auth_type || 'password', password: '', password_set: Boolean(row.password_set), private_key_path: row.private_key_path || '', key_passphrase: '', key_passphrase_set: Boolean(row.key_passphrase_set) })
+      Object.assign(connectionForm, { id: row.id, name: row.name, farm_code: row.farm_code || '', host: row.host, port: row.port || 22, username: row.username, auth_type: row.auth_type || 'password', password: '', password_set: Boolean(row.password_set), private_key_path: row.private_key_path || '', key_passphrase: '', key_passphrase_set: Boolean(row.key_passphrase_set) })
       showConnectionDialog.value = true
     }
 
@@ -615,13 +616,15 @@ export default {
 
     const openTaskDialog = () => {
       editingTask.value = false
-      Object.assign(taskForm, { id: null, name: '', farm_code: farms.value[0]?.farm_code || '', connection_id: '', remote_path: '/weather_data/export/', filename_template: 'NWP_${YYYYMMDD}.csv', schedule: '0 */6 * * *', custom_schedule: '', save_path: defaultSavePath, timeout: 300, retry_count: 3, description: '' })
+      Object.assign(taskForm, { id: null, name: '', farm_code: farms.value[0]?.farm_code || '', connection_id: '', remote_path: '/weather_data/export/', path_pattern: 'flat', custom_path_pattern: '', filename_template: 'NWP_${YYYYMMDD}.csv', schedule: '0 */6 * * *', custom_schedule: '', save_path: defaultSavePath, timeout: 300, retry_count: 3, description: '' })
       showTaskDialog.value = true
     }
 
     const editTask = (row) => {
       editingTask.value = true
-      Object.assign(taskForm, { id: row.id, name: row.name, farm_code: row.farm_code || '', connection_id: row.connection_id, remote_path: row.remote_path, filename_template: row.filename_template || row.file_pattern || '', schedule: row.schedule, custom_schedule: '', save_path: row.save_path || defaultSavePath, timeout: row.timeout || 300, retry_count: row.retry_count || 3, description: row.description || '' })
+      const schedulePresets = new Set(['0 * * * *', '0 */6 * * *', '0 */12 * * *', '0 0 * * *'])
+      const scheduleIsPreset = schedulePresets.has(row.schedule)
+      Object.assign(taskForm, { id: row.id, name: row.name, farm_code: row.farm_code || '', connection_id: row.connection_id, remote_path: row.remote_path, path_pattern: row.path_pattern || 'flat', custom_path_pattern: row.custom_path_pattern || '', filename_template: row.filename_template || row.file_pattern || '', schedule: scheduleIsPreset ? row.schedule : 'custom', custom_schedule: scheduleIsPreset ? '' : row.schedule, save_path: row.save_path || defaultSavePath, timeout: row.timeout || 300, retry_count: row.retry_count || 3, description: row.description || '' })
       showTaskDialog.value = true
     }
 
@@ -630,7 +633,7 @@ export default {
       try {
         await taskFormRef.value.validate()
         savingTask.value = true
-        const payload = { ...taskForm, file_pattern: taskForm.filename_template, schedule: taskForm.schedule === 'custom' ? taskForm.custom_schedule : taskForm.schedule, path_pattern: 'custom', custom_path_pattern: 'manual-template', time_strategy: 'latest', processing_options: ['integrity_check'], deduplication_options: ['skip_existing'] }
+        const payload = { ...taskForm, file_pattern: taskForm.filename_template, schedule: taskForm.schedule === 'custom' ? taskForm.custom_schedule : taskForm.schedule, time_strategy: 'latest', processing_options: ['integrity_check'], deduplication_options: ['skip_existing'] }
         if (editingTask.value) await updateWeatherTask(taskForm.id, payload)
         else await createWeatherTask(payload)
         ElMessage.success(editingTask.value ? '任务更新成功' : '任务创建成功')
@@ -701,61 +704,6 @@ export default {
     const getLogLevelType = (level) => (level === 'success' ? 'success' : level === 'warning' ? 'warning' : level === 'error' ? 'danger' : 'info')
     const getLogLevelText = (level) => (level === 'success' ? '成功' : level === 'warning' ? '警告' : level === 'error' ? '错误' : '信息')
 
-    const openManualUploadDialog = () => {
-      manualUploadForm.farm_code = farms.value[0]?.farm_code || ''
-      manualUploadForm.weather_type = 'nwp'
-      manualUploadForm.file = null
-      manualUploadFileList.value = []
-      showManualUploadDialog.value = true
-    }
-
-    const handleManualFileChange = (uploadFile, uploadFiles) => {
-      manualUploadForm.file = uploadFile.raw || null
-      manualUploadFileList.value = uploadFiles.slice(-1)
-    }
-
-    const handleManualFileRemove = () => {
-      manualUploadForm.file = null
-      manualUploadFileList.value = []
-    }
-
-    const submitManualUpload = async () => {
-      if (!manualUploadFormRef.value) return
-      try {
-        await manualUploadFormRef.value.validate()
-        if (!manualUploadForm.file) return ElMessage.warning('请先选择文件')
-        uploadingManual.value = true
-        const formData = new FormData()
-        formData.append('file', manualUploadForm.file)
-        formData.append('farm_code', manualUploadForm.farm_code)
-        formData.append('weather_type', manualUploadForm.weather_type)
-        const response = await uploadManualWeatherFile(formData)
-        const data = response?.data || {}
-        const warning = data.warning
-        const parseError = data.error || data.errors?.[0]
-        if (warning || parseError) {
-          manualUploadResult.type = 'warning'
-          manualUploadResult.message = '获取成功但解析失败，请检查文件格式'
-          manualUploadResult.detail = parseError || warning
-          ElMessage.warning(manualUploadResult.message)
-        } else {
-          manualUploadResult.type = 'success'
-          manualUploadResult.message = '解析成功，已覆盖今日预测基础数据'
-          manualUploadResult.detail = data.message || ''
-          ElMessage.success(manualUploadResult.message)
-        }
-        showManualUploadDialog.value = false
-        await fetchTasks()
-      } catch (error) {
-        manualUploadResult.type = 'error'
-        manualUploadResult.message = '格式错误或上传失败'
-        manualUploadResult.detail = extractErrorMessage(error, '后端未返回详细信息')
-        ElMessage.error(manualUploadResult.message)
-      } finally {
-        uploadingManual.value = false
-      }
-    }
-
     onMounted(async () => {
       await Promise.all([fetchFarms(), fetchConnections(), fetchTasks(), checkSchedulerStatus()])
       refreshEcmwfStatus()
@@ -765,17 +713,16 @@ export default {
 
     return {
       farms, connections, tasks, taskLogs,
-      loadingConnections, loadingTasks, loadingLogs, savingConnection, savingTask, checkingScheduler, restartingScheduler, uploadingManual,
-      showConnectionDialog, showTaskDialog, showLogsDialog, showManualUploadDialog, editingConnection, editingTask,
-      connectionFormRef, taskFormRef, manualUploadFormRef,
-      connectionForm, taskForm, manualUploadForm, manualUploadRules, connectionRules, taskRules, manualUploadFileList, manualUploadResult,
+      loadingConnections, loadingTasks, loadingLogs, savingConnection, savingTask, checkingScheduler, restartingScheduler,
+      showConnectionDialog, showTaskDialog, showLogsDialog, editingConnection, editingTask,
+      connectionFormRef, taskFormRef,
+      connectionForm, taskForm, connectionRules, taskRules,
       currentTaskName, logLevel, schedulerCheckedAt, schedulerInfo, healthBoard,
       ecmwfStatus, loadingEcmwf, refreshEcmwfStatus,
       checkSchedulerStatus, restartScheduler, openConnectionDialog, editConnection, saveConnection, deleteConnection, testConnection,
       openTaskDialog, editTask, saveTask, deleteTask, runTask, toggleTask,
       viewTaskLogs, fetchTaskLogs, getLogLevelType, getLogLevelText,
-      formatDateTime, getScheduleDescription, getTodayStatusTag,
-      openManualUploadDialog, handleManualFileChange, handleManualFileRemove, submitManualUpload
+      formatDateTime, getScheduleDescription, getTodayStatusTag, getConnectionStatusTag
     }
   }
 }
@@ -798,7 +745,6 @@ export default {
 .health-node.is-ready { box-shadow: inset 0 0 0 1px rgba(103, 194, 58, 0.4); }
 .health-node.is-warning { box-shadow: inset 0 0 0 1px rgba(230, 162, 60, 0.4); }
 .health-node.is-danger { box-shadow: inset 0 0 0 1px rgba(245, 108, 108, 0.4); }
-.manual-result-detail { margin-top: 4px; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
 .button-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .action-buttons-container { display: flex; align-items: center; gap: 6px; justify-content: center; flex-wrap: wrap; }
 .logs-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }

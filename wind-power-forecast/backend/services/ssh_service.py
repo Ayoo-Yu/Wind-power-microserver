@@ -259,8 +259,11 @@ class SSHService:
             client = self.connections[connection_id]
             sftp = client.open_sftp()
             
+            # 平铺目录直接在基础路径中查找文件。
+            if path_pattern == 'flat':
+                time_paths = [base_path]
             # 对于 latest 策略，先查找实际存在的时间目录
-            if time_strategy == 'latest':
+            elif time_strategy == 'latest':
                 logger.info("使用最新数据策略，扫描服务器上实际存在的时间目录")
                 time_paths = []
                 
@@ -345,9 +348,7 @@ class SSHService:
                             # 文件模式匹配
                             if file_pattern:
                                 # 先转义所有正则特殊字符，再替换通配符
-                                pattern = re.escape(file_pattern)
-                                pattern = pattern.replace(r'\*', '.*').replace(r'\?', '.')
-                                pattern = f'^{pattern}$'  # 确保完整匹配
+                                pattern = self._convert_file_pattern_to_regex(file_pattern)
                                 logger.debug(f"文件匹配: {filename} vs 模式: {pattern}")
                                 if not re.match(pattern, filename):
                                     logger.debug(f"文件 {filename} 不匹配模式 {file_pattern}")
@@ -546,6 +547,25 @@ class SSHService:
             regex_pattern = regex_pattern.replace(re.escape(var), regex)
         
         return f'^{regex_pattern}$'
+
+    def _convert_file_pattern_to_regex(self, pattern: str) -> str:
+        """将文件名模板和通配符转换为完整匹配正则。"""
+
+        regex_pattern = re.escape(pattern)
+        replacements = {
+            '${YYYYMMDDHHNN}': r'\d{12}',
+            '${YYYYMMDDHH}': r'\d{10}',
+            '${YYYYMMDD}': r'\d{8}',
+            '${YYYY}': r'\d{4}',
+            '${MM}': r'\d{2}',
+            '${DD}': r'\d{2}',
+            '${HH}': r'\d{2}',
+            '${NN}': r'\d{2}',
+        }
+        for token, replacement in replacements.items():
+            regex_pattern = regex_pattern.replace(re.escape(token), replacement)
+        regex_pattern = regex_pattern.replace(r'\*', '.*').replace(r'\?', '.')
+        return f'^{regex_pattern}$'
     
     def _parse_time_from_dirname(self, dirname: str, pattern: str) -> datetime:
         """从目录名解析时间"""
@@ -650,4 +670,4 @@ class SSHService:
             return time_dirs
 
 # 全局SSH服务实例
-ssh_service = SSHService() 
+ssh_service = SSHService()

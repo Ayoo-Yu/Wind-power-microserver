@@ -1,9 +1,10 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from utils.authorization import permission_required
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from db_session import db_session
-from db_models.weather_fetch import WeatherConnection, WeatherTask, WeatherLog
+from db_models.weather_fetch import WeatherConnection, WeatherTask, WeatherLog, WeatherData
 from datetime import datetime, timedelta
 import subprocess
 import paramiko
@@ -11,6 +12,7 @@ import os
 import logging
 from services import ssh_service
 from services.cron_service import validate_cron_expression
+from services.celery_beat_health import get_beat_health
 from services.weather_connection_security import (
     apply_connection_secrets,
     build_connection_config,
@@ -23,6 +25,20 @@ weather_fetch_bp = Blueprint('weather_fetch', __name__)
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _validate_task_path_pattern(
+    data,
+    *,
+    default_path_pattern=None,
+    default_custom_path_pattern=None,
+):
+    """校验新建或更新任务后的有效目录配置。"""
+
+    path_pattern = data.get('path_pattern', default_path_pattern)
+    custom_path_pattern = data.get('custom_path_pattern', default_custom_path_pattern)
+    if path_pattern == 'custom' and not str(custom_path_pattern or '').strip():
+        raise ValueError('自定义时间目录格式不能为空')
 
 @weather_fetch_bp.route('/connections', methods=['GET'])
 @jwt_required()
@@ -67,7 +83,6 @@ def create_connection():
         for field in required_fields:
             if not data.get(field):
                 return jsonify({'message': f'缺少必填字段: {field}'}), 400
-
         # 根据认证方式验证相应字段
         if data['auth_type'] == 'password' and not data.get('password'):
             return jsonify({'message': '密码认证需要提供密码'}), 400
@@ -306,7 +321,11 @@ def get_tasks():
 def create_task():
     """创建拉取任务（支持多场站）"""
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
+        try:
+            _validate_task_path_pattern(data)
+        except ValueError as exc:
+            return jsonify({'message': str(exc)}), 400
         current_user_id = get_jwt_identity()
 
         # 验证必填字段
@@ -401,7 +420,7 @@ def create_task():
 def update_task(task_id):
     """更新拉取任务"""
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
         
         with db_session() as db:
             task = db.query(WeatherTask).filter(
@@ -411,6 +430,15 @@ def update_task(task_id):
             
             if not task:
                 return jsonify({'message': '任务不存在'}), 404
+
+            try:
+                _validate_task_path_pattern(
+                    data,
+                    default_path_pattern=task.path_pattern,
+                    default_custom_path_pattern=task.custom_path_pattern,
+                )
+            except ValueError as exc:
+                return jsonify({'message': str(exc)}), 400
 
             if 'schedule' in data:
                 schedule = data['schedule']
@@ -648,9 +676,10 @@ def get_scheduler_status():
                 'trigger': task.schedule,
                 'next_run_time': None,
             } for task in tasks]
+            heartbeat = get_beat_health()
             return jsonify({
                 'message': '气象任务由 Celery Beat 托管',
-                'is_running': None,
+                'is_running': heartbeat['healthy'],
                 'configured': True,
                 'mode': 'celery',
                 'managed_externally': True,
@@ -659,6 +688,7 @@ def get_scheduler_status():
                 ),
                 'jobs': jobs,
                 'total_jobs': len(jobs),
+                'heartbeat': heartbeat,
             })
     except Exception as e:
         logger.error(f"获取调度器状态失败: {e}")
@@ -671,32 +701,33 @@ def get_stats():
     """获取统计信息"""
     try:
         with db_session() as db:
-            today = datetime.utcnow().date()
-            
-            # 今日处理文件数（从日志中统计）
-            files_processed_today = db.query(WeatherLog).filter(
-                WeatherLog.log_level == 'success',
-                WeatherLog.message.like('%文件处理完成%'),
-                WeatherLog.created_at >= today
-            ).count()
-            
-            # 今日插入记录数（需要从详细日志中解析，这里简化处理）
-            records_inserted_today = files_processed_today * 100  # 假设每个文件平均100条记录
+            today_start = datetime.combine(datetime.utcnow().date(), datetime.min.time())
+
+            # 文件数和记录数直接来自处理记录，避免通过日志文本推算。
+            file_stats = db.query(
+                func.count(WeatherData.id),
+                func.coalesce(func.sum(WeatherData.records_count), 0),
+            ).filter(
+                WeatherData.status == 'success',
+                WeatherData.completed_at >= today_start,
+            ).one()
+            files_processed_today = int(file_stats[0] or 0)
+            records_inserted_today = int(file_stats[1] or 0)
             
             # 成功率计算（最近24小时）
             yesterday = datetime.utcnow() - timedelta(hours=24)
             total_runs = db.query(WeatherLog).filter(
                 WeatherLog.created_at >= yesterday,
-                WeatherLog.message.like('%任务执行%')
+                WeatherLog.message == '任务开始执行'
             ).count()
             
             success_runs = db.query(WeatherLog).filter(
                 WeatherLog.created_at >= yesterday,
                 WeatherLog.log_level == 'success',
-                WeatherLog.message.like('%任务执行成功%')
+                WeatherLog.message == '任务执行完成'
             ).count()
             
-            success_rate = f"{(success_runs / total_runs * 100):.1f}%" if total_runs > 0 else "0%"
+            success_rate_percent = round(success_runs / total_runs * 100, 1) if total_runs > 0 else None
             
             # 活跃任务数
             active_tasks = db.query(WeatherTask).filter(
@@ -707,9 +738,11 @@ def get_stats():
             return jsonify({
                 'files_processed_today': files_processed_today,
                 'records_inserted_today': records_inserted_today,
-                'success_rate': success_rate,
+                'success_rate': f"{success_rate_percent:.1f}%" if success_rate_percent is not None else None,
+                'success_rate_percent': success_rate_percent,
                 'active_tasks': active_tasks,
-                'scheduler_status': 'Celery Beat 托管'
+                'scheduler_status': 'Celery Beat 托管',
+                'statistics_source': 'weather_data_records_and_weather_logs',
             })
             
     except Exception as e:

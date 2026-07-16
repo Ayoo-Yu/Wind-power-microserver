@@ -120,7 +120,7 @@ instance.interceptors.response.use(
     }
 
     // For 5xx server errors, suppress toast but still reject so callers
-    // (including withLegacyFallback) can handle the error properly.
+    // 保留原始错误，让调用方按接口契约决定是否兼容旧读取路径。
     // Attach a marker so callers know this was a server error.
     if (status >= 500 && status < 600) {
       error._serverError = true

@@ -145,7 +145,15 @@ def _query_prediction_series(db, farm_code, prediction_type, start_dt, end_dt):
     )
 
 
-def _query_supershort_average(db, farm_code, start_dt, end_dt, min_predictions_required, include_quality_info):
+def _query_supershort_average(
+    db,
+    farm_code,
+    start_dt,
+    end_dt,
+    min_predictions_required,
+    include_quality_info,
+    column_suffix='',
+):
     max_offset_minutes = (17 - 2) * 15
     earliest_needed_dt = start_dt - timedelta(minutes=max_offset_minutes)
 
@@ -168,7 +176,7 @@ def _query_supershort_average(db, farm_code, start_dt, end_dt, min_predictions_r
             source_record = records_by_timestamp.get(source_timestamp)
             if not source_record:
                 continue
-            column_name = f"wp_pred{k}"
+            column_name = f"wp_pred{k}{column_suffix}"
             pred_value = getattr(source_record, column_name, None)
             if pred_value is not None:
                 predictions.append(pred_value)
@@ -186,6 +194,35 @@ def _query_supershort_average(db, farm_code, start_dt, end_dt, min_predictions_r
             averaged_data.append(data_point)
         current_target_dt += timedelta(minutes=15)
     return averaged_data
+
+
+def _query_prediction_interval_series(db, farm_code, prediction_type, bound, start_dt, end_dt):
+    """读取预测区间边界，返回与功率主曲线一致的数据结构。"""
+
+    if bound not in {'lower', 'upper'}:
+        raise ValueError(f'unsupported prediction interval bound: {bound}')
+
+    if prediction_type in {'short', 'mid'}:
+        model = ShortlPower if prediction_type == 'short' else MidPower
+        value_column = getattr(model, f'wp_pred_{bound}')
+        rows = db.query(
+            model.timestamp,
+            value_column.label('power'),
+        ).filter(
+            model.farm_code == farm_code,
+            model.timestamp.between(start_dt, end_dt),
+        ).order_by(model.timestamp).all()
+        return _series_from_rows(rows)
+
+    return _query_supershort_average(
+        db,
+        farm_code,
+        start_dt,
+        end_dt,
+        min_predictions_required=1,
+        include_quality_info=False,
+        column_suffix=f'_{bound}',
+    )
 
 
 @bp.route('/regulatory_metrics', methods=['POST'])
@@ -347,6 +384,21 @@ def get_power_data():
 
             if '中期预测' in type_set:
                 result['中期预测'] = _query_prediction_series(db, farm_code, 'mid', start_dt, end_dt)
+
+            interval_contracts = (
+                ('短期预测区间', '短期预测下限', '短期预测上限', 'short'),
+                ('中期预测区间', '中期预测下限', '中期预测上限', 'mid'),
+                ('超短期预测区间', '超短期预测下限', '超短期预测上限', 'supershort'),
+            )
+            for request_type, lower_key, upper_key, prediction_type in interval_contracts:
+                if request_type not in type_set:
+                    continue
+                result[lower_key] = _query_prediction_interval_series(
+                    db, farm_code, prediction_type, 'lower', start_dt, end_dt
+                )
+                result[upper_key] = _query_prediction_interval_series(
+                    db, farm_code, prediction_type, 'upper', start_dt, end_dt
+                )
 
             if '短期风速预测' in type_set:
                 ws = _fetch_wind_speed_ecmwf(db, farm_code, start_dt, end_dt, lead_days=2)

@@ -24,10 +24,12 @@
           <span><i class="el-icon-timer"></i> 自动上报调度器</span>
           <div class="scheduler-controls">
             <el-tag
-              :type="schedulerStatus.managed_externally ? 'info' : (schedulerStatus.running ? 'success' : 'danger')"
+              :type="schedulerStatus.running ? 'success' : 'danger'"
               size="small"
             >
-              {{ schedulerStatus.managed_externally ? 'Celery 托管' : (schedulerStatus.running ? '运行中' : '已停止') }}
+              {{ schedulerStatus.managed_externally
+                ? (schedulerStatus.running ? 'Celery Beat 正常' : 'Celery Beat 心跳异常')
+                : (schedulerStatus.running ? '运行中' : '已停止') }}
             </el-tag>
             <el-button 
               v-if="!schedulerStatus.managed_externally && !schedulerStatus.running"
@@ -73,7 +75,9 @@
           <span class="info-label">状态说明:</span>
           <span class="info-value">
             {{ schedulerStatus.managed_externally
-              ? '由独立 Celery Beat 和 Worker 托管，Web 进程重启不影响调度职责'
+              ? (schedulerStatus.running
+                ? '独立 Celery Beat 心跳正常，Web 进程不持有周期调度线程'
+                : '未检测到有效的 Celery Beat 心跳，请检查 Beat 与 Redis 服务')
               : '兼容模式由后端单进程运行，前端关闭后仍会自动上报' }}
           </span>
         </div>
@@ -1068,8 +1072,9 @@ export default {
     // 调度器状态
     const schedulerStatus = ref({
       running: false,
-      managed_externally: false,
-      mode: 'embedded',
+      managed_externally: true,
+      mode: 'celery',
+      heartbeat: { status: 'unknown', healthy: false },
       next_report_times: []
     })
     const schedulerLoading = ref(false)
