@@ -67,3 +67,34 @@ def test_regulatory_metrics_route_limits_synchronous_range(monkeypatch):
 
     assert response.status_code == 400
     assert response.get_json()["message"] == "date range must not exceed 31 days"
+
+
+def test_power_data_requires_object_body_and_farm_code(monkeypatch):
+    @contextmanager
+    def fake_db_session():
+        yield _Session()
+
+    monkeypatch.setattr(authorization, "db_session", fake_db_session)
+    app = _app()
+    with app.app_context():
+        token = create_access_token(identity="1")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    malformed = app.test_client().post(
+        "/api/v1/power-compare/data",
+        json="invalid-body",
+        headers=headers,
+    )
+    missing_farm = app.test_client().post(
+        "/api/v1/power-compare/data",
+        json={
+            "start": "2026-07-15T00:00:00",
+            "end": "2026-07-15T01:00:00",
+            "types": ["实测值"],
+        },
+        headers=headers,
+    )
+
+    assert malformed.status_code == 400
+    assert missing_farm.status_code == 400
+    assert "场站编码" in missing_farm.get_json()["error"]

@@ -193,6 +193,25 @@ def test_ingest_keeps_raw_observation_without_quarter_write(session):
     assert connection.last_data_at == datetime(2026, 7, 15, 10, 7)
 
 
+def test_ingest_rejects_off_grid_business_timestamp_but_keeps_audit_record(session):
+    _farm, connection = _connection(session)
+    result = ingest_scada_sample(
+        session,
+        _payload(connection.id, normalized_timestamp="2026-07-15T10:07:00+08:00"),
+        {},
+        now=datetime(2026, 7, 15, 10, 7, 5),
+    )
+
+    assert result.accepted is False
+    assert result.outcome == "rejected"
+    assert "十五分钟边界" in result.message
+    assert session.query(ActualPower).count() == 0
+    assert session.query(SourceObservation).count() == 0
+    assert session.query(ScadaIngestRecord).one().normalized_timestamp == datetime(
+        2026, 7, 15, 10, 7
+    )
+
+
 def test_ingest_rejects_bad_quality_without_advancing_last_good_sample(session):
     _farm, connection = _connection(session)
     result = ingest_scada_sample(

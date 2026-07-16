@@ -197,6 +197,50 @@ def test_sensitive_blueprints_reject_anonymous_requests(method, path):
     assert response.status_code == 401
 
 
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        (
+            ["invalid-body"],
+            "缺少必要参数",
+        ),
+        (
+            {
+                "Timestamp": "2026-07-15T10:07:00+08:00",
+                "farm_code": "WF001",
+                "wp_true": 12.5,
+            },
+            "十五分钟边界",
+        ),
+        (
+            {
+                "Timestamp": "2026-07-15T10:15:00+08:00",
+                "farm_code": "WF001",
+                "wp_true": float("inf"),
+            },
+            "有限数值",
+        ),
+    ],
+)
+def test_actual_power_write_enforces_time_and_value_contract(
+    monkeypatch,
+    payload,
+    message,
+):
+    app = _app()
+    app.register_blueprint(actual_power_bp)
+    _patch_user(monkeypatch, _user(permissions=["upload_files"]))
+
+    response = app.test_client().post(
+        "/actual_power/",
+        json=payload,
+        headers={"Authorization": f"Bearer {_token(app)}"},
+    )
+
+    assert response.status_code == 400
+    assert message in response.get_json()["error"]
+
+
 def test_all_mutation_routes_declare_an_authentication_boundary():
     """新增写接口必须显式授权，或位于带 before_request 的受控蓝图。"""
 

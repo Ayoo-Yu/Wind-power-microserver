@@ -1,26 +1,27 @@
+import hmac
 import json
 import logging
 import os
-import hmac
+from datetime import datetime, timedelta
 from functools import wraps
 
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
-from db_session import db_session
-from db_models.scada_connection import ScadaConnection
+
 from db_models.report_config import WindFarm
-from db_models.power import ActualPower
-from datetime import datetime
-from services.scada_health_service import build_scada_health_snapshot
-from services.scada_ingest_service import ScadaIngestError, ingest_scada_sample
-from services.scada_runtime_service import update_worker_status
-from services.scada_security import ScadaNetworkPolicyError, validate_scada_target
+from db_models.scada_connection import ScadaConnection
 from db_models.user import User
+from db_session import db_session
+from services.actual_power_service import floor_quarter_hour, load_canonical_actual_power
 from services.scada_contract import (
     SCADA_POINT_CONTRACT_VERSION,
     ScadaContractError,
     normalize_point_catalog,
 )
+from services.scada_health_service import build_scada_health_snapshot
+from services.scada_ingest_service import ScadaIngestError, ingest_scada_sample
+from services.scada_runtime_service import update_worker_status
+from services.scada_security import ScadaNetworkPolicyError, validate_scada_target
 
 logger = logging.getLogger(__name__)
 
@@ -439,24 +440,38 @@ def test_connection(conn_id: int):
 @scada_connection_bp.route('/scada/connections/<int:conn_id>/data', methods=['GET'])
 @_management_required
 def get_connection_data(conn_id: int):
-    limit = request.args.get('limit', 20, type=int)
+    limit = max(1, min(request.args.get('limit', 20, type=int) or 20, 500))
 
     with db_session() as db:
         conn = db.query(ScadaConnection).filter(ScadaConnection.id == conn_id).first()
         if not conn:
             return jsonify({'success': False, 'error': 'Connection not found'}), 404
 
-        records = db.query(ActualPower).filter(
-            ActualPower.farm_code == conn.farm_code
-        ).order_by(ActualPower.timestamp.desc()).limit(limit).all()
-
+        end_time = floor_quarter_hour(datetime.now()) + timedelta(minutes=15)
+        start_time = end_time - timedelta(minutes=15 * limit)
+        series = load_canonical_actual_power(
+            db,
+            conn.farm_code,
+            start_time,
+            end_time,
+        )
         data = [{
-            'timestamp': r.timestamp.isoformat() if r.timestamp else None,
-            'wp_true': r.wp_true,
-            'farm_code': r.farm_code,
-        } for r in records]
+            'timestamp': timestamp.isoformat(),
+            'wp_true': series.values[timestamp],
+            'farm_code': conn.farm_code,
+            'data_source': series.sources[timestamp],
+        } for timestamp in sorted(series.values, reverse=True)]
 
-        return jsonify({'success': True, 'data': data})
+        return jsonify({
+            'success': True,
+            'data': data,
+            'meta': {
+                'resolution_minutes': 15,
+                'source_counts': series.source_counts,
+                'missing_count': series.missing_count,
+                'ignored_off_grid_count': series.ignored_off_grid_count,
+            },
+        })
 
 
 def _verify_worker_secret():
@@ -525,7 +540,7 @@ def ingest_sample():
             return jsonify(response), status_code
     except ScadaIngestError as exc:
         return jsonify({'accepted': False, 'error': str(exc)}), exc.status_code
-    except Exception as exc:
+    except Exception:
         logger.exception('SCADA 样本处理失败')
         return jsonify({'accepted': False, 'error': 'SCADA 样本处理失败'}), 500
 

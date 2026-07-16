@@ -7,12 +7,12 @@ import logging
 from db_session import db_session
 from utils.authorization import permission_required
 from models import (
-    WindFarm, ReportConfig, ReportLog, ActualPower, SupershortlPower, ShortlPower, MidPower, ReportQualityStatistics, DataQualityMarker,
+    WindFarm, ReportConfig, ReportLog, SupershortlPower, ShortlPower, MidPower, ReportQualityStatistics, DataQualityMarker,
     ManualInterventionVersion, WindSpeedData, TurbinePowerData, WeatherData, InstalledCapacityData, AvailableCapacityData,
     TheoreticalPowerData, AvailablePowerData
 )
 from db_models.report_config_meta import ReportConfigMeta
-from sqlalchemy import desc, and_, or_, func, distinct
+from sqlalchemy import desc, and_, func
 from routes.power_compare import _calc_basic_metrics
 from services.report_outbox_service import (
     build_report_payload,
@@ -20,6 +20,7 @@ from services.report_outbox_service import (
     enqueue_report,
     make_idempotency_key,
 )
+from services.actual_power_service import floor_quarter_hour, load_canonical_actual_power
 from utils.credential_cipher import (
     CredentialConfigurationError,
     encrypt_secret,
@@ -28,7 +29,6 @@ from utils.credential_cipher import (
 
 # 添加定时调度器
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
 import atexit
 from threading import Lock
 
@@ -893,49 +893,26 @@ def get_actual_power_data(db: Session, report_time: datetime = None, farm_code: 
     if report_time is None:
         report_time = datetime.now()
     
-    # 移除时区信息进行本地时间查询
-    if report_time.tzinfo is not None:
-        report_time = report_time.replace(tzinfo=None)
+    target_time = floor_quarter_hour(report_time)
     
-    # 向前取整到15分钟边界（实际功率通常按15分钟间隔记录）
-    # 例如：10:16:30 -> 10:15:00, 10:31:30 -> 10:30:00
-    minutes = (report_time.minute // 15) * 15
-    target_time = report_time.replace(minute=minutes, second=0, microsecond=0)
-    
-    # 扩大查找窗口到±30分钟，增加找到数据的可能性
-    time_window_start = target_time - timedelta(minutes=30)
-    time_window_end = target_time + timedelta(minutes=30)
-    
-    actual_data = db.query(ActualPower)\
-                   .filter(and_(
-                       ActualPower.farm_code == farm_code,
-                       ActualPower.timestamp >= time_window_start,
-                       ActualPower.timestamp <= time_window_end
-                   ))\
-                   .order_by(ActualPower.timestamp.desc())\
-                   .first()
-    
-    if actual_data:
+    series = load_canonical_actual_power(
+        db,
+        farm_code,
+        target_time,
+        target_time + timedelta(minutes=15),
+    )
+    actual_value = series.values.get(target_time)
+    if actual_value is not None:
         return [{
             'time': target_time.isoformat(),
-            'value': actual_data.wp_true,  # 使用value字段以匹配前端数据结构
-            'wp_true': actual_data.wp_true,  # 保留兼容性字段
-            'actual_timestamp': actual_data.timestamp.isoformat(),  # 实际数据的时间戳
-            'data_source': 'database'
+            'value': actual_value,
+            'wp_true': actual_value,
+            'actual_timestamp': target_time.isoformat(),
+            'data_source': 'database',
+            'actual_source': series.sources[target_time],
         }]
-    else:
-        # 如果还是找不到，尝试查询任意时间的数据
-        any_data = db.query(ActualPower)\
-                    .filter(ActualPower.farm_code == farm_code)\
-                    .order_by(ActualPower.timestamp.desc())\
-                    .limit(3).all()
-        
-        if any_data:
-            logging.warning(f"未找到 {target_time} 时刻的实际功率数据，但数据库中有其他时间的数据")
-            logging.info(f"最新数据时间: {[d.timestamp for d in any_data]}")
-        else:
-            logging.warning(f"数据库中完全没有实际功率数据")
-        return []
+    logging.warning(f"场站 {farm_code} 在 {target_time} 缺少可用实际功率数据")
+    return []
 
 def get_forecast_short_data(db: Session, report_time: datetime = None, farm_code: str = None):
     """获取超短期预测数据（对应时刻的数据）"""
@@ -2078,7 +2055,16 @@ def get_accuracy_statistics():
             total_excluded_hours = 0.0
 
             for farm in farms:
-                actual_map = _collect_series_map(session, ActualPower, ActualPower.wp_true, farm.farm_code, month_start, month_end)
+                actual_series = load_canonical_actual_power(
+                    session,
+                    farm.farm_code,
+                    month_start,
+                    month_end,
+                )
+                actual_map = {
+                    timestamp.isoformat(): value
+                    for timestamp, value in actual_series.values.items()
+                }
                 short_map = _collect_series_map(session, ShortlPower, ShortlPower.wp_pred, farm.farm_code, month_start, month_end)
                 supershort_map = _collect_series_map(session, SupershortlPower, SupershortlPower.wp_pred2, farm.farm_code, month_start, month_end)
 
@@ -2114,6 +2100,12 @@ def get_accuracy_statistics():
                     notes.append('短期预测无可比对点')
                 if supershort_metrics.get('points', 0) == 0:
                     notes.append('超短期预测无可比对点')
+                if actual_series.source_label == 'mixed':
+                    notes.append('实测功率包含逐点补源')
+                if actual_series.ignored_off_grid_count > 0:
+                    notes.append(
+                        f'忽略非十五分钟实测记录 {actual_series.ignored_off_grid_count} 条'
+                    )
 
                 items.append({
                     'farm_code': farm.farm_code,
@@ -2129,6 +2121,9 @@ def get_accuracy_statistics():
                     'supershort_points': int(supershort_metrics.get('points') or 0),
                     'short_rmse': round(float(short_metrics['rmse']), 4) if short_metrics.get('rmse') is not None else None,
                     'supershort_rmse': round(float(supershort_metrics['rmse']), 4) if supershort_metrics.get('rmse') is not None else None,
+                    'actual_source': actual_series.source_label,
+                    'actual_source_counts': actual_series.source_counts,
+                    'ignored_off_grid_actual_count': actual_series.ignored_off_grid_count,
                     'excluded_hours': excluded_hours,
                     'notes': '；'.join(notes)
                 })

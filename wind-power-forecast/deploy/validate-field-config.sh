@@ -69,6 +69,22 @@ if [ "${REPORT_SCHEDULER_MODE:-}" != "celery" ]; then
     error "REPORT_SCHEDULER_MODE 必须为 celery"
 fi
 
+actual_fallback_age="${ACTUAL_POWER_RAW_FALLBACK_MAX_AGE_SECONDS:-900}"
+case "$actual_fallback_age" in
+    ''|*[!0-9]*)
+        error "ACTUAL_POWER_RAW_FALLBACK_MAX_AGE_SECONDS 必须是整数"
+        ;;
+    *)
+        if [ "$actual_fallback_age" -lt 1 ] || [ "$actual_fallback_age" -gt 900 ]; then
+            error "ACTUAL_POWER_RAW_FALLBACK_MAX_AGE_SECONDS 必须在 1 至 900 之间"
+        fi
+        ;;
+esac
+case "${ACTUAL_POWER_TURBINE_SOURCE_UNIT:-kW}" in
+    kW|kw|MW|mw) ;;
+    *) error "ACTUAL_POWER_TURBINE_SOURCE_UNIT 仅支持 kW 或 MW" ;;
+esac
+
 require_secret DB_PASSWORD 16
 require_secret SECRET_KEY 32
 if [ -n "${CREDENTIAL_ENCRYPTION_KEY:-}" ] && [ -n "${CREDENTIAL_ENCRYPTION_KEY_FILE:-}" ]; then

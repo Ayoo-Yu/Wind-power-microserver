@@ -2,12 +2,13 @@ import math
 from datetime import datetime, timedelta
 
 from flask import Blueprint, request, jsonify
-from sqlalchemy import func, text
+from sqlalchemy import text
 
-from db_models import ActualPower, MidPower, ShortlPower, SupershortlPower
-from db_models.operational_data import AvailableCapacityData, TurbinePowerData
+from db_models import MidPower, ShortlPower, SupershortlPower
+from db_models.operational_data import AvailableCapacityData
 from db_models.report_config import WindFarm
 from db_session import db_session
+from services.actual_power_service import load_canonical_actual_power
 from utils.authorization import permission_required
 from db_models.ecmwf_grid_model import ecmwf_grid_table_name
 
@@ -107,28 +108,18 @@ def _series_from_rows(rows, value_attr='power'):
 
 
 def _query_actual_series(db, farm_code, start_dt, end_dt):
-    query = db.query(ActualPower.timestamp, ActualPower.wp_true.label("power"))
-    if farm_code:
-        query = query.filter(ActualPower.farm_code == farm_code)
-    rows = query.filter(
-        ActualPower.timestamp.between(start_dt, end_dt),
-        ActualPower.wp_true.isnot(None)
-    ).order_by(ActualPower.timestamp).all()
-    series = _series_from_rows(rows)
-    if series:
-        return series
-
-    turbine_query = db.query(
-        TurbinePowerData.timestamp,
-        func.sum(TurbinePowerData.active_power).label("power")
+    if not farm_code:
+        return []
+    canonical = load_canonical_actual_power(
+        db,
+        farm_code,
+        start_dt,
+        end_dt + timedelta(microseconds=1),
     )
-    if farm_code:
-        turbine_query = turbine_query.filter(TurbinePowerData.farm_code == farm_code)
-    rows = turbine_query.filter(
-        TurbinePowerData.timestamp.between(start_dt, end_dt),
-        TurbinePowerData.active_power.isnot(None)
-    ).group_by(TurbinePowerData.timestamp).order_by(TurbinePowerData.timestamp).all()
-    return _series_from_rows(rows)
+    return [
+        {"timestamp": timestamp.isoformat(), "power": canonical.values[timestamp]}
+        for timestamp in sorted(canonical.values)
+    ]
 
 
 def _query_prediction_series(db, farm_code, prediction_type, start_dt, end_dt):
@@ -296,7 +287,7 @@ def get_regulatory_metrics():
 @permission_required('view_all_data')
 def get_power_data():
     data = request.get_json(silent=True)
-    if not data:
+    if not isinstance(data, dict) or not data:
         return jsonify({"error": "缺少请求体"}), 400
 
     try:
@@ -312,6 +303,8 @@ def get_power_data():
             farm_code = farm_code.strip() or None
         elif farm_code is not None:
             farm_code = str(farm_code).strip() or None
+        if not farm_code:
+            return jsonify({"error": "必须提供场站编码"}), 400
 
         supershort_horizon = data.get('supershort_horizon', 'average')
         min_predictions_required = int(data.get('min_predictions_required', 1) or 1)
@@ -383,15 +376,18 @@ def get_power_data():
                     if farm_code:
                         farm_row = db.query(WindFarm).filter(WindFarm.farm_code == farm_code).first()
                     if farm_row and farm_row.capacity:
-                        actual_base = db.query(ActualPower.timestamp)
-                        if farm_code:
-                            actual_base = actual_base.filter(ActualPower.farm_code == farm_code)
-                        actual_base = actual_base.filter(
-                            ActualPower.timestamp.between(start_dt, end_dt)
-                        ).order_by(ActualPower.timestamp).all()
+                        actual_series = load_canonical_actual_power(
+                            db,
+                            farm_code,
+                            start_dt,
+                            end_dt + timedelta(microseconds=1),
+                        )
                         result['可用容量'] = [
-                            {"timestamp": a.timestamp.isoformat(), "available_capacity": farm_row.capacity}
-                            for a in actual_base
+                            {
+                                "timestamp": timestamp.isoformat(),
+                                "available_capacity": farm_row.capacity,
+                            }
+                            for timestamp in sorted(actual_series.values)
                         ]
 
             return jsonify(result)

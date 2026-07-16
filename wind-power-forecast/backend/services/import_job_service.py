@@ -24,6 +24,11 @@ from db_models.ecmwf_grid_model import (
     WIND_DERIVE_RULES,
 )
 from db_models.report_config import WindFarm
+from services.actual_power_service import (
+    ActualPowerContractError,
+    parse_actual_power_value,
+    require_quarter_hour,
+)
 from utils.db_partition_utils import parse_timestamp
 
 
@@ -340,8 +345,7 @@ def _validate_actual_power_csv(path: str):
     if missing:
         raise ValueError(
             "actual_power CSV missing columns: "
-            f"{', '.join(sorted(missing))}. "
-            "Please upload ECMWF grid files from the weather data tab."
+            f"{', '.join(sorted(missing))}."
         )
 
 
@@ -361,23 +365,43 @@ def _prepare_actual_power_chunk(chunk_df: pd.DataFrame, farm_code: str):
     if "wp_true" not in lower_to_original:
         raise ValueError("CSV must contain wp_true column")
 
-    prepared = pd.DataFrame(
-        {
-            "timestamp": pd.to_datetime(
-                chunk_df[lower_to_original["timestamp"]],
-                errors="coerce",
-            ),
+    prepared_rows = []
+    invalid_count = 0
+    timestamp_values = chunk_df[lower_to_original["timestamp"]]
+    power_values = chunk_df[lower_to_original["wp_true"]]
+    for timestamp_value, power_value in zip(timestamp_values, power_values):
+        try:
+            timestamp = require_quarter_hour(timestamp_value)
+        except ActualPowerContractError:
+            invalid_count += 1
+            continue
+
+        try:
+            power = (
+                None
+                if pd.isna(power_value)
+                else parse_actual_power_value(power_value)
+            )
+        except ActualPowerContractError:
+            invalid_count += 1
+            continue
+        prepared_rows.append({
+            "timestamp": timestamp,
             "farm_code": farm_code,
-            "wp_true": pd.to_numeric(
-                chunk_df[lower_to_original["wp_true"]],
-                errors="coerce",
-            ),
-        }
+            "wp_true": power,
+        })
+
+    prepared = pd.DataFrame(
+        prepared_rows,
+        columns=["timestamp", "farm_code", "wp_true"],
     )
-    invalid_count = int(prepared["timestamp"].isna().sum())
-    prepared = prepared.dropna(subset=["timestamp"])
-    prepared = prepared.drop_duplicates(subset=["farm_code", "timestamp"], keep="last")
-    return prepared, invalid_count
+    before_deduplication = len(prepared)
+    prepared = prepared.drop_duplicates(
+        subset=["farm_code", "timestamp"],
+        keep="last",
+    )
+    duplicate_count = before_deduplication - len(prepared)
+    return prepared, invalid_count, duplicate_count
 
 
 def _copy_dataframe_to_staging(connection, prepared: pd.DataFrame):
@@ -610,7 +634,10 @@ def import_actual_power_csv(temp_path: str, farm_code: str, strategy: str, progr
         totals["processed_rows"] += raw_rows
 
         try:
-            prepared, invalid_count = _prepare_actual_power_chunk(chunk_df, farm_code)
+            prepared, invalid_count, duplicate_count = _prepare_actual_power_chunk(
+                chunk_df,
+                farm_code,
+            )
         except Exception as exc:
             totals["error_count"] += raw_rows
             if error_callback:
@@ -619,7 +646,10 @@ def import_actual_power_csv(temp_path: str, farm_code: str, strategy: str, progr
 
         totals["error_count"] += invalid_count
         if invalid_count and error_callback:
-            error_callback(f"chunk {chunk_number}: {invalid_count} rows have invalid timestamp")
+            error_callback(
+                f"chunk {chunk_number}: {invalid_count} rows have invalid timestamp, "
+                "off-grid timestamp, or invalid power value"
+            )
 
         valid_rows = len(prepared)
         updated = 0
@@ -644,7 +674,9 @@ def import_actual_power_csv(temp_path: str, farm_code: str, strategy: str, progr
                             "SELECT COUNT(*) FROM actual_power_import_staging AS staging "
                             "JOIN actual_power AS target "
                             "ON target.farm_code = staging.farm_code "
-                            "AND target.timestamp = staging.timestamp"
+                            "AND target.timestamp = staging.timestamp "
+                            "WHERE staging.wp_true IS NOT NULL "
+                            "AND target.wp_true IS DISTINCT FROM staging.wp_true"
                         )
                     )
                     existing_before_merge = int(existing_result.scalar() or 0)
@@ -653,8 +685,11 @@ def import_actual_power_csv(temp_path: str, farm_code: str, strategy: str, progr
                             "INSERT INTO actual_power (timestamp, farm_code, wp_true, created_at) "
                             "SELECT staging.timestamp, staging.farm_code, staging.wp_true, NOW() "
                             "FROM actual_power_import_staging AS staging "
+                            "WHERE staging.wp_true IS NOT NULL "
                             "ON CONFLICT (farm_code, timestamp) "
-                            "DO UPDATE SET wp_true = EXCLUDED.wp_true"
+                            "DO UPDATE SET wp_true = EXCLUDED.wp_true "
+                            "WHERE EXCLUDED.wp_true IS NOT NULL "
+                            "AND actual_power.wp_true IS DISTINCT FROM EXCLUDED.wp_true"
                         )
                     )
                     affected = max(0, merge_result.rowcount or 0)
@@ -663,18 +698,36 @@ def import_actual_power_csv(temp_path: str, farm_code: str, strategy: str, progr
                     totals["updated_count"] += updated
                     totals["inserted_count"] += inserted
                 else:
-                    insert_result = connection.execute(
+                    existing_result = connection.execute(
+                        text(
+                            "SELECT COUNT(*) FROM actual_power_import_staging AS staging "
+                            "JOIN actual_power AS target "
+                            "ON target.farm_code = staging.farm_code "
+                            "AND target.timestamp = staging.timestamp "
+                            "WHERE target.wp_true IS NULL "
+                            "AND staging.wp_true IS NOT NULL"
+                        )
+                    )
+                    fillable_existing = int(existing_result.scalar() or 0)
+                    merge_result = connection.execute(
                         text(
                             "INSERT INTO actual_power (timestamp, farm_code, wp_true, created_at) "
                             "SELECT staging.timestamp, staging.farm_code, staging.wp_true, NOW() "
                             "FROM actual_power_import_staging AS staging "
-                            "ON CONFLICT (farm_code, timestamp) DO NOTHING"
+                            "WHERE staging.wp_true IS NOT NULL "
+                            "ON CONFLICT (farm_code, timestamp) "
+                            "DO UPDATE SET wp_true = EXCLUDED.wp_true "
+                            "WHERE actual_power.wp_true IS NULL "
+                            "AND EXCLUDED.wp_true IS NOT NULL"
                         )
                     )
-                    inserted = max(0, insert_result.rowcount or 0)
+                    affected = max(0, merge_result.rowcount or 0)
+                    updated = min(affected, fillable_existing)
+                    inserted = max(0, affected - updated)
+                    totals["updated_count"] += updated
                     totals["inserted_count"] += inserted
 
-        skipped = max(0, valid_rows - inserted - updated)
+        skipped = duplicate_count + max(0, valid_rows - inserted - updated)
         totals["skipped_count"] += skipped
 
         if progress_callback:

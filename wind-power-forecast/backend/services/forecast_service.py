@@ -20,6 +20,7 @@ warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 from sklearn.metrics import mean_absolute_error, r2_score
 
 from farm_registry.farms_config import get_farm
+from services.actual_power_service import load_canonical_actual_power, to_local_naive
 from services.forecast_contract import (
     ForecastContractError,
     SHORT_MID_FEATURE_CONTRACT_VERSION,
@@ -607,30 +608,40 @@ def load_training_data_from_db(
     farm_code: str,
     lookback_days: Optional[int] = DEFAULT_TRAINING_LOOKBACK_DAYS,
 ) -> pd.DataFrame:
-    """JOIN feature table with actual_power and return a DataFrame."""
+    """加载训练特征，并按统一实际功率契约逐点补源。"""
     from sqlalchemy import text
 
     cutoff = None
     where_clause = ""
-    params = {"farm_code": farm_code}
+    params = {}
     if lookback_days is not None:
         cutoff = datetime.now() - timedelta(days=lookback_days)
         where_clause = 'WHERE f."Timestamp" >= :cutoff'
         params["cutoff"] = cutoff
 
     sql = text(f"""
-        SELECT f.*, a.wp_true AS "Total_Power"
+        SELECT f.*
         FROM "{feature_table}" f
-        LEFT JOIN actual_power a
-            ON a.farm_code = :farm_code AND a.timestamp = f."Timestamp"
         {where_clause}
         ORDER BY f."Timestamp"
     """)
     rows = session.execute(sql, params).fetchall()
     if not rows:
         return pd.DataFrame()
-    cols = list(rows[0]._fields) if hasattr(rows[0], "_fields") else list(rows[0].keys())
-    return pd.DataFrame([dict(row._mapping) for row in rows])
+    frame = pd.DataFrame([dict(row._mapping) for row in rows])
+    if TIME_COL not in frame.columns:
+        raise ValueError(f"特征表 {feature_table} 缺少 {TIME_COL} 列")
+
+    timestamps = [to_local_naive(value) for value in frame[TIME_COL]]
+    actual_series = load_canonical_actual_power(
+        session,
+        farm_code,
+        min(timestamps),
+        max(timestamps) + timedelta(minutes=15),
+    )
+    frame[TIME_COL] = timestamps
+    frame[TARGET] = [actual_series.values.get(timestamp) for timestamp in timestamps]
+    return frame
 
 
 def load_prediction_nwp_from_db(
@@ -665,26 +676,20 @@ def load_recent_actual_power(
     farm_code: str,
     days: int = 7,
 ) -> pd.DataFrame:
-    """Load recent actual power for lag feature construction."""
-    from sqlalchemy import text
-
+    """按统一补源优先级加载近期十五分钟实际功率。"""
     cutoff = datetime.now() - timedelta(days=days)
-    sql = text("""
-        SELECT timestamp AS "Timestamp", wp_true AS "Total_Power"
-        FROM actual_power
-        WHERE farm_code = :farm_code
-          AND timestamp >= :cutoff
-        ORDER BY timestamp
-    """)
-    rows = session.execute(sql, {
-        "farm_code": farm_code,
-        "cutoff": cutoff,
-    }).fetchall()
-    if not rows:
+    series = load_canonical_actual_power(
+        session,
+        farm_code,
+        cutoff,
+        datetime.now(),
+    )
+    if not series.values:
         return pd.DataFrame()
-    df = pd.DataFrame([dict(row._mapping) for row in rows])
-    df["Timestamp"] = pd.to_datetime(df["Timestamp"])
-    return df
+    return pd.DataFrame([
+        {TIME_COL: timestamp, TARGET: series.values[timestamp]}
+        for timestamp in sorted(series.values)
+    ])
 
 
 def write_predictions_to_db(
@@ -1352,13 +1357,10 @@ def run_daily_calibration(
 
     cutoff = datetime.now() - timedelta(days=14)
     sql = text(f"""
-        SELECT p.timestamp, p.wp_pred_raw, a.wp_true
+        SELECT p.timestamp, p.wp_pred_raw
         FROM "{pred_table}" p
-        JOIN actual_power a
-          ON a.farm_code = p.farm_code AND a.timestamp = p.timestamp
         WHERE p.farm_code = :farm_code
           AND p.timestamp >= :cutoff
-          AND a.wp_true IS NOT NULL
           AND p.wp_pred_raw IS NOT NULL
         ORDER BY p.timestamp
     """)
@@ -1370,8 +1372,22 @@ def run_daily_calibration(
     if not rows:
         return {"status": "skipped", "message": "No calibration data"}
 
-    y = np.array([float(r[2]) for r in rows])
-    p = np.array([float(r[1]) for r in rows])
+    actual_series = load_canonical_actual_power(
+        session,
+        farm_code,
+        min(row[0] for row in rows),
+        max(row[0] for row in rows) + timedelta(minutes=15),
+    )
+    pairs = [
+        (actual_series.values[row[0]], float(row[1]))
+        for row in rows
+        if row[0] in actual_series.values
+    ]
+    if not pairs:
+        return {"status": "skipped", "message": "No calibration data"}
+
+    y = np.array([pair[0] for pair in pairs])
+    p = np.array([pair[1] for pair in pairs])
     alpha, beta = fit_affine(y, p, cap)
 
     calibration_manager.save(farm_code, forecast_type, alpha, beta)
@@ -1382,7 +1398,7 @@ def run_daily_calibration(
         "forecast_type": forecast_type,
         "alpha": alpha,
         "beta": beta,
-        "n_points": len(rows),
+        "n_points": len(pairs),
         "calib_dir": os.path.dirname(calibration_manager._path(farm_code, forecast_type)),
     }
 
@@ -1768,15 +1784,13 @@ def run_ultrashort_calibration(
     all_targets_end = max(
         row[0] + timedelta(minutes=N_SHIFTS * 15) for row in rows
     )
-    actual_sql = text(
-        "SELECT timestamp, wp_true FROM actual_power "
-        "WHERE farm_code = :fc AND timestamp >= :start AND timestamp <= :end "
-        "AND wp_true IS NOT NULL"
+    actual_series = load_canonical_actual_power(
+        session,
+        farm_code,
+        all_targets_start,
+        all_targets_end + timedelta(minutes=15),
     )
-    actual_rows = session.execute(actual_sql, {
-        "fc": farm_code, "start": all_targets_start, "end": all_targets_end,
-    }).fetchall()
-    actual_map: Dict[datetime, float] = {r[0]: float(r[1]) for r in actual_rows}
+    actual_map = actual_series.values
 
     MIN_CALIBRATION_POINTS = 20
     shift_params: Dict[int, dict] = {}

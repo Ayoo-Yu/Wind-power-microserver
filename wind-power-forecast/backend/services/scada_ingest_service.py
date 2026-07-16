@@ -20,6 +20,7 @@ from db_models.operational_data import (
 from db_models.report_config import WindFarm
 from db_models.scada_connection import ScadaConnection
 from db_models.scada_ingest_record import ScadaIngestRecord
+from services.actual_power_service import is_quarter_hour
 from services.scada_contract import (
     SCADA_METRICS,
     SCADA_POINT_CONTRACT_VERSION,
@@ -437,6 +438,12 @@ def ingest_scada_sample(
         except ScadaContractError as exc:
             rejection = str(exc)
 
+    if (
+        rejection is None
+        and normalized_timestamp is not None
+        and not is_quarter_hour(normalized_timestamp)
+    ):
+        rejection = "normalized_timestamp 必须位于十五分钟边界"
     if rejection is None and quality != "good":
         rejection = f"质量码不可用: {quality}"
     elif rejection is None and (value is None or not math.isfinite(value)):

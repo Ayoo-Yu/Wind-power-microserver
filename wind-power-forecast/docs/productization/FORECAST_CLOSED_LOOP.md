@@ -39,10 +39,10 @@ NWP 影子环境已将模型层和完整业务层分开。完整原始时效到�
 现场确认的新超短期口径要求同一目标时刻汇总 1 至 16 个提前量预测，并使用算术均值参与评估。系统规则版本为：
 
 ```text
-south-grid-2022-ultrashort-mean-1-16-v1
+south-grid-2022-ultrashort-mean-1-16-actual-source-v2
 ```
 
-该版本同时保留文档规则标识 `south-grid-2022`，便于历史解释。未来收到盖章文件或调度侧正式接口说明后，应新增规则版本并进行双轨复算，已有历史结果继续保留原版本。
+该版本同时保留文档规则标识 `south-grid-2022`，便于历史解释。版本中的 `actual-source-v2` 表示评估逐点使用统一实际功率来源，计算公式和 1 至 16 提前量均值规则没有调整。实际功率时间与补源规则见 [ACTUAL_POWER_CONTRACT.md](ACTUAL_POWER_CONTRACT.md)。未来收到盖章文件或调度侧正式接口说明后，应新增规则版本并进行双轨复算，已有历史结果继续保留原版本。
 
 ## 公式实现
 
@@ -98,7 +98,7 @@ backend/migrations/versions/20260716_01_forecast_closed_loop.py
 
 1. 备份数据库。
 2. 在生产副本执行 `alembic upgrade head`。
-3. 核对 Alembic 头版本为 `20260716_01`。
+3. 核对 Alembic 头版本为 `20260716_02`。
 4. 确认 `forecast_output_points` 已创建，`daily_metrics` 已增加追溯字段。
 5. 部署后端、Celery Worker、Celery Beat 和前端。
 6. 手工触发三类预测并核对输入快照、输出账本和运行摘要。

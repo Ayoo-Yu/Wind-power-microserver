@@ -1,61 +1,40 @@
+import pandas as pd
 from flask import Blueprint, request, jsonify, current_app
-from datetime import datetime
-from database_config import get_db
-from models import ActualPower
-from sqlalchemy.orm import Session
-import pandas as pd  # 添加pandas导入
-from db_session import db_session  # 导入上下文管理器
+
+from db_session import db_session
+from db_models.power import ActualPower
+from services.actual_power_service import (
+    ActualPowerContractError,
+    parse_actual_power_value,
+    require_quarter_hour,
+)
 from utils.authorization import permission_required
 
 actual_power_bp = Blueprint('actual_power', __name__, url_prefix='/actual_power')
 
 # 定义分块大小
-CHUNK_SIZE = 10000  # 每次处理2000行数据
+CHUNK_SIZE = 10000
 
 @actual_power_bp.route('/', methods=['POST'])
 @permission_required('upload_files')
 def create_actual_power():
-    data = request.get_json()
+    data = request.get_json(silent=True)
     
     # 检查 'Timestamp' 是否存在。 'wp_true' 可以不存在或为 null。
-    if not data or 'Timestamp' not in data:
+    if not isinstance(data, dict) or 'Timestamp' not in data:
         return jsonify({"error": "缺少必要参数: Timestamp"}), 400
 
-    wp_true_input = data.get('wp_true') # 使用 .get() 获取，如果键不存在则为 None
+    wp_true_input = data.get('wp_true')
     farm_code = str(data.get('farm_code', '') or '').strip()
     if not farm_code:
         return jsonify({"error": "缺少必要参数: farm_code"}), 400
 
-    processed_wp_true = None # 默认值，如果 wp_true_input 是 None 或无效，则存为 NULL
-
-    if wp_true_input is not None: # 如果 'wp_true' 键存在且值不是 JSON null
-        if isinstance(wp_true_input, str):
-            if wp_true_input.lower() == 'nan':
-                # 字符串 "NaN" 也处理为 None (数据库 NULL)
-                processed_wp_true = None
-            else:
-                try:
-                    processed_wp_true = float(wp_true_input)
-                except ValueError:
-                    return jsonify({"error": f"wp_true 值 '{wp_true_input}' 无法转换为有效的数字或识别为NaN"}), 400
-        elif isinstance(wp_true_input, (int, float)):
-            # 优化：只转换一次float
-            val_float = float(wp_true_input)
-            if pd.isna(val_float):
-                processed_wp_true = None # 将 float('nan') 也统一处理为数据库 NULL
-            else:
-                processed_wp_true = val_float
-        else:
-            # 如果类型不是 None, str, int, float
-            return jsonify({"error": "wp_true 必须是数字、null、或字符串 'NaN'"}), 400
-    
-    # 到这里，processed_wp_true 要么是一个有效的浮点数，要么是 None (将被存为数据库 NULL)
-
     try:
-        timestamp_dt = datetime.fromisoformat(data['Timestamp'])
-    except ValueError:
-        current_app.logger.error(f"时间戳格式错误: {data.get('Timestamp')}")
-        return jsonify({"error": "时间戳格式错误，请使用ISO 8601格式"}), 400
+        processed_wp_true = parse_actual_power_value(wp_true_input)
+        timestamp_dt = require_quarter_hour(data['Timestamp'])
+    except ActualPowerContractError as exc:
+        current_app.logger.warning(f"实际功率契约校验失败: {exc}")
+        return jsonify({"error": str(exc)}), 400
 
     try:
         with db_session() as db:
@@ -103,25 +82,14 @@ def create_actual_power():
         # 否则可能需要 db.rollback()
         return jsonify({"error": "数据存储失败，请稍后重试"}), 500
 
-def process_wp_true_value(wp_true_input, row_index=None):
+def process_wp_true_value(wp_true_input):
     """处理wp_true值的通用函数"""
     if wp_true_input is None or pd.isna(wp_true_input):
         return None
-    
-    if isinstance(wp_true_input, str):
-        if wp_true_input.lower() == 'nan':
-            return None
-        try:
-            return float(wp_true_input)
-        except ValueError:
-            raise ValueError(f"wp_true值 '{wp_true_input}' 无法转换为有效的数字")
-    elif isinstance(wp_true_input, (int, float)):
-        val_float = float(wp_true_input)
-        if pd.isna(val_float):
-            return None
-        return val_float
-    else:
-        raise ValueError(f"wp_true类型无效: {type(wp_true_input)}")
+    try:
+        return parse_actual_power_value(wp_true_input)
+    except ActualPowerContractError as exc:
+        raise ValueError(str(exc)) from exc
 
 @actual_power_bp.route('/batch', methods=['POST'])
 @permission_required('upload_files')
@@ -133,7 +101,7 @@ def batch_create_actual_power():
     if file.filename == '':
         return jsonify({"error": "空文件名"}), 400
     
-    if not file.filename.endswith('.csv'):
+    if not file.filename.lower().endswith('.csv'):
         return jsonify({"error": "仅支持CSV文件"}), 400
 
     batch_farm_code = str(request.form.get('farm_code', '') or '').strip()
@@ -143,6 +111,7 @@ def batch_create_actual_power():
     total_error_count = 0
     total_processed_rows = 0
     total_skipped_intra_batch_duplicates = 0
+    total_skipped_empty_power = 0
     all_errors = []
     processed_chunks = 0
 
@@ -162,7 +131,7 @@ def batch_create_actual_power():
                         return jsonify({"error": "CSV文件缺少必要的'Timestamp'列"}), 400
                     
                     if 'wp_true' not in chunk_df.columns:
-                        current_app.logger.warning("CSV文件缺少'wp_true'列，所有值将被设置为NULL")
+                        return jsonify({"error": "CSV文件缺少必要的'wp_true'列"}), 400
                     
                     first_chunk = False
 
@@ -170,13 +139,13 @@ def batch_create_actual_power():
                 chunk_records = []
                 chunk_errors = 0
                 
-                for index, row in chunk_df.iterrows():
-                    global_row_index = (processed_chunks - 1) * CHUNK_SIZE + index + 1
+                for row_offset, (_, row) in enumerate(chunk_df.iterrows(), start=1):
+                    global_row_index = total_processed_rows + row_offset + 1
                     try:
                         # 处理时间戳
                         try:
-                            timestamp = pd.to_datetime(row['Timestamp'])
-                        except Exception as e:
+                            timestamp = require_quarter_hour(row['Timestamp'])
+                        except ActualPowerContractError as e:
                             chunk_errors += 1
                             error_msg = f"行 {global_row_index}: 时间戳格式错误 '{row.get('Timestamp', 'N/A')}' - {str(e)}"
                             all_errors.append(error_msg)
@@ -184,9 +153,9 @@ def batch_create_actual_power():
                             continue
                         
                         # 处理wp_true值
-                        wp_true_input = row.get('wp_true') if 'wp_true' in chunk_df.columns else None
+                        wp_true_input = row.get('wp_true')
                         try:
-                            processed_wp_true = process_wp_true_value(wp_true_input, global_row_index)
+                            processed_wp_true = process_wp_true_value(wp_true_input)
                         except ValueError as e:
                             chunk_errors += 1
                             error_msg = f"行 {global_row_index}: {str(e)}"
@@ -201,6 +170,9 @@ def batch_create_actual_power():
                             error_msg = f"行 {global_row_index}: 缺少必要参数 farm_code"
                             all_errors.append(error_msg)
                             current_app.logger.error(error_msg)
+                            continue
+                        if processed_wp_true is None:
+                            total_skipped_empty_power += 1
                             continue
                         chunk_records.append({
                             "timestamp": timestamp,
@@ -292,6 +264,7 @@ def batch_create_actual_power():
                     "processed_chunks": processed_chunks,
                     "inserted": total_inserted_count,
                     "updated": total_updated_count,
+                    "skipped_empty_power": total_skipped_empty_power,
                     "skipped_intra_batch_duplicates": total_skipped_intra_batch_duplicates
                 }), 200
             else:
@@ -301,6 +274,7 @@ def batch_create_actual_power():
                     "processed_chunks": processed_chunks,
                     "inserted": total_inserted_count,
                     "updated": total_updated_count,
+                    "skipped_empty_power": total_skipped_empty_power,
                     "skipped_intra_batch_duplicates": total_skipped_intra_batch_duplicates,
                     "error_count": total_error_count,
                     "errors": all_errors[:50]  # 限制返回的错误数量
@@ -310,4 +284,4 @@ def batch_create_actual_power():
         return jsonify({"error": "CSV文件为空"}), 400
     except Exception as e:
         current_app.logger.error(f"文件处理失败: {str(e)}", exc_info=True)
-        return jsonify({"error": "文件处理失败，请检查数据格式后重试"}), 500 
+        return jsonify({"error": "文件处理失败，请检查数据格式后重试"}), 500

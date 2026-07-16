@@ -7,16 +7,15 @@ from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 from statistics import mean
 
-from sqlalchemy import func
-
 from db_models.forecast_trace import ForecastOutputPoint
-from db_models.operational_data import AvailablePowerData, TurbinePowerData
-from db_models.power import ActualPower, MidPower, ShortlPower, SupershortlPower
+from db_models.operational_data import AvailablePowerData
+from db_models.power import MidPower, ShortlPower, SupershortlPower
 from db_models.training import DailyMetrics
+from services.actual_power_service import load_canonical_actual_power
 
 
 SOUTH_GRID_DOCUMENT_POLICY_VERSION = "south-grid-2022"
-SOUTH_GRID_OPERATIONAL_POLICY_VERSION = "south-grid-2022-ultrashort-mean-1-16-v1"
+SOUTH_GRID_OPERATIONAL_POLICY_VERSION = "south-grid-2022-ultrashort-mean-1-16-actual-source-v2"
 EXPECTED_DAILY_POINTS = 96
 SUPPORTED_FORECAST_TYPES = ("short", "mid", "supershort")
 
@@ -172,28 +171,18 @@ def _expected_timestamps(day: date) -> list[datetime]:
     return [start + timedelta(minutes=15 * index) for index in range(EXPECTED_DAILY_POINTS)]
 
 
-def _load_actual_map(session, farm_code: str, start: datetime, end: datetime) -> tuple[dict, str]:
-    rows = session.query(ActualPower.timestamp, ActualPower.wp_true).filter(
-        ActualPower.farm_code == farm_code,
-        ActualPower.timestamp >= start,
-        ActualPower.timestamp < end,
-    ).all()
-    actual_map = {row.timestamp: _finite(row.wp_true) for row in rows if _finite(row.wp_true) is not None}
-    if actual_map:
-        return actual_map, "actual_power"
-
-    rows = session.query(
-        TurbinePowerData.timestamp,
-        func.sum(TurbinePowerData.active_power).label("power"),
-    ).filter(
-        TurbinePowerData.farm_code == farm_code,
-        TurbinePowerData.timestamp >= start,
-        TurbinePowerData.timestamp < end,
-        TurbinePowerData.active_power.isnot(None),
-    ).group_by(TurbinePowerData.timestamp).all()
+def _load_actual_map(
+    session,
+    farm_code: str,
+    start: datetime,
+    end: datetime,
+) -> tuple[dict, str, dict[str, int], int]:
+    series = load_canonical_actual_power(session, farm_code, start, end)
     return (
-        {row.timestamp: _finite(row.power) for row in rows if _finite(row.power) is not None},
-        "turbine_power_sum" if rows else "missing",
+        series.values,
+        series.source_label,
+        series.source_counts,
+        series.ignored_off_grid_count,
     )
 
 
@@ -422,6 +411,8 @@ def _persist_daily_metrics(session, result: dict) -> None:
         "qualified": result["qualified"],
         "selection": result["selection"],
         "actual_source": result["actual_source"],
+        "actual_source_counts": result["actual_source_counts"],
+        "ignored_off_grid_actual_count": result["ignored_off_grid_actual_count"],
         "reference_source_counts": result["reference_source_counts"],
         "deficit_percentage_points": result["deficit_percentage_points"],
     }
@@ -443,7 +434,12 @@ def evaluate_regulatory_day(
     if forecast_type not in SUPPORTED_FORECAST_TYPES:
         raise ValueError(f"不支持的预测尺度: {forecast_type}")
     start, end = _day_bounds(day)
-    actual_map, actual_source = _load_actual_map(session, farm_code, start, end)
+    (
+        actual_map,
+        actual_source,
+        actual_source_counts,
+        ignored_off_grid_actual_count,
+    ) = _load_actual_map(session, farm_code, start, end)
     available_map = _load_available_map(session, farm_code, start, end)
     if forecast_type == "supershort":
         prediction_map, selection = _load_supershort_predictions(session, farm_code, day)
@@ -474,6 +470,8 @@ def evaluate_regulatory_day(
         "date": day.isoformat(),
         "policy_version": SOUTH_GRID_OPERATIONAL_POLICY_VERSION,
         "actual_source": actual_source,
+        "actual_source_counts": actual_source_counts,
+        "ignored_off_grid_actual_count": ignored_off_grid_actual_count,
         "actual_point_count": len(actual_map),
         "prediction_point_count": len(prediction_map),
         "selection": selection,
