@@ -98,7 +98,7 @@ backend/migrations/versions/20260716_01_forecast_closed_loop.py
 
 1. 备份数据库。
 2. 在生产副本执行 `alembic upgrade head`。
-3. 核对 Alembic 头版本为 `20260716_02`。
+3. 核对 Alembic 头版本为 `20260716_03`。
 4. 确认 `forecast_output_points` 已创建，`daily_metrics` 已增加追溯字段。
 5. 部署后端、Celery Worker、Celery Beat 和前端。
 6. 手工触发三类预测并核对输入快照、输出账本和运行摘要。

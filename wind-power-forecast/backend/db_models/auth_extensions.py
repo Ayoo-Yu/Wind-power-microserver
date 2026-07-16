@@ -30,4 +30,6 @@ class OperationAuditLog(Base):
     operation_type = Column(String(100), nullable=False)
     details = Column(Text, nullable=True)
     result = Column(String(50), nullable=False, default="成功")
+    source = Column(String(20), nullable=False, default="legacy", index=True)
+    request_id = Column(String(100), nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.now)

@@ -9,6 +9,8 @@ from db_models.data_lineage import (
     SourceObservation,
 )
 from db_models.model_version import ModelVersion
+from db_models.prediction_run import PredictionRun
+from db_models.prediction_task import PredictionTask
 from services.prediction_lineage_service import capture_prediction_input_snapshot
 from services.scada_contract import REQUIRED_SCADA_METRICS, SCADA_METRICS
 
@@ -16,6 +18,8 @@ from services.scada_contract import REQUIRED_SCADA_METRICS, SCADA_METRICS
 def _session():
     engine = create_engine("sqlite:///:memory:")
     for table in (
+        PredictionTask.__table__,
+        PredictionRun.__table__,
         IngestionBatch.__table__,
         SourceObservation.__table__,
         PredictionInputSnapshot.__table__,
@@ -25,10 +29,30 @@ def _session():
     return sessionmaker(bind=engine)(), engine
 
 
+def _prediction_run(session, run_id, task_type="short"):
+    task = PredictionTask(
+        id=run_id,
+        farm_code="CF",
+        task_type=task_type,
+        enabled=True,
+    )
+    run = PredictionRun(
+        id=run_id,
+        task_id=run_id,
+        celery_task_id=f"celery-{run_id}",
+        action="predict",
+        status="running",
+        attempt_count=1,
+    )
+    session.add_all([task, run])
+    session.flush()
+
+
 def test_prediction_snapshot_freezes_complete_source_and_model_lineage():
     session, engine = _session()
     now = datetime(2026, 7, 15, 10, 0)
     try:
+        _prediction_run(session, 101)
         for index, metric in enumerate(REQUIRED_SCADA_METRICS):
             session.add(SourceObservation(
                 observation_key=f"{index:064x}",
@@ -102,6 +126,7 @@ def test_prediction_snapshot_freezes_complete_source_and_model_lineage():
 def test_prediction_snapshot_marks_missing_inputs_and_model_as_blocked():
     session, engine = _session()
     try:
+        _prediction_run(session, 102)
         snapshot = capture_prediction_input_snapshot(
             session,
             prediction_run_id=102,

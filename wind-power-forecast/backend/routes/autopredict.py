@@ -10,9 +10,7 @@ import datetime
 import glob
 import os
 import uuid
-import threading
 import logging
-import traceback
 
 from flask import Blueprint, request, jsonify, current_app, g
 from sqlalchemy import text as _text, desc, func, case as db_case
@@ -21,19 +19,22 @@ import re as _re
 
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
-from database_config import Base, get_db
 from db_session import db_session
 from db_models import TaskHistory, PredictionTask, PredictionRun
 from config import Config
+from services.operation_audit_service import add_operation_audit
+from services.prediction_run_service import (
+    PredictionRunConflict,
+    PredictionTaskMissing,
+    mark_prediction_dispatch_failed,
+    reserve_prediction_run,
+)
 from utils.authorization import enforce_permission, permission_required
 
 # ---------------------------------------------------------------------------
 # Sub-module imports (extracted helpers)
 # ---------------------------------------------------------------------------
 from routes._farm_helpers import (  # noqa: F401
-    active_farm_codes_cache,
-    active_farms_cache,
-    normalize_farm_code,
     canonicalize_farm_code,
     get_active_farm_codes,
     get_active_farms,
@@ -41,11 +42,6 @@ from routes._farm_helpers import (  # noqa: F401
     resolve_farm_code,
 )
 from routes._prediction_helpers import (  # noqa: F401
-    action_lock,
-    inflight_actions,
-    build_action_key,
-    try_acquire_action_lock,
-    release_action_lock,
     record_task_history,
 )
 
@@ -61,6 +57,32 @@ def _get_celery_tasks():
     """Lazy import to avoid requiring celery when Flask starts without workers."""
     from celery_app.tasks import train_model, run_prediction, run_supershort_predict
     return train_model, run_prediction, run_supershort_predict
+
+
+def _request_actor():
+    return str(getattr(g, 'acting_username', None) or get_jwt_identity() or 'unknown')
+
+
+def _add_request_audit(session, operation_type, details, result='成功'):
+    add_operation_audit(
+        session,
+        operator=_request_actor(),
+        ip_address=request.remote_addr,
+        module='自动预测',
+        operation_type=operation_type,
+        details=details,
+        result=result,
+        source='server',
+        request_id=request.headers.get('X-Request-ID'),
+    )
+
+
+def _record_request_audit_best_effort(operation_type, details, result):
+    try:
+        with db_session() as session:
+            _add_request_audit(session, operation_type, details, result=result)
+    except Exception as exc:
+        logger.error('写入自动预测审计失败: %s', exc, exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -463,6 +485,15 @@ def control_all_prediction():
                     "success": True,
                     "message": f"{prediction_type} {'已启用' if enabled else '已停止'} (场站: {t.farm_code})",
                 })
+            _add_request_audit(
+                session,
+                '批量任务启停',
+                {
+                    'action': action,
+                    'task_type': prediction_type,
+                    'farm_codes': [item['farm_code'] for item in items],
+                },
+            )
 
         return api_success(
             data={"items": items, "summary": {"total": len(items), "success": len(items), "failed": 0}},
@@ -583,6 +614,11 @@ def start_prediction():
                 return api_error(f'未找到任务配置: {farm_code} {prediction_type}', code=1004, status_code=404)
             task.enabled = True
             task.updated_at = _dt.now()
+            _add_request_audit(
+                session,
+                '任务启用',
+                {'farm_code': farm_code, 'task_type': prediction_type},
+            )
 
         return api_success(
             data={"farm_code": farm_code, "type": prediction_type, "enabled": True},
@@ -611,6 +647,11 @@ def stop_prediction():
                 return api_error(f'未找到任务配置: {farm_code} {prediction_type}', code=1004, status_code=404)
             task.enabled = False
             task.updated_at = _dt.now()
+            _add_request_audit(
+                session,
+                '任务停用',
+                {'farm_code': farm_code, 'task_type': prediction_type},
+            )
 
         return api_success(
             data={"farm_code": farm_code, "type": prediction_type, "enabled": False},
@@ -817,7 +858,7 @@ def _build_db_log_text(prediction_type: str, log_type: str, date_str: str) -> st
                     if result.get('calib_dir'):
                         lines.append(f"  参数路径: {result['calib_dir']}")
                 except Exception:
-                    lines.append(f"  (结果JSON解析失败)")
+                    lines.append("  (结果JSON解析失败)")
 
         return '\n'.join(lines)
 
@@ -1057,20 +1098,163 @@ def trigger_prediction():
     if prediction_type not in _VALID_PREDICTION_TYPES:
         return api_error('type 仅支持 short/medium/supershort', code=1001, status_code=400)
 
+    idempotency_key = str(request.headers.get('Idempotency-Key') or '').strip()
+    if len(idempotency_key) > 128:
+        return api_error('Idempotency-Key 长度不能超过 128', code=1001, status_code=400)
+    actor = _request_actor()
+    request_id = str(request.headers.get('X-Request-ID') or '').strip()
+    if len(request_id) > 100:
+        return api_error('X-Request-ID 长度不能超过 100', code=1001, status_code=400)
+    identity_seed = (
+        f"{actor}:{farm_code}:{prediction_type}:{action}:{idempotency_key}"
+    )
+    celery_task_id = (
+        str(uuid.uuid5(uuid.NAMESPACE_URL, identity_seed))
+        if idempotency_key
+        else str(uuid.uuid4())
+    )
+    request_id = request_id or celery_task_id
+    ip_address = request.remote_addr
+
     try:
         train_model, run_prediction, run_supershort_predict = _get_celery_tasks()
     except ImportError:
+        _record_request_audit_best_effort(
+            '任务排队',
+            {
+                'farm_code': farm_code,
+                'task_type': prediction_type,
+                'action': action,
+                'error': 'Celery 未安装',
+            },
+            '失败',
+        )
         return api_error('Celery 未安装，无法触发任务', code=1500, status_code=503)
 
+    try:
+        with db_session() as session:
+            claim = reserve_prediction_run(
+                session,
+                farm_code=farm_code,
+                task_type=prediction_type,
+                action=action,
+                celery_task_id=celery_task_id,
+                requested_by=actor,
+                trigger_source='manual_api',
+                request_id=request_id,
+            )
+            if claim.reason == 'reserved':
+                add_operation_audit(
+                    session,
+                    operator=actor,
+                    ip_address=ip_address,
+                    module='自动预测',
+                    operation_type='任务排队',
+                    details={
+                        'prediction_run_id': claim.run_id,
+                        'celery_task_id': celery_task_id,
+                        'farm_code': farm_code,
+                        'task_type': prediction_type,
+                        'action': action,
+                    },
+                    result='成功',
+                    source='server',
+                    request_id=request_id,
+                )
+    except PredictionTaskMissing as exc:
+        _record_request_audit_best_effort(
+            '任务排队',
+            {
+                'farm_code': farm_code,
+                'task_type': prediction_type,
+                'action': action,
+                'error': str(exc),
+            },
+            '失败',
+        )
+        return api_error(str(exc), code=1004, status_code=404)
+    except PredictionRunConflict as exc:
+        _record_request_audit_best_effort(
+            '任务排队',
+            {
+                'farm_code': farm_code,
+                'task_type': prediction_type,
+                'action': action,
+                'active_run_id': exc.active_run_id,
+            },
+            '警告',
+        )
+        return api_error(
+            str(exc),
+            code=1409,
+            status_code=409,
+            details={
+                'active_run_id': exc.active_run_id,
+                'celery_task_id': exc.celery_task_id,
+            },
+        )
+
+    if claim.reason == 'idempotent_replay':
+        return api_success(
+            data={
+                'prediction_run_id': claim.run_id,
+                'celery_task_id': claim.celery_task_id,
+                'farm_code': farm_code,
+                'type': prediction_type,
+                'action': action,
+                'status': claim.status,
+                'deduplicated': True,
+            },
+            message='相同幂等请求已受理',
+        )
+
     if prediction_type == 'supershort' and action == 'predict':
-        result = run_supershort_predict.delay(farm_code)
+        celery_task = run_supershort_predict
+        task_args = [farm_code]
     elif action == 'train':
-        result = train_model.delay(farm_code, prediction_type)
+        celery_task = train_model
+        task_args = [farm_code, prediction_type]
     else:
-        result = run_prediction.delay(farm_code, prediction_type)
+        celery_task = run_prediction
+        task_args = [farm_code, prediction_type]
+
+    try:
+        result = celery_task.apply_async(args=task_args, task_id=celery_task_id)
+    except Exception as exc:
+        logger.error('预测任务发送到 Celery 失败: %s', exc, exc_info=True)
+        with db_session() as session:
+            mark_prediction_dispatch_failed(
+                session,
+                run_id=claim.run_id,
+                error_message=str(exc),
+            )
+            add_operation_audit(
+                session,
+                operator=actor,
+                ip_address=ip_address,
+                module='自动预测',
+                operation_type='任务发送',
+                details={
+                    'prediction_run_id': claim.run_id,
+                    'celery_task_id': celery_task_id,
+                    'error': str(exc),
+                },
+                result='失败',
+                source='server',
+                request_id=request_id,
+            )
+        return api_error('预测任务发送失败', code=1503, status_code=503)
 
     return api_success(
-        data={"celery_task_id": result.id, "farm_code": farm_code, "type": prediction_type, "action": action},
+        data={
+            "prediction_run_id": claim.run_id,
+            "celery_task_id": result.id or celery_task_id,
+            "farm_code": farm_code,
+            "type": prediction_type,
+            "action": action,
+            "status": "queued",
+            "deduplicated": False,
+        },
         message=f"已触发 {action} 任务 ({prediction_type}, 场站: {farm_code})",
     )
 
@@ -1115,11 +1299,17 @@ def get_runs():
                         result_data = None
                 items.append({
                     "id": run.id,
+                    "celery_task_id": run.celery_task_id,
                     "farm_code": task.farm_code,
                     "task_type": task.task_type,
                     "action": run.action,
                     "status": run.status,
+                    "requested_by": run.requested_by,
+                    "trigger_source": run.trigger_source,
+                    "request_id": run.request_id,
+                    "attempt_count": run.attempt_count,
                     "started_at": run.started_at.isoformat() if run.started_at else None,
+                    "last_heartbeat_at": run.last_heartbeat_at.isoformat() if run.last_heartbeat_at else None,
                     "finished_at": run.finished_at.isoformat() if run.finished_at else None,
                     "duration_sec": run.duration_sec,
                     "error_message": run.error_message,
@@ -1164,6 +1354,16 @@ def update_schedule_config():
             if predict_schedule:
                 task.predict_schedule = predict_schedule
             task.updated_at = _dt.now()
+            _add_request_audit(
+                session,
+                '调度配置更新',
+                {
+                    'farm_code': farm_code,
+                    'task_type': task_type,
+                    'train_schedule': train_schedule,
+                    'predict_schedule': predict_schedule,
+                },
+            )
 
         return api_success(
             data={"farm_code": farm_code, "type": task_type},
@@ -1283,10 +1483,7 @@ def get_model_versions():
 
 
 def _model_action_actor():
-    acting_user = getattr(g, 'acting_user', None)
-    if acting_user is not None and getattr(acting_user, 'username', None):
-        return acting_user.username
-    return str(get_jwt_identity() or 'unknown')
+    return _request_actor()
 
 
 def _model_registry_action(version_id, action, reason=None):
@@ -1313,6 +1510,11 @@ def _model_registry_action(version_id, action, reason=None):
             details=json.dumps(result, ensure_ascii=False),
             user=actor,
         )
+        _record_request_audit_best_effort(
+            f'模型{action}',
+            {'model_version_id': version_id, 'reason': reason, 'result': result},
+            '成功',
+        )
         return api_success(data=result, message=message)
     except ValueError as exc:
         record_task_history(
@@ -1321,6 +1523,11 @@ def _model_registry_action(version_id, action, reason=None):
             status='failed',
             details=str(exc),
             user=actor,
+        )
+        _record_request_audit_best_effort(
+            f'模型{action}',
+            {'model_version_id': version_id, 'reason': reason, 'error': str(exc)},
+            '失败',
         )
         return api_error(str(exc), code=1001, status_code=400)
 
@@ -1362,6 +1569,19 @@ def deactivate_model_version(version_id):
     from services.model_registry import ModelRegistry
     registry = ModelRegistry()
     registry.deactivate(version_id)
+    actor = _model_action_actor()
+    record_task_history(
+        task_type='model',
+        action='deactivate',
+        status='success',
+        details=f'模型版本 {version_id} 已停用',
+        user=actor,
+    )
+    _record_request_audit_best_effort(
+        '模型deactivate',
+        {'model_version_id': version_id},
+        '成功',
+    )
     return api_success(message=f'模型版本 {version_id} 已停用')
 
 

@@ -27,6 +27,11 @@
           <el-option label="警告" value="警告" />
           <el-option label="失败" value="失败" />
         </el-select>
+        <el-select v-model="filters.source" clearable placeholder="来源" class="filter-item">
+          <el-option label="服务端" value="server" />
+          <el-option label="客户端申报" value="client" />
+          <el-option label="历史记录" value="legacy" />
+        </el-select>
         <el-select v-model="filters.sortOrder" class="filter-item">
           <el-option label="时间倒序" value="desc" />
           <el-option label="时间正序" value="asc" />
@@ -51,6 +56,11 @@
         <el-table-column prop="ipAddress" label="IP 地址" min-width="130" />
         <el-table-column prop="module" label="模块" min-width="140" />
         <el-table-column prop="operationType" label="操作类型" min-width="140" />
+        <el-table-column label="来源" min-width="120">
+          <template #default="{ row }">
+            {{ sourceLabel(row.source) }}
+          </template>
+        </el-table-column>
         <el-table-column prop="details" label="详情" min-width="420" show-overflow-tooltip />
         <el-table-column label="结果" width="92">
           <template #default="{ row }">
@@ -90,6 +100,12 @@ function toDisplayTime(value) {
   return date.toLocaleString('zh-CN', { hour12: false })
 }
 
+function sourceLabel(value) {
+  if (value === 'server') return '服务端'
+  if (value === 'client') return '客户端申报'
+  return '历史记录'
+}
+
 function downloadTextFile(text, filename) {
   const blob = new Blob([text], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
@@ -113,6 +129,7 @@ export default {
       operator: '',
       module: '',
       result: '',
+      source: '',
       sortOrder: 'desc'
     })
     const pagination = reactive({
@@ -131,6 +148,7 @@ export default {
       if (filters.operator) params.operator = filters.operator
       if (filters.module) params.module = filters.module
       if (filters.result) params.result = filters.result
+      if (filters.source) params.source = filters.source
       if (Array.isArray(filters.timeRange) && filters.timeRange.length === 2) {
         params.start_time = filters.timeRange[0]
         params.end_time = filters.timeRange[1]
@@ -169,6 +187,7 @@ export default {
       filters.operator = ''
       filters.module = ''
       filters.result = ''
+      filters.source = ''
       filters.sortOrder = 'desc'
       pagination.page = 1
       pagination.perPage = 20
@@ -192,13 +211,14 @@ export default {
         return
       }
 
-      const header = ['操作时间', '操作人', 'IP 地址', '模块', '操作类型', '详情', '结果']
+      const header = ['操作时间', '操作人', 'IP 地址', '模块', '操作类型', '来源', '详情', '结果']
       const rows = logs.value.map((item) => [
         item.operationTime,
         item.operator,
         item.ipAddress,
         item.module,
         item.operationType,
+        sourceLabel(item.source),
         item.details,
         item.result
       ])
@@ -224,6 +244,7 @@ export default {
       handlePageChange,
       handleSizeChange,
       exportLogs,
+      sourceLabel,
       Refresh
     }
   }

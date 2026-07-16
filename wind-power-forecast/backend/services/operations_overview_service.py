@@ -251,11 +251,17 @@ def _prediction_overview(session, now: datetime, farm_code: str | None) -> dict:
             trace_status = "missing"
         latest_runs.append({
             "id": run.id,
+            "celery_task_id": run.celery_task_id,
             "farm_code": task.farm_code,
             "task_type": task.task_type,
             "action": run.action,
             "status": run.status,
+            "requested_by": run.requested_by,
+            "trigger_source": run.trigger_source,
+            "request_id": run.request_id,
+            "attempt_count": run.attempt_count,
             "started_at": _iso(run.started_at),
+            "last_heartbeat_at": _iso(run.last_heartbeat_at),
             "finished_at": _iso(run.finished_at),
             "duration_sec": run.duration_sec,
             "error_message": run.error_message,

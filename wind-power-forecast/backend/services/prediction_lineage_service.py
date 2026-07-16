@@ -13,6 +13,7 @@ from db_models.data_lineage import (
     SourceObservation,
 )
 from db_models.model_version import ModelVersion
+from db_models.prediction_run import PredictionRun
 from services.scada_contract import REQUIRED_SCADA_METRICS
 
 
@@ -75,6 +76,17 @@ def capture_prediction_input_snapshot(
     nwp_stale_after_seconds: int | None = None,
 ) -> PredictionInputSnapshot:
     """为一次预测运行创建不可变输入快照，重复调用返回同一记录。"""
+
+    run = (
+        session.query(PredictionRun)
+        .filter(PredictionRun.id == prediction_run_id)
+        .with_for_update()
+        .first()
+    )
+    if run is None:
+        raise ValueError(f"预测运行 {prediction_run_id} 不存在")
+    if run.action != "predict":
+        raise ValueError("只有预测运行可以创建输入快照")
 
     existing = session.query(PredictionInputSnapshot).filter(
         PredictionInputSnapshot.prediction_run_id == prediction_run_id

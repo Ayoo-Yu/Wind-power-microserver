@@ -7,7 +7,9 @@ import json
 import math
 from datetime import datetime
 
+from db_models.data_lineage import PredictionInputSnapshot
 from db_models.forecast_trace import ForecastOutputPoint
+from db_models.prediction_run import PredictionRun
 
 
 FORECAST_OUTPUT_CONTRACT_VERSION = "forecast-output-v1"
@@ -156,6 +158,38 @@ def record_forecast_output_points(
     if expected_count <= 0:
         raise ValueError("expected_count 必须大于 0")
     normalised_type = _normalise_type(forecast_type)
+
+    run = (
+        session.query(PredictionRun)
+        .filter(PredictionRun.id == prediction_run_id)
+        .with_for_update()
+        .first()
+    )
+    if run is None:
+        raise ValueError(f"预测运行 {prediction_run_id} 不存在")
+    if run.action != "predict":
+        raise ValueError("只有预测运行可以写入输出账本")
+
+    if input_snapshot_id is not None:
+        snapshot = (
+            session.query(PredictionInputSnapshot)
+            .filter(PredictionInputSnapshot.id == input_snapshot_id)
+            .first()
+        )
+        if snapshot is None or snapshot.prediction_run_id != prediction_run_id:
+            raise ValueError("输入快照与预测运行不匹配")
+        if snapshot.farm_code != farm_code:
+            raise ValueError("输入快照与输出场站不匹配")
+        snapshot_type = "mid" if snapshot.task_type == "medium" else snapshot.task_type
+        if snapshot_type != normalised_type:
+            raise ValueError("输入快照与输出预测尺度不匹配")
+        if (
+            model_version_id is not None
+            and snapshot.model_version_id is not None
+            and model_version_id != snapshot.model_version_id
+        ):
+            raise ValueError("输入快照与输出模型版本不匹配")
+
     normalised_points = _normalise_points(issued_at, points)
     incoming_manifest = _manifest_payload(
         prediction_run_id=prediction_run_id,

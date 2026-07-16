@@ -6,6 +6,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Float,
+    ForeignKey,
     Index,
     Integer,
     JSON,
@@ -98,13 +99,23 @@ class PredictionInputSnapshot(Base):
     __tablename__ = "prediction_input_snapshots"
 
     id = Column(Integer, primary_key=True)
-    prediction_run_id = Column(Integer, nullable=False, unique=True)
+    prediction_run_id = Column(
+        Integer,
+        ForeignKey("prediction_runs.id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
     farm_code = Column(String(50), nullable=False, index=True)
     task_type = Column(String(20), nullable=False, index=True)
     captured_at = Column(DateTime, nullable=False, default=datetime.now, index=True)
     contract_version = Column(String(32), nullable=False)
     dataset_version = Column(String(64), nullable=False, index=True)
-    model_version_id = Column(Integer, nullable=True, index=True)
+    model_version_id = Column(
+        Integer,
+        ForeignKey("model_versions.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     data_start = Column(DateTime, nullable=True)
     data_end = Column(DateTime, nullable=True)
     scada_observation_count = Column(Integer, nullable=False, default=0)

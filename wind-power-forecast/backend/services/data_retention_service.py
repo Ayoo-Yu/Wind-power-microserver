@@ -46,12 +46,17 @@ RETENTION_TABLES = [
         int(os.environ.get("INGESTION_BATCH_RETENTION_DAYS", "730")),
     ),
     RetentionTable(
+        "forecast_output_points",
+        "created_at",
+        int(os.environ.get("PREDICTION_LINEAGE_RETENTION_DAYS", "730")),
+    ),
+    RetentionTable(
         "prediction_input_snapshots",
         "captured_at",
         int(os.environ.get("PREDICTION_LINEAGE_RETENTION_DAYS", "730")),
     ),
     RetentionTable(
-        "forecast_output_points",
+        "prediction_runs",
         "created_at",
         int(os.environ.get("PREDICTION_LINEAGE_RETENTION_DAYS", "730")),
     ),

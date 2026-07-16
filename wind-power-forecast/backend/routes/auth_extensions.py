@@ -5,10 +5,10 @@ import logging
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from sqlalchemy import asc, desc
-from sqlalchemy.exc import ProgrammingError
 
 from db_session import db_session
-from models import OperationAuditLog, User, UserProfileMeta
+from db_models import OperationAuditLog, User, UserProfileMeta
+from services.operation_audit_service import add_operation_audit
 from utils.database_schema import require_model_tables
 
 
@@ -80,7 +80,8 @@ def _serialize_audit_log(item):
         'operationType': item.operation_type,
         'details': item.details or '',
         'result': item.result,
-        'source': 'backend'
+        'source': item.source or 'legacy',
+        'requestId': item.request_id,
     }
 
 
@@ -210,6 +211,7 @@ def list_operation_audit_logs():
             operator = (request.args.get('operator') or '').strip()
             module = (request.args.get('module') or '').strip()
             result = (request.args.get('result') or '').strip()
+            source = (request.args.get('source') or '').strip()
             start_time = (request.args.get('start_time') or '').strip()
             end_time = (request.args.get('end_time') or '').strip()
             sort_order = (request.args.get('sort_order') or 'desc').strip().lower()
@@ -222,6 +224,8 @@ def list_operation_audit_logs():
                 query = query.filter(OperationAuditLog.module == module)
             if result:
                 query = query.filter(OperationAuditLog.result == result)
+            if source:
+                query = query.filter(OperationAuditLog.source == source)
             if start_time:
                 try:
                     query = query.filter(OperationAuditLog.operation_time >= _safe_parse_datetime(start_time))
@@ -261,16 +265,28 @@ def create_operation_audit_log():
             if not current_user:
                 return jsonify({'message': '用户不存在'}), 404
 
-            row = OperationAuditLog(
-                operation_time=datetime.utcnow(),
-                operator=data.get('operator') or current_user.username,
-                ip_address=data.get('ipAddress') or request.headers.get('X-Forwarded-For') or request.remote_addr or '-',
+            request_id = str(request.headers.get('X-Request-ID') or '').strip()
+            if len(request_id) > 100:
+                return jsonify({'message': 'X-Request-ID 长度不能超过 100'}), 400
+            client_result = data.get('result')
+            if client_result not in {'成功', '警告', '失败'}:
+                client_result = '警告'
+            row = add_operation_audit(
+                session,
+                operation_time=datetime.now(),
+                operator=current_user.username,
+                ip_address=request.remote_addr or '-',
                 module=data.get('module') or '系统',
                 operation_type=data.get('operationType') or '操作',
-                details=data.get('details') or '',
-                result=data.get('result') or '成功'
+                details={
+                    'client_details': data.get('details') or '',
+                    'client_reported_operator': data.get('operator'),
+                    'client_reported_ip': data.get('ipAddress'),
+                },
+                result=client_result,
+                source='client',
+                request_id=request_id or None,
             )
-            session.add(row)
             session.commit()
             session.refresh(row)
             return jsonify({

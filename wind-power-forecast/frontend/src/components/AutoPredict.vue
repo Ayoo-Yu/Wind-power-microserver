@@ -866,7 +866,7 @@ const pollTriggerProgress = (predictionType, celeryTaskId) => {
         const items = res?.data?.data?.items || res?.data?.items || []
         run = items[0]
       }
-      if (run && run.status !== 'running') {
+      if (run && !['queued', 'running'].includes(run.status)) {
         clearInterval(timer)
         triggerProgress[key] = {
           ...triggerProgress[key],
@@ -887,6 +887,12 @@ const pollTriggerProgress = (predictionType, celeryTaskId) => {
           ...triggerProgress[key],
           phase: 'running',
           elapsed: runElapsed,
+        }
+      } else if (run && run.status === 'queued') {
+        triggerProgress[key] = {
+          ...triggerProgress[key],
+          phase: 'queued',
+          elapsed,
         }
       } else {
         triggerProgress[key] = {

@@ -28,8 +28,18 @@ class ForecastOutputPoint(Base):
         nullable=False,
         index=True,
     )
-    input_snapshot_id = Column(Integer, nullable=True, index=True)
-    model_version_id = Column(Integer, nullable=True, index=True)
+    input_snapshot_id = Column(
+        Integer,
+        ForeignKey("prediction_input_snapshots.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    model_version_id = Column(
+        Integer,
+        ForeignKey("model_versions.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     farm_code = Column(String(50), nullable=False)
     forecast_type = Column(String(20), nullable=False)
     issued_at = Column(DateTime, nullable=False)

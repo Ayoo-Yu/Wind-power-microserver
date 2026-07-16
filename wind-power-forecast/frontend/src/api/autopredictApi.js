@@ -80,11 +80,11 @@ async function autopredictGet(path, legacyPath, params) {
   }
 }
 
-async function autopredictPost(path, payload = {}, legacyPath) {
+async function autopredictPost(path, payload = {}, legacyPath, config = {}) {
   try {
     return await withLegacyFallback(
-      () => axiosInstance.post(`/api/v1/autopredict/${path}`, payload),
-      () => axiosInstance.post(`/api/${legacyPath || path}`, payload)
+      () => axiosInstance.post(`/api/v1/autopredict/${path}`, payload, config),
+      () => axiosInstance.post(`/api/${legacyPath || path}`, payload, config)
     )
   } catch (error) {
     if (!isInvalidFarmError(error)) {
@@ -101,8 +101,8 @@ async function autopredictPost(path, payload = {}, legacyPath) {
     const fallbackPayload = { ...payload, farm_code: fallbackFarmCode }
 
     return withLegacyFallback(
-      () => axiosInstance.post(`/api/v1/autopredict/${path}`, fallbackPayload),
-      () => axiosInstance.post(`/api/${legacyPath || path}`, fallbackPayload)
+      () => axiosInstance.post(`/api/v1/autopredict/${path}`, fallbackPayload, config),
+      () => axiosInstance.post(`/api/${legacyPath || path}`, fallbackPayload, config)
     )
   }
 }
@@ -242,7 +242,15 @@ export function triggerAutoPredict(farmCode, predictionType, action = 'predict')
     type: predictionType,
     action,
   }
-  return autopredictPost('trigger', payload, 'trigger')
+  const requestId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `manual-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  return autopredictPost('trigger', payload, 'trigger', {
+    headers: {
+      'Idempotency-Key': requestId,
+      'X-Request-ID': requestId,
+    },
+  })
 }
 
 export function getAutoPredictRuns(farmCode, predictionType, limit = 5, action = null) {

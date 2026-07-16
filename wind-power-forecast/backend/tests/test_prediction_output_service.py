@@ -5,13 +5,36 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from db_models.forecast_trace import ForecastOutputPoint
+from db_models.prediction_run import PredictionRun
+from db_models.prediction_task import PredictionTask
 from services.prediction_output_service import record_forecast_output_points
 
 
 def _session():
     engine = create_engine("sqlite:///:memory:")
+    PredictionTask.__table__.create(engine)
+    PredictionRun.__table__.create(engine)
     ForecastOutputPoint.__table__.create(engine)
     return sessionmaker(bind=engine)(), engine
+
+
+def _prediction_run(session, run_id, task_type="short"):
+    task = PredictionTask(
+        id=run_id,
+        farm_code="WF001",
+        task_type=task_type,
+        enabled=True,
+    )
+    run = PredictionRun(
+        id=run_id,
+        task_id=run_id,
+        celery_task_id=f"celery-{run_id}",
+        action="predict",
+        status="running",
+        attempt_count=1,
+    )
+    session.add_all([task, run])
+    session.flush()
 
 
 def _points(issued_at, count):
@@ -28,11 +51,12 @@ def test_output_ledger_is_idempotent_and_hashes_exact_points():
     session, engine = _session()
     issued_at = datetime(2026, 7, 16, 10, 0)
     try:
+        _prediction_run(session, 101, "supershort")
         manifest = record_forecast_output_points(
             session,
             prediction_run_id=101,
-            input_snapshot_id=11,
-            model_version_id=7,
+            input_snapshot_id=None,
+            model_version_id=None,
             farm_code="WF001",
             forecast_type="supershort",
             issued_at=issued_at,
@@ -42,8 +66,8 @@ def test_output_ledger_is_idempotent_and_hashes_exact_points():
         repeated = record_forecast_output_points(
             session,
             prediction_run_id=101,
-            input_snapshot_id=11,
-            model_version_id=7,
+            input_snapshot_id=None,
+            model_version_id=None,
             farm_code="WF001",
             forecast_type="supershort",
             issued_at=issued_at,
@@ -66,6 +90,7 @@ def test_output_ledger_rejects_changed_content_for_same_run():
     session, engine = _session()
     issued_at = datetime(2026, 7, 16, 10, 0)
     try:
+        _prediction_run(session, 102)
         points = _points(issued_at, 2)
         record_forecast_output_points(
             session,
@@ -101,11 +126,12 @@ def test_current_mid_run_is_traced_but_not_marked_240_hour_ready():
     session, engine = _session()
     issued_at = datetime(2026, 7, 16, 8, 50)
     try:
+        _prediction_run(session, 103, "medium")
         manifest = record_forecast_output_points(
             session,
             prediction_run_id=103,
-            input_snapshot_id=12,
-            model_version_id=8,
+            input_snapshot_id=None,
+            model_version_id=None,
             farm_code="WF001",
             forecast_type="mid",
             issued_at=issued_at,
@@ -125,6 +151,7 @@ def test_output_manifest_requires_contiguous_horizons_for_completion():
     session, engine = _session()
     issued_at = datetime(2026, 7, 16, 10, 0)
     try:
+        _prediction_run(session, 104, "supershort")
         points = _points(issued_at, 2)
         points[1]["horizon_index"] = 3
         manifest = record_forecast_output_points(

@@ -1,7 +1,6 @@
 import os
 import re
 import sys
-import json
 import logging
 from datetime import datetime, timezone, timedelta
 
@@ -9,7 +8,10 @@ from sqlalchemy.exc import OperationalError, DisconnectionError, InterfaceError
 
 from . import celery_app
 from db_session import db_session
-from db_models import PredictionTask, PredictionRun
+from services.prediction_run_service import (
+    claim_prediction_run,
+    finish_prediction_run,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +21,6 @@ _FARM_CODE_RE = re.compile(r'^[A-Za-z0-9_-]{1,50}$')
 
 
 _BJ_TZ = timezone(timedelta(hours=8))
-
-
-def _utc_now():
-    return datetime.now(_BJ_TZ).replace(tzinfo=None)
 
 
 def _validate_farm_code(farm_code):
@@ -39,67 +37,51 @@ def _is_db_error(exc):
     return False
 
 
-def _get_task_id(farm_code, task_type):
+def _claim_run_record(
+    farm_code,
+    task_type,
+    action,
+    celery_task_id,
+    attempt_number,
+):
     with db_session() as session:
-        task = session.query(PredictionTask).filter_by(
-            farm_code=farm_code, task_type=task_type
-        ).first()
-        return task.id if task else None
-
-
-def _create_run_record(task_id, action, celery_task_id):
-    with db_session() as session:
-        run = PredictionRun(
-            task_id=task_id,
-            celery_task_id=celery_task_id,
+        return claim_prediction_run(
+            session,
+            farm_code=farm_code,
+            task_type=task_type,
             action=action,
-            status="running",
-            started_at=_utc_now(),
+            celery_task_id=celery_task_id,
+            attempt_number=attempt_number,
         )
-        session.add(run)
-        session.flush()
-        return run.id
 
 
-def _finish_run_and_update_task(run_id, task_id, action, status, error_message=None, result_data=None):
+def _finish_run(
+    run_id,
+    attempt_number,
+    status,
+    error_message=None,
+    result_data=None,
+):
     with db_session() as session:
-        if run_id:
-            run = session.query(PredictionRun).get(run_id)
-            if run:
-                run.status = status
-                run.finished_at = _utc_now()
-                if run.started_at:
-                    run.duration_sec = int((run.finished_at - run.started_at).total_seconds())
-                run.error_message = error_message
-                if result_data is not None:
-                    run.result_json = json.dumps(result_data, default=str, ensure_ascii=False)
-        if task_id:
-            task = session.query(PredictionTask).get(task_id)
-            if task:
-                now = _utc_now()
-                if action == "train":
-                    task.last_train_status = status
-                    task.last_train_at = now
-                else:
-                    task.last_predict_status = status
-                    task.last_predict_at = now
-                if error_message:
-                    task.last_error = error_message
-                task.updated_at = now
+        return finish_prediction_run(
+            session,
+            run_id=run_id,
+            attempt_number=attempt_number,
+            status=status,
+            error_message=error_message,
+            result_data=result_data,
+        )
 
 
-def _update_task_running(task_id, action):
-    if not task_id:
-        return
-    with db_session() as session:
-        task = session.query(PredictionTask).get(task_id)
-        if not task:
-            return
-        if action == "train":
-            task.last_train_status = "running"
-        else:
-            task.last_predict_status = "running"
-        task.updated_at = _utc_now()
+def _claim_skip_result(claim, farm_code, task_type):
+    return {
+        "status": "skipped",
+        "farm_code": farm_code,
+        "task_type": task_type,
+        "prediction_run_id": claim.run_id,
+        "reason": claim.reason,
+        "active_run_id": claim.active_run_id,
+    }
 
 
 def _map_task_type(task_type: str) -> str:
@@ -110,16 +92,24 @@ def _map_task_type(task_type: str) -> str:
 @celery_app.task(bind=True, max_retries=2, soft_time_limit=1800)
 def train_model(self, farm_code, task_type):
     _validate_farm_code(farm_code)
+    attempt_number = int(self.request.retries or 0) + 1
     try:
-        task_id = _get_task_id(farm_code, task_type)
-        run_id = _create_run_record(task_id, "train", self.request.id) if task_id else None
+        claim = _claim_run_record(
+            farm_code,
+            task_type,
+            "train",
+            self.request.id,
+            attempt_number,
+        )
     except Exception as exc:
         if _is_db_error(exc):
             logger.warning(f"train_model DB unavailable at startup for {farm_code}/{task_type}, will retry: {exc}")
             raise self.retry(exc=exc, countdown=120)
         raise
+    if not claim.should_execute:
+        return _claim_skip_result(claim, farm_code, task_type)
+    run_id = claim.run_id
     try:
-        _update_task_running(task_id, "train")
         from services.model_manager import ModelManager
         mgr = ModelManager()
 
@@ -135,15 +125,20 @@ def train_model(self, farm_code, task_type):
 
         if result.get("status") != "ok":
             raise RuntimeError(result.get("message", "training failed"))
-        _finish_run_and_update_task(run_id, task_id, "train", "success", result_data=result)
-        return {"status": "success", "farm_code": farm_code, "task_type": task_type}
+        _finish_run(run_id, attempt_number, "success", result_data=result)
+        return {
+            "status": "success",
+            "farm_code": farm_code,
+            "task_type": task_type,
+            "prediction_run_id": run_id,
+        }
     except Exception as exc:
         db_down = _is_db_error(exc)
         if not db_down:
             try:
-                _finish_run_and_update_task(run_id, task_id, "train", "failed", str(exc))
+                _finish_run(run_id, attempt_number, "failed", str(exc))
             except Exception:
-                logger.warning(f"train_model: failed to record failure status (DB may be down)")
+                logger.warning("train_model: failed to record failure status (DB may be down)")
         else:
             logger.warning(f"train_model DB error for {farm_code}/{task_type}, will retry: {exc}")
         raise self.retry(exc=exc, countdown=120 if db_down else 60)
@@ -152,29 +147,36 @@ def train_model(self, farm_code, task_type):
 @celery_app.task(bind=True, max_retries=1, soft_time_limit=600)
 def run_prediction(self, farm_code, task_type):
     _validate_farm_code(farm_code)
+    attempt_number = int(self.request.retries or 0) + 1
     try:
-        task_id = _get_task_id(farm_code, task_type)
-        run_id = _create_run_record(task_id, "predict", self.request.id) if task_id else None
+        claim = _claim_run_record(
+            farm_code,
+            task_type,
+            "predict",
+            self.request.id,
+            attempt_number,
+        )
     except Exception as exc:
         if _is_db_error(exc):
             logger.warning(f"run_prediction DB unavailable at startup for {farm_code}/{task_type}, will retry: {exc}")
             raise self.retry(exc=exc, countdown=120)
         raise
+    if not claim.should_execute:
+        return _claim_skip_result(claim, farm_code, task_type)
+    run_id = claim.run_id
     try:
-        _update_task_running(task_id, "predict")
         input_snapshot_id = None
         model_version_id = None
-        if run_id:
-            from services.prediction_lineage_service import capture_prediction_input_snapshot
-            with db_session() as lineage_session:
-                snapshot = capture_prediction_input_snapshot(
-                    lineage_session,
-                    prediction_run_id=run_id,
-                    farm_code=farm_code,
-                    task_type=task_type,
-                )
-                input_snapshot_id = snapshot.id
-                model_version_id = snapshot.model_version_id
+        from services.prediction_lineage_service import capture_prediction_input_snapshot
+        with db_session() as lineage_session:
+            snapshot = capture_prediction_input_snapshot(
+                lineage_session,
+                prediction_run_id=run_id,
+                farm_code=farm_code,
+                task_type=task_type,
+            )
+            input_snapshot_id = snapshot.id
+            model_version_id = snapshot.model_version_id
         from services.forecast_service import run_daily_prediction
         from services.model_manager import ModelManager
         from services.calibration_manager import CalibrationManager
@@ -197,15 +199,20 @@ def run_prediction(self, farm_code, task_type):
         if result.get("status") != "ok":
             raise RuntimeError(result.get("message", "prediction failed"))
         result["input_snapshot_id"] = input_snapshot_id
-        _finish_run_and_update_task(run_id, task_id, "predict", "success", result_data=result)
-        return {"status": "success", "farm_code": farm_code, "task_type": task_type}
+        _finish_run(run_id, attempt_number, "success", result_data=result)
+        return {
+            "status": "success",
+            "farm_code": farm_code,
+            "task_type": task_type,
+            "prediction_run_id": run_id,
+        }
     except Exception as exc:
         db_down = _is_db_error(exc)
         if not db_down:
             try:
-                _finish_run_and_update_task(run_id, task_id, "predict", "failed", str(exc))
+                _finish_run(run_id, attempt_number, "failed", str(exc))
             except Exception:
-                logger.warning(f"run_prediction: failed to record failure status (DB may be down)")
+                logger.warning("run_prediction: failed to record failure status (DB may be down)")
         else:
             logger.warning(f"run_prediction DB error for {farm_code}/{task_type}, will retry: {exc}")
         raise self.retry(exc=exc, countdown=120 if db_down else 30)
@@ -214,16 +221,24 @@ def run_prediction(self, farm_code, task_type):
 @celery_app.task(bind=True, max_retries=1, soft_time_limit=300)
 def run_calibration(self, farm_code, task_type):
     _validate_farm_code(farm_code)
+    attempt_number = int(self.request.retries or 0) + 1
     try:
-        task_id = _get_task_id(farm_code, task_type)
-        run_id = _create_run_record(task_id, "calibrate", self.request.id) if task_id else None
+        claim = _claim_run_record(
+            farm_code,
+            task_type,
+            "calibrate",
+            self.request.id,
+            attempt_number,
+        )
     except Exception as exc:
         if _is_db_error(exc):
             logger.warning(f"run_calibration DB unavailable at startup for {farm_code}/{task_type}, will retry: {exc}")
             raise self.retry(exc=exc, countdown=120)
         raise
+    if not claim.should_execute:
+        return _claim_skip_result(claim, farm_code, task_type)
+    run_id = claim.run_id
     try:
-        _update_task_running(task_id, "calibrate")
         from services.calibration_manager import CalibrationManager
         cal_mgr = CalibrationManager()
 
@@ -238,15 +253,21 @@ def run_calibration(self, farm_code, task_type):
                 result = run_daily_calibration(farm_code, ftype, cal_mgr, session)
 
         status = "success" if result.get("status") == "ok" else "skipped"
-        _finish_run_and_update_task(run_id, task_id, "calibrate", status, result_data=result)
-        return {"status": status, "farm_code": farm_code, "task_type": task_type, **result}
+        _finish_run(run_id, attempt_number, status, result_data=result)
+        return {
+            "status": status,
+            "farm_code": farm_code,
+            "task_type": task_type,
+            "prediction_run_id": run_id,
+            **result,
+        }
     except Exception as exc:
         db_down = _is_db_error(exc)
         if not db_down:
             try:
-                _finish_run_and_update_task(run_id, task_id, "calibrate", "failed", str(exc))
+                _finish_run(run_id, attempt_number, "failed", str(exc))
             except Exception:
-                logger.warning(f"run_calibration: failed to record failure status (DB may be down)")
+                logger.warning("run_calibration: failed to record failure status (DB may be down)")
         else:
             logger.warning(f"run_calibration DB error for {farm_code}/{task_type}, will retry: {exc}")
         raise self.retry(exc=exc, countdown=120 if db_down else 30)
@@ -255,29 +276,36 @@ def run_calibration(self, farm_code, task_type):
 @celery_app.task(bind=True, max_retries=1, soft_time_limit=300)
 def run_supershort_predict(self, farm_code):
     _validate_farm_code(farm_code)
+    attempt_number = int(self.request.retries or 0) + 1
     try:
-        task_id = _get_task_id(farm_code, "supershort")
-        run_id = _create_run_record(task_id, "predict", self.request.id) if task_id else None
+        claim = _claim_run_record(
+            farm_code,
+            "supershort",
+            "predict",
+            self.request.id,
+            attempt_number,
+        )
     except Exception as exc:
         if _is_db_error(exc):
             logger.warning(f"run_supershort_predict DB unavailable at startup for {farm_code}, will retry: {exc}")
             raise self.retry(exc=exc, countdown=120)
         raise
+    if not claim.should_execute:
+        return _claim_skip_result(claim, farm_code, "supershort")
+    run_id = claim.run_id
     try:
-        _update_task_running(task_id, "predict")
         input_snapshot_id = None
         model_version_id = None
-        if run_id:
-            from services.prediction_lineage_service import capture_prediction_input_snapshot
-            with db_session() as lineage_session:
-                snapshot = capture_prediction_input_snapshot(
-                    lineage_session,
-                    prediction_run_id=run_id,
-                    farm_code=farm_code,
-                    task_type="supershort",
-                )
-                input_snapshot_id = snapshot.id
-                model_version_id = snapshot.model_version_id
+        from services.prediction_lineage_service import capture_prediction_input_snapshot
+        with db_session() as lineage_session:
+            snapshot = capture_prediction_input_snapshot(
+                lineage_session,
+                prediction_run_id=run_id,
+                farm_code=farm_code,
+                task_type="supershort",
+            )
+            input_snapshot_id = snapshot.id
+            model_version_id = snapshot.model_version_id
         from services.forecast_service import run_ultrashort_prediction
         from services.model_manager import ModelManager
         from services.calibration_manager import CalibrationManager
@@ -298,15 +326,19 @@ def run_supershort_predict(self, farm_code):
         if result.get("status") != "ok":
             raise RuntimeError(result.get("message", "supershort prediction failed"))
         result["input_snapshot_id"] = input_snapshot_id
-        _finish_run_and_update_task(run_id, task_id, "predict", "success", result_data=result)
-        return {"status": "success", "farm_code": farm_code}
+        _finish_run(run_id, attempt_number, "success", result_data=result)
+        return {
+            "status": "success",
+            "farm_code": farm_code,
+            "prediction_run_id": run_id,
+        }
     except Exception as exc:
         db_down = _is_db_error(exc)
         if not db_down:
             try:
-                _finish_run_and_update_task(run_id, task_id, "predict", "failed", str(exc))
+                _finish_run(run_id, attempt_number, "failed", str(exc))
             except Exception:
-                logger.warning(f"run_supershort_predict: failed to record failure status (DB may be down)")
+                logger.warning("run_supershort_predict: failed to record failure status (DB may be down)")
         else:
             logger.warning(f"run_supershort_predict DB error for {farm_code}, will retry: {exc}")
         raise self.retry(exc=exc, countdown=120 if db_down else 15)
@@ -385,33 +417,52 @@ def run_regulatory_evaluation(self, end_date_str=None, lookback_days=None):
 def merge_predictions(self, farm_code, date_str):
     import subprocess
     _validate_farm_code(farm_code)
+    attempt_number = int(self.request.retries or 0) + 1
     try:
-        task_id = _get_task_id(farm_code, "medium")
-        run_id = _create_run_record(task_id, "merge", self.request.id) if task_id else None
+        claim = _claim_run_record(
+            farm_code,
+            "medium",
+            "merge",
+            self.request.id,
+            attempt_number,
+        )
     except Exception as exc:
         if _is_db_error(exc):
             logger.warning(f"merge_predictions DB unavailable at startup for {farm_code}, will retry: {exc}")
             raise self.retry(exc=exc, countdown=120)
         raise
+    if not claim.should_execute:
+        return _claim_skip_result(claim, farm_code, "medium")
+    run_id = claim.run_id
     merge_script = os.path.join(BASE_DIR, "auto_scripts", "scripts", "middle", "run_auto_predict.py")
     try:
         env = os.environ.copy()
         env["FARM_CODE"] = farm_code
         env["TARGET_DATE"] = date_str
         if os.path.exists(merge_script):
-            subprocess.run(
+            completed = subprocess.run(
                 [sys.executable, merge_script, "--farm_code", farm_code, "--date", date_str],
                 capture_output=True, text=True, timeout=300, env=env,
             )
-        _finish_run_and_update_task(run_id, task_id, "merge", "success")
-        return {"status": "success", "farm_code": farm_code, "date": date_str}
+            if completed.returncode != 0:
+                message = (completed.stderr or completed.stdout or "合并脚本执行失败").strip()
+                raise RuntimeError(message[-2000:])
+        else:
+            raise FileNotFoundError(f"合并脚本不存在: {merge_script}")
+        result = {"farm_code": farm_code, "date": date_str}
+        _finish_run(run_id, attempt_number, "success", result_data=result)
+        return {
+            "status": "success",
+            "prediction_run_id": run_id,
+            **result,
+        }
     except Exception as exc:
         db_down = _is_db_error(exc)
         if not db_down:
             try:
-                _finish_run_and_update_task(run_id, task_id, "merge", "failed", str(exc))
+                _finish_run(run_id, attempt_number, "failed", str(exc))
             except Exception:
-                logger.warning(f"merge_predictions: failed to record failure status (DB may be down)")
+                logger.warning("merge_predictions: failed to record failure status (DB may be down)")
         else:
             logger.warning(f"merge_predictions DB error for {farm_code}, will retry: {exc}")
         if db_down:
