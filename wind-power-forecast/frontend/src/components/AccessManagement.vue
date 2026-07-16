@@ -25,6 +25,8 @@ import UserManagement from './UserManagement.vue'
 import RoleManagement from './RoleManagement.vue'
 import { getStoredUser, hasPermission } from '../utils/permission'
 
+defineOptions({ name: 'UserManagement' })
+
 const route = useRoute()
 const router = useRouter()
 const currentUser = computed(() => getStoredUser() || {})

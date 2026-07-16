@@ -156,6 +156,44 @@
         </div>
       </el-header>
 
+      <nav class="workspace-tabs" aria-label="已打开页面">
+        <div ref="tabsScrollerRef" class="workspace-tabs__scroller" role="tablist">
+          <div
+            v-for="tab in openTabs"
+            :key="tab.key"
+            class="workspace-tab"
+            :class="{ 'is-active': tab.key === activeTabKey, 'is-fixed': !tab.closable }"
+            :data-tab-key="tab.key"
+          >
+            <button
+              type="button"
+              class="workspace-tab__main"
+              role="tab"
+              :aria-selected="tab.key === activeTabKey"
+              :title="tab.title"
+              @click="activateTab(tab)"
+              @keydown.delete.prevent="closeTab(tab.key)"
+            >
+              <el-icon class="workspace-tab__icon">
+                <HomeFilled v-if="!tab.closable" />
+                <Document v-else />
+              </el-icon>
+              <span>{{ tab.title }}</span>
+            </button>
+            <button
+              v-if="tab.closable"
+              type="button"
+              class="workspace-tab__close"
+              :aria-label="`关闭${tab.title}`"
+              :title="`关闭${tab.title}`"
+              @click.stop="closeTab(tab.key)"
+            >
+              <el-icon><Close /></el-icon>
+            </button>
+          </div>
+        </div>
+      </nav>
+
       <el-main ref="mainContentRef" class="main-content">
         <router-view v-slot="{ Component, route: currentRoute }">
           <keep-alive :include="keepAliveRouteNames">
@@ -189,11 +227,20 @@ import {
   DataAnalysis,
   WarnTriangleFilled,
   Setting,
-  Bell
+  Bell,
+  Document,
+  Close
 } from '@element-plus/icons-vue'
 import FarmSelector from './FarmSelector.vue'
 import farmService from '../utils/farmService'
 import { getCapabilities } from '../api/capabilityApi'
+import {
+  closeWorkspaceTab,
+  getWorkspaceTabKey,
+  restoreWorkspaceTabs,
+  routeToWorkspaceTab,
+  upsertWorkspaceTab
+} from '../utils/workspaceTabs.mjs'
 
 export default {
   name: 'AppLayout',
@@ -212,6 +259,8 @@ export default {
     WarnTriangleFilled,
     Setting,
     Bell,
+    Document,
+    Close,
     FarmSelector
   },
   setup() {
@@ -222,6 +271,7 @@ export default {
     const menuRef = ref(null)
     const sidebarRef = ref(null)
     const mainContentRef = ref(null)
+    const tabsScrollerRef = ref(null)
     const isAnimatedBackground = ref(true)
     const currentUser = ref(null)
     const uiText = UI_TEXT.appLayout
@@ -231,14 +281,19 @@ export default {
     const capabilities = ref([])
     let timeTicker = null
     let capabilityTicker = null
+    let removeWorkspaceGuard = null
+    let skipWorkspacePersistence = false
     const reportingEnabled = import.meta.env.VITE_REPORTING_ENABLED === 'true'
     const menuGroups = ['/group-predict', '/group-analysis', '/group-exchange', '/group-ops', '/group-admin']
+    const workspaceStateKey = 'wind_power_workspace_tabs_v1'
+    const workspaceScrollPositions = new Map()
 
     const unsubscribeDb = dbState.onChange((val) => { dbUnavailable.value = val })
 
     provide('isAnimatedBackground', isAnimatedBackground)
 
     const activeMenu = computed(() => (route.path === '/' ? '/' : route.path))
+    const activeTabKey = computed(() => getWorkspaceTabKey(route))
     const activeGroup = computed(() => {
       if (['/autopredict', '/manual-workspace'].includes(route.path)) return '/group-predict'
       if (['/powercompare', '/accuracy-report', '/power-curve'].includes(route.path)) return '/group-analysis'
@@ -248,11 +303,11 @@ export default {
       return ''
     })
     const defaultOpeneds = computed(() => (activeGroup.value ? [activeGroup.value] : []))
+    const openTabs = ref([])
     const keepAliveRouteNames = computed(() =>
-      router
-        .getRoutes()
-        .filter(r => r.meta?.keepAlive && typeof r.name === 'string')
-        .map(r => r.name)
+      openTabs.value
+        .filter(tab => tab.name)
+        .map(tab => tab.name)
     )
     const canViewAlerts = computed(() => hasPermission('view_alarm_center') || hasPermission('manage_reports'))
     const capabilityIssues = computed(() =>
@@ -281,6 +336,94 @@ export default {
     }
 
     provide('capabilities', capabilities)
+
+    const persistWorkspaceState = () => {
+      try {
+        sessionStorage.setItem(workspaceStateKey, JSON.stringify({
+          tabs: openTabs.value,
+          scrollPositions: Object.fromEntries(workspaceScrollPositions)
+        }))
+      } catch {
+        // 浏览器禁用会话存储时，当前会话内的页签仍可正常工作。
+      }
+    }
+
+    const loadWorkspaceState = () => {
+      let storedState = {}
+      try {
+        storedState = JSON.parse(sessionStorage.getItem(workspaceStateKey) || '{}')
+      } catch {
+        storedState = {}
+      }
+
+      Object.entries(storedState.scrollPositions || {}).forEach(([key, value]) => {
+        workspaceScrollPositions.set(key, Math.max(0, Number(value) || 0))
+      })
+
+      const homeTab = routeToWorkspaceTab(router.resolve('/'))
+      const restoredTabs = restoreWorkspaceTabs(storedState.tabs, target => router.resolve(target))
+        .filter(tab => tab.key !== homeTab?.key)
+      openTabs.value = homeTab ? [homeTab, ...restoredTabs] : restoredTabs
+      openTabs.value = upsertWorkspaceTab(openTabs.value, route)
+      persistWorkspaceState()
+    }
+
+    const rememberScrollPosition = (routeLike) => {
+      const key = getWorkspaceTabKey(routeLike)
+      const mainElement = mainContentRef.value?.$el || mainContentRef.value
+      if (!key || !mainElement) return
+      workspaceScrollPositions.set(key, Math.max(0, mainElement.scrollTop || 0))
+      persistWorkspaceState()
+    }
+
+    const restoreScrollPosition = async (routeLike) => {
+      const key = getWorkspaceTabKey(routeLike)
+      await nextTick()
+      window.requestAnimationFrame(() => {
+        const mainElement = mainContentRef.value?.$el || mainContentRef.value
+        if (mainElement) mainElement.scrollTop = workspaceScrollPositions.get(key) || 0
+      })
+    }
+
+    const scrollActiveTabIntoView = async () => {
+      await nextTick()
+      tabsScrollerRef.value
+        ?.querySelector('.workspace-tab.is-active')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
+    }
+
+    const syncWorkspaceForRoute = async () => {
+      if (!route.name || route.name === 'Login') return
+      openTabs.value = upsertWorkspaceTab(openTabs.value, route)
+      persistWorkspaceState()
+      await restoreScrollPosition(route)
+      await scrollActiveTabIntoView()
+    }
+
+    const activateTab = (tab) => {
+      if (!tab || tab.key === activeTabKey.value) return
+      router.push(tab.fullPath || tab.path)
+    }
+
+    const closeTab = (key) => {
+      const result = closeWorkspaceTab(openTabs.value, key, activeTabKey.value)
+      if (result.tabs.length === openTabs.value.length) return
+
+      openTabs.value = result.tabs
+      persistWorkspaceState()
+
+      if (result.nextTab) {
+        router.replace(result.nextTab.fullPath || result.nextTab.path).finally(() => {
+          workspaceScrollPositions.delete(key)
+          persistWorkspaceState()
+        })
+      } else {
+        workspaceScrollPositions.delete(key)
+        persistWorkspaceState()
+      }
+    }
+
+    loadWorkspaceState()
 
     const userInitial = computed(() => {
       const userStr = localStorage.getItem('user')
@@ -320,6 +463,8 @@ export default {
       if (!token || !userStr) {
         isAuthLoading.value = false
         isAuthReady.value = false
+        skipWorkspacePersistence = true
+        sessionStorage.removeItem(workspaceStateKey)
         if (router.currentRoute.value.path !== '/login') {
           router.push('/login')
         }
@@ -335,6 +480,8 @@ export default {
       } catch {
         localStorage.removeItem('accessToken')
         localStorage.removeItem('user')
+        skipWorkspacePersistence = true
+        sessionStorage.removeItem(workspaceStateKey)
         currentUser.value = null
         isAuthReady.value = false
         if (router.currentRoute.value.path !== '/login') {
@@ -375,15 +522,13 @@ export default {
     }
 
     const handleSelect = (index) => {
-      router.push(index)
+      if (route.path !== index) router.push(index)
     }
 
     const syncMenuForRoute = async () => {
       await nextTick()
       const sidebarElement = sidebarRef.value?.$el || sidebarRef.value
       if (sidebarElement) sidebarElement.scrollTop = 0
-      const mainElement = mainContentRef.value?.$el || mainContentRef.value
-      if (mainElement) mainElement.scrollTop = 0
 
       if (!currentUser.value || !menuRef.value) return
       menuGroups.forEach(group => {
@@ -393,6 +538,7 @@ export default {
     }
 
     watch(() => route.path, syncMenuForRoute)
+    watch(() => route.fullPath, syncWorkspaceForRoute)
 
     const handleCommand = (command) => {
       if (command === 'logout') {
@@ -421,6 +567,8 @@ export default {
         .then(() => {
           localStorage.removeItem('user')
           localStorage.removeItem('accessToken')
+          skipWorkspacePersistence = true
+          sessionStorage.removeItem(workspaceStateKey)
           ElMessage.success('已成功退出登录')
           router.push('/login')
         })
@@ -428,6 +576,10 @@ export default {
     }
 
     onMounted(() => {
+      removeWorkspaceGuard = router.beforeEach((to, from) => {
+        if (!skipWorkspacePersistence && from.name && from.name !== 'Login') rememberScrollPosition(from)
+        return true
+      })
       syncCollapseForViewport()
       refreshSystemTime()
       timeTicker = setInterval(refreshSystemTime, 1000)
@@ -437,6 +589,7 @@ export default {
       window.addEventListener('resize', syncCollapseForViewport)
       document.addEventListener('visibilitychange', refreshCapabilitiesWhenVisible)
       syncMenuForRoute()
+      restoreScrollPosition(route)
     })
 
     onUnmounted(() => {
@@ -448,6 +601,7 @@ export default {
       }
       window.removeEventListener('resize', syncCollapseForViewport)
       document.removeEventListener('visibilitychange', refreshCapabilitiesWhenVisible)
+      if (removeWorkspaceGuard) removeWorkspaceGuard()
       unsubscribeDb()
     })
 
@@ -456,12 +610,17 @@ export default {
       menuRef,
       sidebarRef,
       mainContentRef,
+      tabsScrollerRef,
       activeMenu,
+      activeTabKey,
+      openTabs,
       defaultOpeneds,
       keepAliveRouteNames,
       dbUnavailable,
       toggleCollapse,
       handleSelect,
+      activateTab,
+      closeTab,
       userInitial,
       userName,
       alertCount,
@@ -509,9 +668,126 @@ export default {
   background: var(--bg-root) !important;
 }
 
+.main-container {
+  min-width: 0;
+}
+
 .main-content {
   padding: 0;
   overflow-y: auto;
+}
+
+.workspace-tabs {
+  flex: 0 0 46px;
+  min-width: 0;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  padding: 6px 18px;
+  background: rgba(255, 255, 255, 0.96);
+  border-bottom: 1px solid var(--border-color);
+  z-index: 998;
+}
+
+.workspace-tabs__scroller {
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #c8d2ca transparent;
+}
+
+.workspace-tabs__scroller::-webkit-scrollbar {
+  height: 4px;
+}
+
+.workspace-tabs__scroller::-webkit-scrollbar-thumb {
+  background: #c8d2ca;
+  border-radius: 999px;
+}
+
+.workspace-tab {
+  flex: 0 0 auto;
+  min-width: 112px;
+  max-width: 210px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+  background: #f4f6f4;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  transition: color var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.workspace-tab:hover {
+  color: var(--text-primary);
+  background: #eef2ef;
+}
+
+.workspace-tab.is-active {
+  color: var(--accent);
+  background: #ffffff;
+  border-color: #bfd5c8;
+}
+
+.workspace-tab__main {
+  min-width: 0;
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.workspace-tab__main span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.workspace-tab__icon {
+  flex: 0 0 auto;
+  font-size: 14px;
+}
+
+.workspace-tab__close {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  margin-right: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.workspace-tab__close:hover,
+.workspace-tab__close:focus-visible {
+  color: var(--danger);
+  background: var(--danger-soft);
+  outline: none;
+}
+
+.workspace-tab__main:focus-visible {
+  border-radius: 7px;
+  outline: 2px solid rgba(47, 138, 95, 0.28);
+  outline-offset: -2px;
 }
 
 .sidebar {
@@ -800,6 +1076,15 @@ export default {
   .username,
   .system-time-chip {
     display: none;
+  }
+
+  .workspace-tabs {
+    padding-inline: 10px;
+  }
+
+  .workspace-tab {
+    min-width: 104px;
+    max-width: 168px;
   }
 }
 
