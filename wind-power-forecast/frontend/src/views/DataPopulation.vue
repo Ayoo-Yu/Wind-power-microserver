@@ -355,7 +355,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled, Document, Close } from '@element-plus/icons-vue'
-import { uploadActualPowerAsync, getImportJob, uploadEcmwfGridAsync, uploadFeatureCsv, getEtextPipelineConfig, updateEtextPipelineConfig, triggerEtextPipeline, getEtextTriggerStatus } from '../api/dataImportApi'
+import { uploadActualPowerAsync, getImportJob, uploadFeatureCsv, getEtextPipelineConfig, updateEtextPipelineConfig, triggerEtextPipeline, getEtextTriggerStatus } from '../api/dataImportApi'
 import farmService from '../utils/farmService'
 
 const activeTab = ref('actual')
@@ -392,14 +392,6 @@ function formatDataType(dataType, brief = false) {
 const actualFiles = ref([])
 const ecmwfFiles = ref([])
 const batchJobs = ref([])
-const actualFile = computed({
-  get: () => actualFiles.value[0] || null,
-  set: (file) => { actualFiles.value = file ? [file] : [] }
-})
-const ecmwfFile = computed({
-  get: () => ecmwfFiles.value[0] || null,
-  set: (file) => { ecmwfFiles.value = file ? [file] : [] }
-})
 
 const farmList = computed(() => farms.value.filter(f => f.code))
 
@@ -442,25 +434,11 @@ function triggerInput(tab) {
 function handleFileSelect(e, tab) {
   setSelectedFiles(tab, Array.from(e.target.files || []))
   e.target.value = ''
-  return
-  const f = e.target.files?.[0]
-  if (!f) return
-  if (!f.name.toLowerCase().endsWith('.csv')) { ElMessage.warning('仅支持 CSV'); return }
-  if (f.size > 2147483648) { ElMessage.error('超过 2GB'); return }
-  if (tab === 'actual') actualFile.value = f
-  else ecmwfFile.value = f
 }
 
 function handleDrop(e, tab) {
   dragover.value = ''
   setSelectedFiles(tab, Array.from(e.dataTransfer?.files || []))
-  return
-  const f = e.dataTransfer?.files?.[0]
-  if (!f) return
-  if (!f.name.toLowerCase().endsWith('.csv')) { ElMessage.warning('仅支持 CSV'); return }
-  if (f.size > 2147483648) { ElMessage.error('超过 2GB'); return }
-  if (tab === 'actual') actualFile.value = f
-  else ecmwfFile.value = f
 }
 
 function setSelectedFiles(tab, files) {
@@ -492,181 +470,8 @@ function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-async function waitForImportJob(jobId, signal, type = 'actual') {
-  let pollFailures = 0
-  while (true) {
-    await wait(1500)
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
-
-    let res
-    try {
-      res = await getImportJob(jobId, { signal })
-      pollFailures = 0
-    } catch (error) {
-      if (signal?.aborted) throw error
-      pollFailures += 1
-      statusText.value = `Waiting for status response, retry ${pollFailures}`
-      progressDetail.value = {
-        ...progressDetail.value,
-        phase: 'Waiting',
-        jobId
-      }
-      if (pollFailures >= 30) {
-        throw new Error('Status polling timed out repeatedly')
-      }
-      continue
-    }
-
-    const job = res.data
-    progress.value = job.status === 'done'
-      ? 100
-      : Math.max(1, Math.min(job.progress || 0, 99))
-    progressDetail.value = {
-      phase: job.status === 'queued' ? 'Queued' : job.status === 'done' ? 'Done' : 'Processing',
-      jobId,
-      status: job.status,
-      processedRows: job.processed_rows || 0,
-      totalRows: job.total_rows || null,
-      inserted: job.inserted_count || 0,
-      updated: job.updated_count || 0,
-      skipped: job.skipped_count || 0,
-      ingested: job.ingested_count || 0,
-      errors: job.error_count || 0
-    }
-    statusText.value = job.status === 'done'
-      ? `Done ${fmtNum(job.processed_rows || 0)} / ${fmtNum(job.total_rows)} rows`
-      : `Server processing ${fmtNum(job.processed_rows || 0)} / ${fmtNum(job.total_rows)} rows`
-
-    if (job.status === 'done') return job
-    if (job.status === 'failed') throw new Error(job.message || 'Import failed')
-  }
-}
-
 async function doUpload(tab) {
   await doBatchUpload(tab)
-  return
-  uploading.value = true
-  progress.value = 0
-  statusText.value = '正在上传...'
-  progressDetail.value = { phase: 'Uploading' }
-  lastResult.value = null
-  abortCtrl = new AbortController()
-
-  const onProgress = (e) => {
-    if (e.total) {
-      const pct = Math.round((e.loaded / e.total) * 100)
-      progress.value = Math.min(pct, 99)
-      progressDetail.value = {
-        phase: pct >= 100 ? 'Waiting' : 'Uploading',
-        uploadedBytes: e.loaded,
-        totalBytes: e.total
-      }
-      if (pct >= 100) statusText.value = '服务器处理中...'
-    }
-  }
-
-  try {
-    let res, result
-    if (tab === 'actual') {
-      res = await uploadActualPowerAsync({
-        file: actualFile.value,
-        farmCode: actualForm.value.farmCode,
-        strategy: actualForm.value.strategy,
-        onUploadProgress: onProgress,
-        signal: abortCtrl.signal
-      })
-      progress.value = 0
-      statusText.value = 'Server processing...'
-      progressDetail.value = {
-        phase: 'Queued',
-        jobId: res.data.job_id,
-        processedRows: 0,
-        totalRows: null,
-        inserted: 0,
-        updated: 0,
-        skipped: 0,
-        ingested: 0,
-        errors: 0
-      }
-      const d = await waitForImportJob(res.data.job_id, abortCtrl.signal, 'actual')
-      result = {
-        success: d.status === 'done' && toCount(d.error_count) === 0,
-        type: 'actual',
-        farmCode: actualForm.value.farmCode,
-        strategy: actualForm.value.strategy,
-        inserted: toCount(d.inserted_count),
-        updated: toCount(d.updated_count),
-        skipped: toCount(d.skipped_count),
-        processed: toCount(d.processed_rows),
-        errors: toCount(d.error_count)
-      }
-    } else {
-      res = await uploadEcmwfGridAsync({
-        file: ecmwfFile.value,
-        farmCode: ecmwfForm.value.farmCode,
-        onUploadProgress: onProgress,
-        signal: abortCtrl.signal
-      })
-      progress.value = 0
-      statusText.value = 'Server processing...'
-      progressDetail.value = {
-        phase: 'Queued',
-        jobId: res.data.job_id,
-        processedRows: 0,
-        totalRows: null,
-        inserted: 0,
-        updated: 0,
-        skipped: 0,
-        ingested: 0,
-        errors: 0
-      }
-      const d = await waitForImportJob(res.data.job_id, abortCtrl.signal, 'ecmwf')
-      result = {
-        success: d.status === 'done' && toCount(d.error_count) === 0,
-        type: 'ecmwf',
-        farmCode: ecmwfForm.value.farmCode,
-        ingested: toCount(d.ingested_count),
-        processed: toCount(d.processed_rows),
-        errors: toCount(d.error_count)
-      }
-    }
-
-    progress.value = 100
-    statusText.value = '处理完成'
-    lastResult.value = result
-
-    history.value.unshift({
-      time: new Date().toLocaleString(),
-      type: result.type,
-      farmCode: result.farmCode,
-      fileName: (tab === 'actual' ? actualFile.value : ecmwfFile.value)?.name,
-      inserted: result.inserted,
-      updated: result.updated,
-      skipped: result.skipped,
-      ingested: result.ingested,
-      processed: result.processed,
-      errors: result.errors,
-      ok: result.success
-    })
-
-    if (result.success) {
-      ElMessage.success(`导入完成：${result.inserted ?? result.ingested ?? 0} 条`)
-    } else {
-      ElMessage.warning(`部分失败，错误 ${result.errors} 条`)
-    }
-
-    if (tab === 'actual') actualFile.value = null
-    else ecmwfFile.value = null
-  } catch (err) {
-    if (err.name === 'CanceledError' || err.name === 'AbortError') {
-      ElMessage.info('已取消')
-    } else {
-      ElMessage.error(err.response?.data?.error || err.message || '上传失败')
-    }
-  } finally {
-    uploading.value = false
-    abortCtrl = null
-  }
 }
 
 function refreshBatchSummary() {
@@ -689,7 +494,7 @@ function refreshBatchSummary() {
 
 async function pollBatchJob(entry, signal) {
   let pollFailures = 0
-  while (true) {
+  for (;;) {
     await wait(1500)
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
 
@@ -795,7 +600,7 @@ async function uploadOneFile(tab, file, entry, signal) {
     return result
   }
 
-  // ecmwf tab: synchronous upload via /api/upload_feature_csv
+  // ECMWF 页签通过 /api/upload_feature_csv 同步上传。
   const tableName = `${ecmwfForm.value.dataType}_${ecmwfForm.value.farmCode.toLowerCase()}`
   const res = await uploadFeatureCsv({
     file,

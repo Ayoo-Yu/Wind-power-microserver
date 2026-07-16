@@ -42,7 +42,7 @@
               {{ conn.farm_code }}
             </span>
             <span class="meta-item">
-              <el-icon><Link /></el-icon>
+              <el-icon><LinkIcon /></el-icon>
               {{ conn.server_ip }}:{{ conn.server_port }}
             </span>
             <span v-if="conn.upload_target_ioa" class="meta-item">
@@ -203,13 +203,13 @@
 import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  Plus, Refresh, Delete, OfficeBuilding, Link, DataLine
+  Plus, Refresh, Delete, OfficeBuilding, Link as LinkIcon, DataLine
 } from '@element-plus/icons-vue'
 import * as scadaApi from '../api/scadaApi'
 
 export default {
   name: 'ScadaConnection',
-  components: { Plus, Refresh, Delete, OfficeBuilding, Link, DataLine },
+  components: { OfficeBuilding, LinkIcon, DataLine },
   setup() {
     const connections = ref([])
     const availableFarms = ref([])
@@ -429,7 +429,11 @@ export default {
         await scadaApi.deleteConnection(conn.id)
         ElMessage.success('连接已删除')
         loadConnections()
-      } catch {}
+      } catch (error) {
+        if (error !== 'cancel' && error !== 'close') {
+          ElMessage.error(error.response?.data?.error || '删除连接失败')
+        }
+      }
     }
 
     const addIoa = () => {
@@ -488,7 +492,7 @@ export default {
       openAddDialog, openEditDialog, handleSave,
       handleStart, handleStop, handleRestart, handleTest, handleDelete,
       addIoa, removeIoa, updateIoaType, updateIoaAddress,
-      Plus, Refresh, Delete, OfficeBuilding, Link, DataLine,
+      Plus, Refresh, Delete,
     }
   }
 }

@@ -13,7 +13,7 @@
           clearable
           class="search-input"
         >
-          <template #prefix><el-icon><Search /></el-icon></template>
+          <template #prefix><el-icon><SearchIcon /></el-icon></template>
         </el-input>
         <div class="toolbar-actions">
           <el-button :icon="Refresh" :loading="loading" @click="fetchData">刷新</el-button>
@@ -160,7 +160,7 @@
 <script>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Edit, Key, Lock, Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { Delete, Edit, Key, Lock, Plus, Refresh, Search as SearchIcon } from '@element-plus/icons-vue'
 import {
   createUser,
   deleteUser,
@@ -190,6 +190,7 @@ const EMPTY_USER_FORM = () => ({
 
 export default {
   name: 'UserManagement',
+  components: { SearchIcon },
   setup() {
     const loading = ref(false)
     const submitting = ref(false)
@@ -537,7 +538,6 @@ export default {
       Plus,
       Edit,
       Refresh,
-      Search,
       Delete,
       Lock,
       Key

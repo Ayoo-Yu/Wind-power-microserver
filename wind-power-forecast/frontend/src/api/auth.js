@@ -38,7 +38,7 @@ export const getCurrentUser = async () => {
       phone: metaResponse.data?.phone || '',
       stations: Array.isArray(metaResponse.data?.stations) ? metaResponse.data.stations : ['__ALL__']
     }
-  } catch (error) {
+  } catch {
     return {
       ...response.data,
       permissions: rolePermissions,

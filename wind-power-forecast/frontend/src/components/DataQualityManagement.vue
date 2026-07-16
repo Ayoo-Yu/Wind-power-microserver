@@ -186,7 +186,7 @@ function getStoredUserName() {
     if (!raw) return '当前用户'
     const parsed = JSON.parse(raw)
     return parsed?.real_name || parsed?.username || parsed?.name || '当前用户'
-  } catch (error) {
+  } catch {
     return '当前用户'
   }
 }
@@ -258,7 +258,7 @@ export default {
         if (selectedFarm.value !== 'all' && !farms.value.some((item) => item.value === selectedFarm.value)) {
           selectedFarm.value = 'all'
         }
-      } catch (error) {
+      } catch {
         farms.value = []
       }
     }
@@ -273,7 +273,7 @@ export default {
         }
         const response = await getReportStatistics(params)
         statistics.value = Array.isArray(response.data?.daily_stats) ? response.data.daily_stats : []
-      } catch (error) {
+      } catch {
         statistics.value = []
       } finally {
         loadingStats.value = false
@@ -295,7 +295,7 @@ export default {
           end_time_display: formatDateTime(item.end_time),
           created_at_display: formatDateTime(item.created_at)
         }))
-      } catch (error) {
+      } catch {
         markers.value = []
       } finally {
         loadingMarkers.value = false
@@ -334,7 +334,7 @@ export default {
         resetForm()
         await loadMarkers()
         ElMessage.success('质量标记已保存到后端')
-      } catch (error) {
+      } catch {
         console.warn('保存质量标记失败')
       } finally {
         submitting.value = false
@@ -346,7 +346,7 @@ export default {
         await deleteQualityMarker(row.id)
         await loadMarkers()
         ElMessage.success('质量标记已删除')
-      } catch (error) {
+      } catch {
         console.warn('删除质量标记失败')
       }
     }

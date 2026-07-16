@@ -2,7 +2,7 @@
 const BACKEND_PORT = process.env.MAIN_BACKEND_PORT || process.env.VUE_APP_MAIN_BACKEND_PORT || '5000'
 
 function attachJsonBodyForward(proxy) {
-  proxy.on('proxyReq', (proxyReq, req, res) => {
+  proxy.on('proxyReq', (proxyReq, req, _res) => {
     if (req.body) {
       const bodyData = JSON.stringify(req.body)
       proxyReq.setHeader('Content-Type', 'application/json')
@@ -26,6 +26,7 @@ const proxyTargetWs = {
 }
 
 module.exports = {
+  lintOnSave: false,
   css: {
     loaderOptions: {
       sass: {
@@ -42,6 +43,14 @@ module.exports = {
       '/api': proxyTargetWs,
       '/scada/': proxyTarget,
       '/operational': proxyTarget
+    }
+  },
+  configureWebpack: {
+    performance: {
+      hints: 'error',
+      maxAssetSize: 1300 * 1024,
+      maxEntrypointSize: 1700 * 1024,
+      assetFilter: (filename) => /\.(?:js|css)$/.test(filename)
     }
   }
 }

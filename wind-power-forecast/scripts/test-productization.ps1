@@ -1,5 +1,6 @@
 param(
     [switch]$SkipFrontend,
+    [switch]$SkipFrontendInstall,
     [switch]$SkipCompose
 )
 
@@ -33,9 +34,15 @@ if (-not $SkipFrontend) {
     Push-Location $frontendDir
     try {
         $npm = if (Get-Command npm.cmd -ErrorAction SilentlyContinue) { "npm.cmd" } else { "npm" }
-        & $npm run build
+        if (-not $SkipFrontendInstall) {
+            & $npm ci
+            if ($LASTEXITCODE -ne 0) {
+                throw "Frontend dependency installation failed"
+            }
+        }
+        & $npm run verify
         if ($LASTEXITCODE -ne 0) {
-            throw "Frontend build failed"
+            throw "Frontend quality gate failed"
         }
     } finally {
         Pop-Location

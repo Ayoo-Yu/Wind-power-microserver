@@ -52,7 +52,7 @@
 
 <script>
 import { ref, watch, onMounted, onUnmounted, nextTick, computed } from 'vue'
-import * as echarts from 'echarts'
+import * as echarts from '../utils/echarts'
 import { ElMessage } from 'element-plus'
 import {
   fetchPowerCurveData,

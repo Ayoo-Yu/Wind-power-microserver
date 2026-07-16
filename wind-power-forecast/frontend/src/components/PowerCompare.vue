@@ -311,7 +311,6 @@ export default {
       const start = typeof query.start === 'string' ? query.start : ''
       const end = typeof query.end === 'string' ? query.end : ''
       const predictionType = typeof query.prediction_type === 'string' ? query.prediction_type.toLowerCase() : ''
-      const view = typeof query.view === 'string' ? query.view : ''
 
       if (mode === 'fleet' || mode === 'single') this.analysisTab = mode
       if (farmCode && this.fleetCompareFarms.some(v => v.code === farmCode)) this.singleFarmCode = farmCode
@@ -472,7 +471,7 @@ export default {
         cancelAnimationFrame(this.chartRenderRaf)
         this.chartRenderRaf = null
       }
-      ;(this.chartRenderTimers || []).forEach(timer => window.clearTimeout(timer))
+      (this.chartRenderTimers || []).forEach(timer => window.clearTimeout(timer))
       this.chartRenderTimers = []
     },
     setQuickTimeRange(period) {

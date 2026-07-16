@@ -33,7 +33,7 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Location, ArrowDown, Check } from '@element-plus/icons-vue'
 import farmService from '../utils/farmService'

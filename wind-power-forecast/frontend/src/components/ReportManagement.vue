@@ -451,7 +451,7 @@
                   plain
                   class="action-btn"
                   :loading="previewLoading">
-                  <el-icon><View /></el-icon>
+                  <el-icon><ViewIcon /></el-icon>
                   预览上报
                 </el-button>
                 <el-button 
@@ -528,7 +528,7 @@
                   </el-date-picker>
                 </el-form-item>
                 <el-form-item>
-                  <el-button type="success" @click="searchLogs"><el-icon><Search /></el-icon>查询</el-button>
+                  <el-button type="success" @click="searchLogs"><el-icon><SearchIcon /></el-icon>查询</el-button>
                   <el-button @click="resetLogQuery"><el-icon><RefreshLeft /></el-icon>重置</el-button>
                   <el-button type="success" @click="refreshLogs"><el-icon><Refresh /></el-icon>刷新</el-button>
                 </el-form-item>
@@ -1018,7 +1018,7 @@
 <script>
 import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Edit, Delete, View, Plus, Refresh, Search, RefreshLeft } from '@element-plus/icons-vue'
+import { Edit, Delete, View as ViewIcon, Plus, Refresh, Search as SearchIcon, RefreshLeft } from '@element-plus/icons-vue'
 import {
   getReportFarms,
   getReportConfigs,
@@ -1043,10 +1043,10 @@ export default {
   components: {
     Edit,
     Delete,
-    View,
+    ViewIcon,
     Plus,
     Refresh,
-    Search,
+    SearchIcon,
     RefreshLeft
   },
   setup() {
@@ -1333,7 +1333,7 @@ export default {
           editableData.value = parsed
         }
         ElMessage.success('JSON数据已更新，数据来源已自动调整')
-      } catch (e) {
+      } catch {
         ElMessage.error('JSON格式错误，请检查语法')
       }
     }
@@ -1528,7 +1528,7 @@ export default {
             type: 'warning'
           }
         )
-      } catch (action) {
+      } catch {
         return
       }
       try {
@@ -1719,10 +1719,6 @@ export default {
         })
         
         await deleteReportConfig(config.id)
-        const metaMap = getConfigMetaMap()
-        delete metaMap[String(config.id)]
-        saveConfigMetaMap(metaMap)
-        
         ElMessage.success('配置删除成功')
         await fetchConfigs()
       } catch (error) {
@@ -2399,8 +2395,7 @@ export default {
         ElMessage.error('当前场站未配置该上报类型，请先在上报配置管理中添加')
         return null
       }
-      const meta = getConfigMetaMap()[String(target.id)] || {}
-      return normalizeConfig(target, meta)
+      return normalizeConfig(target)
     }
 
     const buildTemplateFilename = (template, farmCode, reportType, reportDate) => {

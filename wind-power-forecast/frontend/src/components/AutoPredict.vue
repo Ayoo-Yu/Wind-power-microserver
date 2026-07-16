@@ -1008,7 +1008,7 @@ const fetchFleetStatus = async () => {
     let res
     try {
       res = await getAutoPredictOverview()
-    } catch (overviewError) {
+    } catch {
       res = await getAutoPredictStatusAll()
     }
     const payload = res.data?.data || res.data || {}

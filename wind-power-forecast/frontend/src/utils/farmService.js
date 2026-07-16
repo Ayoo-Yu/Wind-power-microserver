@@ -52,7 +52,7 @@ class FarmService {
       const stations = Array.isArray(currentUser?.stations) ? currentUser.stations : []
       if (stations.includes('__ALL__')) return null
       return stations.length > 0 ? stations : null
-    } catch (error) {
+    } catch {
       return null
     }
   }

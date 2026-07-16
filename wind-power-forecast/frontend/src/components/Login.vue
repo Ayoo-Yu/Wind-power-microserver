@@ -1,10 +1,5 @@
 <template>
   <div class="login-shell">
-    <video class="bg-video" autoplay muted loop playsinline>
-      <source src="/bg.mp4" type="video/mp4" />
-    </video>
-    <div class="bg-video-overlay"></div>
-
     <div class="visual-overlay">
       <h1>风电功率预测系统</h1>
       <p>智慧能源 · 实时感知 · 智能决策</p>
@@ -140,6 +135,7 @@ import { isAuthReady, isAuthLoading } from '../store/authReady'
 
 export default {
   name: 'LoginView',
+  components: { OfficeBuilding, Lightning, Aim },
   setup() {
     const LOCK_STORAGE_KEY = 'login_security_lock_v1'
     const MAX_FAIL_COUNT = 5
@@ -198,7 +194,7 @@ export default {
       try {
         const raw = localStorage.getItem(LOCK_STORAGE_KEY)
         return raw ? JSON.parse(raw) : {}
-      } catch (error) {
+      } catch {
         return {}
       }
     }
@@ -393,26 +389,40 @@ export default {
   justify-content: center;
   gap: 60px;
   overflow: hidden;
-  background: #04101c;
+  background:
+    radial-gradient(circle at 16% 22%, rgba(22, 211, 238, 0.2), transparent 34%),
+    radial-gradient(circle at 78% 74%, rgba(45, 212, 191, 0.14), transparent 32%),
+    linear-gradient(135deg, #03101c 0%, #06243a 48%, #04121f 100%);
   padding: 40px;
 }
 
-.bg-video {
+.login-shell::before {
+  content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  inset: -20%;
   z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(119, 203, 236, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(119, 203, 236, 0.07) 1px, transparent 1px);
+  background-size: 64px 64px;
+  -webkit-mask-image: radial-gradient(circle at center, #000 12%, transparent 68%);
+  mask-image: radial-gradient(circle at center, #000 12%, transparent 68%);
+  animation: grid-drift 28s linear infinite;
 }
 
-.bg-video-overlay {
+.login-shell::after {
+  content: '';
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: linear-gradient(180deg, rgba(4, 16, 28, 0.4) 0%, rgba(4, 16, 28, 0.6) 100%);
   pointer-events: none;
+  background: linear-gradient(180deg, rgba(2, 10, 18, 0.04) 0%, rgba(2, 10, 18, 0.52) 100%);
+}
+
+@keyframes grid-drift {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(64px, 64px, 0); }
 }
 
 .visual-overlay {

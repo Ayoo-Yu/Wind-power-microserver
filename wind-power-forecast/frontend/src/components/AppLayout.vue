@@ -319,7 +319,7 @@ export default {
         localStorage.setItem('user', JSON.stringify(latestUser))
         currentUser.value = latestUser
         isAuthReady.value = true
-      } catch (error) {
+      } catch {
         localStorage.removeItem('accessToken')
         localStorage.removeItem('user')
         currentUser.value = null

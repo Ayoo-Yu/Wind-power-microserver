@@ -4,25 +4,35 @@
   "private": true,
   "scripts": {
     "serve": "vue-cli-service serve",
-    "build": "vue-cli-service build"
+    "build": "vue-cli-service build",
+    "lint": "eslint src scripts vue.config.js --max-warnings 0",
+    "test:contracts": "node --test tests/*.test.cjs",
+    "verify": "npm run lint && npm run test:contracts && npm run build && npm run check:bundle",
+    "check:bundle": "node scripts/check-bundle-budget.js",
+    "audit:runtime": "npm audit --omit=dev --registry=https://registry.npmjs.org"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
     "axios": "^1.8.4",
     "chart.js": "^4.4.8",
-    "echarts": "^5.6.0",
+    "echarts": "6.1.0",
     "element-plus": "^2.9.7",
     "papaparse": "^5.5.2",
-    "plotly.js-dist-min": "^3.0.1",
     "socket.io-client": "^4.8.1",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
+    "@babel/eslint-parser": "7.29.7",
+    "@eslint/js": "9.39.5",
     "@vue/cli-plugin-babel": "^5.0.8",
     "@vue/cli-service": "^5.0.8",
     "@vue/compiler-sfc": "^3.5.13",
+    "eslint": "9.39.5",
+    "eslint-plugin-vue": "10.9.2",
+    "globals": "17.7.0",
     "sass": "^1.86.3",
-    "sass-loader": "^13.3.3"
+    "sass-loader": "^13.3.3",
+    "vue-eslint-parser": "10.4.1"
   }
 }

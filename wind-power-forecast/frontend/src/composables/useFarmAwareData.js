@@ -293,7 +293,6 @@ export function useFarmAwareData(options = {}) {
 export function useFarmAwareTable(fetchFn, options = {}) {
   const {
     pageSize = 10,
-    immediate = true,
     transformFn = null
   } = options
 

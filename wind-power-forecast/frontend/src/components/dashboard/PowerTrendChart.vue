@@ -15,7 +15,7 @@
 
 <script setup>
 import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import * as echarts from 'echarts'
+import * as echarts from '../../utils/echarts'
 
 const props = defineProps({
   points: {

@@ -1,5 +1,5 @@
-# 使用 Node.js 构建镜像
-FROM node:18 AS build
+# 使用受支持的 Node.js LTS 构建镜像
+FROM node:24.15.0-bookworm-slim AS build
 
 # 设置工作目录
 WORKDIR /app
@@ -7,14 +7,14 @@ WORKDIR /app
 # 复制项目文件
 COPY package*.json ./
 
-# 安装依赖
-RUN npm install
+# 按锁文件安装依赖
+RUN npm ci
 
 # 复制项目源码
 COPY . .
 
-# 构建前端
-RUN npm run build
+# 执行前端质量门禁并生成产物
+RUN npm run verify
 
 # 使用 Nginx 运行静态文件
 FROM nginx:alpine

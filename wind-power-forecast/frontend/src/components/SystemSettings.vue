@@ -129,7 +129,7 @@ function getStoredUserName() {
     if (!raw) return '当前用户'
     const parsed = JSON.parse(raw)
     return parsed?.real_name || parsed?.username || parsed?.name || '当前用户'
-  } catch (error) {
+  } catch {
     return '当前用户'
   }
 }
@@ -192,7 +192,7 @@ export default {
         applySettings(response.data?.data)
         savedAt.value = buildSavedAt(response.data?.updated_at)
         updatedBy.value = response.data?.updated_by || ''
-      } catch (error) {
+      } catch {
         applySettings()
       } finally {
         loading.value = false

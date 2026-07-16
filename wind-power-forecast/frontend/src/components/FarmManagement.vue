@@ -317,7 +317,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { WindPower } from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
+import * as echarts from '../utils/echarts'
 import { createFarm, deleteFarm, getFarms, updateFarm } from '@/api/farmApi'
 import StatusDot from './common/StatusDot.vue'
 

@@ -152,38 +152,6 @@ function toHHmm(value) {
   return text.slice(11, 16) || text.slice(0, 5)
 }
 
-function farmCountByScope(activeFarmCode, farms) {
-  if (activeFarmCode) return farms.length ? 1 : 0
-  return farms.length
-}
-
-function isUltraType(row) {
-  const text = `${row?.report_type || ''}`.toLowerCase()
-  return text.includes('supershort') || text.includes('ultra') || text.includes('forecast_short')
-}
-
-function isShortType(row) {
-  const text = `${row?.report_type || ''}`.toLowerCase()
-  return text.includes('forecast_long') || text.includes('short') || text.includes('mid')
-}
-
-function isSuccessStatus(status) {
-  const text = `${status || ''}`.toLowerCase()
-  return text.includes('success') || text.includes('ok')
-}
-
-function summarizeReportCompletion(logs, farmTotal) {
-  const ultraExpected = farmTotal * 96
-  const shortExpected = farmTotal
-  const ultraSuccess = logs.filter(row => isUltraType(row) && isSuccessStatus(row.status)).length
-  const shortSuccess = logs.filter(row => isShortType(row) && isSuccessStatus(row.status)).length
-
-  return {
-    ultra: { success: Math.min(ultraSuccess, ultraExpected), expected: ultraExpected },
-    short: { success: Math.min(shortSuccess, shortExpected), expected: shortExpected }
-  }
-}
-
 function collectFarmLogs(logs, farmCode) {
   return logs.filter((row) => `${row?.farm_code || ''}`.trim() === farmCode)
 }
@@ -241,7 +209,7 @@ export async function getDashboardOverview({ farmCode } = {}) {
   try {
     const loaded = await farmService.loadAvailableFarms()
     farms = loaded.filter(f => f.code)
-  } catch (error) {
+  } catch {
     farms = []
   }
 
@@ -254,7 +222,7 @@ export async function getDashboardOverview({ farmCode } = {}) {
           capacity: safeNumber(row.capacity, 0)
         }))
       : []
-  } catch (error) {
+  } catch {
     farmMeta = []
   }
 
@@ -282,14 +250,14 @@ export async function getDashboardOverview({ farmCode } = {}) {
       per_page: 500
     })
     logs = unwrapItems(logsResp?.data)
-  } catch (error) {
+  } catch {
     logs = []
   }
 
   try {
     const health = await getScadaHealth()
     scadaHealth = Array.isArray(health?.connections) ? health.connections : []
-  } catch (error) {
+  } catch {
     scadaHealth = []
   }
 
@@ -311,7 +279,7 @@ export async function getDashboardOverview({ farmCode } = {}) {
           ultraWeight: Math.min(series.actual.length, ultraSeries.length),
           online: series.actual.length > 0 || shortSeries.length > 0 || ultraSeries.length > 0
         }
-      } catch (error) {
+      } catch {
         return {
           code: farm.code,
           latestActual: 0,
@@ -534,7 +502,7 @@ export async function getDashboardStationRank({ farmCode, start, end } = {}) {
             ? actual.reduce((sum, cur) => sum + safeNumber(cur.power, 0), 0) / actual.length
             : 0
           return { name: shortFarmName(farms.find(f => f.code === code)?.name || code), value: Number(avg.toFixed(2)) }
-        } catch (error) {
+        } catch {
           return { name: shortFarmName(farms.find(f => f.code === code)?.name || code), value: 0 }
         }
       })
