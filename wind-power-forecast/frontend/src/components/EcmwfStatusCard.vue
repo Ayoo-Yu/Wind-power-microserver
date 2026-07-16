@@ -1,5 +1,5 @@
 <template>
-  <el-card class="ecmwf-card" shadow="hover" style="margin-bottom:20px">
+  <el-card class="ecmwf-card" shadow="hover">
     <template #header>
       <div class="card-header">
         <span class="card-title">ECMWF 气象数据库状态</span>
@@ -44,6 +44,9 @@ export default {
 </script>
 
 <style scoped>
+.ecmwf-card { margin-bottom: 20px; }
+.card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
+.card-title { color: var(--text-primary); font-size: 16px; font-weight: 600; }
 .ecmwf-grid { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
 .ecmwf-item { display: flex; align-items: center; gap: 8px; }
 .ecmwf-stat { font-size: 14px; font-weight: 600; color: var(--text-primary); }
