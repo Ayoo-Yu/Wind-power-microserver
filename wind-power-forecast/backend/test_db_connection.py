@@ -8,6 +8,20 @@ import sys
 # 添加当前目录到路径
 sys.path.insert(0, '.')
 
+
+def database_settings():
+    """从环境变量读取诊断连接配置。"""
+    password = os.environ.get('DB_PASSWORD')
+    if not password:
+        raise RuntimeError('DB_PASSWORD 未配置')
+    return {
+        'host': os.environ.get('DB_HOST', 'localhost'),
+        'port': os.environ.get('DB_PORT', '54321'),
+        'user': os.environ.get('DB_USER', 'system'),
+        'password': password,
+        'name': os.environ.get('DB_NAME', 'windpower'),
+    }
+
 def test_direct_connection():
     """测试直接数据库连接"""
     print("=== 测试直接数据库连接 ===")
@@ -16,22 +30,17 @@ def test_direct_connection():
         import psycopg2
         print("[OK] psycopg2模块导入成功")
 
-        # 从配置文件读取连接信息
-        DB_HOST = 'localhost'  # 使用localhost而不是kingbase
-        DB_PORT = '54321'
-        DB_USER = 'system'
-        DB_PASSWORD = '12345678ab'
-        DB_NAME = 'windpower'
+        config = database_settings()
 
-        print(f"连接信息: {DB_USER}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
+        print(f"连接信息: {config['user']}@{config['host']}:{config['port']}/{config['name']}")
 
         # 尝试连接
         conn = psycopg2.connect(
-            host=DB_HOST,
-            port=DB_PORT,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            database=DB_NAME,
+            host=config['host'],
+            port=config['port'],
+            user=config['user'],
+            password=config['password'],
+            database=config['name'],
             connect_timeout=10
         )
 
@@ -63,15 +72,16 @@ def test_sqlalchemy_connection():
         from sqlalchemy import create_engine
         print("[OK] SQLAlchemy模块导入成功")
 
-        # 构建连接URL
-        DB_HOST = 'localhost'  # 使用localhost而不是kingbase
-        DB_PORT = '54321'
-        DB_USER = 'system'
-        DB_PASSWORD = '12345678ab'
-        DB_NAME = 'windpower'
+        config = database_settings()
 
-        database_url = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-        print(f"连接URL: {database_url}")
+        database_url = (
+            f"postgresql+psycopg2://{config['user']}:{config['password']}"
+            f"@{config['host']}:{config['port']}/{config['name']}"
+        )
+        print(
+            f"连接信息: {config['user']}@{config['host']}:"
+            f"{config['port']}/{config['name']}"
+        )
 
         # 创建引擎
         engine = create_engine(database_url)
@@ -102,15 +112,16 @@ def test_kingbase_dialect():
 
         from sqlalchemy import create_engine
 
-        # 使用KingBase方言
-        DB_HOST = 'localhost'  # 使用localhost而不是kingbase
-        DB_PORT = '54321'
-        DB_USER = 'system'
-        DB_PASSWORD = '12345678ab'
-        DB_NAME = 'windpower'
+        config = database_settings()
 
-        database_url = f"postgresql+kingbase://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-        print(f"KingBase连接URL: {database_url}")
+        database_url = (
+            f"postgresql+kingbase://{config['user']}:{config['password']}"
+            f"@{config['host']}:{config['port']}/{config['name']}"
+        )
+        print(
+            f"KingBase连接信息: {config['user']}@{config['host']}:"
+            f"{config['port']}/{config['name']}"
+        )
 
         engine = create_engine(database_url)
         print("[OK] KingBase引擎创建成功")

@@ -659,7 +659,12 @@
           <el-input v-model="configForm.server_username" placeholder="用户名"></el-input>
         </el-form-item>
         <el-form-item label="密码" prop="server_password">
-          <el-input v-model="configForm.server_password" type="password" show-password placeholder="密码"></el-input>
+          <el-input
+            v-model="configForm.server_password"
+            type="password"
+            show-password
+            :placeholder="configForm.server_password_set ? '已配置，留空表示保持原密码' : '密码'"
+          ></el-input>
         </el-form-item>
         <el-form-item label="远程目录路径" prop="remote_directory">
           <el-input v-model="configForm.remote_directory" placeholder="/upload/forecast/"></el-input>
@@ -1114,6 +1119,7 @@ export default {
       target_port: null,
       server_username: '',
       server_password: '',
+      server_password_set: false,
       remote_directory: '/upload/forecast/',
       file_name_template: '${FARM_CODE}_${YYYYMMDD}_${HHmm}_${TYPE}.txt',
       report_interval: 15,
@@ -1133,9 +1139,12 @@ export default {
         target_ip: [{ required: true, message: '请输入服务器IP', trigger: 'blur' }],
         target_port: [{ required: true, message: '请输入服务器端口', trigger: 'blur' }],
         server_username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-        server_password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
         remote_directory: [{ required: true, message: '请输入远程目录路径', trigger: 'blur' }],
         file_name_template: [{ required: true, message: '请输入文件名模板', trigger: 'blur' }]
+      }
+
+      if (!configForm.id || !configForm.server_password_set) {
+        baseRules.server_password = [{ required: true, message: '请输入密码', trigger: 'blur' }]
       }
       
       // 根据上报类型动态添加必填规则
@@ -1399,39 +1408,16 @@ export default {
       }
     }
     
-    const CONFIG_META_STORAGE_KEY = 'report_config_meta_v2'
-
-    const getConfigMetaMap = () => {
-      void CONFIG_META_STORAGE_KEY
-      return {}
-    }
-
-    const saveConfigMetaMap = (metaMap) => {
-      return metaMap
-    }
-
-    const normalizeConfig = (config, storedMeta = {}) => ({
+    const normalizeConfig = (config) => ({
       ...config,
-      protocol_type: storedMeta.protocol_type || config.protocol_type || 'sftp',
-      server_username: storedMeta.server_username || config.server_username || '',
-      server_password: storedMeta.server_password || config.server_password || '',
-      remote_directory: storedMeta.remote_directory || config.remote_directory || '/upload/forecast/',
-      file_name_template: storedMeta.file_name_template || config.file_name_template || '${FARM_CODE}_${YYYYMMDD}_${HHmm}_${TYPE}.txt',
+      protocol_type: config.protocol_type || 'sftp',
+      server_username: config.server_username || '',
+      server_password: '',
+      server_password_set: Boolean(config.server_password_set),
+      remote_directory: config.remote_directory || '/upload/forecast/',
+      file_name_template: config.file_name_template || '${FARM_CODE}_${YYYYMMDD}_${HHmm}_${TYPE}.txt',
       reporting: false
     })
-
-    const persistConfigMeta = (configId, payload) => {
-      if (!configId) return
-      const metaMap = getConfigMetaMap()
-      metaMap[String(configId)] = {
-        protocol_type: payload.protocol_type,
-        server_username: payload.server_username,
-        server_password: payload.server_password,
-        remote_directory: payload.remote_directory,
-        file_name_template: payload.file_name_template
-      }
-      saveConfigMetaMap(metaMap)
-    }
 
     // 获取上报配置列表
     const fetchConfigs = async () => {
@@ -1443,7 +1429,7 @@ export default {
         }
         
         const response = await getReportConfigs(params)
-        reportConfigs.value = response.data.map(config => normalizeConfig(config, {}))
+        reportConfigs.value = response.data.map(config => normalizeConfig(config))
       } catch (error) {
         console.error('获取上报配置列表失败:', error)
         ElMessage.error('获取上报配置列表失败')
@@ -1590,7 +1576,10 @@ export default {
     
     // 编辑配置
     const editConfig = (config) => {
-      Object.assign(configForm, config)
+      Object.assign(configForm, config, {
+        server_password: '',
+        server_password_set: Boolean(config.server_password_set)
+      })
       
       // 编辑时确保字段正确显示
       if (config.report_type === 'forecast_long') {
@@ -1617,6 +1606,8 @@ export default {
       try {
         // 准备保存的数据
         const saveData = { ...configForm }
+        delete saveData.server_password_set
+        if (!saveData.server_password) delete saveData.server_password
         
         // 长期预测类型特殊处理
         if (saveData.report_type === 'forecast_long') {
@@ -1638,12 +1629,10 @@ export default {
         if (configForm.id) {
           // 更新
           await updateReportConfig(configForm.id, saveData)
-          persistConfigMeta(configForm.id, saveData)
           ElMessage.success('配置更新成功')
         } else {
           // 创建
-          const createResp = await createReportConfig(saveData)
-          persistConfigMeta(createResp?.data?.config_id, saveData)
+          await createReportConfig(saveData)
           ElMessage.success('配置创建成功')
         }
         configDialogVisible.value = false
@@ -1667,6 +1656,7 @@ export default {
         target_port: null,
         server_username: '',
         server_password: '',
+        server_password_set: false,
         remote_directory: '/upload/forecast/',
         file_name_template: '${FARM_CODE}_${YYYYMMDD}_${HHmm}_${TYPE}.txt',
         report_interval: 15,  // 非长期预测的默认值

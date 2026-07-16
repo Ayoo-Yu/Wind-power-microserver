@@ -1,14 +1,17 @@
 import psycopg2
 import os
 import sys
-import time
 
 # 从环境变量获取数据库连接信息
 host = os.environ.get('DB_HOST', 'localhost')  # 改为localhost
 port = os.environ.get('DB_PORT', '54321')
 user = os.environ.get('DB_USER', 'system')
-password = os.environ.get('DB_PASSWORD', '12345678ab')
+password = os.environ.get('DB_PASSWORD')
 dbname = os.environ.get('DB_NAME', 'windpower')
+
+if not password:
+    print("数据库连接失败: DB_PASSWORD 未配置")
+    sys.exit(2)
 
 try:
     conn = psycopg2.connect(

@@ -3,12 +3,15 @@ import os
 
 def check_db_connections():
     try:
-        # 获取环境变量或使用默认值
+        # 从环境变量读取连接配置
         db_host = os.environ.get('DB_HOST', 'localhost')
         db_port = os.environ.get('DB_PORT', '54321')
         db_user = os.environ.get('DB_USER', 'system')
-        db_password = os.environ.get('DB_PASSWORD', '12345678ab')
+        db_password = os.environ.get('DB_PASSWORD')
         db_name = os.environ.get('DB_NAME', 'windpower')
+
+        if not db_password:
+            raise RuntimeError('DB_PASSWORD 未配置')
 
         print(f'尝试连接到数据库 {db_host}:{db_port}/{db_name}...')
         
@@ -139,4 +142,4 @@ if __name__ == "__main__":
         print("\n连接检查失败!")
     
     print("\n按回车键退出...")
-    input() 
+    input()

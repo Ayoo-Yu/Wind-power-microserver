@@ -71,6 +71,13 @@ fi
 
 require_secret DB_PASSWORD 16
 require_secret SECRET_KEY 32
+if [ -n "${CREDENTIAL_ENCRYPTION_KEY:-}" ] && [ -n "${CREDENTIAL_ENCRYPTION_KEY_FILE:-}" ]; then
+    error "CREDENTIAL_ENCRYPTION_KEY 与 CREDENTIAL_ENCRYPTION_KEY_FILE 不能同时设置"
+elif [ -n "${CREDENTIAL_ENCRYPTION_KEY:-}" ]; then
+    require_secret CREDENTIAL_ENCRYPTION_KEY 32
+elif [ -z "${CREDENTIAL_ENCRYPTION_KEY_FILE:-}" ]; then
+    error "必须设置 CREDENTIAL_ENCRYPTION_KEY 或 CREDENTIAL_ENCRYPTION_KEY_FILE"
+fi
 if [ -n "${BOOTSTRAP_ADMIN_PASSWORD:-}" ]; then
     require_secret BOOTSTRAP_ADMIN_PASSWORD 16
 fi

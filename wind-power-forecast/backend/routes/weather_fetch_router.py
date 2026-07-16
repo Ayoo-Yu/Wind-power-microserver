@@ -12,6 +12,12 @@ import logging
 from services.task_executor import execute_weather_task
 from services.scheduler_service import get_scheduler
 from services import ssh_service
+from services.weather_connection_security import (
+    apply_connection_secrets,
+    build_connection_config,
+    serialize_connection_secret_state,
+)
+from utils.credential_cipher import CredentialCipherError
 
 weather_fetch_bp = Blueprint('weather_fetch', __name__)
 
@@ -37,9 +43,12 @@ def get_connections():
                 'port': conn.port,
                 'username': conn.username,
                 'auth_type': conn.auth_type,
+                'farm_code': conn.farm_code,
+                'private_key_path': conn.private_key_path,
                 'status': conn.status,
                 'created_at': conn.created_at.isoformat() if conn.created_at else None,
-                'last_test_at': conn.last_test_at.isoformat() if conn.last_test_at else None
+                'last_test_at': conn.last_test_at.isoformat() if conn.last_test_at else None,
+                **serialize_connection_secret_state(conn),
             } for conn in connections])
     except Exception as e:
         logger.error(f"获取连接列表失败: {e}")
@@ -51,7 +60,7 @@ def get_connections():
 def create_connection():
     """创建SSH连接（支持多场站）"""
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
         current_user_id = get_jwt_identity()
 
         # 验证必填字段
@@ -83,13 +92,11 @@ def create_connection():
                 port=data['port'],
                 username=data['username'],
                 auth_type=data['auth_type'],
-                password=data.get('password', ''),
                 private_key_path=data.get('private_key_path', ''),
-                key_passphrase=data.get('key_passphrase', ''),
                 farm_code=data.get('farm_code', ''),  # 新增场站字段
-                description=data.get('description', ''),  # 新增描述字段
                 created_by=current_user_id
             )
+            apply_connection_secrets(connection, data)
 
             db.add(connection)
             db.commit()
@@ -99,6 +106,9 @@ def create_connection():
                 'id': connection.id
             }), 201
 
+    except CredentialCipherError as e:
+        logger.error(f"气象连接凭据加密配置不可用: {e}")
+        return jsonify({'message': str(e)}), 503
     except Exception as e:
         logger.error(f"创建连接失败: {e}")
         return jsonify({'message': '创建连接失败'}), 500
@@ -109,7 +119,7 @@ def create_connection():
 def update_connection(connection_id):
     """更新SSH连接"""
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
         
         with db_session() as db:
             connection = db.query(WeatherConnection).filter(
@@ -121,18 +131,30 @@ def update_connection(connection_id):
                 return jsonify({'message': '连接不存在'}), 404
             
             # 更新字段
-            update_fields = ['name', 'host', 'port', 'username', 'auth_type', 
-                           'password', 'private_key_path', 'key_passphrase']
+            update_fields = [
+                'name', 'host', 'port', 'username', 'auth_type',
+                'private_key_path', 'farm_code',
+            ]
             
             for field in update_fields:
                 if field in data:
                     setattr(connection, field, data[field])
+
+            apply_connection_secrets(connection, data)
+            secret_state = serialize_connection_secret_state(connection)
+            if connection.auth_type == 'password' and not secret_state['password_set']:
+                return jsonify({'message': '密码认证需要提供密码'}), 400
+            if connection.auth_type == 'key' and not connection.private_key_path:
+                return jsonify({'message': '密钥认证需要提供私钥路径'}), 400
             
             connection.updated_at = datetime.utcnow()
             db.commit()
             
             return jsonify({'message': '连接更新成功'})
             
+    except CredentialCipherError as e:
+        logger.error(f"气象连接凭据加密配置不可用: {e}")
+        return jsonify({'message': str(e)}), 503
     except Exception as e:
         logger.error(f"更新连接失败: {e}")
         return jsonify({'message': '更新连接失败'}), 500
@@ -180,6 +202,7 @@ def test_connection(connection_id):
             # 测试SSH连接
             success = False
             error_message = ""
+            connection_config = build_connection_config(connection)
             
             try:
                 ssh_client = paramiko.SSHClient()
@@ -187,19 +210,19 @@ def test_connection(connection_id):
                 
                 if connection.auth_type == 'password':
                     ssh_client.connect(
-                        hostname=connection.host,
-                        port=connection.port,
-                        username=connection.username,
-                        password=connection.password,
+                        hostname=connection_config['host'],
+                        port=connection_config['port'],
+                        username=connection_config['username'],
+                        password=connection_config['password'],
                         timeout=10
                     )
                 else:  # key authentication
                     ssh_client.connect(
-                        hostname=connection.host,
-                        port=connection.port,
-                        username=connection.username,
-                        key_filename=connection.private_key_path,
-                        passphrase=connection.key_passphrase if connection.key_passphrase else None,
+                        hostname=connection_config['host'],
+                        port=connection_config['port'],
+                        username=connection_config['username'],
+                        key_filename=connection_config['private_key_path'],
+                        passphrase=connection_config['key_passphrase'] or None,
                         timeout=10
                     )
                 
@@ -229,6 +252,9 @@ def test_connection(connection_id):
                 'message': '连接成功' if success else f'连接失败: {error_message}'
             })
             
+    except CredentialCipherError as e:
+        logger.error(f"气象连接凭据无法解密: {e}")
+        return jsonify({'message': str(e)}), 503
     except Exception as e:
         logger.error(f"测试连接失败: {e}")
         return jsonify({'message': '测试连接失败'}), 500
@@ -741,15 +767,7 @@ def check_directories():
                 return jsonify({'message': '连接不存在'}), 404
             
             # 构建连接配置
-            connection_config = {
-                'host': connection.host,
-                'port': connection.port,
-                'username': connection.username,
-                'auth_type': connection.auth_type,
-                'password': connection.password,
-                'private_key_path': connection.private_key_path,
-                'key_passphrase': connection.key_passphrase
-            }
+            connection_config = build_connection_config(connection)
             
             # 查找可用目录
             limit = data.get('limit', 50)  # 默认50个，最大100个
@@ -772,6 +790,9 @@ def check_directories():
                 'total_found': len(directories)
             })
             
+    except CredentialCipherError as e:
+        logger.error(f"气象连接凭据无法解密: {e}")
+        return jsonify({'message': str(e)}), 503
     except Exception as e:
         logger.error(f"检查可用目录失败: {e}")
         return jsonify({'message': f'检查目录失败: {str(e)}'}), 500
@@ -794,7 +815,9 @@ def restart_scheduler():
         db_host = os.environ.get('DB_HOST', 'localhost')
         db_port = os.environ.get('DB_PORT', '54321')
         db_user = os.environ.get('DB_USER', 'system')
-        db_password = os.environ.get('DB_PASSWORD', '12345678ab')
+        db_password = os.environ.get('DB_PASSWORD')
+        if not db_password:
+            return jsonify({'message': 'DB_PASSWORD 未配置'}), 503
         db_name = os.environ.get('DB_NAME', 'windpower')
         database_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
         

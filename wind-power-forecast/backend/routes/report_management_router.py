@@ -20,6 +20,11 @@ from services.report_outbox_service import (
     enqueue_report,
     make_idempotency_key,
 )
+from utils.credential_cipher import (
+    CredentialConfigurationError,
+    encrypt_secret,
+    has_secret,
+)
 
 # 添加定时调度器
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -34,13 +39,13 @@ REPORT_SCHEDULER_MODE = os.environ.get('REPORT_SCHEDULER_MODE', 'embedded').lowe
 
 report_management_bp = Blueprint('report_management', __name__)
 
-CONFIG_META_FIELDS = {
+CONFIG_META_PUBLIC_FIELDS = {
     'protocol_type',
     'server_username',
-    'server_password',
     'remote_directory',
     'file_name_template',
 }
+CONFIG_META_SECRET_FIELD = 'server_password'
 
 
 def _month_bounds(month_str=None):
@@ -143,7 +148,7 @@ def _serialize_manual_intervention_version(item):
     }
 
 
-def _read_report_config_meta(meta):
+def _read_report_config_meta_payload(meta):
     if not meta or not getattr(meta, 'payload', None):
         return {}
     try:
@@ -153,15 +158,44 @@ def _read_report_config_meta(meta):
         return {}
 
 
+def _read_report_config_meta(meta):
+    payload = _read_report_config_meta_payload(meta)
+    result = {
+        key: payload.get(key)
+        for key in CONFIG_META_PUBLIC_FIELDS
+        if key in payload
+    }
+    result['server_password_set'] = has_secret(payload.get(CONFIG_META_SECRET_FIELD))
+    return result
+
+
 def _extract_report_config_meta(data):
-    return {key: data.get(key) for key in CONFIG_META_FIELDS if key in data}
+    fields = CONFIG_META_PUBLIC_FIELDS | {
+        CONFIG_META_SECRET_FIELD,
+        'clear_server_password',
+    }
+    return {key: data.get(key) for key in fields if key in data}
 
 
 def _upsert_report_config_meta(db, config_id, payload):
     if not config_id:
         return
     meta = db.query(ReportConfigMeta).filter(ReportConfigMeta.config_id == config_id).first()
-    serialized_payload = json.dumps(payload or {}, ensure_ascii=False)
+    merged_payload = _read_report_config_meta_payload(meta)
+    incoming = payload or {}
+
+    for field in CONFIG_META_PUBLIC_FIELDS:
+        if field in incoming:
+            merged_payload[field] = incoming[field]
+
+    if incoming.get('clear_server_password') is True:
+        merged_payload.pop(CONFIG_META_SECRET_FIELD, None)
+    else:
+        password = incoming.get(CONFIG_META_SECRET_FIELD)
+        if isinstance(password, str) and password:
+            merged_payload[CONFIG_META_SECRET_FIELD] = encrypt_secret(password)
+
+    serialized_payload = json.dumps(merged_payload, ensure_ascii=False)
     if meta:
         meta.payload = serialized_payload
         meta.updated_at = datetime.now()
@@ -307,7 +341,7 @@ def get_report_configs():
 def create_report_config():
     """创建上报配置"""
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
         
         with db_session() as db:
             config = ReportConfig(
@@ -324,7 +358,7 @@ def create_report_config():
             )
             
             db.add(config)
-            db.commit()
+            db.flush()
             _upsert_report_config_meta(db, config.id, _extract_report_config_meta(data))
             db.commit()
             
@@ -332,6 +366,9 @@ def create_report_config():
                 'message': '上报配置创建成功',
                 'config_id': config.id
             })
+    except CredentialConfigurationError as e:
+        logging.error(f"上报凭据加密配置不可用: {str(e)}")
+        return jsonify({'error': str(e)}), 503
     except Exception as e:
         logging.error(f"创建上报配置失败: {str(e)}")
         return jsonify({'error': '创建上报配置失败'}), 500
@@ -341,7 +378,7 @@ def create_report_config():
 def update_report_config(config_id):
     """更新上报配置"""
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
         
         with db_session() as db:
             config = db.query(ReportConfig).filter(ReportConfig.id == config_id).first()
@@ -358,6 +395,9 @@ def update_report_config(config_id):
             db.commit()
             
             return jsonify({'message': '上报配置更新成功'})
+    except CredentialConfigurationError as e:
+        logging.error(f"上报凭据加密配置不可用: {str(e)}")
+        return jsonify({'error': str(e)}), 503
     except Exception as e:
         logging.error(f"更新上报配置失败: {str(e)}")
         return jsonify({'error': '更新上报配置失败'}), 500

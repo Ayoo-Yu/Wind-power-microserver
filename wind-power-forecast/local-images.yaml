@@ -19,7 +19,7 @@ services:
       - DB_HOST=kingbase       # 淇敼涓洪噾浠撴暟鎹簱
       - DB_PORT=54321          # 閲戜粨鏁版嵁搴撶鍙?
       - DB_USER=system         # 閲戜粨榛樿鐢ㄦ埛
-      - DB_PASSWORD=12345678ab # 閲戜粨榛樿瀵嗙爜
+      - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD must be set}
       - DB_NAME=windpower      # 鏁版嵁搴撳悕
     networks:
       - wind-power-network
@@ -41,7 +41,7 @@ services:
     environment:
       - NEED_START=yes
       - DB_USER=system
-      - DB_PASSWORD=12345678ab
+      - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD must be set}
       - DB_MODE=oracle  # 閲戜粨鏁版嵁搴撴帹鑽愪娇鐢╫racle妯″紡
       - ENCODING=UTF8
     volumes:
@@ -57,8 +57,8 @@ services:
     image: dpage/pgadmin4:latest
     container_name: wind-power-pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:?PGADMIN_DEFAULT_EMAIL must be set}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:?PGADMIN_DEFAULT_PASSWORD must be set}
     ports:
       - "5050:80"
     volumes:

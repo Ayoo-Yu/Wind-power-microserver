@@ -15,9 +15,9 @@ class WeatherConnection(Base):
     port = Column(Integer, default=22, comment='SSH端口')
     username = Column(String(100), nullable=False, comment='用户名')
     auth_type = Column(String(20), nullable=False, comment='认证方式: password/key')
-    password = Column(String(255), comment='密码')
+    password = Column(Text, comment='加密密码')
     private_key_path = Column(String(500), comment='私钥文件路径')
-    key_passphrase = Column(String(255), comment='私钥密码')
+    key_passphrase = Column(Text, comment='加密私钥密码')
     status = Column(String(20), default='disconnected', comment='连接状态')
     last_test_at = Column(DateTime, comment='最后测试时间')
     created_by = Column(Integer, comment='创建者ID')
@@ -96,4 +96,4 @@ class WeatherData(Base):
     completed_at = Column(DateTime, comment='完成处理时间')
 
     # 关联关系
-    task = relationship("WeatherTask") 
+    task = relationship("WeatherTask")

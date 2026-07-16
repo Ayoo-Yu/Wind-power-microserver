@@ -24,10 +24,12 @@ services:
       - DB_HOST=kingbase
       - DB_PORT=54321
       - DB_USER=system
-      - DB_PASSWORD=12345678ab # 寮虹儓寤鸿浣跨敤 .env 鏂囦欢鎴?Docker secrets 绠＄悊瀵嗙爜
+      - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD must be set}
       - DB_NAME=windpower
       - TZ=Asia/Shanghai
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - CREDENTIAL_ENCRYPTION_KEY=${CREDENTIAL_ENCRYPTION_KEY:-}
+      - CREDENTIAL_ENCRYPTION_KEY_FILE=${CREDENTIAL_ENCRYPTION_KEY_FILE:-}
     networks:
       - wind-power-network
     depends_on:
@@ -48,7 +50,7 @@ services:
     environment:
       - NEED_START=yes
       - DB_USER=system
-      - DB_PASSWORD=12345678ab # 寮虹儓寤鸿浣跨敤 .env 鏂囦欢鎴?Docker secrets
+      - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD must be set}
       - DB_MODE=oracle
       - ENCODING=UTF8
       - TZ=Asia/Shanghai
@@ -71,8 +73,8 @@ services:
     image: dpage/pgadmin4:latest # <--- 浣跨敤浣犲鍑虹殑闀滃儚鏍囩
     container_name: wind-power-pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com # 寤鸿淇敼涓哄畨鍏ㄧ殑鍑瘉
-      PGADMIN_DEFAULT_PASSWORD: admin # 寮虹儓寤鸿浣跨敤 .env 鏂囦欢鎴?Docker secrets
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:?PGADMIN_DEFAULT_EMAIL must be set}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:?PGADMIN_DEFAULT_PASSWORD must be set}
       TZ: Asia/Shanghai
     ports:
       - "5050:80"

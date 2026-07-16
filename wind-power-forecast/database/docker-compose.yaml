@@ -6,7 +6,7 @@ services:
     container_name: wind-power-kingbase
     environment:
       KINGBASE_USER: system
-      KINGBASE_PASSWORD: yzz0216yh
+      KINGBASE_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
       KINGBASE_DB: windpower
     volumes:
       - kingbase_data:/opt/kingbase/data  # 鏍规嵁閲戜粨鏁版嵁搴撶殑鏁版嵁瀛樺偍璺緞鍙兘闇€瑕佽皟鏁?
@@ -20,8 +20,8 @@ services:
     image: dpage/pgadmin4
     container_name: wind-power-pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:?PGADMIN_DEFAULT_EMAIL must be set}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:?PGADMIN_DEFAULT_PASSWORD must be set}
     ports:
       - "5050:80"
     depends_on:

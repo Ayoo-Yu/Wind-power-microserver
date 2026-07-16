@@ -160,9 +160,23 @@
         <el-form-item label="认证方式" prop="auth_type">
           <el-radio-group v-model="connectionForm.auth_type"><el-radio value="password">密码认证</el-radio><el-radio value="key">密钥认证</el-radio></el-radio-group>
         </el-form-item>
-        <el-form-item v-if="connectionForm.auth_type === 'password'" label="密码" prop="password"><el-input v-model="connectionForm.password" type="password" show-password /></el-form-item>
+        <el-form-item v-if="connectionForm.auth_type === 'password'" label="密码" prop="password">
+          <el-input
+            v-model="connectionForm.password"
+            type="password"
+            show-password
+            :placeholder="connectionForm.password_set ? '已配置，留空表示保持原密码' : '请输入密码'"
+          />
+        </el-form-item>
         <el-form-item v-if="connectionForm.auth_type === 'key'" label="私钥路径" prop="private_key_path"><el-input v-model="connectionForm.private_key_path" placeholder="/home/user/.ssh/id_rsa" /></el-form-item>
-        <el-form-item v-if="connectionForm.auth_type === 'key'" label="私钥密码" prop="key_passphrase"><el-input v-model="connectionForm.key_passphrase" type="password" show-password /></el-form-item>
+        <el-form-item v-if="connectionForm.auth_type === 'key'" label="私钥密码" prop="key_passphrase">
+          <el-input
+            v-model="connectionForm.key_passphrase"
+            type="password"
+            show-password
+            :placeholder="connectionForm.key_passphrase_set ? '已配置，留空表示保持原口令' : '无口令时可留空'"
+          />
+        </el-form-item>
       </el-form>
       <template #footer><el-button @click="showConnectionDialog = false">取消</el-button><el-button type="primary" :loading="savingConnection" @click="saveConnection">保存</el-button></template>
     </el-dialog>
@@ -347,8 +361,10 @@ export default {
       username: '',
       auth_type: 'password',
       password: '',
+      password_set: false,
       private_key_path: '',
-      key_passphrase: ''
+      key_passphrase: '',
+      key_passphrase_set: false
     })
 
     const defaultSavePath = navigator.userAgent.includes('Windows') ? 'D:\\weather_data\\{date}\\' : '/data/weather/{date}/'
@@ -372,13 +388,22 @@ export default {
     const manualUploadFileList = ref([])
     const manualUploadResult = reactive({ type: 'success', message: '', detail: '' })
 
-    const connectionRules = {
-      name: [{ required: true, message: '请输入连接名称', trigger: 'blur' }],
-      farm_code: [{ required: true, message: '请选择场站', trigger: 'change' }],
-      protocol: [{ required: true, message: '请选择协议', trigger: 'change' }],
-      host: [{ required: true, message: '请输入服务器地址', trigger: 'blur' }],
-      username: [{ required: true, message: '请输入用户名', trigger: 'blur' }]
-    }
+    const connectionRules = computed(() => {
+      const rules = {
+        name: [{ required: true, message: '请输入连接名称', trigger: 'blur' }],
+        farm_code: [{ required: true, message: '请选择场站', trigger: 'change' }],
+        protocol: [{ required: true, message: '请选择协议', trigger: 'change' }],
+        host: [{ required: true, message: '请输入服务器地址', trigger: 'blur' }],
+        username: [{ required: true, message: '请输入用户名', trigger: 'blur' }]
+      }
+      if (connectionForm.auth_type === 'password' && !connectionForm.password_set) {
+        rules.password = [{ required: true, message: '请输入密码', trigger: 'blur' }]
+      }
+      if (connectionForm.auth_type === 'key') {
+        rules.private_key_path = [{ required: true, message: '请输入私钥路径', trigger: 'blur' }]
+      }
+      return rules
+    })
 
     const taskRules = {
       name: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
@@ -526,13 +551,13 @@ export default {
 
     const openConnectionDialog = () => {
       editingConnection.value = false
-      Object.assign(connectionForm, { id: null, name: '', farm_code: farms.value[0]?.farm_code || '', protocol: 'sftp', host: '', port: 22, username: '', auth_type: 'password', password: '', private_key_path: '', key_passphrase: '' })
+      Object.assign(connectionForm, { id: null, name: '', farm_code: farms.value[0]?.farm_code || '', protocol: 'sftp', host: '', port: 22, username: '', auth_type: 'password', password: '', password_set: false, private_key_path: '', key_passphrase: '', key_passphrase_set: false })
       showConnectionDialog.value = true
     }
 
     const editConnection = (row) => {
       editingConnection.value = true
-      Object.assign(connectionForm, { id: row.id, name: row.name, farm_code: row.farm_code || '', protocol: row.protocol || 'sftp', host: row.host, port: row.port || 22, username: row.username, auth_type: row.auth_type || 'password', password: '', private_key_path: row.private_key_path || '', key_passphrase: '' })
+      Object.assign(connectionForm, { id: row.id, name: row.name, farm_code: row.farm_code || '', protocol: row.protocol || 'sftp', host: row.host, port: row.port || 22, username: row.username, auth_type: row.auth_type || 'password', password: '', password_set: Boolean(row.password_set), private_key_path: row.private_key_path || '', key_passphrase: '', key_passphrase_set: Boolean(row.key_passphrase_set) })
       showConnectionDialog.value = true
     }
 
@@ -542,6 +567,10 @@ export default {
         await connectionFormRef.value.validate()
         savingConnection.value = true
         const payload = { ...connectionForm }
+        delete payload.password_set
+        delete payload.key_passphrase_set
+        if (!payload.password) delete payload.password
+        if (!payload.key_passphrase) delete payload.key_passphrase
         if (editingConnection.value) await updateWeatherConnection(connectionForm.id, payload)
         else await createWeatherConnection(payload)
         ElMessage.success(editingConnection.value ? '连接更新成功' : '连接创建成功')

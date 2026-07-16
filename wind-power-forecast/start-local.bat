@@ -23,6 +23,9 @@ set "DB_SCHEMA_STRICT=true"
 set "METRICS_ENABLED=false"
 if not defined LOCAL_SECRET_KEY set "LOCAL_SECRET_KEY=local-dev-secret-key-do-not-use-in-prod"
 set "SECRET_KEY=%LOCAL_SECRET_KEY%"
+if not defined LOCAL_CREDENTIAL_ENCRYPTION_KEY set "LOCAL_CREDENTIAL_ENCRYPTION_KEY=local-dev-credential-encryption-key-32-chars"
+set "CREDENTIAL_ENCRYPTION_KEY=%LOCAL_CREDENTIAL_ENCRYPTION_KEY%"
+set "CREDENTIAL_ENCRYPTION_KEY_FILE="
 if not defined LOCAL_SEED_ENABLED set "LOCAL_SEED_ENABLED=true"
 
 REM Redis and Celery
@@ -101,6 +104,11 @@ if not exist "%LOCAL_PROCESS_MANAGER%" (
   echo [ERROR] Local process manager not found: "%LOCAL_PROCESS_MANAGER%"
   pause
   exit /b 1
+)
+
+if /I "%START_LOCAL_VALIDATE_ONLY%"=="true" (
+  echo [OK] start-local.bat validation passed.
+  exit /b 0
 )
 
 REM 关闭由本项目上一次启动并记录的本地进程。

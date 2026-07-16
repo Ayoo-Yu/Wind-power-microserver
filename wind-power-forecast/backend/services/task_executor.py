@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from db_models.weather_fetch import WeatherTask, WeatherConnection, WeatherLog, WeatherData
 from services.ssh_service import ssh_service
 from services.weather_data_service import weather_data_service
+from services.weather_connection_security import build_connection_config
 
 logger = logging.getLogger(__name__)
 
@@ -28,15 +29,7 @@ def execute_weather_task(task: WeatherTask, connection: WeatherConnection, sessi
         session.commit()
         
         # 构建连接配置
-        connection_config = {
-            'host': connection.host,
-            'port': connection.port,
-            'username': connection.username,
-            'auth_type': connection.auth_type,
-            'password': connection.password,
-            'private_key_path': connection.private_key_path,
-            'key_passphrase': connection.key_passphrase
-        }
+        connection_config = build_connection_config(connection)
         
         # 1. 列出远程文件（使用动态路径）
         files = ssh_service.list_files_dynamic_path(
@@ -308,4 +301,4 @@ def _should_skip_file(session: Session, task_id: int, file_info: Dict[str, Any],
     # 5. 如果文件存在且大小匹配，但没有数据库记录，说明可能是之前下载但处理失败的文件
     # 这种情况下允许重新处理，但不重新下载
     logger.info(f"文件存在但无成功记录，重新处理: {file_info['name']}")
-    return False 
+    return False
