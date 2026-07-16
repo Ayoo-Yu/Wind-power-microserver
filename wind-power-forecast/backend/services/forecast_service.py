@@ -1393,6 +1393,10 @@ def run_daily_prediction(
     model_manager,
     calibration_manager,
     session,
+    *,
+    prediction_run_id: int | None = None,
+    input_snapshot_id: int | None = None,
+    model_version_id: int | None = None,
 ) -> Dict:
     """Orchestrate a single day prediction: load NWP, predict, calibrate, write.
 
@@ -1485,12 +1489,35 @@ def run_daily_prediction(
         raw_predictions=raw_preds,
     )
 
+    output_manifest = None
+    if prediction_run_id:
+        from services.prediction_output_service import record_forecast_output_points
+
+        output_manifest = record_forecast_output_points(
+            session,
+            prediction_run_id=prediction_run_id,
+            input_snapshot_id=input_snapshot_id,
+            model_version_id=model_version_id,
+            farm_code=farm_code,
+            forecast_type=forecast_type,
+            issued_at=pre_at,
+            expected_count=96,
+            points=[{
+                "target_time": timestamp,
+                "horizon_index": index + 1,
+                "predicted_power": calibrated_preds[index],
+                "raw_predicted_power": raw_preds[index],
+            } for index, timestamp in enumerate(timestamps)],
+        )
+
     return {
         "status": "ok",
         "farm_code": farm_code,
         "forecast_type": forecast_type,
+        "issued_at": pre_at.isoformat(),
         "target_date": target_date.isoformat(),
         "n_predictions": n_written,
+        "output_manifest": output_manifest,
     }
 
 
@@ -1565,6 +1592,10 @@ def run_ultrashort_prediction(
     model_manager,
     calibration_manager,
     session,
+    *,
+    prediction_run_id: int | None = None,
+    input_snapshot_id: int | None = None,
+    model_version_id: int | None = None,
 ) -> Dict:
     """Predict 16 future points (T+15min to T+4h) for one 15-min cycle.
 
@@ -1668,6 +1699,28 @@ def run_ultrashort_prediction(
         setattr(obj, f"wp_pred{s + 1}_raw", raw_predictions.get(s))
     session.flush()
 
+    output_manifest = None
+    if prediction_run_id:
+        from services.prediction_output_service import record_forecast_output_points
+
+        output_manifest = record_forecast_output_points(
+            session,
+            prediction_run_id=prediction_run_id,
+            input_snapshot_id=input_snapshot_id,
+            model_version_id=model_version_id,
+            farm_code=farm_code,
+            forecast_type="supershort",
+            issued_at=T,
+            expected_count=N_SHIFTS,
+            points=[{
+                "target_time": T + timedelta(minutes=shift * 15),
+                "horizon_index": shift,
+                "horizon_minutes": shift * 15,
+                "predicted_power": predictions[shift],
+                "raw_predicted_power": raw_predictions.get(shift),
+            } for shift in sorted(predictions)],
+        )
+
     return {
         "status": "ok",
         "farm_code": farm_code,
@@ -1675,6 +1728,7 @@ def run_ultrashort_prediction(
         "anchor_time": T.isoformat(),
         "prediction_start_time": prediction_start_time.isoformat(),
         "n_predictions": len(predictions),
+        "output_manifest": output_manifest,
     }
 
 

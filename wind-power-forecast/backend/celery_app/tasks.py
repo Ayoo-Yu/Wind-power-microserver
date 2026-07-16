@@ -163,6 +163,7 @@ def run_prediction(self, farm_code, task_type):
     try:
         _update_task_running(task_id, "predict")
         input_snapshot_id = None
+        model_version_id = None
         if run_id:
             from services.prediction_lineage_service import capture_prediction_input_snapshot
             with db_session() as lineage_session:
@@ -173,6 +174,7 @@ def run_prediction(self, farm_code, task_type):
                     task_type=task_type,
                 )
                 input_snapshot_id = snapshot.id
+                model_version_id = snapshot.model_version_id
         from services.forecast_service import run_daily_prediction
         from services.model_manager import ModelManager
         from services.calibration_manager import CalibrationManager
@@ -181,7 +183,16 @@ def run_prediction(self, farm_code, task_type):
         model_mgr = ModelManager()
         cal_mgr = CalibrationManager()
         with db_session() as session:
-            result = run_daily_prediction(farm_code, ftype, model_mgr, cal_mgr, session)
+            result = run_daily_prediction(
+                farm_code,
+                ftype,
+                model_mgr,
+                cal_mgr,
+                session,
+                prediction_run_id=run_id,
+                input_snapshot_id=input_snapshot_id,
+                model_version_id=model_version_id,
+            )
 
         if result.get("status") != "ok":
             raise RuntimeError(result.get("message", "prediction failed"))
@@ -254,6 +265,19 @@ def run_supershort_predict(self, farm_code):
         raise
     try:
         _update_task_running(task_id, "predict")
+        input_snapshot_id = None
+        model_version_id = None
+        if run_id:
+            from services.prediction_lineage_service import capture_prediction_input_snapshot
+            with db_session() as lineage_session:
+                snapshot = capture_prediction_input_snapshot(
+                    lineage_session,
+                    prediction_run_id=run_id,
+                    farm_code=farm_code,
+                    task_type="supershort",
+                )
+                input_snapshot_id = snapshot.id
+                model_version_id = snapshot.model_version_id
         from services.forecast_service import run_ultrashort_prediction
         from services.model_manager import ModelManager
         from services.calibration_manager import CalibrationManager
@@ -261,10 +285,19 @@ def run_supershort_predict(self, farm_code):
         model_mgr = ModelManager()
         cal_mgr = CalibrationManager()
         with db_session() as session:
-            result = run_ultrashort_prediction(farm_code, model_mgr, cal_mgr, session)
+            result = run_ultrashort_prediction(
+                farm_code,
+                model_mgr,
+                cal_mgr,
+                session,
+                prediction_run_id=run_id,
+                input_snapshot_id=input_snapshot_id,
+                model_version_id=model_version_id,
+            )
 
         if result.get("status") != "ok":
             raise RuntimeError(result.get("message", "supershort prediction failed"))
+        result["input_snapshot_id"] = input_snapshot_id
         _finish_run_and_update_task(run_id, task_id, "predict", "success", result_data=result)
         return {"status": "success", "farm_code": farm_code}
     except Exception as exc:
@@ -277,6 +310,75 @@ def run_supershort_predict(self, farm_code):
         else:
             logger.warning(f"run_supershort_predict DB error for {farm_code}, will retry: {exc}")
         raise self.retry(exc=exc, countdown=120 if db_down else 15)
+
+
+@celery_app.task(bind=True, max_retries=1, soft_time_limit=600)
+def run_regulatory_evaluation(self, end_date_str=None, lookback_days=None):
+    """滚动复算南网日评估，吸收延迟到达的实测和限电数据。"""
+
+    from db_models import WindFarm
+    from services.regulatory_evaluation_service import evaluate_regulatory_period
+
+    try:
+        if end_date_str:
+            evaluation_end = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+        else:
+            evaluation_end = datetime.now(_BJ_TZ).date() - timedelta(days=1)
+        days = int(
+            lookback_days
+            if lookback_days is not None
+            else os.environ.get("REGULATORY_EVALUATION_LOOKBACK_DAYS", "3")
+        )
+        days = min(max(days, 1), 31)
+        evaluation_start = evaluation_end - timedelta(days=days - 1)
+
+        with db_session() as session:
+            query = session.query(WindFarm)
+            if hasattr(WindFarm, "deleted_at"):
+                query = query.filter(WindFarm.deleted_at.is_(None))
+            if hasattr(WindFarm, "is_active"):
+                query = query.filter(WindFarm.is_active.is_(True))
+            farms = query.order_by(WindFarm.farm_code).all()
+            summaries = []
+            for farm in farms:
+                capacity = float(farm.capacity or 0)
+                if capacity <= 0:
+                    summaries.append({
+                        "farm_code": farm.farm_code,
+                        "status": "blocked",
+                        "message": "场站装机容量未配置",
+                    })
+                    continue
+                result = evaluate_regulatory_period(
+                    session,
+                    farm_code=farm.farm_code,
+                    capacity_mw=capacity,
+                    start_date=evaluation_start,
+                    end_date=evaluation_end,
+                    persist=True,
+                )
+                summaries.append({
+                    "farm_code": farm.farm_code,
+                    "status": "success",
+                    "metrics": {
+                        key: {
+                            "status": value["status"],
+                            "complete_day_count": value["complete_day_count"],
+                            "accuracy_percent": value["accuracy_percent"],
+                        }
+                        for key, value in result["metrics"].items()
+                    },
+                })
+        return {
+            "status": "success",
+            "start_date": evaluation_start.isoformat(),
+            "end_date": evaluation_end.isoformat(),
+            "farm_count": len(summaries),
+            "farms": summaries,
+        }
+    except Exception as exc:
+        logger.exception("南网日评估任务执行失败")
+        raise self.retry(exc=exc, countdown=120)
 
 
 @celery_app.task(bind=True, max_retries=1, soft_time_limit=300)

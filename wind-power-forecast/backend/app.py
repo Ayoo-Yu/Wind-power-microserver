@@ -113,6 +113,12 @@ app.register_blueprint(download_bp, url_prefix='/')
 app.register_blueprint(actual_power_bp)
 app.register_blueprint(prediction2database_bp)
 app.register_blueprint(power_compare_bp)
+# 为功率对比接口提供统一的 v1 命名空间，同时保留原有路径兼容现网前端。
+app.register_blueprint(
+    power_compare_bp,
+    url_prefix='/api/v1/power-compare',
+    name='power_compare_v1',
+)
 # Legacy auth namespace (kept for compatibility)
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(auth_extensions_bp, url_prefix='/auth')

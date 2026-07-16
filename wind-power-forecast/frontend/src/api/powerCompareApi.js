@@ -23,6 +23,13 @@ export function getFleetMetrics(payload) {
   )
 }
 
+export function getRegulatoryMetrics(payload) {
+  return withLegacyFallback(
+    () => axiosInstance.post('/api/v1/power-compare/regulatory_metrics', payload),
+    () => axiosInstance.post('/power-compare/regulatory_metrics', payload)
+  )
+}
+
 export function getFleetSeries(payload) {
   return withLegacyFallback(
     () => axiosInstance.post('/api/v1/power-compare/fleet_series', payload),

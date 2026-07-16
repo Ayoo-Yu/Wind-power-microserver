@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey, Boolean, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .base import Base, TimeStampMixin
@@ -64,6 +64,14 @@ class DailyMetrics(Base):
     pe = Column(Float)
     sample_count = Column(Integer)
     metric_type = Column(String(20))
+    policy_version = Column(String(64), nullable=False, default="legacy")
+    threshold_percent = Column(Float)
+    expected_count = Column(Integer)
+    excluded_count = Column(Integer, nullable=False, default=0)
+    completeness = Column(Float)
+    status = Column(String(20), nullable=False, default="legacy")
+    details_json = Column(JSON)
+    computed_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     def __repr__(self):
         return f"<DailyMetrics {self.date.strftime('%Y-%m-%d')} ({self.metric_type})>"

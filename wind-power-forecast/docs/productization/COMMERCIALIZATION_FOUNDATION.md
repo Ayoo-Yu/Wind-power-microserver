@@ -81,3 +81,5 @@ backend/migrations/versions/20260715_03_commercial_data_lineage.py
 ## 发布边界
 
 本分支提供可进入联调和 FAT 的商业化基础版本。完成真实点表、真实 NWP、真实下游和连续运行 SAT 后，才具备场站正式投产条件。生产分支和当前生产容器不会因该分支的开发提交自动变化。
+
+后续预测运行追溯、南网日评估和 240 小时交付边界见 `FORECAST_CLOSED_LOOP.md`。

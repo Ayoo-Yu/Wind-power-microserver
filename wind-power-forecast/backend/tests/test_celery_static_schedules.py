@@ -16,6 +16,7 @@ def test_static_report_schedules_survive_database_outage(monkeypatch):
 
     assert schedule["report_outbox_dispatch"]["task"] == "celery_app.tasks.process_report_outbox"
     assert schedule["report_schedule_scan"]["task"] == "celery_app.tasks.scan_scheduled_reports"
+    assert schedule["regulatory_evaluation_daily"]["task"] == "celery_app.tasks.run_regulatory_evaluation"
 
 
 def test_report_scan_task_skips_when_embedded_mode_is_selected(monkeypatch):

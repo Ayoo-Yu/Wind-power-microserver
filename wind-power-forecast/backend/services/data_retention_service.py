@@ -50,6 +50,12 @@ RETENTION_TABLES = [
         "captured_at",
         int(os.environ.get("PREDICTION_LINEAGE_RETENTION_DAYS", "730")),
     ),
+    RetentionTable(
+        "forecast_output_points",
+        "created_at",
+        int(os.environ.get("PREDICTION_LINEAGE_RETENTION_DAYS", "730")),
+    ),
+    RetentionTable("daily_metrics", "date"),
 ]
 
 

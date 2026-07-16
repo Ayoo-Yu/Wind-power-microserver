@@ -1,13 +1,14 @@
+import math
 from datetime import datetime, timedelta
 
 from flask import Blueprint, request, jsonify
 from sqlalchemy import func, text
 
+from db_models import ActualPower, MidPower, ShortlPower, SupershortlPower
 from db_models.operational_data import AvailableCapacityData, TurbinePowerData
 from db_models.report_config import WindFarm
 from db_session import db_session
 from db_models.ecmwf_grid_model import ecmwf_grid_table_name
-from models import ActualPower, SupershortlPower, ShortlPower, MidPower
 
 
 bp = Blueprint('power_compare', __name__, url_prefix='/power-compare')
@@ -142,11 +143,14 @@ def _query_prediction_series(db, farm_code, prediction_type, start_dt, end_dt):
             MidPower.timestamp.between(start_dt, end_dt)
         ).order_by(MidPower.timestamp).all()
         return _series_from_rows(pred_rows)
-    pred_rows = db.query(SupershortlPower.timestamp, SupershortlPower.wp_pred2.label("power")).filter(
-        SupershortlPower.farm_code == farm_code,
-        SupershortlPower.timestamp.between(start_dt, end_dt)
-    ).order_by(SupershortlPower.timestamp).all()
-    return _series_from_rows(pred_rows)
+    return _query_supershort_average(
+        db,
+        farm_code,
+        start_dt,
+        end_dt,
+        min_predictions_required=1,
+        include_quality_info=False,
+    )
 
 
 def _query_supershort_average(db, farm_code, start_dt, end_dt, min_predictions_required, include_quality_info):
@@ -190,6 +194,100 @@ def _query_supershort_average(db, farm_code, start_dt, end_dt, min_predictions_r
             averaged_data.append(data_point)
         current_target_dt += timedelta(minutes=15)
     return averaged_data
+
+
+@bp.route('/regulatory_metrics', methods=['POST'])
+def get_regulatory_metrics():
+    """按版本化南网口径返回单站或多站日评估。"""
+
+    from services.regulatory_evaluation_service import (
+        POLICY,
+        SUPPORTED_FORECAST_TYPES,
+        evaluate_regulatory_period,
+    )
+
+    payload = request.get_json(silent=True) or {}
+    start = payload.get('start')
+    end = payload.get('end')
+    if not start or not end:
+        return jsonify({"code": 1001, "message": "missing start/end"}), 400
+    try:
+        start_date = datetime.fromisoformat(start).date()
+        end_date = datetime.fromisoformat(end).date()
+    except (TypeError, ValueError):
+        return jsonify({"code": 1001, "message": "invalid datetime format"}), 400
+    if end_date < start_date:
+        return jsonify({"code": 1001, "message": "end must not be before start"}), 400
+    if (end_date - start_date).days > 30:
+        return jsonify({"code": 1001, "message": "date range must not exceed 31 days"}), 400
+
+    raw_types = payload.get('prediction_types') or list(SUPPORTED_FORECAST_TYPES)
+    if not isinstance(raw_types, list):
+        return jsonify({"code": 1001, "message": "prediction_types must be a list"}), 400
+    prediction_types = []
+    for item in raw_types:
+        value = 'mid' if str(item).strip().lower() == 'medium' else str(item).strip().lower()
+        if value not in SUPPORTED_FORECAST_TYPES:
+            return jsonify({"code": 1001, "message": f"invalid prediction_type: {item}"}), 400
+        if value not in prediction_types:
+            prediction_types.append(value)
+
+    farm_codes = payload.get('farm_codes') or []
+    if payload.get('farm_code'):
+        farm_codes = [payload.get('farm_code')]
+    if farm_codes and not isinstance(farm_codes, list):
+        return jsonify({"code": 1001, "message": "farm_codes must be a list"}), 400
+    selected_codes = []
+    for code in farm_codes:
+        value = str(code).strip()
+        if value and value not in selected_codes:
+            selected_codes.append(value)
+    with db_session() as db:
+        query = db.query(WindFarm)
+        if hasattr(WindFarm, 'deleted_at'):
+            query = query.filter(WindFarm.deleted_at.is_(None))
+        if hasattr(WindFarm, 'is_active'):
+            query = query.filter(WindFarm.is_active.is_(True))
+        if selected_codes:
+            query = query.filter(WindFarm.farm_code.in_(selected_codes))
+        farms = query.order_by(WindFarm.farm_code).all()
+
+        items = []
+        for farm in farms:
+            capacity = float(farm.capacity or 0)
+            if not math.isfinite(capacity) or capacity <= 0:
+                items.append({
+                    "farm_code": farm.farm_code,
+                    "farm_name": farm.farm_name or farm.farm_code,
+                    "capacity_mw": capacity,
+                    "status": "blocked",
+                    "message": "场站装机容量未配置",
+                    "metrics": {},
+                })
+                continue
+            result = evaluate_regulatory_period(
+                db,
+                farm_code=farm.farm_code,
+                capacity_mw=capacity,
+                start_date=start_date,
+                end_date=end_date,
+                forecast_types=prediction_types,
+                persist=False,
+            )
+            result["farm_name"] = farm.farm_name or farm.farm_code
+            result["status"] = "ok"
+            items.append(result)
+
+    return jsonify({
+        "code": 0,
+        "message": "ok",
+        "data": {
+            "policy": POLICY,
+            "items": items,
+            "count": len(items),
+            "persisted": False,
+        },
+    })
 
 
 @bp.route('/data', methods=['POST'])

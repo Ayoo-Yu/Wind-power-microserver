@@ -30,6 +30,17 @@ STATIC_SCHEDULES = {
     },
 }
 
+if os.environ.get("REGULATORY_EVALUATION_ENABLED", "true").strip().lower() in {
+    "1", "true", "yes", "on",
+}:
+    STATIC_SCHEDULES["regulatory_evaluation_daily"] = {
+        "task": "celery_app.tasks.run_regulatory_evaluation",
+        "schedule": crontab(
+            hour=int(os.environ.get("REGULATORY_EVALUATION_HOUR", "1")),
+            minute=int(os.environ.get("REGULATORY_EVALUATION_MINUTE", "20")),
+        ),
+    }
+
 
 def _parse_hhmm(value: str, fallback: str) -> tuple[int, int]:
     raw = value or fallback

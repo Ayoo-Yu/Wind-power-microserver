@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import os
 import shutil
+import json
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from db_models import (
     IngestionBatch,
+    ForecastOutputPoint,
     ModelVersion,
     PredictionInputSnapshot,
     PredictionRun,
@@ -21,8 +23,11 @@ from db_models import (
 from services.scada_contract import REQUIRED_SCADA_METRICS, SCADA_METRICS
 
 
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+_BEIJING_TZ = timezone(timedelta(hours=8))
+
+
+def _beijing_now() -> datetime:
+    return datetime.now(_BEIJING_TZ).replace(tzinfo=None)
 
 
 def _iso(value: datetime | None) -> str | None:
@@ -222,39 +227,107 @@ def _prediction_overview(session, now: datetime, farm_code: str | None) -> dict:
         query = query.filter(PredictionTask.farm_code == farm_code)
     rows = query.order_by(PredictionRun.created_at.desc()).limit(200).all()
     status_counts = Counter(str(run.status or "unknown").lower() for run, _ in rows)
-    latest_runs = [{
-        "id": run.id,
-        "farm_code": task.farm_code,
-        "task_type": task.task_type,
-        "action": run.action,
-        "status": run.status,
-        "started_at": _iso(run.started_at),
-        "finished_at": _iso(run.finished_at),
-        "duration_sec": run.duration_sec,
-        "error_message": run.error_message,
-    } for run, task in rows[:12]]
+    run_ids = [run.id for run, _ in rows]
+    output_rows = []
+    if run_ids:
+        output_rows = session.query(ForecastOutputPoint).filter(
+            ForecastOutputPoint.prediction_run_id.in_(run_ids)
+        ).all()
+    outputs_by_run = {}
+    for output in output_rows:
+        outputs_by_run.setdefault(output.prediction_run_id, []).append(output)
+
+    latest_runs = []
+    for run, task in rows[:12]:
+        outputs = outputs_by_run.get(run.id, [])
+        expected_count = 16 if task.task_type == "supershort" else 96
+        if run.action != "predict":
+            trace_status = "not_applicable"
+        elif len(outputs) >= expected_count:
+            trace_status = "complete"
+        elif outputs:
+            trace_status = "partial"
+        else:
+            trace_status = "missing"
+        latest_runs.append({
+            "id": run.id,
+            "farm_code": task.farm_code,
+            "task_type": task.task_type,
+            "action": run.action,
+            "status": run.status,
+            "started_at": _iso(run.started_at),
+            "finished_at": _iso(run.finished_at),
+            "duration_sec": run.duration_sec,
+            "error_message": run.error_message,
+            "output_point_count": len(outputs),
+            "output_trace_status": trace_status,
+        })
 
     snapshot_query = session.query(PredictionInputSnapshot)
     if farm_code:
         snapshot_query = snapshot_query.filter(PredictionInputSnapshot.farm_code == farm_code)
     snapshots = snapshot_query.order_by(PredictionInputSnapshot.captured_at.desc()).limit(12).all()
-    snapshot_items = [{
-        "id": item.id,
-        "prediction_run_id": item.prediction_run_id,
-        "farm_code": item.farm_code,
-        "task_type": item.task_type,
-        "captured_at": _iso(item.captured_at),
-        "dataset_version": item.dataset_version,
-        "model_version_id": item.model_version_id,
-        "status": item.status,
-        "missing_rate": item.missing_rate,
-        "manifest_sha256": item.manifest_sha256,
-    } for item in snapshots]
+    snapshot_run_ids = [item.prediction_run_id for item in snapshots]
+    missing_output_run_ids = [run_id for run_id in snapshot_run_ids if run_id not in outputs_by_run]
+    if missing_output_run_ids:
+        for output in session.query(ForecastOutputPoint).filter(
+            ForecastOutputPoint.prediction_run_id.in_(missing_output_run_ids)
+        ).all():
+            outputs_by_run.setdefault(output.prediction_run_id, []).append(output)
+    snapshot_runs = {
+        run.id: run
+        for run in session.query(PredictionRun).filter(PredictionRun.id.in_(snapshot_run_ids)).all()
+    } if snapshot_run_ids else {}
+    snapshot_items = []
+    for item in snapshots:
+        outputs = outputs_by_run.get(item.prediction_run_id, [])
+        run = snapshot_runs.get(item.prediction_run_id)
+        output_manifest = None
+        if run and run.result_json:
+            try:
+                output_manifest = (json.loads(run.result_json) or {}).get("output_manifest")
+            except (TypeError, ValueError):
+                output_manifest = None
+        expected_count = 16 if item.task_type == "supershort" else 96
+        snapshot_items.append({
+            "id": item.id,
+            "prediction_run_id": item.prediction_run_id,
+            "farm_code": item.farm_code,
+            "task_type": item.task_type,
+            "captured_at": _iso(item.captured_at),
+            "dataset_version": item.dataset_version,
+            "model_version_id": item.model_version_id,
+            "status": item.status,
+            "missing_rate": item.missing_rate,
+            "manifest_sha256": item.manifest_sha256,
+            "output_point_count": len(outputs),
+            "output_trace_status": (
+                "complete" if len(outputs) >= expected_count else ("partial" if outputs else "missing")
+            ),
+            "output_target_start": _iso(min((row.target_time for row in outputs), default=None)),
+            "output_target_end": _iso(max((row.target_time for row in outputs), default=None)),
+            "output_sha256": output_manifest.get("output_sha256") if output_manifest else None,
+            "regulatory_delivery_ready": (
+                output_manifest.get("regulatory_delivery_ready") if output_manifest else False
+            ),
+        })
+    successful_predict_runs = [
+        run for run, _ in rows
+        if run.action == "predict" and str(run.status).lower() == "success"
+    ]
+    missing_trace_count = sum(
+        1 for run in successful_predict_runs if not outputs_by_run.get(run.id)
+    )
     return {
         "window_hours": 24,
         "status_counts": dict(sorted(status_counts.items())),
         "latest_runs": latest_runs,
         "latest_input_snapshots": snapshot_items,
+        "output_point_count": len(output_rows),
+        "traced_prediction_run_count": sum(
+            1 for run in successful_predict_runs if outputs_by_run.get(run.id)
+        ),
+        "missing_output_trace_count": missing_trace_count,
     }
 
 
@@ -339,7 +412,7 @@ def build_operations_overview(
     storage_path: str | None = None,
 ) -> dict:
     """构建单次只读运维快照，供界面和现场巡检脚本共用。"""
-    effective_now = now or _utc_now()
+    effective_now = now or _beijing_now()
     scada = _scada_overview(
         session,
         effective_now,
@@ -386,6 +459,13 @@ def build_operations_overview(
             "domain": "prediction",
             "severity": "warning",
             "message": f"最近 24 小时存在 {failed_runs} 次预测或训练失败",
+        })
+    missing_output_trace_count = prediction.get("missing_output_trace_count", 0)
+    if missing_output_trace_count:
+        issues.append({
+            "domain": "prediction",
+            "severity": "warning",
+            "message": f"最近 24 小时有 {missing_output_trace_count} 次成功预测缺少输出账本",
         })
     if reporting["dead_count"]:
         issues.append({

@@ -4,6 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from db_models import (
+    ForecastOutputPoint,
     IngestionBatch,
     ModelVersion,
     PredictionInputSnapshot,
@@ -27,6 +28,7 @@ def _session():
         PredictionTask.__table__,
         PredictionRun.__table__,
         PredictionInputSnapshot.__table__,
+        ForecastOutputPoint.__table__,
         ReportOutbox.__table__,
         ModelVersion.__table__,
     ]
@@ -105,7 +107,7 @@ def _seed_healthy_state(session, now):
     )
     session.add(model)
     session.flush()
-    session.add(PredictionInputSnapshot(
+    snapshot = PredictionInputSnapshot(
         prediction_run_id=run.id,
         farm_code="WF001",
         task_type="supershort",
@@ -120,7 +122,22 @@ def _seed_healthy_state(session, now):
         quality_summary={"state": "good"},
         input_manifest={"scada": [], "nwp": {}},
         manifest_sha256="e" * 64,
-    ))
+    )
+    session.add(snapshot)
+    session.flush()
+    for horizon in range(1, 17):
+        session.add(ForecastOutputPoint(
+            prediction_run_id=run.id,
+            input_snapshot_id=snapshot.id,
+            model_version_id=model.id,
+            farm_code="WF001",
+            forecast_type="supershort",
+            issued_at=now - timedelta(minutes=2),
+            target_time=now + timedelta(minutes=15 * horizon),
+            horizon_index=horizon,
+            horizon_minutes=15 * horizon,
+            predicted_power=20.0 + horizon,
+        ))
     session.add(ReportOutbox(
         idempotency_key="report-WF001-001",
         config_id=1,
@@ -165,6 +182,7 @@ def test_overview_reports_healthy_closed_loop(tmp_path, monkeypatch):
     assert result["reporting"]["dead_count"] == 0
     assert result["models"]["active_count"] == 1
     assert result["prediction"]["latest_input_snapshots"][0]["status"] == "ready"
+    assert result["prediction"]["latest_input_snapshots"][0]["output_trace_status"] == "complete"
 
 
 def test_required_stale_inputs_and_dead_letter_are_critical(tmp_path, monkeypatch):

@@ -8,6 +8,15 @@
       <el-tab-pane label="多站横向对比" name="fleet" />
     </el-tabs>
 
+    <el-alert
+      class="policy-alert"
+      type="info"
+      :closable="false"
+      show-icon
+      title="南方区域考核口径"
+      :description="assessmentPolicyText"
+    />
+
     <div class="summary-grid">
       <el-card class="summary-card" v-for="(card, idx) in kpiCards" :key="idx">
         <div class="summary-label">{{ card.label }}</div>
@@ -106,7 +115,7 @@
 
     <div v-else>
       <el-card class="chart-card" v-if="fleetCompareRows.length > 0">
-        <template #header><div class="card-header">多站准确率对比（短期 vs 超短期）</div></template>
+        <template #header><div class="card-header">多站准确率对比（短期、中期、超短期）</div></template>
         <div class="chart-wrapper" ref="fleetBarChartEl">
           <canvas ref="fleetBarChartCanvas" class="native-chart-canvas" @mousemove="handleChartMouseMove($event, 'fleet')" @mouseleave="hideChartTooltip"></canvas>
         </div>
@@ -118,11 +127,14 @@
           <el-table-column prop="farm_code" label="场站编码" min-width="130" />
           <el-table-column label="短期准确率(%)" width="130"><template #default="scope">{{ formatPct(scope.row.short_acc) }}</template></el-table-column>
           <el-table-column label="短期合格率(%)" width="130"><template #default="scope">{{ formatPct(scope.row.short_qualified_rate) }}</template></el-table-column>
+          <el-table-column label="中期第4日准确率(%)" width="155"><template #default="scope">{{ formatPct(scope.row.mid_acc) }}</template></el-table-column>
+          <el-table-column label="中期合格率(%)" width="130"><template #default="scope">{{ formatPct(scope.row.mid_qualified_rate) }}</template></el-table-column>
           <el-table-column label="超短期准确率(%)" width="140"><template #default="scope">{{ formatPct(scope.row.supershort_acc) }}</template></el-table-column>
           <el-table-column label="超短期合格率(%)" width="140"><template #default="scope">{{ formatPct(scope.row.supershort_qualified_rate) }}</template></el-table-column>
           <el-table-column label="RMSE" width="110"><template #default="scope">{{ formatNum(scope.row.rmse_avg) }}</template></el-table-column>
           <el-table-column label="MAE" width="110"><template #default="scope">{{ formatNum(scope.row.mae_avg) }}</template></el-table-column>
-          <el-table-column prop="unqualified_points" label="不合格点数" width="120" />
+          <el-table-column prop="unqualified_days" label="未达标日" width="105" />
+          <el-table-column label="测算考核电量(MWh)" width="155"><template #default="scope">{{ formatNum(scope.row.assessment_energy) }}</template></el-table-column>
         </el-table>
       </el-card>
     </div>
@@ -142,7 +154,7 @@
 <script>
 import { Download } from '@element-plus/icons-vue'
 import farmService from '../utils/farmService'
-import { getFleetMetrics, getPowerCompareData } from '../api/powerCompareApi'
+import { getPowerCompareData, getRegulatoryMetrics } from '../api/powerCompareApi'
 import LoadingIndicator from './LoadingIndicator.vue'
 
 const YAXIS_POWER = 0
@@ -176,15 +188,19 @@ export default {
       chartMeta: {},
       chartTooltip: { visible: false, x: 0, y: 0, lines: [] },
       exportData: { comparison: null, metrics: null },
+      assessmentPolicy: null,
+      singleRegulatoryMetrics: {},
       singleSeriesState: null,
       singleMetricsSummary: {
         shortAcc: null,
         shortQualifiedRate: null,
         supershortAcc: null,
         supershortQualifiedRate: null,
+        midAcc: null,
+        midQualifiedRate: null,
         rmse: null,
         mae: null,
-        unqualifiedPoints: 0,
+        unqualifiedDays: 0,
         assessmentEnergy: 0
       },
       fleetCompareRows: []
@@ -203,23 +219,33 @@ export default {
     kpiCards() {
       if (this.analysisTab === 'single') {
         return [
-          { label: '短期预测指标', value: `准确率 ${this.formatPct(this.singleMetricsSummary.shortAcc)} | 合格率 ${this.formatPct(this.singleMetricsSummary.shortQualifiedRate)}` },
-          { label: '超短期预测指标', value: `准确率 ${this.formatPct(this.singleMetricsSummary.supershortAcc)} | 合格率 ${this.formatPct(this.singleMetricsSummary.supershortQualifiedRate)}` },
-          { label: '误差统计 (RMSE/MAE)', value: `RMSE ${this.formatNum(this.singleMetricsSummary.rmse)} | MAE ${this.formatNum(this.singleMetricsSummary.mae)}` },
-          { label: '损失/受累电量评估', value: `不合格点 ${this.singleMetricsSummary.unqualifiedPoints} | 考核电量 ${this.formatNum(this.singleMetricsSummary.assessmentEnergy)} MWh` }
+          { label: '短期日前', value: this.formatRegulatoryMetric(this.singleRegulatoryMetrics.short) },
+          { label: '中期第 4 日', value: this.formatRegulatoryMetric(this.singleRegulatoryMetrics.mid) },
+          { label: '超短期 1 至 16 均值', value: this.formatRegulatoryMetric(this.singleRegulatoryMetrics.supershort) },
+          { label: '评估汇总', value: `未达标 ${this.formatCount(this.singleMetricsSummary.unqualifiedDays)} 日 | 测算考核电量 ${this.formatNum(this.singleMetricsSummary.assessmentEnergy)} MWh` }
         ]
       }
       const rows = this.fleetCompareRows
       const avgShort = this.mean(rows.map(v => v.short_acc))
+      const avgMid = this.mean(rows.map(v => v.mid_acc))
       const avgUltra = this.mean(rows.map(v => v.supershort_acc))
-      const avgRmse = this.mean(rows.map(v => v.rmse_avg))
-      const totalUnqualified = rows.reduce((s, r) => s + (Number(r.unqualified_points) || 0), 0)
+      const unqualifiedValues = rows
+        .map(row => row.unqualified_days)
+        .filter(value => value !== null && value !== undefined && Number.isFinite(Number(value)))
+      const totalUnqualified = unqualifiedValues.length
+        ? unqualifiedValues.reduce((sum, value) => sum + Number(value), 0)
+        : null
       return [
         { label: '参与场站数', value: `${rows.length}` },
         { label: '短期平均准确率', value: this.formatPct(avgShort) },
+        { label: '中期第 4 日平均准确率', value: this.formatPct(avgMid) },
         { label: '超短期平均准确率', value: this.formatPct(avgUltra) },
-        { label: 'RMSE/不合格点', value: `${this.formatNum(avgRmse)} / ${totalUnqualified}` }
+        { label: '未达标日', value: this.formatCount(totalUnqualified) }
       ]
+    },
+    assessmentPolicyText() {
+      const version = this.assessmentPolicy?.version || '等待后端返回规则版本'
+      return `规则 ${version}。短期采用日前 96 点，中期采用第 73 至 96 小时，超短期采用同一目标时刻 1 至 16 个提前量预测均值。数据不完整时仅展示临时准确率，不判定是否达标。`
     },
     curveLegendItems() {
       return [
@@ -330,15 +356,40 @@ export default {
         .map(f => ({ code: f.code, name: f.name || f.code, capacity: Number(f.capacity) || 0 }))
     },
     formatPct(value) {
+      if (value === null || value === undefined || value === '') return '--'
       if (!Number.isFinite(Number(value))) return '--'
       return `${Number(value).toFixed(2)}%`
     },
     formatNum(value) {
+      if (value === null || value === undefined || value === '') return '--'
       if (!Number.isFinite(Number(value))) return '--'
       return Number(value).toFixed(2)
     },
+    formatCount(value) {
+      if (value === null || value === undefined || value === '') return '--'
+      if (!Number.isFinite(Number(value))) return '--'
+      return `${Number(value)}`
+    },
+    formatRegulatoryMetric(metric) {
+      if (!metric || metric.status === 'missing') return '暂无可评估数据'
+      if (metric.status === 'excluded') return '当日低功率数据全部豁免'
+      if (metric.status === 'partial') {
+        const provisional = metric.provisional_accuracy_percent ?? metric.accuracy_percent
+        if (provisional !== null && provisional !== undefined && Number.isFinite(Number(provisional))) {
+          return `临时准确率 ${this.formatPct(provisional)} | 完整日 ${metric.complete_day_count || 0}/${metric.day_count || 0}`
+        }
+        return `数据不完整 | 完整日 ${metric.complete_day_count || 0}/${metric.day_count || 0}`
+      }
+      if (metric.accuracy_percent !== null && metric.accuracy_percent !== undefined && Number.isFinite(Number(metric.accuracy_percent))) {
+        return `准确率 ${this.formatPct(metric.accuracy_percent)} | 合格率 ${this.formatPct(metric.qualified_rate_percent)}`
+      }
+      return '数据尚未达到评估条件'
+    },
     mean(values) {
-      const arr = values.map(Number).filter(Number.isFinite)
+      const arr = values
+        .filter(value => value !== null && value !== undefined && value !== '')
+        .map(Number)
+        .filter(Number.isFinite)
       if (!arr.length) return null
       return arr.reduce((s, v) => s + v, 0) / arr.length
     },
@@ -519,49 +570,6 @@ export default {
         return Number.isFinite(val) ? val : null
       })
     },
-    calcMetrics(actual, predicted) {
-      const pairs = []
-      actual.forEach((a, i) => {
-        const p = predicted[i]
-        if (Number.isFinite(a) && Number.isFinite(p)) pairs.push([a, p])
-      })
-      if (!pairs.length) return { mae: null, rmse: null, mse: null, acc: null, k: null, unqualifiedPoints: 0, pe: 0 }
-      const threshold = 0.2 * this.installedCapacity
-      const absErrors = pairs.map(([a, p]) => Math.abs(p - a))
-      const sqErrors = pairs.map(([a, p]) => (p - a) ** 2)
-      const mse = sqErrors.reduce((s, v) => s + v, 0) / pairs.length
-      const rmse = Math.sqrt(mse)
-      const mae = absErrors.reduce((s, v) => s + v, 0) / pairs.length
-      const acc = 1 - rmse / this.installedCapacity
-      const kArr = pairs.map(([a, p]) => ((p - a) / Math.max(Math.abs(a), threshold)) ** 2)
-      const k = 1 - Math.sqrt(kArr.reduce((s, v) => s + v, 0) / kArr.length)
-      const unqualifiedPoints = pairs.filter(([a, p]) => Math.abs(p - a) > threshold).length
-      const pe = acc < 0.83 ? (0.83 - acc) * this.installedCapacity : 0
-      return { mae, rmse, mse, acc, k, unqualifiedPoints, pe }
-    },
-    calcDailyStats(actualSeries, predSeries, qualifiedThreshold) {
-      const actualMap = new Map((actualSeries || []).map(v => [new Date(v.timestamp).toISOString(), Number(v.power)]))
-      const predMap = new Map((predSeries || []).map(v => [new Date(v.timestamp).toISOString(), Number(v.power)]))
-      const dayBucket = {}
-      Array.from(predMap.keys()).forEach((ts) => {
-        if (!actualMap.has(ts)) return
-        const d = ts.slice(0, 10)
-        if (!dayBucket[d]) dayBucket[d] = { actual: [], pred: [] }
-        const a = actualMap.get(ts)
-        const p = predMap.get(ts)
-        if (Number.isFinite(a) && Number.isFinite(p)) {
-          dayBucket[d].actual.push(a)
-          dayBucket[d].pred.push(p)
-        }
-      })
-      const days = Object.values(dayBucket).filter(v => v.actual.length > 0)
-      if (!days.length) return { avgAcc: null, qualifiedRate: null }
-      const metrics = days.map(d => this.calcMetrics(d.actual, d.pred))
-      const accs = metrics.map(m => m.acc).filter(Number.isFinite)
-      const avgAcc = accs.length ? (accs.reduce((s, v) => s + v, 0) / accs.length) * 100 : null
-      const qualified = metrics.filter(m => Number.isFinite(m.k) && m.k > qualifiedThreshold).length
-      return { avgAcc, qualifiedRate: (qualified / metrics.length) * 100 }
-    },
     async fetchComparisonData() {
       if (!this.timeRange || this.timeRange.length !== 2) {
         this.$message.warning('请先选择完整时间范围')
@@ -602,9 +610,20 @@ export default {
       })
       if (!requestTypes.includes('可用容量')) requestTypes.push('可用容量')
       const payload = { start: this.timeRange[0], end: this.timeRange[1], types: requestTypes, farm_code: farmCode, supershort_horizon: 'average' }
-      const response = await getPowerCompareData(payload)
+      const [response, assessmentResponse] = await Promise.all([
+        getPowerCompareData(payload),
+        getRegulatoryMetrics({
+          start: this.timeRange[0],
+          end: this.timeRange[1],
+          farm_code: farmCode,
+          prediction_types: ['short', 'mid', 'supershort']
+        })
+      ])
       if (this.isStaleRequest(requestSeq, 'single')) return
       const apiData = response?.data?.data || response?.data || {}
+      const assessmentData = assessmentResponse?.data?.data || {}
+      this.assessmentPolicy = assessmentData.policy || null
+      this.singleRegulatoryMetrics = assessmentData.items?.[0]?.metrics || {}
       this.chartData = apiData
 
       const actual = this.getSeries(apiData, ['实测值', 'actual'])
@@ -667,19 +686,26 @@ export default {
       const supershortLowerValues = this.alignedSeries(sortedTimeline, supershortLowerSeries, 'power', alignToleranceMs)
       const supershortUpperValues = this.alignedSeries(sortedTimeline, supershortUpperSeries, 'power', alignToleranceMs)
 
-      const shortDaily = this.calcDailyStats(sortedActual, short, 0.6)
-      const superDaily = this.calcDailyStats(sortedActual, supershort, 0.65)
-      const shortMetrics = this.calcMetrics(actualValues, shortValues)
-      const superMetrics = this.calcMetrics(actualValues, superValues)
+      const shortAssessment = this.singleRegulatoryMetrics.short || {}
+      const midAssessment = this.singleRegulatoryMetrics.mid || {}
+      const superAssessment = this.singleRegulatoryMetrics.supershort || {}
+      const assessments = [shortAssessment, midAssessment, superAssessment]
+      const hasCompleteAssessment = assessments.some(metric => Number(metric.complete_day_count || 0) > 0)
       this.singleMetricsSummary = {
-        shortAcc: shortDaily.avgAcc,
-        shortQualifiedRate: shortDaily.qualifiedRate,
-        supershortAcc: superDaily.avgAcc,
-        supershortQualifiedRate: superDaily.qualifiedRate,
-        rmse: this.mean([shortMetrics.rmse, superMetrics.rmse]),
-        mae: this.mean([shortMetrics.mae, superMetrics.mae]),
-        unqualifiedPoints: (shortMetrics.unqualifiedPoints || 0) + (superMetrics.unqualifiedPoints || 0),
-        assessmentEnergy: (shortMetrics.pe || 0) + (superMetrics.pe || 0)
+        shortAcc: shortAssessment.accuracy_percent,
+        shortQualifiedRate: shortAssessment.qualified_rate_percent,
+        midAcc: midAssessment.accuracy_percent,
+        midQualifiedRate: midAssessment.qualified_rate_percent,
+        supershortAcc: superAssessment.accuracy_percent,
+        supershortQualifiedRate: superAssessment.qualified_rate_percent,
+        rmse: this.mean([shortAssessment.rmse, midAssessment.rmse, superAssessment.rmse]),
+        mae: this.mean([shortAssessment.mae, midAssessment.mae, superAssessment.mae]),
+        unqualifiedDays: hasCompleteAssessment
+          ? assessments.reduce((sum, metric) => sum + (Number(metric.unqualified_day_count) || 0), 0)
+          : null,
+        assessmentEnergy: hasCompleteAssessment
+          ? assessments.reduce((sum, metric) => sum + (Number(metric.assessment_energy_mwh) || 0), 0)
+          : null
       }
       this.exportData.metrics = this.singleMetricsSummary
 
@@ -1124,43 +1150,40 @@ export default {
         this.$message.warning('请至少选择一个场站')
         return
       }
-      const [shortResp, superResp] = await Promise.all([
-        getFleetMetrics({ start: this.timeRange[0], end: this.timeRange[1], farm_codes: farmCodes, prediction_type: 'short' }),
-        getFleetMetrics({ start: this.timeRange[0], end: this.timeRange[1], farm_codes: farmCodes, prediction_type: 'supershort' })
-      ])
+      const response = await getRegulatoryMetrics({
+        start: this.timeRange[0],
+        end: this.timeRange[1],
+        farm_codes: farmCodes,
+        prediction_types: ['short', 'mid', 'supershort']
+      })
       if (this.isStaleRequest(requestSeq, 'fleet')) return
-      const shortItems = shortResp?.data?.data?.items || []
-      const superItems = superResp?.data?.data?.items || []
-      const map = new Map()
-      shortItems.forEach((item) => {
-        const rmse = this.toFiniteNumber(item.rmse)
-        const mae = this.toFiniteNumber(item.mae)
-        const points = this.toFiniteNumber(item.points)
-        map.set(item.farm_code, {
+      const responseData = response?.data?.data || {}
+      this.assessmentPolicy = responseData.policy || null
+      this.fleetCompareRows = (responseData.items || []).map((item) => {
+        const shortMetric = item.metrics?.short || {}
+        const midMetric = item.metrics?.mid || {}
+        const superMetric = item.metrics?.supershort || {}
+        const metrics = [shortMetric, midMetric, superMetric]
+        const hasCompleteMetric = metrics.some(metric => Number(metric.complete_day_count || 0) > 0)
+        return {
           farm_code: item.farm_code,
           farm_name: item.farm_name || item.farm_code,
-          short_acc: Number.isFinite(rmse) ? Math.max(0, 100 * (1 - rmse / this.installedCapacity)) : null,
-          short_qualified_rate: Number.isFinite(rmse) ? (rmse / this.installedCapacity <= 0.2 ? 100 : 0) : null,
-          supershort_acc: null,
-          supershort_qualified_rate: null,
-          rmse_avg: rmse,
-          mae_avg: mae,
-          unqualified_points: Number.isFinite(points) && Number.isFinite(rmse) && rmse / this.installedCapacity > 0.2 ? points : 0
-        })
+          short_acc: shortMetric.accuracy_percent,
+          short_qualified_rate: shortMetric.qualified_rate_percent,
+          mid_acc: midMetric.accuracy_percent,
+          mid_qualified_rate: midMetric.qualified_rate_percent,
+          supershort_acc: superMetric.accuracy_percent,
+          supershort_qualified_rate: superMetric.qualified_rate_percent,
+          rmse_avg: this.mean([shortMetric.rmse, midMetric.rmse, superMetric.rmse]),
+          mae_avg: this.mean([shortMetric.mae, midMetric.mae, superMetric.mae]),
+          unqualified_days: hasCompleteMetric
+            ? metrics.reduce((sum, metric) => sum + (Number(metric.unqualified_day_count) || 0), 0)
+            : null,
+          assessment_energy: hasCompleteMetric
+            ? metrics.reduce((sum, metric) => sum + (Number(metric.assessment_energy_mwh) || 0), 0)
+            : null
+        }
       })
-      superItems.forEach((item) => {
-        const cur = map.get(item.farm_code)
-        if (!cur) return
-        const rmse = this.toFiniteNumber(item.rmse)
-        const mae = this.toFiniteNumber(item.mae)
-        const points = this.toFiniteNumber(item.points)
-        cur.supershort_acc = Number.isFinite(rmse) ? Math.max(0, 100 * (1 - rmse / this.installedCapacity)) : null
-        cur.supershort_qualified_rate = Number.isFinite(rmse) ? (rmse / this.installedCapacity <= 0.2 ? 100 : 0) : null
-        cur.rmse_avg = this.mean([cur.rmse_avg, rmse])
-        cur.mae_avg = this.mean([cur.mae_avg, mae])
-        cur.unqualified_points += Number.isFinite(points) && Number.isFinite(rmse) && rmse / this.installedCapacity > 0.2 ? points : 0
-      })
-      this.fleetCompareRows = Array.from(map.values())
       this.exportData.metrics = this.fleetCompareRows
       this.exportData.comparison = null
       this.scheduleChartRender('fleet')
@@ -1173,6 +1196,7 @@ export default {
         this.fleetCompareRows.map(v => v.farm_name || v.farm_code),
         [
           { name: '短期准确率(%)', values: this.fleetCompareRows.map(v => v.short_acc), color: 'rgba(96, 165, 250, 0.78)' },
+          { name: '中期第4日准确率(%)', values: this.fleetCompareRows.map(v => v.mid_acc), color: 'rgba(74, 222, 128, 0.78)' },
           { name: '超短期准确率(%)', values: this.fleetCompareRows.map(v => v.supershort_acc), color: 'rgba(34, 211, 238, 0.78)' }
         ]
       )
@@ -1197,15 +1221,17 @@ export default {
         rows.push(['指标', '值'])
         rows.push(['短期准确率(%)', this.formatPct(this.singleMetricsSummary.shortAcc)])
         rows.push(['短期合格率(%)', this.formatPct(this.singleMetricsSummary.shortQualifiedRate)])
+        rows.push(['中期第4日准确率(%)', this.formatPct(this.singleMetricsSummary.midAcc)])
+        rows.push(['中期合格率(%)', this.formatPct(this.singleMetricsSummary.midQualifiedRate)])
         rows.push(['超短期准确率(%)', this.formatPct(this.singleMetricsSummary.supershortAcc)])
         rows.push(['超短期合格率(%)', this.formatPct(this.singleMetricsSummary.supershortQualifiedRate)])
         rows.push(['RMSE', this.formatNum(this.singleMetricsSummary.rmse)])
         rows.push(['MAE', this.formatNum(this.singleMetricsSummary.mae)])
-        rows.push(['不合格点数', this.singleMetricsSummary.unqualifiedPoints])
-        rows.push(['考核电量(MWh)', this.formatNum(this.singleMetricsSummary.assessmentEnergy)])
+        rows.push(['未达标日', this.singleMetricsSummary.unqualifiedDays])
+        rows.push(['测算考核电量(MWh)', this.formatNum(this.singleMetricsSummary.assessmentEnergy)])
       } else {
-        rows.push(['场站编码', '场站名称', '短期准确率(%)', '超短期准确率(%)', 'RMSE', 'MAE', '不合格点数'])
-        this.fleetCompareRows.forEach((r) => rows.push([r.farm_code, r.farm_name, this.formatPct(r.short_acc), this.formatPct(r.supershort_acc), this.formatNum(r.rmse_avg), this.formatNum(r.mae_avg), r.unqualified_points]))
+        rows.push(['场站编码', '场站名称', '短期准确率(%)', '中期第4日准确率(%)', '超短期准确率(%)', 'RMSE', 'MAE', '未达标日', '测算考核电量(MWh)'])
+        this.fleetCompareRows.forEach((r) => rows.push([r.farm_code, r.farm_name, this.formatPct(r.short_acc), this.formatPct(r.mid_acc), this.formatPct(r.supershort_acc), this.formatNum(r.rmse_avg), this.formatNum(r.mae_avg), r.unqualified_days, this.formatNum(r.assessment_energy)]))
       }
       const html = `<html><head><meta charset="UTF-8"></head><body><table border="1">${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</table></body></html>`
       this.downloadBlob(html, 'application/vnd.ms-excel;charset=utf-8;', `考核指标_${Date.now()}.xls`)
@@ -1263,6 +1289,7 @@ export default {
 
 <style scoped>
 .power-compare-container { min-height: auto; padding: 18px 22px 28px; color: var(--text-primary); }
+.policy-alert { margin-bottom: 14px; }
 .page-title { margin: 0 0 14px; color: #f2f7ff; font-size: 28px; font-weight: 700; }
 .analysis-tabs { margin-bottom: 12px; }
 .single-view-tabs { margin: 8px 0 12px; }

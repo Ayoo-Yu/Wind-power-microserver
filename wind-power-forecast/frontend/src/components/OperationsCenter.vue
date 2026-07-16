@@ -114,8 +114,8 @@
         <template #header>
           <div class="card-title-row">
             <div>
-              <span class="card-title">预测输入追溯</span>
-              <small>每次预测冻结 SCADA、NWP、模型和数据集版本</small>
+              <span class="card-title">预测输入与输出追溯</span>
+              <small>每次预测冻结输入、模型、目标区间和不可变输出摘要</small>
             </div>
             <span>{{ inputSnapshots.length }} 条最新快照</span>
           </div>
@@ -136,8 +136,29 @@
               <el-tag size="small" :type="snapshotTag(row.status)">{{ snapshotLabel(row.status) }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="数据版本" min-width="150">
+          <el-table-column label="输出账本" width="105">
+            <template #default="{ row }">
+              <el-tag size="small" :type="traceTag(row.output_trace_status)">
+                {{ traceLabel(row.output_trace_status) }} {{ row.output_point_count || 0 }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="目标截止" min-width="145">
+            <template #default="{ row }">{{ formatDateTime(row.output_target_end) }}</template>
+          </el-table-column>
+          <el-table-column label="240小时交付" width="115">
+            <template #default="{ row }">
+              <el-tag v-if="['medium', 'mid'].includes(row.task_type)" size="small" :type="deliveryTag(row)">
+                {{ deliveryLabel(row) }}
+              </el-tag>
+              <span v-else class="muted-text">不适用</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="输入版本" min-width="135">
             <template #default="{ row }"><span class="mono digest">{{ shortDigest(row.dataset_version) }}</span></template>
+          </el-table-column>
+          <el-table-column label="输出版本" min-width="135">
+            <template #default="{ row }"><span class="mono digest">{{ shortDigest(row.output_sha256) }}</span></template>
           </el-table-column>
         </el-table>
       </el-card>
@@ -261,6 +282,7 @@ const signals = computed(() => {
   const data = overview.value || {}
   const predictionCounts = data.prediction?.status_counts || {}
   const failed = (predictionCounts.failed || 0) + (predictionCounts.failure || 0) + (predictionCounts.error || 0)
+  const missingTrace = Number(data.prediction?.missing_output_trace_count || 0)
   const storageState = Number(data.storage?.used_percent || 0) >= 90
     ? 'critical'
     : (Number(data.storage?.used_percent || 0) >= 80 ? 'degraded' : 'healthy')
@@ -282,9 +304,9 @@ const signals = computed(() => {
     {
       key: 'prediction',
       label: '24 小时预测任务',
-      state: failed ? 'degraded' : 'healthy',
+      state: failed || missingTrace ? 'degraded' : 'healthy',
       value: `${Object.values(predictionCounts).reduce((sum, value) => sum + Number(value || 0), 0)} 次`,
-      detail: failed ? `${failed} 次失败` : '未发现执行失败'
+      detail: `${failed} 次失败，${data.prediction?.output_point_count || 0} 个输出点，${missingTrace} 次缺少账本`
     },
     {
       key: 'reporting',
@@ -379,7 +401,7 @@ function shortDigest(value) {
 }
 
 function taskLabel(value) {
-  return ({ supershort: '超短期', short: '短期', medium: '中期' })[value] || value || '未知'
+  return ({ supershort: '超短期', short: '短期', medium: '中期', mid: '中期' })[value] || value || '未知'
 }
 
 function snapshotTag(status) {
@@ -388,6 +410,25 @@ function snapshotTag(status) {
 
 function snapshotLabel(status) {
   return ({ ready: '就绪', degraded: '降级', blocked: '阻断' })[status] || status || '未知'
+}
+
+function traceTag(status) {
+  return ({ complete: 'success', partial: 'warning', missing: 'danger' })[status] || 'info'
+}
+
+function traceLabel(status) {
+  return ({ complete: '完整', partial: '部分', missing: '缺失' })[status] || '未知'
+}
+
+function deliveryTag(row) {
+  if (row.regulatory_delivery_ready) return 'success'
+  return Number(row.output_point_count || 0) > 0 ? 'warning' : 'danger'
+}
+
+function deliveryLabel(row) {
+  if (row.regulatory_delivery_ready) return '已就绪'
+  const count = Number(row.output_point_count || 0)
+  return count > 0 ? `当前仅${count}点` : '暂无输出'
 }
 
 function modelTag(row) {

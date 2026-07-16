@@ -50,11 +50,12 @@ def _latest_observations(session, farm_code: str) -> dict[str, SourceObservation
 
 
 def _active_model(session, farm_code: str, task_type: str) -> ModelVersion | None:
+    task_types = ["medium", "mid"] if task_type in {"medium", "mid"} else [task_type]
     return (
         session.query(ModelVersion)
         .filter(
             ModelVersion.farm_code == farm_code,
-            ModelVersion.task_type == task_type,
+            ModelVersion.task_type.in_(task_types),
             ModelVersion.is_active.is_(True),
             ModelVersion.lifecycle_status == "approved",
         )
