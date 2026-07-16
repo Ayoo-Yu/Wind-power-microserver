@@ -16,7 +16,7 @@ try:
         host=os.environ.get("DB_HOST", "kingbase"),
         port=os.environ.get("DB_PORT", "54321"),
         user=os.environ.get("DB_USER", "system"),
-        password=os.environ.get("DB_PASSWORD", "12345678ab"),
+        password=os.environ["DB_PASSWORD"],
         dbname=os.environ.get("DB_NAME", "windpower"),
         connect_timeout=3,
     )
@@ -89,12 +89,6 @@ for path in Path("/app").rglob("*.py"):
     lines.insert(insert_at, "from __future__ import annotations")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY
-
-INIT_FLAG_FILE="/app/backend/data/admin_initialized.flag"
-if [ ! -f "$INIT_FLAG_FILE" ]; then
-    python -m reset_admin
-    touch "$INIT_FLAG_FILE"
-fi
 
 cat > /app/wsgi_app.py <<'PY'
 import gevent.monkey

@@ -71,6 +71,12 @@ fi
 
 require_secret DB_PASSWORD 16
 require_secret SECRET_KEY 32
+if [ -n "${BOOTSTRAP_ADMIN_PASSWORD:-}" ]; then
+    require_secret BOOTSTRAP_ADMIN_PASSWORD 16
+fi
+if [ -n "${BOOTSTRAP_ADMIN_PASSWORD:-}" ] && [ -n "${BOOTSTRAP_ADMIN_PASSWORD_FILE:-}" ]; then
+    error "BOOTSTRAP_ADMIN_PASSWORD 与 BOOTSTRAP_ADMIN_PASSWORD_FILE 不能同时设置"
+fi
 require_versioned_image FRONTEND_IMAGE
 require_versioned_image PREDICTION_IMAGE
 require_versioned_image DATABASE_IMAGE

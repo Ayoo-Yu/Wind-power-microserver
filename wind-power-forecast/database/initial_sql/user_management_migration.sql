@@ -36,9 +36,4 @@ INSERT INTO roles (name, description, permissions)
 SELECT '普通用户', '只能查看基本数据', '{"permissions": ["view_basic_data"]}'
 WHERE NOT EXISTS (SELECT 1 FROM roles WHERE name = '普通用户');
 
--- 插入默认管理员用户（如果不存在）
--- 密码为 admin123，使用 bcrypt 加密
-INSERT INTO users (username, password, full_name, email, role_id, is_active, first_login)
-SELECT 'admin', '$2b$10$rR3CQrJ4Ut/Bf6vxiI.YAOGCjmKH7vRm5LWA9O0gWUqCGR6Z/ZnZa', '系统管理员', 'admin@example.com', 
-       (SELECT id FROM roles WHERE name = '系统管理员'), TRUE, TRUE
-WHERE NOT EXISTS (SELECT 1 FROM users WHERE username = 'admin'); 
+-- 管理员账号由后端受控引导命令创建，此迁移不再写入固定密码。

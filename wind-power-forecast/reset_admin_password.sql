@@ -1,5 +1,3 @@
--- 使用一个简单直接的密码哈希
--- 这是'admin123'使用的哈希值
-UPDATE users 
-SET password_hash = 'pbkdf2:sha256:150000$fLahYBPZ$87a70c634e3a6243e25bc92a69f46a83a92d12a4b51156c7a0cd76bb9ac5a9a8' 
-WHERE username = 'admin'; 
+-- 该脚本已停用，避免固定密码哈希进入部署和运维流程。
+-- 请在后端容器中交互执行 python -m reset_admin，或通过
+-- RESET_ADMIN_PASSWORD_FILE 提供一次性只读密码文件。

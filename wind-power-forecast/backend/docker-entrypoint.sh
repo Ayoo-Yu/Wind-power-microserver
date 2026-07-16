@@ -26,17 +26,10 @@ case "${SCHEMA_ACTION}" in
         ;;
 esac
 
-echo "初始化默认角色和管理员账号..."
+echo "初始化默认角色；仅在显式提供引导密码时创建管理员账号..."
 python -m init_users
 python -m fix_admin_permissions
 python -m fix_user_permissions
-
-mkdir -p /app/backend/data
-INIT_FLAG_FILE="/app/backend/data/admin_initialized.flag"
-if [ "${RESET_DEFAULT_ADMIN_ON_FIRST_START:-false}" = "true" ] && [ ! -f "${INIT_FLAG_FILE}" ]; then
-    python -m reset_admin
-    touch "${INIT_FLAG_FILE}"
-fi
 
 CORES="$(grep -c '^processor' /proc/cpuinfo || echo 1)"
 WORKERS="${GUNICORN_WORKERS:-3}"

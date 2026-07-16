@@ -323,48 +323,6 @@ def delete_role(role_id):
 # 初始化用户和角色
 @user_bp.route('/init', methods=['POST'])
 def init_users():
-    with db_session() as db:
-        # 检查是否已经有用户
-        existing_users = db.query(User).count()
-        if existing_users > 0:
-            return jsonify({'message': '已有用户存在，无需初始化'}), 400
-        
-        # 创建角色
-        admin_role = Role(name='管理员', description='系统管理员', permissions={'admin': True})
-        user_role = Role(name='普通用户', description='普通用户', permissions={'user': True})
-        
-        db.add(admin_role)
-        db.add(user_role)
-        db.flush()  # 获取新创建角色的ID
-        
-        # 创建管理员用户
-        admin_user = User(
-            username='admin',
-            password_hash=generate_password_hash('admin123'),
-            email='admin@example.com',
-            full_name='系统管理员',
-            is_active=True,
-            role_id=admin_role.id,
-            created_at=datetime.now()
-        )
-        
-        # 创建测试用户
-        test_user = User(
-            username='user',
-            password_hash=generate_password_hash('user123'),
-            email='user@example.com',
-            full_name='测试用户',
-            is_active=True,
-            role_id=user_role.id,
-            created_at=datetime.now()
-        )
-        
-        db.add(admin_user)
-        db.add(test_user)
-        
-        try:
-            db.commit()
-            return jsonify({'message': '用户和角色初始化成功'})
-        except Exception as e:
-            db.rollback()
-            return jsonify({'error': f'初始化失败: {str(e)}'}), 500 
+    return jsonify({
+        'error': 'HTTP 用户初始化已停用，请在服务器上使用受控引导命令'
+    }), 410

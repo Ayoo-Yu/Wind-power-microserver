@@ -8,6 +8,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database_config import get_db, engine, Base
 from models import Role, User
 from services.auth_service import get_password_hash, get_user_by_username, get_role_by_id
+from utils.admin_password import load_admin_password
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -61,7 +62,6 @@ DEFAULT_ROLES = [
 # 默认管理员用户
 DEFAULT_ADMIN = {
     "username": "admin",
-    "password": "admin123",  # 初始密码，应该在首次登录后修改
     "email": "admin@example.com",
     "full_name": "系统管理员"
 }
@@ -101,7 +101,11 @@ def create_admin_user(db):
         return
     
     # 创建管理员用户
-    hashed_password = get_password_hash(DEFAULT_ADMIN["password"])
+    password = load_admin_password(
+        "BOOTSTRAP_ADMIN_PASSWORD",
+        "BOOTSTRAP_ADMIN_PASSWORD_FILE",
+    )
+    hashed_password = get_password_hash(password)
     admin_user = User(
         username=DEFAULT_ADMIN["username"],
         password_hash=hashed_password,
@@ -135,4 +139,4 @@ def init_users_and_roles():
         db.close()
 
 if __name__ == "__main__":
-    init_users_and_roles() 
+    init_users_and_roles()

@@ -1,5 +1,6 @@
 from database_config import get_db
 from db_models import User, Role
+from utils.admin_password import load_admin_password, validate_admin_password
 from utils.password_utils import generate_password_hash
 from datetime import datetime
 import logging
@@ -15,13 +16,14 @@ def init_users_and_roles():
         
         # 使用get_db获取数据库会话
         db = next(get_db())
-        
-        # 检查和创建角色
-        init_roles(db)
-        
-        # 检查和创建管理员用户
-        init_admin_user(db)
-        
+        try:
+            # 检查和创建角色
+            init_roles(db)
+
+            # 已有管理员保持原密码，全新数据库需要显式提供引导密码
+            init_admin_user(db)
+        finally:
+            db.close()
     except Exception as e:
         logger.error(f"初始化用户和角色失败: {str(e)}")
         raise
@@ -112,7 +114,7 @@ def init_roles(db):
     db.commit()
     logger.info("角色初始化完成")
 
-def init_admin_user(db):
+def init_admin_user(db, password=None):
     """初始化管理员用户"""
     # 检查是否已经有管理员用户
     admin_exists = db.query(User).filter(User.username == "admin").first()
@@ -128,9 +130,16 @@ def init_admin_user(db):
         logger.error("未找到系统管理员角色，无法创建管理员用户")
         return
     
-    # 使用统一的哈希函数
-    password_hash = generate_password_hash("admin123")
-    logger.info(f"生成的密码哈希: {password_hash[:20]}...")
+    if password is None:
+        password = load_admin_password(
+            "BOOTSTRAP_ADMIN_PASSWORD",
+            "BOOTSTRAP_ADMIN_PASSWORD_FILE",
+        )
+    else:
+        password = validate_admin_password(password)
+
+    # 使用统一的哈希函数，日志中不输出密码或哈希片段
+    password_hash = generate_password_hash(password)
     
     # 创建默认管理员用户
     admin_user = User(

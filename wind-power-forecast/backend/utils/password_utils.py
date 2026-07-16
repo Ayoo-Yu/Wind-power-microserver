@@ -29,9 +29,9 @@ def verify_password(password, password_hash):
         
     return check_password_hash(password_hash, password)
 
-def get_debug_hash(password="admin123"):
+def get_debug_hash(password):
     """
     生成调试用的标准哈希，用于故障排除
     """
     hash_value = generate_password_hash(password)
-    return f"使用 '{password}' 生成的标准哈希: {hash_value}" 
+    return hash_value
