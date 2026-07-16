@@ -6,7 +6,7 @@ from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required
 
 from database_config import ensure_engine
-from routes.auth import permission_required
+from utils.authorization import permission_required
 from services.database_governance_service import build_database_overview
 
 

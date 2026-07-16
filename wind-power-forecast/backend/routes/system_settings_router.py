@@ -3,11 +3,10 @@ import json
 import logging
 
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required
-
 from db_session import db_session
 from models import SystemSetting
 from utils.database_schema import require_model_tables
+from utils.authorization import permission_required
 
 
 system_settings_bp = Blueprint('system_settings', __name__)
@@ -58,7 +57,7 @@ def _serialize_system_settings(setting):
 
 
 @system_settings_bp.route('/settings', methods=['GET'])
-@jwt_required()
+@permission_required('configure_system')
 def get_system_settings():
     try:
         with db_session() as session:
@@ -71,7 +70,7 @@ def get_system_settings():
 
 
 @system_settings_bp.route('/settings', methods=['PUT'])
-@jwt_required()
+@permission_required('configure_system')
 def save_system_settings():
     try:
         data = request.get_json() or {}
@@ -107,7 +106,7 @@ def save_system_settings():
 
 
 @system_settings_bp.route('/settings/reset', methods=['POST'])
-@jwt_required()
+@permission_required('configure_system')
 def reset_system_settings():
     try:
         data = request.get_json() or {}

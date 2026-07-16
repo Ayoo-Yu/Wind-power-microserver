@@ -11,7 +11,7 @@ from sqlalchemy import func
 
 from db_models import ReportOutbox
 from db_session import db_session
-from routes.auth import permission_required
+from utils.authorization import permission_required
 from services.report_outbox_service import retry_dead_letter
 
 

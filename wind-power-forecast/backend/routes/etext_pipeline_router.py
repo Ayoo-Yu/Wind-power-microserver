@@ -9,6 +9,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify
 
 from services.etext_config import read_config, write_config, validate_and_apply_config_updates, PROJECT_ROOT
+from utils.authorization import permission_required
 
 etext_pipeline_bp = Blueprint('etext_pipeline', __name__)
 
@@ -63,6 +64,7 @@ def _read_job(job_id):
 
 
 @etext_pipeline_bp.route('/api/etext_pipeline/config', methods=['GET'])
+@permission_required('manage_weather_data')
 def get_config():
     cfg = read_config()
     job_info = None
@@ -78,6 +80,7 @@ def get_config():
 
 
 @etext_pipeline_bp.route('/api/etext_pipeline/config', methods=['PUT'])
+@permission_required('manage_weather_data')
 def update_config():
     data = request.get_json()
     if not data:
@@ -98,6 +101,7 @@ def update_config():
 
 
 @etext_pipeline_bp.route('/api/etext_pipeline/trigger', methods=['POST'])
+@permission_required('manage_weather_data')
 def trigger_pipeline():
     """Trigger pipeline in background, return job_id to poll."""
     cfg = read_config()
@@ -146,6 +150,7 @@ def trigger_pipeline():
 
 
 @etext_pipeline_bp.route('/api/etext_pipeline/trigger/<job_id>', methods=['GET'])
+@permission_required('manage_weather_data')
 def get_trigger_status(job_id):
     """Poll trigger job status."""
     job = _read_job(job_id)

@@ -1,16 +1,8 @@
-from flask import Blueprint, request, jsonify, current_app, g
-from sqlalchemy.exc import IntegrityError
-from database_config import get_db
-from services.auth_service import (
-    authenticate_user, create_user, update_user, get_user_by_id, get_all_users,
-    create_role, get_role_by_id, get_all_roles, create_access_token as create_legacy_token,
-    log_login_attempt, update_last_login, decode_token as decode_legacy_token, check_permission, get_user_by_username,
-    verify_password as verify_password_bcrypt
-)
+from flask import Blueprint, request, jsonify, g
+from services.auth_service import update_last_login, verify_password as verify_password_bcrypt
 from utils.password_utils import verify_password, generate_password_hash
+from utils.authorization import is_admin_role, permission_required
 from models import User, Role
-from functools import wraps
-from datetime import timedelta
 from db_session import db_session  # 导入上下文管理器
 # 导入Flask-JWT-Extended
 from flask_jwt_extended import (
@@ -18,114 +10,6 @@ from flask_jwt_extended import (
 )
 
 auth_bp = Blueprint('auth', __name__)
-
-# 中间件：验证JWT令牌 - 保留旧的实现，但建议使用新的jwt_required装饰器
-def token_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        token = None
-        # 从请求头中获取令牌
-        if 'Authorization' in request.headers:
-            auth_header = request.headers['Authorization']
-            if auth_header.startswith('Bearer '):
-                token = auth_header[7:]
-        
-        if not token:
-            return jsonify({"message": "缺少认证令牌"}), 401
-        
-        # 解码令牌
-        try:
-            payload = decode_legacy_token(token)
-            with db_session() as db:
-                current_user = get_user_by_id(db, payload['sub'])
-        except Exception as e:
-            return jsonify({"message": "无效或过期的令牌"}), 401
-        
-        # 将用户信息存储在g对象中，以便在路由处理函数中使用
-        g.user = current_user
-        return f(*args, **kwargs)
-    
-    return decorated
-
-# 中间件：检查权限
-def permission_required(required_permission):
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            current_user_id = None
-            try:
-                # 尝试从JWT获取当前用户ID
-                current_user_id = get_jwt_identity()
-            except Exception:
-                # 如果没有JWT上下文 (例如路由未使用 @jwt_required)，则尝试从请求参数获取
-                pass
-
-            user_to_check = None
-            username_for_logs = "JWT User"
-
-            with db_session() as db:
-                if current_user_id:
-                    user_to_check = db.query(User).filter(User.id == current_user_id).first()
-                    if user_to_check:
-                        username_for_logs = user_to_check.username
-                
-                if not user_to_check:
-                    # 后备：如果JWT中没有用户或路由未使用JWT，尝试从请求参数获取 username
-                    # 这部分逻辑主要为了兼容旧的调用方式，但更推荐所有受保护路由都用JWT
-                    username_param = request.args.get('username')
-                    if not username_param:
-                        json_data = request.get_json(silent=True)
-                        if json_data and 'username' in json_data:
-                            username_param = json_data.get('username')
-                    
-                    if not username_param:
-                        print(f"权限检查失败：既无有效JWT也未提供用户名参数，要求权限: {required_permission}")
-                        return jsonify({"message": "未提供用户身份信息，无法验证权限"}), 403 # 更新了错误信息
-                    
-                    user_to_check = db.query(User).filter(User.username == username_param).first()
-                    username_for_logs = username_param
-
-                if not user_to_check:
-                    print(f"权限检查失败：用户 {username_for_logs} 不存在，要求权限: {required_permission}")
-                    return jsonify({"message": "用户不存在"}), 404
-                
-                if not user_to_check.is_active:
-                    print(f"权限检查失败：用户 {username_for_logs} 已被禁用，要求权限: {required_permission}")
-                    return jsonify({"message": "操作用户账户已被禁用"}), 403
-
-                if is_admin_role(user_to_check.role):
-                    g.acting_user = user_to_check
-                    return f(*args, **kwargs)
-
-                if not user_to_check.role or not user_to_check.role.permissions:
-                    print(f"权限检查失败：用户 {username_for_logs} 没有角色或权限为空，要求权限: {required_permission}")
-                    return jsonify({"message": "用户没有任何权限"}), 403
-                
-                permissions = user_to_check.role.permissions
-                print(f"用户 {username_for_logs} 的权限: {permissions}, 类型: {type(permissions)}")
-                
-                if isinstance(permissions, dict) and 'permissions' in permissions:
-                    permissions = permissions['permissions']
-                
-                if not isinstance(permissions, list): # 确保权限是列表格式
-                    print(f"权限检查失败：用户 {username_for_logs} 的权限格式不正确 (非列表)，权限: {permissions}")
-                    return jsonify({"message": "用户权限配置错误"}), 500
-
-                if required_permission not in permissions:
-                    # 检查是否有 'admin' 权限，通常 'admin' 包含所有权限
-                    if 'admin' not in permissions:
-                        print(f"权限检查失败：用户 {username_for_logs} 没有权限 {required_permission}，拥有权限: {permissions}")
-                        return jsonify({"message": f"权限不足，需要 {required_permission} 权限"}), 403
-                    else:
-                        print(f"用户 {username_for_logs} 作为管理员，默认拥有 {required_permission} 权限")
-                
-                print(f"权限检查成功：用户 {username_for_logs} 具有所需的 {required_permission} 权限")
-                # 将被检查的用户（通常是操作发起者）存储在g对象中，以便后续路由使用
-                g.acting_user = user_to_check 
-                return f(*args, **kwargs)
-            
-        return decorated_function
-    return decorator
 
 # 登录路由
 @auth_bp.route('/login', methods=['POST'])
@@ -416,9 +300,6 @@ def get_user(user_id):
 def is_super_admin(username):
     # 通过用户名判断是否是超级管理员
     return username.lower() == "admin"
-
-def is_admin_role(role):
-    return role and role.name.lower() in ["admin", "管理员", "系统管理员"]
 
 # 更新用户信息 - 使用JWT认证
 @auth_bp.route('/users/<int:user_id>', methods=['PUT'])

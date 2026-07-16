@@ -17,6 +17,7 @@ from db_session import db_session
 from db_models import SystemSetting
 from services.extreme_weather_detector import DEFAULT_THRESHOLDS
 from utils.database_schema import require_model_tables
+from utils.authorization import permission_required
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,7 @@ def _get_alarm_history(
 
 
 @extreme_weather_bp.route("/thresholds", methods=["GET"])
+@permission_required("view_all_data")
 def get_thresholds() -> tuple[dict[str, float], int]:
     """Return current detection thresholds as JSON."""
     logger.debug("GET /thresholds")
@@ -96,6 +98,7 @@ def get_thresholds() -> tuple[dict[str, float], int]:
 
 
 @extreme_weather_bp.route("/thresholds", methods=["PUT"])
+@permission_required("configure_system")
 def update_thresholds() -> tuple[dict[str, float], int]:
     """Update thresholds from a JSON body.
 
@@ -160,6 +163,7 @@ def update_thresholds() -> tuple[dict[str, float], int]:
 
 
 @extreme_weather_bp.route("/status", methods=["GET"])
+@permission_required("view_all_data")
 def get_status() -> tuple[dict[str, Any], int]:
     """Return current weather condition for a farm.
 
@@ -192,6 +196,7 @@ def get_status() -> tuple[dict[str, Any], int]:
 
 
 @extreme_weather_bp.route("/history", methods=["GET"])
+@permission_required("view_all_data")
 def get_history() -> tuple[dict[str, Any], int]:
     """Return paginated historical extreme weather events.
 

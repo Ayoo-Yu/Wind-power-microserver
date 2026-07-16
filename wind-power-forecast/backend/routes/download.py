@@ -1,10 +1,12 @@
 from flask import Blueprint, jsonify, send_from_directory, current_app
 from werkzeug.utils import secure_filename
 import os
+from utils.authorization import permission_required
 
 download_bp = Blueprint('download', __name__)
 
 @download_bp.route('/download/<filename>', methods=['GET'])
+@permission_required('download_files')
 def download_file(filename):
     try:
         safe_filename = secure_filename(filename)

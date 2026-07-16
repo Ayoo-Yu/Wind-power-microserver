@@ -9,6 +9,7 @@ import psycopg2
 import psycopg2.extras
 
 from config import KINGBASE_CONFIG
+from utils.authorization import permission_required
 
 feature_upload_bp = Blueprint('feature_upload', __name__)
 
@@ -23,6 +24,7 @@ def _is_valid_table_name(name):
 
 
 @feature_upload_bp.route('/api/upload_feature_csv', methods=['POST'])
+@permission_required('upload_files')
 def upload_feature_csv():
     """Upload CSV to a per-farm feature table.
 

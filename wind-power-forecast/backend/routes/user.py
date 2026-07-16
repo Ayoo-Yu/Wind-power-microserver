@@ -6,11 +6,13 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import json
 from db_session import db_session  # 导入上下文管理器
+from utils.authorization import permission_required
 
 user_bp = Blueprint('user', __name__)
 
 # 获取所有用户
 @user_bp.route('/users', methods=['GET'])
+@permission_required('manage_users')
 def get_users():
     with db_session() as db:
         users = db.query(User).all()
@@ -33,6 +35,7 @@ def get_users():
 
 # 获取单个用户
 @user_bp.route('/users/<int:user_id>', methods=['GET'])
+@permission_required('manage_users')
 def get_user(user_id):
     with db_session() as db:
         user = db.query(User).filter(User.id == user_id).first()
@@ -56,6 +59,7 @@ def get_user(user_id):
 
 # 创建用户
 @user_bp.route('/users', methods=['POST'])
+@permission_required('manage_users')
 def create_user():
     data = request.json
     
@@ -102,6 +106,7 @@ def create_user():
 
 # 更新用户
 @user_bp.route('/users/<int:user_id>', methods=['PUT'])
+@permission_required('manage_users')
 def update_user(user_id):
     data = request.json
     
@@ -150,6 +155,7 @@ def update_user(user_id):
 
 # 重置用户密码
 @user_bp.route('/users/<int:user_id>/reset-password', methods=['POST'])
+@permission_required('manage_users')
 def reset_password(user_id):
     data = request.json
     if not data or not data.get('password'):
@@ -178,6 +184,7 @@ def reset_password(user_id):
 
 # 删除用户
 @user_bp.route('/users/<int:user_id>', methods=['DELETE'])
+@permission_required('manage_users')
 def delete_user(user_id):
     with db_session() as db:
         user = db.query(User).filter(User.id == user_id).first()
@@ -195,6 +202,7 @@ def delete_user(user_id):
 
 # 获取所有角色
 @user_bp.route('/roles', methods=['GET'])
+@permission_required('manage_roles')
 def get_roles():
     with db_session() as db:
         roles = db.query(Role).all()
@@ -212,6 +220,7 @@ def get_roles():
 
 # 获取单个角色
 @user_bp.route('/roles/<int:role_id>', methods=['GET'])
+@permission_required('manage_roles')
 def get_role(role_id):
     with db_session() as db:
         role = db.query(Role).filter(Role.id == role_id).first()
@@ -230,6 +239,7 @@ def get_role(role_id):
 
 # 创建角色
 @user_bp.route('/roles', methods=['POST'])
+@permission_required('manage_roles')
 def create_role():
     data = request.json
     
@@ -265,6 +275,7 @@ def create_role():
 
 # 更新角色
 @user_bp.route('/roles/<int:role_id>', methods=['PUT'])
+@permission_required('manage_roles')
 def update_role(role_id):
     data = request.json
     
@@ -300,6 +311,7 @@ def update_role(role_id):
 
 # 删除角色
 @user_bp.route('/roles/<int:role_id>', methods=['DELETE'])
+@permission_required('manage_roles')
 def delete_role(role_id):
     with db_session() as db:
         role = db.query(Role).filter(Role.id == role_id).first()
@@ -322,6 +334,7 @@ def delete_role(role_id):
 
 # 初始化用户和角色
 @user_bp.route('/init', methods=['POST'])
+@permission_required('manage_users')
 def init_users():
     return jsonify({
         'error': 'HTTP 用户初始化已停用，请在服务器上使用受控引导命令'

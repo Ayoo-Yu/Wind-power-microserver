@@ -8,6 +8,7 @@ from db_models import ActualPower, MidPower, ShortlPower, SupershortlPower
 from db_models.operational_data import AvailableCapacityData, TurbinePowerData
 from db_models.report_config import WindFarm
 from db_session import db_session
+from utils.authorization import permission_required
 from db_models.ecmwf_grid_model import ecmwf_grid_table_name
 
 
@@ -197,6 +198,7 @@ def _query_supershort_average(db, farm_code, start_dt, end_dt, min_predictions_r
 
 
 @bp.route('/regulatory_metrics', methods=['POST'])
+@permission_required('view_all_data')
 def get_regulatory_metrics():
     """按版本化南网口径返回单站或多站日评估。"""
 
@@ -291,6 +293,7 @@ def get_regulatory_metrics():
 
 
 @bp.route('/data', methods=['POST'])
+@permission_required('view_all_data')
 def get_power_data():
     data = request.get_json(silent=True)
     if not data:
@@ -402,6 +405,7 @@ def get_power_data():
 
 
 @bp.route('/fleet_metrics', methods=['POST'])
+@permission_required('view_all_data')
 def get_fleet_metrics():
     payload = request.get_json(silent=True) or {}
     start = payload.get('start')
@@ -486,6 +490,7 @@ def get_fleet_metrics():
 
 
 @bp.route('/fleet_series', methods=['POST'])
+@permission_required('view_all_data')
 def get_fleet_series():
     payload = request.get_json(silent=True) or {}
     start = payload.get('start')

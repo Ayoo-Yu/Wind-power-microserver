@@ -6,6 +6,7 @@ import io
 from datetime import datetime
 
 from db_session import db_session
+from utils.authorization import permission_required
 from db_models import TrainPreMiddle, TrainPreShort, TrainPreSupershort # Import the new models
 from services.file_service import allowed_file # Reuse existing file validation if desired
 
@@ -55,6 +56,7 @@ def map_csv_to_model(row_dict, model_class):
 
 
 @feature_upload_bp.route('/api/upload_feature_csv', methods=['POST'])
+@permission_required('upload_files')
 def upload_feature_csv():
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400

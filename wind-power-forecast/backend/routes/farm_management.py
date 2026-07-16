@@ -2,6 +2,7 @@ import json
 
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from utils.authorization import permission_required
 from db_session import db_session
 from db_models.report_config import WindFarm
 from db_models.farm_profile import FarmProfileConfig
@@ -92,6 +93,7 @@ def _upsert_farm_profile(session, farm_code, payload):
 @farm_management_bp.route('/api/farms', methods=['GET'])  # legacy path compatibility
 @farm_management_bp.route('/farms', methods=['GET'])
 @jwt_required()
+@permission_required('view_all_data')
 def get_farms():
     """获取所有风电场列表"""
     try:
@@ -113,6 +115,7 @@ def get_farms():
 @farm_management_bp.route('/api/farms/<farm_code>', methods=['GET'])  # legacy path compatibility
 @farm_management_bp.route('/farms/<farm_code>', methods=['GET'])
 @jwt_required()
+@permission_required('view_all_data')
 def get_farm_by_code(farm_code):
     """根据场站编码获取单场站信息"""
     try:
@@ -138,6 +141,7 @@ def get_farm_by_code(farm_code):
 @farm_management_bp.route('/api/farms', methods=['POST'])  # legacy path compatibility
 @farm_management_bp.route('/farms', methods=['POST'])
 @jwt_required()
+@permission_required('configure_system')
 def create_farm():
     """创建新的风电场"""
     try:
@@ -187,6 +191,7 @@ def create_farm():
 @farm_management_bp.route('/api/farms/<farm_code>', methods=['PUT'])  # legacy path compatibility
 @farm_management_bp.route('/farms/<farm_code>', methods=['PUT'])
 @jwt_required()
+@permission_required('configure_system')
 def update_farm(farm_code):
     """更新风电场信息"""
     try:
@@ -234,6 +239,7 @@ def update_farm(farm_code):
 @farm_management_bp.route('/api/farms/<farm_code>', methods=['DELETE'])  # legacy path compatibility
 @farm_management_bp.route('/farms/<farm_code>', methods=['DELETE'])
 @jwt_required()
+@permission_required('configure_system')
 def delete_farm(farm_code):
     """删除风电场（软删除）"""
     try:
@@ -265,6 +271,7 @@ def delete_farm(farm_code):
 @farm_management_bp.route('/api/farms/<farm_code>/toggle', methods=['POST'])  # legacy path compatibility
 @farm_management_bp.route('/farms/<farm_code>/toggle', methods=['POST'])
 @jwt_required()
+@permission_required('configure_system')
 def toggle_farm(farm_code):
     """启用/停用风电场"""
     try:
@@ -303,6 +310,7 @@ def toggle_farm(farm_code):
 @farm_management_bp.route('/api/farms/<farm_code>/statistics', methods=['GET'])  # compatibility alias
 @farm_management_bp.route('/farms/<farm_code>/statistics', methods=['GET'])  # compatibility alias
 @jwt_required()
+@permission_required('view_all_data')
 def get_farm_stats(farm_code):
     """获取风电场统计信息"""
     try:

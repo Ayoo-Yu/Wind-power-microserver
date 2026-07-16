@@ -25,7 +25,7 @@ from database_config import Base, get_db
 from db_session import db_session
 from db_models import TaskHistory, PredictionTask, PredictionRun
 from config import Config
-from routes.auth import permission_required
+from utils.authorization import enforce_permission, permission_required
 
 # ---------------------------------------------------------------------------
 # Sub-module imports (extracted helpers)
@@ -148,6 +148,13 @@ def api_error(message, code=1500, status_code=400, details=None, legacy=None):
 # Blueprint
 # ---------------------------------------------------------------------------
 autopredict_bp = Blueprint('autopredict', __name__)
+
+
+@autopredict_bp.before_request
+def require_autopredict_permission():
+    """自动预测蓝图的所有历史和版本化入口都使用同一授权策略。"""
+
+    return enforce_permission('auto_predictions')
 
 
 # ---------------------------------------------------------------------------

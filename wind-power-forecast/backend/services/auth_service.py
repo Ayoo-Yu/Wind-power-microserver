@@ -8,10 +8,21 @@ from typing import Optional, Dict, Any
 from utils.password_utils import generate_password_hash as werkzeug_generate_hash
 from utils.password_utils import verify_password as werkzeug_verify_password
 
-# JWT密钥，实际应用中应从环境变量获取
-JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION = 24  # 小时
+
+
+def _get_jwt_secret() -> str:
+    """旧令牌工具只允许使用部署提供的密钥。"""
+
+    secret = (
+        os.getenv("JWT_SECRET")
+        or os.getenv("JWT_SECRET_KEY")
+        or os.getenv("SECRET_KEY")
+    )
+    if not secret:
+        raise RuntimeError("JWT_SECRET_KEY 或 SECRET_KEY 未配置")
+    return secret
 
 def get_password_hash(password: str) -> str:
     """
@@ -48,13 +59,13 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
     else:
         expire = datetime.utcnow() + timedelta(hours=JWT_EXPIRATION)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, _get_jwt_secret(), algorithm=JWT_ALGORITHM)
     return encoded_jwt
 
 def decode_token(token: str) -> Dict[str, Any]:
     """解码JWT令牌"""
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(token, _get_jwt_secret(), algorithms=[JWT_ALGORITHM])
         return payload
     except jwt.PyJWTError:
         return None
@@ -165,4 +176,4 @@ def check_permission(user: User, required_permission: str) -> bool:
         return False
     
     permissions = user.role.permissions
-    return required_permission in permissions.get("permissions", []) 
+    return required_permission in permissions.get("permissions", [])

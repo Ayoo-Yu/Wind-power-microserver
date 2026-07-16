@@ -5,10 +5,12 @@ from models import ShortlPower, MidPower, SupershortlPower
 from sqlalchemy.orm import Session
 import pandas as pd  # 添加pandas导入
 from db_session import db_session  # 导入上下文管理器
+from utils.authorization import permission_required
 
 prediction2database_bp = Blueprint('prediction2database', __name__, url_prefix='/prediction2database')
 
 @prediction2database_bp.route('/batch_supershortl_power', methods=['POST'])
+@permission_required('run_predictions')
 def batch_create_supershortl_power():
     """批量插入超短期预测数据（支持多场站）"""
     if 'file' not in request.files:
@@ -121,6 +123,7 @@ def batch_create_supershortl_power():
         return jsonify({"error": "文件处理失败，请检查文件格式"}), 500 
     
 @prediction2database_bp.route('/batch_shortl_power', methods=['POST'])
+@permission_required('run_predictions')
 def batch_create_shortl_power():
     """批量插入短期预测数据（支持多场站）"""
     if 'file' not in request.files:
@@ -210,6 +213,7 @@ def batch_create_shortl_power():
         return jsonify({"error": "文件处理失败，请检查文件格式"}), 500
 
 @prediction2database_bp.route('/batch_mid_power', methods=['POST'])
+@permission_required('run_predictions')
 def batch_create_mid_power():
     """批量插入中期预测数据（支持多场站）"""
     if 'file' not in request.files:
@@ -296,4 +300,4 @@ def batch_create_mid_power():
             
     except Exception as e:
         current_app.logger.error(f"文件处理失败: {str(e)}")
-        return jsonify({"error": "文件处理失败，请检查文件格式"}), 500 
+        return jsonify({"error": "文件处理失败，请检查文件格式"}), 500

@@ -1,10 +1,12 @@
 from flask import Blueprint, request, jsonify, current_app
 from services.file_service import allowed_file, save_uploaded_file
 from datetime import datetime
+from utils.authorization import permission_required
 
 upload_bp = Blueprint('upload', __name__)
 
 @upload_bp.route('/upload', methods=['POST'])
+@permission_required('upload_files')
 def upload_file():
     if 'file' not in request.files:
         current_app.logger.warning("没有上传文件哦！")

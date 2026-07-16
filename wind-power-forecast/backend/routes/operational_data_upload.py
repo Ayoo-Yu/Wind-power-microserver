@@ -19,6 +19,7 @@ from db_models.operational_data import (
 )
 from db_models.power import ActualPower
 from services.import_job_service import import_job_store
+from utils.authorization import permission_required
 
 operational_data_upload_bp = Blueprint('operational_data_upload', __name__)
 
@@ -102,6 +103,7 @@ def map_csv_to_operational_model(row_dict, model_class):
 
 
 @operational_data_upload_bp.route('/api/upload_operational_csv', methods=['POST'])
+@permission_required('upload_files')
 def upload_operational_csv():
     """
     处理运营数据CSV文件上传，支持分块处理和批量upsert操作（支持多场站）
@@ -299,6 +301,7 @@ def upload_operational_csv():
 
 # 获取支持的表名列表的端点
 @operational_data_upload_bp.route('/api/upload_actual_power_async', methods=['POST'])
+@permission_required('upload_files')
 def upload_actual_power_async():
     """Create an async import job for large actual_power CSV files."""
     if 'file' not in request.files:
@@ -329,6 +332,7 @@ def upload_actual_power_async():
 
 
 @operational_data_upload_bp.route('/api/import_jobs/<job_id>', methods=['GET'])
+@permission_required('upload_files')
 def get_import_job(job_id):
     """Return async import job progress."""
     job = import_job_store.get_job(job_id)
@@ -340,6 +344,7 @@ def get_import_job(job_id):
 
 
 @operational_data_upload_bp.route('/api/operational_tables', methods=['GET'])
+@permission_required('upload_files')
 def get_operational_tables():
     """返回支持的运营数据表名列表及其描述"""
     tables_info = {
@@ -361,6 +366,7 @@ def get_operational_tables():
 
 # 获取特定表的字段信息
 @operational_data_upload_bp.route('/api/operational_table_schema/<table_name>', methods=['GET'])  
+@permission_required('upload_files')
 def get_table_schema(table_name):
     """返回指定表的字段信息，用于CSV格式参考"""
     if table_name not in OPERATIONAL_TABLE_MODEL_MAP:

@@ -1,4 +1,5 @@
 from flask import Blueprint
+from flask_jwt_extended import verify_jwt_in_request
 
 from routes.farm_management import get_farms, get_farm_by_code, get_farm_stats
 from routes.power_compare import get_fleet_metrics, get_fleet_series, get_power_data
@@ -59,6 +60,13 @@ from routes.weather_fetch_router import (
 )
 
 v1_compat_bp = Blueprint("v1_compat", __name__, url_prefix="/api/v1")
+
+
+@v1_compat_bp.before_request
+def require_v1_authentication():
+    """兼容桥只承载登录后的业务接口，统一拒绝匿名访问。"""
+
+    verify_jwt_in_request()
 
 
 @v1_compat_bp.route("/farms", methods=["GET"])

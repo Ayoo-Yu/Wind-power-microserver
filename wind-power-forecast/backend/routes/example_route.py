@@ -4,6 +4,7 @@
 from flask import Blueprint, jsonify, request
 from db_models import Dataset, User
 from db_session import db_session, get_db
+from utils.authorization import permission_required
 import logging
 
 logger = logging.getLogger(__name__)
@@ -14,6 +15,7 @@ example_bp = Blueprint('example', __name__)
 #=================
 
 @example_bp.route('/datasets', methods=['GET'])
+@permission_required('view_all_data')
 def get_datasets():
     """使用上下文管理器自动管理会话生命周期"""
     try:
@@ -41,6 +43,7 @@ def get_datasets():
 #=================
 
 @example_bp.route('/users', methods=['GET'])
+@permission_required('manage_users')
 def get_users():
     """使用依赖注入获取会话"""
     db = next(get_db())
@@ -70,6 +73,7 @@ def get_users():
 #=================
 
 @example_bp.route('/complex-operation', methods=['POST'])
+@permission_required('configure_system')
 def complex_operation():
     """处理多个相关数据库操作"""
     try:
@@ -90,4 +94,4 @@ def complex_operation():
     except Exception as e:
         # 发生任何异常，事务会自动回滚
         logger.error(f"复杂操作失败: {str(e)}")
-        return jsonify({"error": str(e)}), 500 
+        return jsonify({"error": str(e)}), 500

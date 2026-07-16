@@ -9,6 +9,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from db_session import db_session
 from models import AlarmNotificationPolicy, AlarmRecord, AlarmRule, User
 from utils.database_schema import require_model_tables
+from utils.authorization import permission_required
 
 
 alarm_bp = Blueprint('alarm', __name__)
@@ -203,6 +204,7 @@ def _seed_default_configs(session):
 
 @alarm_bp.route('/alarms', methods=['GET'])
 @jwt_required()
+@permission_required('view_all_data')
 def list_alarms():
     try:
         status = request.args.get('status')
@@ -225,6 +227,7 @@ def list_alarms():
 
 @alarm_bp.route('/alarms/notifications', methods=['GET'])
 @jwt_required()
+@permission_required('view_all_data')
 def list_alarm_notifications():
     try:
         with db_session() as session:
@@ -258,6 +261,7 @@ def list_alarm_notifications():
 
 @alarm_bp.route('/alarm-rules', methods=['GET'])
 @jwt_required()
+@permission_required('configure_system')
 def list_alarm_rules():
     try:
         with db_session() as session:
@@ -272,6 +276,7 @@ def list_alarm_rules():
 
 @alarm_bp.route('/alarm-rules', methods=['POST'])
 @jwt_required()
+@permission_required('configure_system')
 def create_alarm_rule():
     try:
         data = request.get_json() or {}
@@ -298,6 +303,7 @@ def create_alarm_rule():
 
 @alarm_bp.route('/alarm-rules/<int:rule_id>', methods=['PUT'])
 @jwt_required()
+@permission_required('configure_system')
 def update_alarm_rule(rule_id):
     try:
         data = request.get_json() or {}
@@ -329,6 +335,7 @@ def update_alarm_rule(rule_id):
 
 @alarm_bp.route('/alarm-rules/<int:rule_id>', methods=['DELETE'])
 @jwt_required()
+@permission_required('configure_system')
 def delete_alarm_rule(rule_id):
     try:
         with db_session() as session:
@@ -346,6 +353,7 @@ def delete_alarm_rule(rule_id):
 
 @alarm_bp.route('/alarm-policies', methods=['GET'])
 @jwt_required()
+@permission_required('configure_system')
 def list_alarm_policies():
     try:
         with db_session() as session:
@@ -360,6 +368,7 @@ def list_alarm_policies():
 
 @alarm_bp.route('/alarm-policies', methods=['POST'])
 @jwt_required()
+@permission_required('configure_system')
 def create_alarm_policy():
     try:
         data = request.get_json() or {}
@@ -384,6 +393,7 @@ def create_alarm_policy():
 
 @alarm_bp.route('/alarm-policies/<int:policy_id>', methods=['PUT'])
 @jwt_required()
+@permission_required('configure_system')
 def update_alarm_policy(policy_id):
     try:
         data = request.get_json() or {}
@@ -411,6 +421,7 @@ def update_alarm_policy(policy_id):
 
 @alarm_bp.route('/alarm-policies/<int:policy_id>', methods=['DELETE'])
 @jwt_required()
+@permission_required('configure_system')
 def delete_alarm_policy(policy_id):
     try:
         with db_session() as session:
@@ -428,6 +439,7 @@ def delete_alarm_policy(policy_id):
 
 @alarm_bp.route('/alarms/<int:alarm_id>/ack', methods=['POST'])
 @jwt_required()
+@permission_required('configure_system')
 def ack_alarm(alarm_id):
     try:
         with db_session() as session:
@@ -449,6 +461,7 @@ def ack_alarm(alarm_id):
 
 @alarm_bp.route('/alarms/<int:alarm_id>/close', methods=['POST'])
 @jwt_required()
+@permission_required('configure_system')
 def close_alarm(alarm_id):
     try:
         with db_session() as session:

@@ -5,6 +5,7 @@ import os
 import json
 import logging
 from db_session import db_session
+from utils.authorization import permission_required
 from models import (
     WindFarm, ReportConfig, ReportLog, ActualPower, SupershortlPower, ShortlPower, MidPower, ReportQualityStatistics, DataQualityMarker,
     ManualInterventionVersion, WindSpeedData, TurbinePowerData, WeatherData, InstalledCapacityData, AvailableCapacityData,
@@ -168,11 +169,13 @@ def _upsert_report_config_meta(db, config_id, payload):
     db.add(ReportConfigMeta(config_id=config_id, payload=serialized_payload))
 
 @report_management_bp.route('/test', methods=['GET'])
+@permission_required('manage_reports')
 def test_route():
     """测试路由"""
     return jsonify({'message': '上报管理路由工作正常', 'status': 'ok'})
 
 @report_management_bp.route('/farms', methods=['GET'])
+@permission_required('manage_reports')
 def get_wind_farms():
     """获取风电场站列表"""
     try:
@@ -197,6 +200,7 @@ def get_wind_farms():
         return jsonify({'error': '获取风电场站列表失败'}), 500
 
 @report_management_bp.route('/farms', methods=['POST'])
+@permission_required('manage_reports')
 def create_wind_farm():
     """创建风电场站"""
     try:
@@ -228,6 +232,7 @@ def create_wind_farm():
         return jsonify({'error': '创建风电场站失败'}), 500
 
 @report_management_bp.route('/farms/<int:farm_id>', methods=['PUT'])
+@permission_required('manage_reports')
 def update_wind_farm(farm_id):
     """更新风电场站"""
     try:
@@ -253,6 +258,7 @@ def update_wind_farm(farm_id):
         return jsonify({'error': '更新风电场站失败'}), 500
 
 @report_management_bp.route('/configs', methods=['GET'])
+@permission_required('manage_reports')
 def get_report_configs():
     """获取上报配置列表"""
     try:
@@ -297,6 +303,7 @@ def get_report_configs():
         return jsonify({'error': '获取上报配置列表失败'}), 500
 
 @report_management_bp.route('/configs', methods=['POST'])
+@permission_required('manage_reports')
 def create_report_config():
     """创建上报配置"""
     try:
@@ -330,6 +337,7 @@ def create_report_config():
         return jsonify({'error': '创建上报配置失败'}), 500
 
 @report_management_bp.route('/configs/<int:config_id>', methods=['PUT'])
+@permission_required('manage_reports')
 def update_report_config(config_id):
     """更新上报配置"""
     try:
@@ -355,6 +363,7 @@ def update_report_config(config_id):
         return jsonify({'error': '更新上报配置失败'}), 500
 
 @report_management_bp.route('/configs/<int:config_id>', methods=['DELETE'])
+@permission_required('manage_reports')
 def delete_report_config(config_id):
     """删除上报配置"""
     try:
@@ -375,6 +384,7 @@ def delete_report_config(config_id):
         return jsonify({'error': '删除上报配置失败'}), 500
 
 @report_management_bp.route('/logs', methods=['GET'])
+@permission_required('manage_reports')
 def get_report_logs():
     """获取上报日志"""
     try:
@@ -438,6 +448,7 @@ def get_report_logs():
         return jsonify({'error': '获取上报日志失败'}), 500
 
 @report_management_bp.route('/preview-report', methods=['POST'])
+@permission_required('manage_reports')
 def preview_report():
     """预览上报数据"""
     try:
@@ -514,6 +525,7 @@ def preview_report():
         return jsonify({'error': str(e)}), 500
 
 @report_management_bp.route('/manual-report', methods=['POST'])
+@permission_required('manage_reports')
 def manual_report():
     """手动执行上报（支持自定义数据）"""
     try:
@@ -620,6 +632,7 @@ def manual_report():
         return jsonify({'error': str(e)}), 500
 
 @report_management_bp.route('/manual-intervention/versions', methods=['GET'])
+@permission_required('manage_reports')
 def list_manual_intervention_versions():
     try:
         farm_code = request.args.get('farm_code')
@@ -641,6 +654,7 @@ def list_manual_intervention_versions():
 
 
 @report_management_bp.route('/manual-intervention/versions', methods=['POST'])
+@permission_required('manage_reports')
 def create_manual_intervention_version():
     try:
         data = request.get_json() or {}
@@ -686,6 +700,7 @@ def create_manual_intervention_version():
 
 
 @report_management_bp.route('/manual-intervention/versions/<int:version_id>', methods=['GET'])
+@permission_required('manage_reports')
 def get_manual_intervention_version(version_id):
     try:
         with db_session() as db:
@@ -699,6 +714,7 @@ def get_manual_intervention_version(version_id):
 
 
 @report_management_bp.route('/manual-intervention/versions/<int:version_id>/apply', methods=['POST'])
+@permission_required('manage_reports')
 def apply_manual_intervention_version(version_id):
     try:
         data = request.get_json() or {}
@@ -1659,6 +1675,7 @@ def stop_report_scheduler():
 
 # 添加控制调度器的API接口
 @report_management_bp.route('/scheduler/start', methods=['POST'])
+@permission_required('manage_reports')
 def start_scheduler():
     """启动上报调度器"""
     try:
@@ -1677,6 +1694,7 @@ def start_scheduler():
         return jsonify({'error': '启动调度器失败'}), 500
 
 @report_management_bp.route('/scheduler/stop', methods=['POST'])
+@permission_required('manage_reports')
 def stop_scheduler():
     """停止上报调度器"""
     try:
@@ -1692,6 +1710,7 @@ def stop_scheduler():
         return jsonify({'error': '停止调度器失败'}), 500
 
 @report_management_bp.route('/scheduler/status', methods=['GET'])
+@permission_required('manage_reports')
 def get_scheduler_status():
     """获取调度器状态"""
     try:
@@ -1861,6 +1880,7 @@ def get_data_structure_info(report_type):
 # ========== 数据质量统计相关接口 ==========
 
 @report_management_bp.route('/statistics', methods=['GET'])
+@permission_required('manage_reports')
 def get_report_statistics():
     """获取上报数据质量统计 - 按类型分别统计"""
     try:
@@ -1991,6 +2011,7 @@ def get_report_statistics():
         return jsonify({"error": "获取统计数据失败"}), 500
 
 @report_management_bp.route('/accuracy-statistics', methods=['GET'])
+@permission_required('manage_reports')
 def get_accuracy_statistics():
     try:
         farm_code = request.args.get('farm_code')
@@ -2148,6 +2169,7 @@ def _serialize_quality_marker(session, marker):
 
 
 @report_management_bp.route('/quality-markers', methods=['GET'])
+@permission_required('manage_reports')
 def get_quality_markers():
     try:
         farm_code = request.args.get('farm_code')
@@ -2177,6 +2199,7 @@ def get_quality_markers():
 
 
 @report_management_bp.route('/quality-markers', methods=['POST'])
+@permission_required('manage_reports')
 def create_quality_marker():
     try:
         data = request.get_json() or {}
@@ -2215,6 +2238,7 @@ def create_quality_marker():
 
 
 @report_management_bp.route('/quality-markers/<int:marker_id>', methods=['PUT'])
+@permission_required('manage_reports')
 def update_quality_marker(marker_id):
     try:
         data = request.get_json() or {}
@@ -2261,6 +2285,7 @@ def update_quality_marker(marker_id):
 
 
 @report_management_bp.route('/quality-markers/<int:marker_id>', methods=['DELETE'])
+@permission_required('manage_reports')
 def delete_quality_marker(marker_id):
     try:
         with db_session() as session:
@@ -2487,6 +2512,7 @@ def calculate_monthly_summary_by_type(db: Session, farm_code: str = None, month:
         }
 
 @report_management_bp.route('/statistics/calculate-daily', methods=['POST'])
+@permission_required('manage_reports')
 def calculate_daily_statistics():
     """手动触发计算每日统计数据"""
     try:
@@ -2641,6 +2667,7 @@ else:
     logging.info("自动上报调度由 Celery Beat 托管，Web 进程不启动内嵌调度器")
 
 @report_management_bp.route('/statistics/test-update', methods=['POST'])
+@permission_required('manage_reports')
 def test_statistics_update():
     """测试统计更新功能"""
     try:

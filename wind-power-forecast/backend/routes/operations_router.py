@@ -8,7 +8,7 @@ from flask_jwt_extended import jwt_required
 
 from config import Config
 from db_session import db_session
-from routes.auth import permission_required
+from utils.authorization import permission_required
 from services.operations_overview_service import (
     build_operations_overview,
     list_prediction_input_snapshots,

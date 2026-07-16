@@ -86,7 +86,6 @@ from routes.power_compare import bp as power_compare_bp
 from routes.auth import auth_bp
 from routes.auth_extensions import auth_extensions_bp
 from routes.user import user_bp
-from routes.example_route import example_bp
 from routes.feature_upload import feature_upload_bp
 from routes.system_info_router import system_info_bp
 from routes.system_settings_router import system_settings_bp
@@ -126,7 +125,6 @@ app.register_blueprint(auth_extensions_bp, url_prefix='/auth')
 app.register_blueprint(auth_bp, url_prefix='/api/v1/auth', name='auth_v1')
 app.register_blueprint(auth_extensions_bp, url_prefix='/api/v1/auth', name='auth_extensions_v1')
 app.register_blueprint(user_bp, url_prefix='/api/user')
-app.register_blueprint(example_bp, url_prefix='/api/example')
 app.register_blueprint(feature_upload_bp)
 app.register_blueprint(system_info_bp, url_prefix='/system')
 app.register_blueprint(system_settings_bp, url_prefix='/system')

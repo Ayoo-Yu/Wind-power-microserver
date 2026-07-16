@@ -5,6 +5,7 @@ from models import ActualPower
 from sqlalchemy.orm import Session
 import pandas as pd  # 添加pandas导入
 from db_session import db_session  # 导入上下文管理器
+from utils.authorization import permission_required
 
 actual_power_bp = Blueprint('actual_power', __name__, url_prefix='/actual_power')
 
@@ -12,6 +13,7 @@ actual_power_bp = Blueprint('actual_power', __name__, url_prefix='/actual_power'
 CHUNK_SIZE = 10000  # 每次处理2000行数据
 
 @actual_power_bp.route('/', methods=['POST'])
+@permission_required('upload_files')
 def create_actual_power():
     data = request.get_json()
     
@@ -122,6 +124,7 @@ def process_wp_true_value(wp_true_input, row_index=None):
         raise ValueError(f"wp_true类型无效: {type(wp_true_input)}")
 
 @actual_power_bp.route('/batch', methods=['POST'])
+@permission_required('upload_files')
 def batch_create_actual_power():
     if 'file' not in request.files:
         return jsonify({"error": "未上传文件"}), 400

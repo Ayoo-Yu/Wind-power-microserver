@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from utils.authorization import permission_required
 from sqlalchemy.exc import IntegrityError
 from db_session import db_session
 from db_models.weather_fetch import WeatherConnection, WeatherTask, WeatherLog
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 @weather_fetch_bp.route('/connections', methods=['GET'])
 @jwt_required()
+@permission_required('manage_weather_data')
 def get_connections():
     """获取SSH连接列表"""
     try:
@@ -45,6 +47,7 @@ def get_connections():
 
 @weather_fetch_bp.route('/connections', methods=['POST'])
 @jwt_required()
+@permission_required('manage_weather_data')
 def create_connection():
     """创建SSH连接（支持多场站）"""
     try:
@@ -102,6 +105,7 @@ def create_connection():
 
 @weather_fetch_bp.route('/connections/<int:connection_id>', methods=['PUT'])
 @jwt_required()
+@permission_required('manage_weather_data')
 def update_connection(connection_id):
     """更新SSH连接"""
     try:
@@ -135,6 +139,7 @@ def update_connection(connection_id):
 
 @weather_fetch_bp.route('/connections/<int:connection_id>', methods=['DELETE'])
 @jwt_required()
+@permission_required('manage_weather_data')
 def delete_connection(connection_id):
     """删除SSH连接（软删除）"""
     try:
@@ -159,6 +164,7 @@ def delete_connection(connection_id):
 
 @weather_fetch_bp.route('/connections/<int:connection_id>/test', methods=['POST'])
 @jwt_required()
+@permission_required('manage_weather_data')
 def test_connection(connection_id):
     """测试SSH连接"""
     try:
@@ -229,6 +235,7 @@ def test_connection(connection_id):
 
 @weather_fetch_bp.route('/tasks', methods=['GET'])
 @jwt_required()
+@permission_required('manage_weather_data')
 def get_tasks():
     """获取拉取任务列表"""
     try:
@@ -270,6 +277,7 @@ def get_tasks():
 
 @weather_fetch_bp.route('/tasks', methods=['POST'])
 @jwt_required()
+@permission_required('manage_weather_data')
 def create_task():
     """创建拉取任务（支持多场站）"""
     try:
@@ -368,6 +376,7 @@ def create_task():
 
 @weather_fetch_bp.route('/tasks/<int:task_id>', methods=['PUT'])
 @jwt_required()
+@permission_required('manage_weather_data')
 def update_task(task_id):
     """更新拉取任务"""
     try:
@@ -432,6 +441,7 @@ def update_task(task_id):
 
 @weather_fetch_bp.route('/tasks/<int:task_id>', methods=['DELETE'])
 @jwt_required()
+@permission_required('manage_weather_data')
 def delete_task(task_id):
     """删除拉取任务（软删除）"""
     try:
@@ -464,6 +474,7 @@ def delete_task(task_id):
 
 @weather_fetch_bp.route('/tasks/<int:task_id>/toggle', methods=['POST'])
 @jwt_required()
+@permission_required('manage_weather_data')
 def toggle_task(task_id):
     """启用/停用任务"""
     try:
@@ -499,6 +510,7 @@ def toggle_task(task_id):
 
 @weather_fetch_bp.route('/tasks/<int:task_id>/run', methods=['POST'])
 @jwt_required()
+@permission_required('manage_weather_data')
 def run_task(task_id):
     """立即执行任务"""
     try:
@@ -542,6 +554,7 @@ def run_task(task_id):
 
 @weather_fetch_bp.route('/logs', methods=['GET'])
 @jwt_required()
+@permission_required('manage_weather_data')
 def get_logs():
     """获取执行日志"""
     try:
@@ -575,6 +588,7 @@ def get_logs():
 
 @weather_fetch_bp.route('/tasks/<int:task_id>/logs', methods=['GET'])
 @jwt_required()
+@permission_required('manage_weather_data')
 def get_task_logs(task_id):
     """获取特定任务的执行日志"""
     try:
@@ -617,6 +631,7 @@ def get_task_logs(task_id):
 
 @weather_fetch_bp.route('/scheduler/status', methods=['GET'])
 @jwt_required()
+@permission_required('manage_weather_data')
 def get_scheduler_status():
     """获取调度器状态"""
     try:
@@ -636,6 +651,7 @@ def get_scheduler_status():
 
 @weather_fetch_bp.route('/stats', methods=['GET'])
 @jwt_required()
+@permission_required('manage_weather_data')
 def get_stats():
     """获取统计信息"""
     try:
@@ -698,6 +714,7 @@ def get_stats():
 
 @weather_fetch_bp.route('/check-directories', methods=['POST'])
 @jwt_required()
+@permission_required('manage_weather_data')
 def check_directories():
     """检查可用的时间目录"""
     try:
@@ -761,6 +778,7 @@ def check_directories():
 
 @weather_fetch_bp.route('/scheduler/restart', methods=['POST'])
 @jwt_required()
+@permission_required('manage_weather_data')
 def restart_scheduler():
     """重启调度器"""
     try:
@@ -798,4 +816,4 @@ def restart_scheduler():
         
     except Exception as e:
         logger.error(f"重启调度器失败: {e}")
-        return jsonify({'message': f'重启调度器失败: {str(e)}'}), 500 
+        return jsonify({'message': f'重启调度器失败: {str(e)}'}), 500
