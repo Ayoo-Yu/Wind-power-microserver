@@ -645,7 +645,7 @@ function renderMapChart() {
   }))
 
   mapChart.setOption({
-    backgroundColor: '#0b1d2d',
+    backgroundColor: '#ffffff',
     grid: {
       left: 58,
       right: 24,
@@ -654,6 +654,9 @@ function renderMapChart() {
     },
     tooltip: {
       trigger: 'item',
+      backgroundColor: '#ffffff',
+      borderColor: '#dfe5e0',
+      textStyle: { color: '#17211b' },
       formatter: (params) => {
         const d = params.data || {}
         const v = d.value || []
@@ -670,14 +673,20 @@ function renderMapChart() {
       name: '经度',
       min: (value) => value.min - 0.2,
       max: (value) => value.max + 0.2,
-      splitLine: { lineStyle: { color: '#eef2f7' } }
+      axisLine: { lineStyle: { color: '#dfe5e0' } },
+      axisLabel: { color: '#768078' },
+      nameTextStyle: { color: '#768078' },
+      splitLine: { lineStyle: { color: '#eef2ef' } }
     },
     yAxis: {
       type: 'value',
       name: '纬度',
       min: (value) => value.min - 0.2,
       max: (value) => value.max + 0.2,
-      splitLine: { lineStyle: { color: '#eef2f7' } }
+      axisLine: { lineStyle: { color: '#dfe5e0' } },
+      axisLabel: { color: '#768078' },
+      nameTextStyle: { color: '#768078' },
+      splitLine: { lineStyle: { color: '#eef2ef' } }
     },
     series: [
       {
@@ -685,13 +694,13 @@ function renderMapChart() {
         data: points,
         symbolSize: (val) => 10 + Math.min(24, Math.sqrt(Number(val[2] || 0))),
         itemStyle: {
-          color: (params) => (params.data?.status === '运行中' ? '#19b955' : '#d3415b')
+          color: (params) => (params.data?.status === '运行中' ? '#2f8a5f' : '#c45252')
         },
         label: {
           show: true,
           position: 'top',
           formatter: (params) => params.data?.farmCode || '',
-          color: '#2f4058',
+          color: '#3e4941',
           fontSize: 11
         }
       }
@@ -801,15 +810,15 @@ onBeforeUnmount(() => {
 }
 
 .status-pill.active {
-  color: #7ef3b7;
-  background: rgba(45, 211, 111, 0.15);
-  border: 1px solid rgba(45, 211, 111, 0.3);
+  color: var(--success);
+  background: var(--accent-soft);
+  border: 1px solid #cbe2d4;
 }
 
 .status-pill.inactive {
-  color: #ff8f9f;
-  background: rgba(255, 93, 115, 0.15);
-  border: 1px solid rgba(255, 93, 115, 0.3);
+  color: var(--danger);
+  background: var(--danger-soft);
+  border: 1px solid #edc9c9;
 }
 
 .core-meta {
@@ -835,7 +844,7 @@ onBeforeUnmount(() => {
 
 .biz-status {
   margin-top: 12px;
-  background: rgba(10, 25, 38, 0.5);
+  background: var(--surface-soft);
   border: 1px solid var(--border-color);
   border-radius: 10px;
   padding: 10px 12px;
@@ -891,7 +900,7 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 560px;
   border: 1px solid var(--border-color);
-  background: rgba(8, 24, 38, 0.5);
+  background: var(--surface);
   border-radius: 12px;
 }
 
@@ -900,9 +909,10 @@ onBeforeUnmount(() => {
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  color: #6f7f93;
+  color: var(--text-muted);
   font-size: 14px;
-  background: rgba(7, 24, 39, 0.58);
+  background: var(--surface);
+  border: 1px solid var(--border-color);
   padding: 10px 14px;
   border-radius: 8px;
 }

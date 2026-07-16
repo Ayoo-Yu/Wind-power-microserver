@@ -1,14 +1,14 @@
 :root {
-  --el-text-color-primary: #eaf4ff;
-  --el-text-color-regular: #9fb6cc;
-  --el-text-color-secondary: #6f89a3;
-  --el-text-color-placeholder: #5a7a94;
-  --el-text-color-disabled: #4a6478;
-  --el-disabled-text-color: #4a6478;
-  --el-disabled-bg-color: #0a1e30;
-  --el-disabled-border-color: rgba(146, 186, 220, 0.15);
-  --el-fill-color: rgba(120, 166, 201, 0.12);
-  --el-fill-color-light: rgba(120, 166, 201, 0.08);
-  --el-fill-color-lighter: rgba(120, 166, 201, 0.04);
-  --el-fill-color-blank: #0d263a;
+  --el-text-color-primary: #17211b;
+  --el-text-color-regular: #4f5b53;
+  --el-text-color-secondary: #727d75;
+  --el-text-color-placeholder: #9aa39d;
+  --el-text-color-disabled: #aeb6b0;
+  --el-disabled-text-color: #aeb6b0;
+  --el-disabled-bg-color: #f3f5f3;
+  --el-disabled-border-color: #e5e9e6;
+  --el-fill-color: #f2f5f2;
+  --el-fill-color-light: #f6f8f6;
+  --el-fill-color-lighter: #fafbfa;
+  --el-fill-color-blank: #ffffff;
 }

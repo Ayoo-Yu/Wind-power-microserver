@@ -1,123 +1,153 @@
-/* ============================================================
-   Wind Power Forecast — Sci-Fi Dark Theme
-   ============================================================ */
-
+/* 风电预测平台明亮设计系统 */
 :root {
-  /* === Core Palette === */
-  --bg-root: #06121f;
-  --bg-surface: #0b1d2d;
-  --bg-card: #10263a;
-  --bg-card-soft: #133047;
-  --card-dark: #10263a;
-  --text-primary: #eaf4ff;
-  --text-secondary: #9fb6cc;
-  --text-muted: #6f89a3;
-  --accent: #12d7ff;
-  --accent-2: #2dd36f;
-  --warning: #f6b73c;
-  --danger: #ff5d73;
-  --border-color: rgba(146, 186, 220, 0.26);
-  --shadow-soft: 0 6px 18px rgba(2, 16, 29, 0.35);
+  --bg-root: #f5f7f4;
+  --bg-surface: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-soft: #f8faf8;
+  --bg-muted: #eef2ee;
+  --card-dark: #ffffff;
+  --text-primary: #17211b;
+  --text-secondary: #59645d;
+  --text-muted: #838d86;
+  --accent: #247a52;
+  --accent-strong: #195f3e;
+  --accent-soft: #eaf4ee;
+  --primary: #247a52;
+  --primary-strong: #195f3e;
+  --primary-soft: #eaf4ee;
+  --surface: #ffffff;
+  --surface-soft: #f8faf8;
+  --success: #2f8a5f;
+  --accent-blue: #397b91;
+  --accent-blue-soft: #edf5f7;
+  --accent-2: #2f8a5f;
+  --warning: #b7791f;
+  --warning-soft: #fbf3e5;
+  --danger: #c45252;
+  --danger-soft: #fbebeb;
+  --border-color: #e2e7e3;
+  --border-light: #edf0ed;
+  --border-strong: #d4dbd6;
+  --shadow-card: 0 1px 2px rgba(25, 44, 32, 0.04), 0 8px 28px rgba(25, 44, 32, 0.05);
+  --shadow-soft: 0 1px 2px rgba(25, 44, 32, 0.04), 0 8px 28px rgba(25, 44, 32, 0.05);
+  --shadow-float: 0 16px 44px rgba(25, 44, 32, 0.12);
   --radius-sm: 8px;
-  --radius-md: 12px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
 
-  /* === Glow & Sci-Fi Tokens === */
-  --glow-accent: 0 0 12px rgba(18, 215, 255, 0.35);
-  --glow-accent-strong: 0 0 24px rgba(18, 215, 255, 0.5);
-  --glow-success: 0 0 12px rgba(45, 211, 111, 0.35);
-  --glow-warning: 0 0 12px rgba(246, 183, 60, 0.35);
-  --glow-danger: 0 0 12px rgba(255, 93, 115, 0.45);
+  --glow-accent: none;
+  --glow-accent-strong: none;
+  --glow-success: none;
+  --glow-warning: none;
+  --glow-danger: none;
+  --gradient-accent: #247a52;
+  --gradient-card: #ffffff;
+  --gradient-glass: #ffffff;
+  --gradient-sidebar: #fbfcfb;
+  --gradient-header: #ffffff;
 
-  /* === Gradients === */
-  --gradient-accent: linear-gradient(135deg, #0bb5d4, #12d7ff);
-  --gradient-card: linear-gradient(180deg, rgba(18, 42, 64, 0.95), rgba(12, 31, 47, 0.94));
-  --gradient-glass: linear-gradient(135deg, rgba(18, 42, 64, 0.85), rgba(10, 28, 44, 0.75));
-  --gradient-sidebar: linear-gradient(180deg, #081a2a 0%, #071626 100%);
-  --gradient-header: linear-gradient(90deg, rgba(18, 42, 64, 0.6), rgba(10, 28, 44, 0.4));
+  --font-display: Inter, "SF Pro Display", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Roboto Mono", Menlo, Monaco, monospace;
+  --font-size-xs: 12px;
+  --font-size-sm: 13px;
+  --font-size-base: 14px;
+  --font-size-md: 15px;
+  --font-size-lg: 17px;
+  --font-size-xl: 22px;
+  --font-size-2xl: 28px;
+  --font-size-3xl: 36px;
 
-  /* === Typography === */
-  --font-display: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
-  --font-mono: Consolas, "Roboto Mono", Menlo, Monaco, monospace;
-  --font-size-xs: 11px;
-  --font-size-sm: 12px;
-  --font-size-base: 13px;
-  --font-size-md: 14px;
-  --font-size-lg: 16px;
-  --font-size-xl: 20px;
-  --font-size-2xl: 24px;
-  --font-size-3xl: 32px;
-
-  /* === Spacing & Motion === */
   --space-xs: 4px;
   --space-sm: 8px;
   --space-md: 12px;
   --space-lg: 16px;
   --space-xl: 24px;
-  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-slow: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  --space-2xl: 32px;
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.22s ease;
+  --transition-slow: 0.32s ease;
 
-  /* === Specific Element Tokens === */
-  --input-bg: #0d263a;
-  --input-border: rgba(146, 186, 220, 0.26);
-  --input-focus-border: rgba(18, 215, 255, 0.7);
-  --input-focus-glow: 0 0 0 1px rgba(18, 215, 255, 0.35), 0 0 16px rgba(18, 215, 255, 0.2);
-  --table-header-bg: rgba(14, 40, 61, 0.96);
-  --table-row-hover: rgba(16, 54, 84, 0.45);
-  --table-border: rgba(120, 166, 201, 0.25);
-  --dialog-bg: #0f2a40;
-  --overlay-bg: rgba(3, 10, 18, 0.7);
+  --input-bg: #ffffff;
+  --input-border: #dce3de;
+  --input-focus-border: #4b8e6c;
+  --input-focus-glow: 0 0 0 3px rgba(36, 122, 82, 0.12);
+  --table-header-bg: #f7f9f7;
+  --table-row-hover: #f4f8f5;
+  --table-border: #e7ebe8;
+  --dialog-bg: #ffffff;
+  --overlay-bg: rgba(27, 36, 30, 0.42);
 
-  /* === Chart Colors === */
-  --chart-line-1: #12d7ff;
-  --chart-line-2: #2dd36f;
-  --chart-line-3: #f6b73c;
-  --chart-line-4: #a78bfa;
-  --chart-line-5: #ff5d73;
-  --chart-area-1: rgba(18, 215, 255, 0.15);
-  --chart-grid: rgba(159, 182, 204, 0.12);
-  --chart-text: #9fb6cc;
+  --chart-line-1: #397b91;
+  --chart-line-2: #2f8a5f;
+  --chart-line-3: #b7791f;
+  --chart-line-4: #7c6f9b;
+  --chart-line-5: #c45252;
+  --chart-area-1: rgba(57, 123, 145, 0.12);
+  --chart-grid: #e8ece9;
+  --chart-text: #667169;
 }
 
-/* ============================================================
-   Base Reset
-   ============================================================ */
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
-html, body, #app {
+html,
+body,
+#app {
   height: 100%;
   margin: 0;
-  background: radial-gradient(circle at 20% 0%, #0d2338 0%, var(--bg-root) 45%), var(--bg-root);
+  background: var(--bg-root);
   color: var(--text-primary);
   font-family: var(--font-display);
   font-size: var(--font-size-base);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* ============================================================
-   Custom Scrollbar
-   ============================================================ */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: rgba(6, 18, 31, 0.5); }
-::-webkit-scrollbar-thumb { background: rgba(18, 215, 255, 0.2); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(18, 215, 255, 0.35); }
-::-webkit-scrollbar-corner { background: transparent; }
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
 
-/* ============================================================
-   Page Shell
-   ============================================================ */
+::selection {
+  background: rgba(36, 122, 82, 0.16);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cdd5cf;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #aeb9b1;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
 .page-shell {
-  padding: var(--space-lg);
-  min-height: calc(100vh - 64px);
-  animation: pageEnter 0.3s ease-out;
+  min-height: calc(100vh - 72px);
+  padding: 28px 32px 40px;
+  animation: page-enter 0.22s ease-out;
 }
-@keyframes pageEnter {
-  from { opacity: 0; transform: translateY(6px); }
+
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(3px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ============================================================
-   Cards — Glassmorphism
-   ============================================================ */
 .panel-card,
 .el-card,
 .main-card,
@@ -135,33 +165,37 @@ html, body, #app {
 .action-card,
 .status-card,
 .card-shell {
-  background: var(--gradient-card) !important;
+  color: var(--text-primary);
+  background: var(--bg-surface) !important;
   border: 1px solid var(--border-color) !important;
   border-radius: var(--radius-md) !important;
-  box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
-  color: var(--text-primary);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  transition: box-shadow var(--transition-normal), border-color var(--transition-normal);
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 .panel-card:hover,
 .el-card:hover {
-  box-shadow: 0 10px 22px rgba(7, 20, 33, 0.35), 0 0 1px rgba(18, 215, 255, 0.3),
-              inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+  box-shadow: none !important;
+  border-color: var(--border-strong) !important;
 }
 
 .el-card__header {
+  padding: 18px 20px !important;
   border-bottom: 1px solid var(--border-color) !important;
 }
 
-/* ============================================================
-   Typography
-   ============================================================ */
+.el-card__body {
+  padding: 20px !important;
+}
+
 .page-title,
 .section-title,
 .card-title,
-h1, h2, h3, h4 {
+h1,
+h2,
+h3,
+h4 {
   color: var(--text-primary);
 }
 
@@ -175,62 +209,70 @@ p {
   color: var(--text-secondary);
 }
 
-/* ============================================================
-   Buttons — Gradient + Glow Hover
-   ============================================================ */
 .el-button {
+  min-height: 36px;
   border-radius: var(--radius-sm) !important;
-  border: 1px solid transparent !important;
-  transition: all var(--transition-normal) !important;
-  font-weight: 500;
+  font-weight: 550;
+  transition: background-color var(--transition-normal), border-color var(--transition-normal), color var(--transition-normal) !important;
 }
 
 .el-button--primary {
-  background: var(--gradient-accent) !important;
-  color: #00111c !important;
+  color: #ffffff !important;
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
 }
-.el-button--primary:hover {
-  box-shadow: 0 0 14px rgba(18, 215, 255, 0.4) !important;
-  transform: translateY(-1px);
+
+.el-button--primary:hover,
+.el-button--primary:focus-visible {
+  color: #ffffff !important;
+  background: var(--accent-strong) !important;
+  border-color: var(--accent-strong) !important;
+  box-shadow: none !important;
+  transform: none !important;
 }
 
 .el-button--success {
-  background: linear-gradient(135deg, #2abf6d, var(--accent-2)) !important;
-  color: #032012 !important;
-}
-.el-button--success:hover {
-  box-shadow: var(--glow-success) !important;
-  transform: translateY(-1px);
+  color: #ffffff !important;
+  background: var(--accent-2) !important;
+  border-color: var(--accent-2) !important;
 }
 
 .el-button--warning {
-  background: linear-gradient(135deg, #dd9c22, var(--warning)) !important;
-  color: #201301 !important;
-}
-.el-button--warning:hover {
-  box-shadow: var(--glow-warning) !important;
-  transform: translateY(-1px);
+  color: #ffffff !important;
+  background: var(--warning) !important;
+  border-color: var(--warning) !important;
 }
 
 .el-button--danger {
-  background: linear-gradient(135deg, #d84b60, var(--danger)) !important;
-}
-.el-button--danger:hover {
-  box-shadow: var(--glow-danger) !important;
-  transform: translateY(-1px);
+  color: #ffffff !important;
+  background: var(--danger) !important;
+  border-color: var(--danger) !important;
 }
 
-/* ============================================================
-   Form Inputs — Dark + Focus Glow
-   ============================================================ */
+.el-button.is-text,
+.el-button--primary.is-text,
+.el-button--success.is-text,
+.el-button--warning.is-text,
+.el-button--danger.is-text {
+  min-height: auto;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.el-button--primary.is-text { color: var(--accent) !important; }
+.el-button--success.is-text { color: var(--accent-2) !important; }
+.el-button--warning.is-text { color: var(--warning) !important; }
+.el-button--danger.is-text { color: var(--danger) !important; }
+
 .el-input__wrapper,
 .el-textarea__inner,
 .el-select__wrapper,
 .el-date-editor.el-input__wrapper,
 .el-date-editor .el-range-input,
 .el-range-editor.el-input__wrapper {
-  background: var(--input-bg) !important;
   color: var(--text-primary) !important;
+  background: var(--input-bg) !important;
   border: 1px solid var(--input-border) !important;
   box-shadow: none !important;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast) !important;
@@ -255,9 +297,11 @@ p {
   color: var(--text-primary) !important;
 }
 
-/* ============================================================
-   Tables
-   ============================================================ */
+.el-input__inner::placeholder,
+.el-textarea__inner::placeholder {
+  color: #9ca69f !important;
+}
+
 .el-table,
 .el-table__inner-wrapper,
 .el-table tr,
@@ -268,349 +312,267 @@ p {
 
 .el-table th {
   background: var(--table-header-bg) !important;
-  font-weight: 600;
   color: var(--text-secondary) !important;
+  font-weight: 600;
 }
 
+.el-table td,
+.el-table th.is-leaf,
 .el-table--border,
 .el-table--border::before,
-.el-table--border::after,
-.el-table td,
-.el-table th.is-leaf {
+.el-table--border::after {
   border-color: var(--table-border) !important;
 }
 
 .el-table__body tr:hover > td {
-  background-color: var(--table-row-hover) !important;
+  background: var(--table-row-hover) !important;
 }
 
-.el-table__empty-block {
-  background: transparent !important;
+.el-table::before,
+.el-table__inner-wrapper::before {
+  background: var(--table-border) !important;
 }
+
 .el-table__empty-text {
   color: var(--text-muted) !important;
 }
 
-/* ============================================================
-   Dialogs, Drawers, Popovers
-   ============================================================ */
 .el-dialog,
 .el-drawer,
 .el-popover,
 .el-select-dropdown,
 .el-picker-panel,
-.el-dropdown-menu {
-  background: var(--dialog-bg) !important;
-  border: 1px solid rgba(18, 215, 255, 0.15) !important;
+.el-dropdown-menu,
+.el-message-box {
   color: var(--text-primary) !important;
+  background: var(--dialog-bg) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: var(--shadow-float) !important;
 }
 
 .el-dialog {
-  box-shadow: 0 0 40px rgba(6, 18, 31, 0.6), 0 0 1px rgba(18, 215, 255, 0.2) !important;
+  border-radius: var(--radius-lg) !important;
 }
 
-.el-dialog__header {
-  border-bottom: 1px solid var(--border-color) !important;
-  padding: 16px 20px !important;
-}
-
-.el-dialog__title {
-  color: var(--text-primary) !important;
-  font-weight: 600 !important;
-  font-size: var(--font-size-lg) !important;
-}
-
-.el-dialog__headerbtn .el-dialog__close {
-  color: var(--text-secondary) !important;
-}
-.el-dialog__headerbtn:hover .el-dialog__close {
-  color: var(--accent) !important;
-}
-
-.el-drawer {
-  border-left: 1px solid rgba(18, 215, 255, 0.15) !important;
-}
+.el-dialog__header,
 .el-drawer__header {
-  color: var(--text-primary) !important;
-  border-bottom: 1px solid var(--border-color);
-  margin-bottom: 0;
-}
-.el-drawer__body {
-  color: var(--text-primary) !important;
+  padding: 20px 24px !important;
+  border-bottom: 1px solid var(--border-color) !important;
 }
 
 .el-dialog__title,
+.el-message-box__title,
 .el-dropdown-menu__item,
 .el-select-dropdown__item,
-.el-picker-panel__icon-btn {
+.el-picker-panel__icon-btn,
+.el-drawer__header {
   color: var(--text-primary) !important;
 }
 
-/* ============================================================
-   el-message-box
-   ============================================================ */
-.el-message-box {
-  background: var(--dialog-bg) !important;
-  border: 1px solid rgba(18, 215, 255, 0.15) !important;
-}
-.el-message-box__title {
-  color: var(--text-primary) !important;
-}
-.el-message-box__message {
+.el-message-box__message,
+.el-drawer__body {
   color: var(--text-secondary) !important;
 }
 
-/* ============================================================
-   Tags
-   ============================================================ */
 .el-tag {
   border-radius: 999px;
+  font-weight: 550;
 }
 
 .el-tag--info {
-  background: rgba(120, 166, 201, 0.15) !important;
-  border-color: rgba(120, 166, 201, 0.3) !important;
-  color: #b8d0e4 !important;
-}
-.el-tag--success {
-  background: rgba(45, 211, 111, 0.15) !important;
-  border-color: rgba(45, 211, 111, 0.35) !important;
-  color: #7ef3b7 !important;
-}
-.el-tag--warning {
-  background: rgba(246, 183, 60, 0.15) !important;
-  border-color: rgba(246, 183, 60, 0.35) !important;
-  color: #ffd58f !important;
-}
-.el-tag--danger {
-  background: rgba(255, 93, 115, 0.15) !important;
-  border-color: rgba(255, 93, 115, 0.35) !important;
-  color: #ff8f9f !important;
-}
-.el-tag--primary {
-  background: rgba(18, 215, 255, 0.15) !important;
-  border-color: rgba(18, 215, 255, 0.35) !important;
-  color: #7de8ff !important;
+  color: #59675f !important;
+  background: #f1f4f2 !important;
+  border-color: #dbe2dd !important;
 }
 
-/* ============================================================
-   Tabs
-   ============================================================ */
+.el-tag--success {
+  color: #247a52 !important;
+  background: #eaf4ee !important;
+  border-color: #cbe2d4 !important;
+}
+
+.el-tag--warning {
+  color: #966019 !important;
+  background: #fbf3e5 !important;
+  border-color: #ead6b4 !important;
+}
+
+.el-tag--danger {
+  color: #a64343 !important;
+  background: #fbebeb !important;
+  border-color: #edc9c9 !important;
+}
+
+.el-tag--primary {
+  color: #2e6f81 !important;
+  background: #edf5f7 !important;
+  border-color: #ccdde2 !important;
+}
+
 .el-tabs__item {
   color: var(--text-secondary) !important;
-  transition: color var(--transition-fast);
 }
-.el-tabs__item:hover {
-  color: var(--text-primary) !important;
-}
+
+.el-tabs__item:hover,
 .el-tabs__item.is-active {
   color: var(--accent) !important;
 }
+
 .el-tabs__active-bar {
-  background-color: var(--accent) !important;
+  height: 2px !important;
+  background: var(--accent) !important;
 }
+
 .el-tabs__nav-wrap::after {
-  background-color: var(--border-color) !important;
+  height: 1px !important;
+  background: var(--border-color) !important;
 }
 
-/* ============================================================
-   Switch
-   ============================================================ */
 .el-switch__core {
-  background-color: rgba(120, 166, 201, 0.3) !important;
-  border-color: rgba(120, 166, 201, 0.3) !important;
-}
-.el-switch.is-checked .el-switch__core {
-  background-color: var(--accent) !important;
-  border-color: var(--accent) !important;
-  box-shadow: var(--glow-accent);
-}
-.el-switch__action {
-  background-color: #eaf4ff !important;
-}
-.el-switch__label {
-  color: var(--text-secondary) !important;
-}
-.el-switch__label.is-active {
-  color: var(--accent) !important;
+  background: #c8d0ca !important;
+  border-color: #c8d0ca !important;
 }
 
-/* ============================================================
-   Checkbox & Radio
-   ============================================================ */
+.el-switch.is-checked .el-switch__core {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+  box-shadow: none !important;
+}
+
+.el-switch__label,
 .el-checkbox__label,
 .el-radio__label {
   color: var(--text-secondary) !important;
 }
-.el-checkbox__inner {
-  background: var(--input-bg) !important;
-  border-color: var(--input-border) !important;
-}
-.el-checkbox__input.is-checked .el-checkbox__inner {
-  background-color: var(--accent) !important;
-  border-color: var(--accent) !important;
-  box-shadow: 0 0 6px rgba(18, 215, 255, 0.3);
-}
-.el-radio__inner {
-  background: var(--input-bg) !important;
-  border-color: var(--input-border) !important;
-}
-.el-radio__input.is-checked .el-radio__inner {
-  background-color: var(--accent) !important;
-  border-color: var(--accent) !important;
+
+.el-switch__label.is-active,
+.el-checkbox__input.is-checked + .el-checkbox__label,
+.el-radio__input.is-checked + .el-radio__label {
+  color: var(--accent) !important;
 }
 
-/* ============================================================
-   Radio Button
-   ============================================================ */
-.el-radio-button__inner {
-  background: rgba(10, 25, 38, 0.6) !important;
-  border-color: var(--border-color) !important;
-  color: var(--text-secondary) !important;
+.el-checkbox__inner,
+.el-radio__inner {
+  background: #ffffff !important;
+  border-color: var(--input-border) !important;
+}
+
+.el-checkbox__input.is-checked .el-checkbox__inner,
+.el-radio__input.is-checked .el-radio__inner {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
   box-shadow: none !important;
 }
+
+.el-radio-button__inner {
+  color: var(--text-secondary) !important;
+  background: #ffffff !important;
+  border-color: var(--border-color) !important;
+  box-shadow: none !important;
+}
+
 .el-radio-button__original-radio:checked + .el-radio-button__inner {
-  background: rgba(18, 215, 255, 0.15) !important;
-  border-color: rgba(18, 215, 255, 0.5) !important;
   color: var(--accent) !important;
-  box-shadow: 0 0 8px rgba(18, 215, 255, 0.2) !important;
+  background: var(--accent-soft) !important;
+  border-color: #a9cbb9 !important;
+  box-shadow: none !important;
 }
 
-/* ============================================================
-   Progress
-   ============================================================ */
 .el-progress-bar__outer {
-  background-color: rgba(120, 166, 201, 0.15) !important;
-}
-.el-progress-bar__inner {
-  box-shadow: 0 0 8px rgba(18, 215, 255, 0.25);
+  background: #edf1ee !important;
 }
 
-/* ============================================================
-   Alert
-   ============================================================ */
+.el-progress-bar__inner {
+  box-shadow: none !important;
+}
+
+.el-alert {
+  border-radius: 10px !important;
+}
+
 .el-alert--info {
-  background: rgba(18, 215, 255, 0.08) !important;
-  border: 1px solid rgba(18, 215, 255, 0.2) !important;
+  background: var(--accent-blue-soft) !important;
+  border: 1px solid #d3e3e7 !important;
 }
-.el-alert--info .el-alert__title { color: #a0e4ff !important; }
+
 .el-alert--warning {
-  background: rgba(246, 183, 60, 0.08) !important;
-  border: 1px solid rgba(246, 183, 60, 0.2) !important;
+  background: var(--warning-soft) !important;
+  border: 1px solid #ead6b4 !important;
 }
-.el-alert--warning .el-alert__title { color: #ffd58f !important; }
+
 .el-alert--success {
-  background: rgba(45, 211, 111, 0.08) !important;
-  border: 1px solid rgba(45, 211, 111, 0.2) !important;
+  background: var(--accent-soft) !important;
+  border: 1px solid #cbe2d4 !important;
 }
-.el-alert--success .el-alert__title { color: #7ef3b7 !important; }
+
 .el-alert--error {
-  background: rgba(255, 93, 115, 0.08) !important;
-  border: 1px solid rgba(255, 93, 115, 0.2) !important;
+  background: var(--danger-soft) !important;
+  border: 1px solid #edc9c9 !important;
 }
-.el-alert--error .el-alert__title { color: #ff8f9f !important; }
+
+.el-alert__title,
 .el-alert__description {
   color: var(--text-secondary) !important;
 }
 
-/* ============================================================
-   Descriptions
-   ============================================================ */
-.el-descriptions__body {
-  background: transparent !important;
-  color: var(--text-primary) !important;
-}
-.el-descriptions__label {
-  color: var(--text-secondary) !important;
-  background: rgba(10, 25, 38, 0.4) !important;
-}
+.el-descriptions__body,
 .el-descriptions__content {
   color: var(--text-primary) !important;
-  background: transparent !important;
+  background: #ffffff !important;
 }
+
+.el-descriptions__label {
+  color: var(--text-secondary) !important;
+  background: #f7f9f7 !important;
+}
+
 .el-descriptions__cell {
   border-color: var(--table-border) !important;
 }
 
-/* ============================================================
-   Input Number
-   ============================================================ */
-.el-input-number .el-input__wrapper {
-  background: var(--input-bg) !important;
-  border: 1px solid var(--input-border) !important;
-  box-shadow: none !important;
-}
 .el-input-number .el-input-number__decrease,
 .el-input-number .el-input-number__increase {
-  background: rgba(10, 25, 38, 0.6) !important;
+  color: var(--text-secondary) !important;
+  background: #f7f9f7 !important;
   border-color: var(--input-border) !important;
-  color: var(--text-secondary) !important;
-}
-.el-input-number .el-input-number__decrease:hover,
-.el-input-number .el-input-number__increase:hover {
-  color: var(--accent) !important;
 }
 
-/* ============================================================
-   Tree
-   ============================================================ */
 .el-tree {
-  background: transparent !important;
   color: var(--text-secondary) !important;
-}
-.el-tree-node__content:hover {
-  background: rgba(18, 215, 255, 0.08) !important;
-}
-.el-tree-node.is-current > .el-tree-node__content {
-  background: rgba(18, 215, 255, 0.12) !important;
-  color: var(--accent) !important;
-}
-.el-tree-node__expand-icon {
-  color: var(--text-muted) !important;
+  background: transparent !important;
 }
 
-/* ============================================================
-   Loading
-   ============================================================ */
-.el-loading-mask {
-  background-color: rgba(6, 18, 31, 0.75) !important;
+.el-tree-node__content:hover,
+.el-tree-node.is-current > .el-tree-node__content {
+  background: var(--accent-soft) !important;
 }
+
+.el-tree-node.is-current > .el-tree-node__content {
+  color: var(--accent) !important;
+}
+
+.el-loading-mask {
+  background: rgba(250, 252, 250, 0.82) !important;
+}
+
 .el-loading-spinner .circular .path {
   stroke: var(--accent) !important;
 }
+
 .el-loading-spinner .el-loading-text {
   color: var(--text-secondary) !important;
 }
 
-/* ============================================================
-   Form Controls — text visibility
-   ============================================================ */
-.el-select-dropdown__item,
-.el-date-editor .el-input__inner,
-.el-date-editor .el-range-input,
-.el-date-picker input,
-.el-select input {
-  color: var(--text-primary) !important;
+.el-pagination .el-pager li,
+.el-pagination button {
+  color: var(--text-secondary) !important;
+  background: transparent !important;
 }
 
-/* ============================================================
-   Pagination
-   ============================================================ */
-.el-pagination .el-pager li {
-  background: transparent !important;
-  color: var(--text-secondary) !important;
-}
 .el-pagination .el-pager li.is-active {
   color: var(--accent) !important;
 }
-.el-pagination button {
-  background: transparent !important;
-  color: var(--text-secondary) !important;
-}
 
-/* ============================================================
-   Legacy cleanup — hide old gradient backgrounds
-   ============================================================ */
 .gradient-background,
 .background-container,
 .background-animation,
@@ -625,23 +587,37 @@ p {
 .autopredict-container,
 .power-predict-container,
 .farm-management,
-.home-container {
+.home-container,
+.operations-center,
+.alarm-center,
+.database-governance,
+.data-quality-container,
+.system-settings,
+.audit-log-container,
+.data-population {
   background: transparent !important;
 }
 
-/* ============================================================
-   Empty State
-   ============================================================ */
 .empty-state {
-  text-align: center;
+  padding: 32px 20px;
   color: var(--text-muted);
-  padding: 24px 16px;
+  text-align: center;
   font-size: var(--font-size-sm);
 }
 
-/* ============================================================
-   Responsive
-   ============================================================ */
 @media (max-width: 768px) {
-  .page-shell { padding: 12px; }
+  .page-shell {
+    padding: 18px 14px 28px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

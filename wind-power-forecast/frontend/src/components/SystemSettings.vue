@@ -316,8 +316,8 @@ export default {
 }
 
 .card-shell {
-  background: rgba(6, 21, 34, 0.86);
-  border: 1px solid rgba(130, 178, 212, 0.2);
+  background: var(--surface);
+  border: 1px solid var(--border-color);
 }
 
 .retention-card {

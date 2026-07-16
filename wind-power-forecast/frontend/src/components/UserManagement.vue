@@ -573,8 +573,8 @@ export default {
 }
 
 .card-shell {
-  background: rgba(6, 21, 34, 0.86);
-  border: 1px solid rgba(130, 178, 212, 0.2);
+  background: var(--surface);
+  border: 1px solid var(--border-color);
 }
 
 .toolbar {
@@ -599,9 +599,9 @@ export default {
 }
 
 .data-table :deep(.el-table__header th) {
-  color: #d8e7f5;
-  background: linear-gradient(180deg, rgba(16, 43, 66, 0.95), rgba(10, 31, 50, 0.95)) !important;
-  border-bottom: 1px solid rgba(96, 154, 198, 0.45);
+  color: var(--text-secondary);
+  background: var(--table-header-bg) !important;
+  border-bottom: 1px solid var(--table-border);
 }
 
 .pager {

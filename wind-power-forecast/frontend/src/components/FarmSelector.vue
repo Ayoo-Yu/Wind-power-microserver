@@ -121,10 +121,10 @@ export default {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
-  background: rgba(18, 215, 255, 0.06);
-  border: 1px solid rgba(18, 215, 255, 0.2);
-  border-radius: 20px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
   cursor: pointer;
   transition: all var(--transition-normal);
   color: var(--text-primary);
@@ -133,9 +133,8 @@ export default {
 }
 
 .farm-selector-trigger:hover {
-  background: rgba(18, 215, 255, 0.12);
-  border-color: rgba(18, 215, 255, 0.4);
-  box-shadow: 0 0 8px rgba(18, 215, 255, 0.15);
+  background: var(--surface-soft);
+  border-color: rgba(36, 122, 82, 0.4);
 }
 
 .current-farm {
@@ -160,7 +159,7 @@ export default {
 }
 
 .farm-item-icon {
-  color: var(--accent);
+  color: var(--primary);
   font-size: 16px;
   flex-shrink: 0;
 }
@@ -183,7 +182,7 @@ export default {
 }
 
 .check-icon {
-  color: var(--accent);
+  color: var(--primary);
   font-size: 16px;
 }
 
@@ -191,25 +190,25 @@ export default {
 :deep(.el-dropdown-menu__item) {
   color: var(--text-primary) !important;
   padding: 8px 16px !important;
-  background: rgba(16, 38, 58, 0.95) !important;
+  background: var(--surface) !important;
 }
 
 :deep(.el-dropdown-menu__item:hover) {
-  background: rgba(16, 54, 84, 0.45) !important;
+  background: var(--surface-soft) !important;
   color: var(--text-primary) !important;
 }
 
 :deep(.el-dropdown-menu__item.is-active) {
-  background: rgba(18, 215, 255, 0.12) !important;
-  color: #2dd36f !important;
+  background: var(--primary-soft) !important;
+  color: var(--primary) !important;
 }
 
 :deep(.el-dropdown-menu__item.is-active .farm-name) {
-  color: #2dd36f !important;
+  color: var(--primary) !important;
 }
 
 :deep(.el-dropdown-menu__item.is-active .farm-code) {
-  color: #2dd36f !important;
+  color: var(--primary) !important;
 }
 
 /* 响应式设计 */

@@ -199,14 +199,14 @@ export default {
 
 <style scoped>
 .metrics-card {
-  background: rgba(7, 24, 39, 0.58);
-  border: 1px solid rgba(136, 186, 217, 0.2);
+  background: var(--surface);
+  border: 1px solid var(--border-color);
   padding: 20px;
   max-height: 300px;
   overflow-y: auto;
 }
 .metrics-content {
-  background: rgba(16, 38, 58, 0.8);
+  background: var(--surface-soft);
   color: var(--text-primary);
   padding: 10px;
   height: 200px;

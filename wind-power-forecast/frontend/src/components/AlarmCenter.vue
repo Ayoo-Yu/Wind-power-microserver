@@ -602,7 +602,7 @@ export default {
 <style scoped>
 .alarm-center {
   min-height: 100%;
-  padding: 20px;
+  padding: 28px 32px 40px;
 }
 
 .page-header {
@@ -624,8 +624,8 @@ export default {
 }
 
 .card-shell {
-  background: rgba(6, 21, 34, 0.86);
-  border: 1px solid rgba(130, 178, 212, 0.2);
+  background: var(--surface);
+  border: 1px solid var(--border-color);
 }
 
 .toolbar {
@@ -652,40 +652,38 @@ export default {
 }
 
 .stat {
+  min-height: 96px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   border-radius: 12px;
-  padding: 14px;
-  color: #fff;
+  padding: 16px;
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--border-color);
   position: relative;
   overflow: hidden;
-}
-.stat::after {
-  content: '';
-  position: absolute;
-  top: -50%;
-  right: -30%;
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.06);
 }
 
 .stat .label {
   font-size: 13px;
-  opacity: 0.9;
+  color: var(--text-muted);
 }
 
 .stat .value {
   font-size: 30px;
   font-weight: 700;
   margin-top: 4px;
-  position: relative;
-  z-index: 1;
 }
 
-.danger { background: linear-gradient(135deg, #8b2236, #d85162); box-shadow: var(--glow-danger); }
-.warning { background: linear-gradient(135deg, #8a5a14, #d89d2b); box-shadow: var(--glow-warning); }
-.info { background: linear-gradient(135deg, #1a4a6b, #2c86b8); box-shadow: 0 0 12px rgba(44, 134, 184, 0.3); }
-.neutral { background: linear-gradient(135deg, #2e3d4e, #617691); }
+.danger { border-top: 3px solid var(--danger); }
+.warning { border-top: 3px solid var(--warning); }
+.info { border-top: 3px solid var(--accent-blue); }
+.neutral { border-top: 3px solid #64736a; }
+.danger .value { color: var(--danger); }
+.warning .value { color: var(--warning); }
+.info .value { color: var(--accent-blue); }
+.neutral .value { color: #64736a; }
 
 .notification-panel {
   margin-top: 18px;
@@ -698,7 +696,7 @@ export default {
 }
 
 .alerts-table :deep(.el-table__cell.el-table-fixed-column--right) {
-  background: #0b2234 !important;
+  background: var(--surface) !important;
 }
 
 .alarm-message {

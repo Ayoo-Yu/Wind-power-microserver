@@ -36,6 +36,9 @@ function render() {
       grid: { top: 16, right: 36, bottom: 14, left: 100 },
       tooltip: {
         trigger: 'axis',
+        backgroundColor: '#ffffff',
+        borderColor: '#dfe5e0',
+        textStyle: { color: '#17211b' },
         formatter: (params) => {
           if (!params?.length) return ''
           const p = params[0]
@@ -44,26 +47,26 @@ function render() {
       },
       xAxis: {
         type: 'value',
-        splitLine: { lineStyle: { color: 'rgba(159,182,204,.12)', type: 'dashed' } },
-        axisLabel: { color: '#8ba4b8', fontSize: 11 }
+        splitLine: { lineStyle: { color: '#e8ece9', type: 'dashed' } },
+        axisLabel: { color: '#768078', fontSize: 11 }
       },
       yAxis: {
         type: 'category',
         data: names,
         axisLabel: {
-          color: '#d6ebff',
+          color: '#3e4941',
           formatter: (value, index) => {
             if (index === 0) return `{top|TOP} ${value}`
             return value
           },
           rich: {
             top: {
-              color: '#f7c850',
+              color: '#b7791f',
               fontWeight: 700,
               fontSize: 9,
               padding: [0, 3, 0, 3],
               borderRadius: 3,
-              backgroundColor: 'rgba(247, 200, 80, 0.12)'
+              backgroundColor: 'rgba(183, 121, 31, 0.10)'
             }
           }
         }
@@ -76,18 +79,13 @@ function render() {
           label: {
             show: true,
             position: 'right',
-            color: '#d9f2ff',
+            color: '#3e4941',
             formatter: (p) => `${Number(p.value).toFixed(1)}`
           },
           itemStyle: {
             borderRadius: [0, 6, 6, 0],
-            color: (p) => {
-              const ratio = names.length > 1 ? p.dataIndex / (names.length - 1) : 0
-              return new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0, color: '#0ea5e9' },
-                { offset: 1, color: `rgba(14, 165, 233, ${0.55 + ratio * 0.45})` }
-              ])
-            }
+            color: '#397b91',
+            opacity: 0.84
           }
         }
       ]

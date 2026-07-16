@@ -69,20 +69,20 @@ function statusSymbol(status) {
 
 .status-matrix th,
 .status-matrix td {
-  border: 1px solid rgba(136, 186, 217, 0.12);
+  border: 1px solid var(--border-light);
   padding: 8px 6px;
   text-align: center;
 }
 
 .status-matrix th {
   font-size: 12px;
-  color: #9fc4df;
-  background: rgba(18, 215, 255, 0.06);
-  border-bottom: 1px solid rgba(18, 215, 255, 0.12);
+  color: var(--text-secondary);
+  background: var(--surface-soft);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .farm-name {
-  color: #d8ebff;
+  color: var(--text-primary);
   font-size: 12px;
   text-align: left !important;
   padding-left: 8px !important;
@@ -102,8 +102,7 @@ function statusSymbol(status) {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #2dd36f;
-  box-shadow: 0 0 6px rgba(45, 211, 111, 0.45);
+  background: var(--success);
 }
 
 .status-chip {
@@ -118,23 +117,22 @@ function statusSymbol(status) {
 }
 
 .status-warn {
-  background: rgba(246, 183, 60, 0.18);
-  color: #f6b73c;
+  background: var(--warning-soft);
+  color: var(--warning);
 }
 
 .status-error {
-  background: rgba(255, 93, 115, 0.22);
-  color: #ff5d73;
-  animation: blink 1.2s ease-in-out infinite;
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .legend {
   display: flex;
   gap: 14px;
   font-size: 11px;
-  color: #7ca0b8;
+  color: var(--text-muted);
   padding-top: 6px;
-  border-top: 1px solid rgba(136, 186, 217, 0.08);
+  border-top: 1px solid var(--border-light);
   margin-top: 4px;
 }
 
@@ -150,21 +148,15 @@ function statusSymbol(status) {
 .dot.ok {
   width: 8px;
   height: 8px;
-  background: #2dd36f;
-  box-shadow: 0 0 4px rgba(45, 211, 111, 0.4);
+  background: var(--success);
 }
 
 .dot.warn {
-  color: #f6b73c;
+  color: var(--warning);
 }
 
 .dot.error {
-  color: #ff5d73;
-}
-
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.45; }
+  color: var(--danger);
 }
 
 @media (max-width: 860px) {

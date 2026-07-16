@@ -2952,11 +2952,10 @@ export default {
 
 /* 信息卡片 */
 .info-card {
-  background: rgba(7, 24, 39, 0.58);
-  backdrop-filter: blur(10px);
-  border-radius: 15px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  box-shadow: none;
 }
 
 .info-card :deep(.el-card__header) {
@@ -3003,7 +3002,7 @@ export default {
 .query-form {
   margin-bottom: 20px;
   padding: 20px;
-  background: rgba(10, 25, 38, 0.5);
+  background: var(--surface-soft);
   border-radius: 8px;
   border: 1px solid var(--border-color);
 }
@@ -3018,14 +3017,13 @@ export default {
 }
 
 .info-card :deep(.el-table__body tr:hover > td) {
-  background-color: rgba(16, 54, 84, 0.45) !important;
+  background-color: var(--table-row-hover) !important;
 }
 
 /* 对话框样式 */
 :deep(.el-dialog) {
-  background: rgba(7, 24, 39, 0.58);
-  backdrop-filter: blur(10px);
-  border-radius: 15px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
 }
 
 :deep(.el-dialog__header) {
@@ -3326,9 +3324,9 @@ export default {
   flex-direction: column;
   gap: 6px;
   padding: 12px;
-  border: 1px solid rgba(18, 215, 255, 0.15);
+  border: 1px solid var(--border-light);
   border-radius: 8px;
-  background: rgba(10, 25, 38, 0.45);
+  background: var(--surface-soft);
   color: var(--text-secondary);
 }
 
@@ -3338,11 +3336,11 @@ export default {
 }
 
 .outbox-metric .metric-warning {
-  color: #f6b73c;
+  color: var(--warning);
 }
 
 .outbox-metric .metric-danger {
-  color: #ff5d73;
+  color: var(--danger);
 }
 
 .dead-letter-table {
@@ -3600,8 +3598,8 @@ export default {
 .quality-gauge-item {
   padding: 12px 8px;
   border-radius: 12px;
-  border: 1px solid rgba(146, 186, 220, 0.2);
-  background: rgba(8, 24, 38, 0.6);
+  border: 1px solid var(--border-light);
+  background: var(--surface-soft);
   text-align: center;
 }
 
@@ -3619,8 +3617,7 @@ export default {
 }
 
 .stat-box:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  border-color: var(--border-strong);
 }
 
 .stat-label {
@@ -3636,7 +3633,7 @@ export default {
 }
 
 .rate-high {
-  color: #67C23A; /* Success */
+  color: var(--success);
 }
 
 .rate-mid {
@@ -3749,8 +3746,8 @@ export default {
 }
 
 .report-management .stat-box {
-  background: rgba(8, 24, 38, 0.75);
-  border: 1px solid rgba(146, 186, 220, 0.2);
+  background: var(--surface-soft);
+  border: 1px solid var(--border-light);
 }
 
 .report-management .stat-label {
@@ -3762,8 +3759,8 @@ export default {
 }
 
 .report-management .log-item {
-  background: rgba(8, 24, 38, 0.7);
-  border-color: rgba(146, 186, 220, 0.2);
+  background: var(--surface-soft);
+  border-color: var(--border-light);
 }
 
 .report-management .log-time,

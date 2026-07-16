@@ -1349,8 +1349,8 @@ const handleLogTypeChange = () => {
 <style scoped>
 /* Styles remain largely the same, but some related to removed dialogs might be implicitly unused */
 .autopredict-container {
-  min-height: 100vh;
-  padding: 20px 24px 30px;
+  min-height: 100%;
+  padding: 28px 32px 40px;
   position: relative;
   z-index: 1;
 }
@@ -1359,18 +1359,6 @@ const handleLogTypeChange = () => {
   min-height: 100vh;
   background: transparent !important;
   position: relative;
-}
-
-@keyframes gradient {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
 }
 
 .page-title {
@@ -1391,26 +1379,26 @@ const handleLogTypeChange = () => {
 
 .fleet-overview {
   margin: 0 0 20px;
-  padding: 14px 16px;
-  background: rgba(10, 31, 49, 0.72);
-  border-radius: 12px;
-  border: 1px solid rgba(128, 182, 220, 0.2);
+  padding: 18px 20px;
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
 }
 
 .fleet-overview :deep(.el-table__cell.el-table-fixed-column--right) {
-  background: #0b2234 !important;
+  background: var(--surface) !important;
 }
 
 .fleet-title {
   font-size: 15px;
   font-weight: 600;
   margin-bottom: 8px;
-  color: #d6ebff;
+  color: var(--text-primary);
 }
 
 .degrade-strategy-tip {
   font-size: 12px;
-  color: #ffd58f;
+  color: var(--warning);
   margin-bottom: 10px;
 }
 
@@ -1423,9 +1411,9 @@ const handleLogTypeChange = () => {
 }
 
 .minor-action-btn {
-  background: rgba(255, 255, 255, 0.08) !important;
-  border-color: rgba(132, 182, 216, 0.38) !important;
-  color: #d0e8ff !important;
+  background: var(--surface) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-secondary) !important;
 }
 
 .fleet-farm-select {
@@ -1435,13 +1423,13 @@ const handleLogTypeChange = () => {
 
 .fleet-code {
   margin-left: 6px;
-  color: #8db7d6;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
 .fleet-name {
   font-size: 13px;
-  color: #d6ebff;
+  color: var(--text-primary);
   margin-bottom: 0;
 }
 
@@ -1452,18 +1440,18 @@ const handleLogTypeChange = () => {
 }
 
 .fleet-filter-row .el-button--primary.is-plain {
-  color: #4ac6ff !important;
-  border-color: rgba(74, 198, 255, 0.55) !important;
+  color: var(--primary) !important;
+  border-color: rgba(36, 122, 82, 0.34) !important;
 }
 
 .fleet-filter-row .el-button--warning.is-plain {
-  color: #f6b73c !important;
-  border-color: rgba(246, 183, 60, 0.55) !important;
+  color: var(--warning) !important;
+  border-color: rgba(183, 121, 31, 0.34) !important;
 }
 
 .fleet-filter-row .el-button--danger.is-plain {
-  color: #ff7b92 !important;
-  border-color: rgba(255, 123, 146, 0.55) !important;
+  color: var(--danger) !important;
+  border-color: rgba(196, 82, 82, 0.34) !important;
 }
 
 .biz-status {
@@ -1477,35 +1465,35 @@ const handleLogTypeChange = () => {
 }
 
 .biz-ready {
-  color: #7ef3b7;
-  border-color: rgba(126, 243, 183, 0.35);
-  background: rgba(26, 79, 59, 0.35);
+  color: var(--success);
+  border-color: #cbe2d4;
+  background: var(--accent-soft);
 }
 
 .biz-running {
-  color: #f7db6d;
-  border-color: rgba(247, 219, 109, 0.38);
-  background: rgba(90, 79, 20, 0.32);
+  color: var(--warning);
+  border-color: #ead6b4;
+  background: var(--warning-soft);
 }
 
 .biz-delayed,
 .biz-degraded {
-  color: #ffbe73;
-  border-color: rgba(255, 190, 115, 0.4);
-  background: rgba(104, 63, 19, 0.34);
+  color: var(--warning);
+  border-color: #ead6b4;
+  background: var(--warning-soft);
 }
 
 .biz-failed {
-  color: #ff8f9f;
-  border-color: rgba(255, 143, 159, 0.45);
-  background: rgba(88, 20, 33, 0.38);
+  color: var(--danger);
+  border-color: #edc9c9;
+  background: var(--danger-soft);
 }
 
 .biz-disabled,
 .biz-unknown {
-  color: #b7c4d0;
-  border-color: rgba(183, 196, 208, 0.35);
-  background: rgba(59, 66, 72, 0.38);
+  color: var(--text-muted);
+  border-color: var(--border-color);
+  background: var(--bg-muted);
 }
 
 .model-tags {
@@ -1526,14 +1514,14 @@ const handleLogTypeChange = () => {
   cursor: default;
 }
 .model-tag.tag-ok {
-  color: #7ef3b7;
-  background: rgba(26, 79, 59, 0.5);
-  border: 1px solid rgba(126, 243, 183, 0.3);
+  color: var(--success);
+  background: var(--accent-soft);
+  border: 1px solid #cbe2d4;
 }
 .model-tag.tag-missing {
-  color: #ff8f9f;
-  background: rgba(88, 20, 33, 0.45);
-  border: 1px solid rgba(255, 143, 159, 0.35);
+  color: var(--danger);
+  background: var(--danger-soft);
+  border: 1px solid #edc9c9;
 }
 
 .hero-section {
@@ -1609,17 +1597,15 @@ const handleLogTypeChange = () => {
 }
 
 .el-card {
-  background: rgba(7, 24, 39, 0.58);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(136, 186, 217, 0.2);
-  border-radius: 20px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: none;
   padding: 16px;
 }
 
 .el-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  border-color: var(--border-strong);
 }
 
 .prediction-card {
@@ -1628,30 +1614,6 @@ const handleLogTypeChange = () => {
   min-height: 284px;
   position: relative;
   overflow: hidden;
-}
-
-.prediction-card::before {
-  content: '';
-  position: absolute;
-  right: 16px;
-  bottom: 14px;
-  width: 98px;
-  height: 98px;
-  opacity: 0.035;
-  border-radius: 50%;
-  border: 1px solid rgba(146, 204, 238, 0.8);
-}
-
-.card-supershort::before {
-  box-shadow: inset 0 0 0 8px rgba(146, 204, 238, 0.15);
-}
-
-.card-short::before {
-  box-shadow: inset 0 0 0 14px rgba(146, 204, 238, 0.12);
-}
-
-.card-medium::before {
-  box-shadow: inset 0 0 0 22px rgba(146, 204, 238, 0.08);
 }
 
 .card-top {
@@ -1665,15 +1627,14 @@ const handleLogTypeChange = () => {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #dff1ff;
+  color: var(--text-primary);
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 
 .title-icon {
-  color: #53d9ff;
-  filter: drop-shadow(0 0 8px rgba(18, 215, 255, 0.3));
+  color: var(--primary);
 }
 
 .card-status {
@@ -1681,7 +1642,7 @@ const handleLogTypeChange = () => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #9ec4db;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -1692,23 +1653,22 @@ const handleLogTypeChange = () => {
 }
 
 .more-btn {
-  color: #a8c8dd !important;
+  color: var(--text-secondary) !important;
 }
 
 :deep(.predict-more-menu) {
-  background: rgba(10, 32, 50, 0.96) !important;
-  border: 1px solid rgba(123, 178, 213, 0.3) !important;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.34);
-  backdrop-filter: blur(8px);
+  background: var(--surface) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: var(--shadow-float);
 }
 
 :deep(.predict-more-menu .el-dropdown-menu__item) {
-  color: #d8ecff !important;
+  color: var(--text-primary) !important;
 }
 
 :deep(.predict-more-menu .el-dropdown-menu__item:hover) {
-  background: rgba(18, 215, 255, 0.14) !important;
-  color: #ecf8ff !important;
+  background: var(--surface-soft) !important;
+  color: var(--primary) !important;
 }
 
 .metric-list {
@@ -1719,17 +1679,17 @@ const handleLogTypeChange = () => {
 }
 
 .metric-item {
-  border: 1px solid rgba(126, 176, 206, 0.2);
+  border: 1px solid var(--border-light);
   border-radius: 8px;
   padding: 8px;
-  background: rgba(10, 29, 45, 0.52);
+  background: var(--surface-soft);
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
 .metric-item span {
-  color: #89a9c0;
+  color: var(--text-muted);
   font-size: 12px;
   display: inline-flex;
   align-items: center;
@@ -1737,19 +1697,18 @@ const handleLogTypeChange = () => {
 }
 
 .metric-item strong {
-  color: #59e2ff;
+  color: var(--text-primary);
   font-size: 14px;
   font-family: Consolas, Menlo, Monaco, monospace;
-  text-shadow: 0 0 10px rgba(18, 215, 255, 0.2);
 }
 
 .metric-divider {
   margin: 0 5px;
-  color: #8fb0c5;
+  color: var(--text-muted);
 }
 
 .metric-failed {
-  color: #ff8f9f;
+  color: var(--danger);
 }
 
 .metric-failed.clickable {
@@ -1760,42 +1719,41 @@ const handleLogTypeChange = () => {
 .countdown-box {
   margin-top: 10px;
   padding: 10px;
-  border: 1px solid rgba(123, 178, 213, 0.25);
+  border: 1px solid var(--border-light);
   border-radius: 10px;
-  background: rgba(8, 25, 39, 0.55);
+  background: var(--surface-soft);
 }
 
 .countdown-label {
-  color: #9ab8cc;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
 .countdown-value {
-  color: #ffe196;
+  color: var(--warning);
   font-size: 22px;
   font-family: Consolas, Menlo, Monaco, monospace;
   margin: 2px 0 8px;
-  text-shadow: 0 0 12px rgba(255, 225, 150, 0.25);
 }
 
 .countdown-note {
   margin-top: 6px;
-  color: #8eb0c7;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
 .degraded-alert {
   margin-top: 8px;
   font-size: 12px;
-  color: #ffbf72;
+  color: var(--warning);
 }
 
 .trigger-progress {
   margin-top: 10px;
   padding: 10px 12px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--surface-soft);
+  border: 1px solid var(--border-light);
 }
 .trigger-progress-header {
   display: flex;
@@ -1804,11 +1762,11 @@ const handleLogTypeChange = () => {
   font-size: 12px;
 }
 .trigger-progress-farm {
-  color: #409eff;
+  color: var(--accent-blue);
   font-weight: 600;
 }
 .trigger-progress-action {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
 }
 .trigger-progress-status {
   display: flex;
@@ -1816,7 +1774,7 @@ const handleLogTypeChange = () => {
   gap: 4px;
   margin-top: 4px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-muted);
 }
 .trigger-progress-result {
   display: flex;
@@ -1825,16 +1783,16 @@ const handleLogTypeChange = () => {
   font-size: 13px;
 }
 .trigger-success {
-  color: #67c23a;
+  color: var(--success);
 }
 .trigger-failed {
-  color: #f56c6c;
+  color: var(--danger);
 }
 .trigger-timeout {
-  color: #e6a23c;
+  color: var(--warning);
 }
 .trigger-error-msg {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-muted);
   font-size: 11px;
   max-width: 200px;
   overflow: hidden;
@@ -1844,7 +1802,7 @@ const handleLogTypeChange = () => {
 .trigger-detail {
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--border-light);
 }
 .detail-row {
   display: flex;
@@ -1853,17 +1811,17 @@ const handleLogTypeChange = () => {
   line-height: 1.8;
 }
 .detail-row span {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-muted);
 }
 .detail-row strong {
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--text-primary);
   font-variant-numeric: tabular-nums;
 }
 .detail-row .detail-path {
   font-family: monospace;
   font-size: 11px;
   word-break: break-all;
-  color: rgba(100, 200, 255, 0.9);
+  color: var(--accent-blue);
 }
 
 .card-footer {
@@ -1953,7 +1911,7 @@ const handleLogTypeChange = () => {
 .info-content, .logs-content, .error-content, .history-detail-content {
   max-height: 600px;
   overflow-y: auto;
-  background: rgba(8, 24, 38, 0.65);
+  background: var(--surface-soft);
   padding: 24px;
   border-radius: 12px;
   font-family: var(--font-mono);
@@ -2025,7 +1983,7 @@ const handleLogTypeChange = () => {
 
 .logs-filters {
   margin-bottom: 20px;
-  background: rgba(8, 24, 38, 0.5);
+  background: var(--surface-soft);
   padding: 16px;
   border-radius: 8px;
   border: 1px solid var(--border-color);

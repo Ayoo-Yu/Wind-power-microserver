@@ -2,38 +2,39 @@
   <div class="operations-center" v-loading="loading">
     <header class="ops-header">
       <div>
-        <div class="eyebrow"><el-icon><Monitor /></el-icon><span>FIELD OPERATIONS</span></div>
-        <h1>运行控制中心</h1>
-        <p>统一查看实时数据、新能源天气、预测链路和模型版本。</p>
+        <h1>链路运行状态</h1>
+        <p>查看场站实时数据、数值天气预报和预测任务的运行健康度。</p>
       </div>
       <div class="header-actions">
-        <div :class="['overall-pill', overallState]">
-          <span class="state-dot"></span>
-          <strong>{{ overallLabel }}</strong>
-          <span>{{ issueCount }} 项关注</span>
-        </div>
-        <el-button :icon="Refresh" type="primary" :loading="loading" @click="loadOverview">
-          刷新状态
-        </el-button>
+        <el-button :icon="Refresh" :loading="loading" @click="loadOverview">刷新数据</el-button>
       </div>
     </header>
 
-    <section v-if="issues.length" class="issue-strip">
-      <div v-for="issue in issues" :key="`${issue.domain}-${issue.message}`" :class="issue.severity">
-        <el-icon><WarningFilled /></el-icon>
-        <span>{{ issue.message }}</span>
-      </div>
-    </section>
-
-    <section class="signal-grid">
-      <article v-for="signal in signals" :key="signal.key" :class="['signal-card', signal.state]">
-        <div class="signal-top">
-          <span>{{ signal.label }}</span>
-          <el-tag :type="stateTag(signal.state)" effect="dark" round>{{ stateLabel(signal.state) }}</el-tag>
+    <section :class="['status-hero', overallState]">
+      <div class="hero-status">
+        <div class="hero-status-heading">
+          <span class="hero-status-icon">
+            <el-icon><CircleCheckFilled v-if="overallState === 'healthy'" /><WarningFilled v-else /></el-icon>
+          </span>
+          <div>
+            <strong>链路整体{{ overallLabel }}</strong>
+            <p>{{ overallDescription }}</p>
+          </div>
         </div>
-        <strong>{{ signal.value }}</strong>
-        <small>{{ signal.detail }}</small>
-      </article>
+
+        <div class="hero-signal-grid">
+          <article v-for="signal in heroSignals" :key="signal.key" class="hero-signal">
+            <span>{{ signal.label }}</span>
+            <strong>{{ signal.value }}</strong>
+            <small>{{ signal.detail }}</small>
+          </article>
+        </div>
+
+        <div class="hero-actions">
+          <el-button type="primary" @click="goToAlarms">查看异常记录</el-button>
+          <span>系统每 30 秒自动更新</span>
+        </div>
+      </div>
     </section>
 
     <section class="workspace-grid">
@@ -41,7 +42,7 @@
         <template #header>
           <div class="card-title-row">
             <div>
-              <span class="card-title">SCADA 五指标实时链路</span>
+              <span class="card-title">SCADA 五指标实时健康</span>
               <small>每个场站均按统一点表契约检查新鲜度、质量和单位</small>
             </div>
             <span class="mono">{{ overview?.scada?.stale_after_seconds || 0 }} s 阈值</span>
@@ -65,7 +66,10 @@
             </div>
             <div class="metric-grid">
               <div v-for="metric in connection.metrics" :key="metric.metric" :class="['metric-cell', metric.state]">
-                <span>{{ metric.label }}</span>
+                <span>
+                  <el-icon class="metric-label-icon"><component :is="metricIcon(metric.metric)" /></el-icon>
+                  {{ metric.label }}
+                </span>
                 <strong>{{ formatMetric(metric) }}</strong>
                 <small>{{ freshnessText(metric) }}</small>
               </div>
@@ -107,8 +111,45 @@
           </el-table-column>
         </el-table>
       </el-card>
+
+      <el-card class="ops-card event-card" shadow="never">
+        <template #header>
+          <div class="card-title-row">
+            <div>
+              <span class="card-title">异常事件记录</span>
+              <small>集中呈现当前链路异常，便于快速响应与处置</small>
+            </div>
+            <el-button text type="primary" @click="goToAlarms">查看全部</el-button>
+          </div>
+        </template>
+
+        <div v-if="recentIssues.length" class="event-list">
+          <article v-for="issue in recentIssues" :key="`${issue.domain}-${issue.message}`" class="event-item">
+            <span :class="['event-dot', issue.severity]"></span>
+            <div class="event-copy">
+              <strong>{{ issue.message }}</strong>
+              <small>{{ issueDomainLabel(issue.domain) }} · {{ formatDateTime(overview?.generated_at) }}</small>
+            </div>
+            <el-tag size="small" :type="issueTag(issue.severity)">{{ issueStateLabel(issue.severity) }}</el-tag>
+          </article>
+        </div>
+        <div v-else class="event-empty">
+          <strong>当前没有待处理异常</strong>
+          <span>链路状态将在下一次自动刷新后更新</span>
+        </div>
+      </el-card>
     </section>
 
+    <details class="governance-details">
+      <summary>
+        <div>
+          <strong>运行治理详情</strong>
+          <span>预测输入追溯、模型版本和高级治理操作</span>
+        </div>
+        <span class="summary-hint">展开查看</span>
+      </summary>
+
+      <div class="governance-content">
     <section class="detail-grid">
       <el-card class="ops-card" shadow="never">
         <template #header>
@@ -234,6 +275,8 @@
         </el-table-column>
       </el-table>
     </el-card>
+      </div>
+    </details>
 
     <footer class="ops-footer">
       <span>当前场站：{{ currentFarm || '全部场站' }}</span>
@@ -245,8 +288,18 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Monitor, Refresh, WarningFilled } from '@element-plus/icons-vue'
+import {
+  CircleCheck,
+  CircleCheckFilled,
+  Lightning,
+  Odometer,
+  PieChart,
+  Refresh,
+  WarningFilled,
+  WindPower
+} from '@element-plus/icons-vue'
 import {
   approveModelVersion,
   getOperationsOverview,
@@ -258,6 +311,7 @@ import { getStoredUser, hasPermission } from '../utils/permission'
 
 const loading = ref(false)
 const overview = ref(null)
+const router = useRouter()
 const currentFarm = ref(farmService.getCurrentFarm())
 const reportingEnabled = import.meta.env.VITE_REPORTING_ENABLED === 'true'
 let refreshTimer = null
@@ -267,6 +321,7 @@ const allIssues = computed(() => overview.value?.overall?.issues || [])
 const issues = computed(() => allIssues.value.filter(
   issue => reportingEnabled || issue.domain !== 'reporting'
 ))
+const recentIssues = computed(() => issues.value.slice(0, 4))
 const overallState = computed(() => {
   if (!overview.value) return 'unknown'
   if (allIssues.value.length === issues.value.length) {
@@ -277,6 +332,11 @@ const overallState = computed(() => {
   return 'healthy'
 })
 const issueCount = computed(() => issues.value.length)
+const overallDescription = computed(() => ({
+  healthy: 'SCADA、NWP 与预测任务链路均处于可用状态。',
+  degraded: `当前有 ${issueCount.value} 项运行状态需要关注。`,
+  critical: `当前有 ${issueCount.value} 项异常需要尽快处理。`
+})[overallState.value] || '系统正在汇总当前链路状态。')
 const scadaConnections = computed(() => overview.value?.scada?.connections || [])
 const nwpBatches = computed(() => overview.value?.nwp?.latest_batches || [])
 const inputSnapshots = computed(() => overview.value?.prediction?.latest_input_snapshots || [])
@@ -285,9 +345,9 @@ const modelVersions = computed(() => overview.value?.models?.recent_versions || 
 const modelCandidateCount = computed(() => overview.value?.models?.lifecycle_counts?.candidate || 0)
 
 const overallLabel = computed(() => ({
-  healthy: '运行正常',
-  degraded: '运行降级',
-  critical: '需要处理'
+  healthy: '稳定',
+  degraded: '需关注',
+  critical: '异常'
 })[overallState.value] || '状态未知')
 
 const signals = computed(() => {
@@ -340,6 +400,17 @@ const signals = computed(() => {
   return signalItems
 })
 
+const heroSignals = computed(() => {
+  const priority = ['scada', 'prediction', 'storage']
+  return priority
+    .map(key => signals.value.find(signal => signal.key === key))
+    .filter(Boolean)
+})
+
+function goToAlarms() {
+  router.push('/alarm-center')
+}
+
 function normalizeSignalState(state) {
   if (state === 'healthy' || state === 'fresh') return 'healthy'
   if (state === 'missing' || state === 'critical') return 'critical'
@@ -359,12 +430,42 @@ function stateTag(state) {
   return ({ healthy: 'success', degraded: 'warning', critical: 'danger', disabled: 'info' })[normalized] || 'info'
 }
 
+function issueTag(severity) {
+  if (['critical', 'error', 'danger'].includes(severity)) return 'danger'
+  if (severity === 'warning') return 'warning'
+  return 'info'
+}
+
+function issueStateLabel(severity) {
+  return ['critical', 'error', 'danger'].includes(severity) ? '待处置' : '需关注'
+}
+
+function issueDomainLabel(domain) {
+  return ({
+    scada: 'SCADA 实时链路',
+    nwp: 'NWP 数据接入',
+    prediction: '预测任务',
+    storage: '运行磁盘',
+    reporting: '可靠上报'
+  })[domain] || '运行保障'
+}
+
 function workerTag(status) {
   return ['running', 'connected'].includes(status) ? 'success' : (status === 'error' ? 'danger' : 'warning')
 }
 
 function workerLabel(status) {
   return ({ running: '运行中', connected: '已连接', connecting: '连接中', stopped: '已停止', error: '异常' })[status] || status || '未知'
+}
+
+function metricIcon(metric) {
+  return ({
+    actual_power: Lightning,
+    wind_speed: WindPower,
+    theoretical_power: Odometer,
+    available_power: CircleCheck,
+    availability_pct: PieChart
+  })[metric] || Odometer
 }
 
 function formatMetric(metric) {
@@ -540,17 +641,14 @@ onBeforeUnmount(() => {
 <style scoped>
 .operations-center {
   min-height: 100%;
-  padding: 24px;
+  padding: 30px 32px 40px;
   color: var(--text-primary);
-  background:
-    radial-gradient(circle at 12% 0%, rgba(18, 215, 255, 0.08), transparent 30%),
-    linear-gradient(180deg, rgba(5, 18, 31, 0.8), rgba(5, 18, 31, 0.35));
+  background: var(--bg-root);
 }
 
 .ops-header,
 .card-title-row,
 .connection-head,
-.signal-top,
 .ops-footer,
 .header-actions,
 .queue-summary,
@@ -563,13 +661,14 @@ onBeforeUnmount(() => {
 .ops-header {
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 
 .ops-header h1 {
-  margin: 5px 0 4px;
-  font-size: 30px;
-  letter-spacing: 0.02em;
+  margin: 0 0 7px;
+  font-size: 34px;
+  font-weight: 680;
+  letter-spacing: -0.035em;
 }
 
 .ops-header p,
@@ -591,91 +690,152 @@ onBeforeUnmount(() => {
   gap: 12px;
 }
 
-.overall-pill {
-  display: grid;
-  grid-template-columns: auto auto;
-  align-items: center;
-  column-gap: 8px;
-  padding: 8px 14px;
-  border: 1px solid rgba(146, 186, 220, 0.25);
-  border-radius: 12px;
-  background: rgba(10, 28, 44, 0.8);
-}
-
-.overall-pill > span:last-child {
-  grid-column: 2;
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-
-.state-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #7f8d9c;
-}
-
-.overall-pill.healthy .state-dot { background: #2dd36f; box-shadow: 0 0 12px rgba(45, 211, 111, 0.7); }
-.overall-pill.degraded .state-dot { background: #f6b73c; box-shadow: 0 0 12px rgba(246, 183, 60, 0.6); }
-.overall-pill.critical .state-dot { background: #ff5c72; box-shadow: 0 0 12px rgba(255, 92, 114, 0.7); }
-
-.issue-strip {
-  display: grid;
-  gap: 8px;
+.status-hero {
+  min-height: 216px;
   margin-bottom: 16px;
+  overflow: hidden;
+  background-color: #ffffff;
+  background-image: url('@/assets/wind-farm-hero.webp');
+  background-repeat: no-repeat;
+  background-position: center right;
+  background-size: cover;
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
 }
 
-.issue-strip > div {
+.hero-status {
+  width: min(720px, 64%);
+  min-height: 216px;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 34px 20px;
+}
+
+.hero-status-heading {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 10px 13px;
-  border-radius: 8px;
+  gap: 14px;
+}
+
+.hero-status-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 42px;
+  color: #ffffff;
+  background: var(--accent);
+  border-radius: 50%;
+  font-size: 24px;
+}
+
+.status-hero.degraded .hero-status-icon {
+  background: var(--warning);
+}
+
+.status-hero.critical .hero-status-icon {
+  background: var(--danger);
+}
+
+.hero-status-heading strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+  font-size: 24px;
+  font-weight: 670;
+}
+
+.hero-status-heading p {
+  margin: 0;
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
-.issue-strip .warning { color: #ffd47a; background: rgba(246, 183, 60, 0.11); border: 1px solid rgba(246, 183, 60, 0.22); }
-.issue-strip .critical { color: #ff9cab; background: rgba(255, 92, 114, 0.1); border: 1px solid rgba(255, 92, 114, 0.22); }
-
-.signal-grid {
+.hero-signal-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 20px;
 }
 
-.signal-card {
-  min-height: 112px;
-  padding: 16px;
-  border: 1px solid rgba(146, 186, 220, 0.16);
-  border-radius: 12px;
-  background: linear-gradient(145deg, rgba(15, 42, 64, 0.92), rgba(9, 27, 43, 0.78));
-  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.16);
+.hero-signal {
+  min-width: 0;
+  padding: 0 22px;
+  border-left: 1px solid rgba(69, 89, 76, 0.14);
 }
 
-.signal-card.critical { border-color: rgba(255, 92, 114, 0.38); }
-.signal-card.degraded { border-color: rgba(246, 183, 60, 0.35); }
-.signal-top { justify-content: space-between; gap: 8px; color: var(--text-secondary); font-size: 13px; }
-.signal-card > strong { display: block; margin: 15px 0 5px; font-size: 25px; }
-.signal-card > small { color: var(--text-secondary); }
+.hero-signal:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.hero-signal > span,
+.hero-signal > small {
+  display: block;
+  overflow: hidden;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.hero-signal > span {
+  font-size: 12px;
+}
+
+.hero-signal > strong {
+  display: block;
+  margin: 7px 0 4px;
+  color: var(--accent);
+  font-size: 24px;
+  font-weight: 680;
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-signal > small {
+  font-size: 11px;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: auto;
+  padding-top: 16px;
+}
+
+.hero-actions > span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
 
 .workspace-grid,
 .detail-grid {
   display: grid;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 20px;
+  margin-bottom: 20px;
 }
 
-.workspace-grid { grid-template-columns: minmax(0, 1.55fr) minmax(360px, 0.8fr); }
+.workspace-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
+.scada-card {
+  grid-column: 1 / -1;
+}
+
+:deep(.scada-card .el-card__header) {
+  padding: 14px 18px !important;
+}
+
+:deep(.scada-card .el-card__body) {
+  padding: 14px 18px !important;
+}
+
 .ops-card {
-  border: 1px solid rgba(146, 186, 220, 0.16);
-  background: rgba(10, 31, 49, 0.88);
+  border: 1px solid var(--border-color);
+  background: #ffffff;
 }
 
 :deep(.ops-card .el-card__header) {
-  border-bottom: 1px solid rgba(146, 186, 220, 0.13);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .card-title-row { justify-content: space-between; gap: 18px; }
@@ -684,48 +844,186 @@ onBeforeUnmount(() => {
 .card-title-row > span { color: var(--text-secondary); font-size: 12px; }
 
 .connection-list { display: grid; gap: 12px; }
-.connection-block { padding: 13px; border: 1px solid rgba(146, 186, 220, 0.13); border-radius: 10px; background: rgba(5, 19, 31, 0.42); }
-.connection-head { justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.connection-block { padding: 2px 0 0; background: transparent; }
+.connection-head { justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .connection-head > div { display: flex; align-items: center; gap: 8px; }
 .connection-head span { color: var(--text-secondary); font-size: 12px; }
 .catalog-version { opacity: 0.8; }
 
-.metric-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
-.metric-cell { padding: 10px; border-radius: 8px; border: 1px solid rgba(146, 186, 220, 0.12); background: rgba(9, 31, 48, 0.7); }
-.metric-cell > span, .metric-cell > small { display: block; color: var(--text-secondary); font-size: 11px; }
-.metric-cell > strong { display: block; margin: 7px 0 5px; font-size: 14px; white-space: nowrap; }
-.metric-cell.fresh { border-color: rgba(45, 211, 111, 0.25); }
-.metric-cell.stale, .metric-cell.degraded { border-color: rgba(246, 183, 60, 0.32); }
-.metric-cell.missing { border-color: rgba(255, 92, 114, 0.36); }
+.event-list {
+  display: grid;
+}
+
+.event-item {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.event-item:last-child {
+  border-bottom: 0;
+}
+
+.event-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.event-dot.warning { background: var(--warning); }
+.event-dot.critical,
+.event-dot.error,
+.event-dot.danger { background: var(--danger); }
+
+.event-copy {
+  min-width: 0;
+}
+
+.event-copy strong,
+.event-copy small {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.event-copy strong {
+  margin-bottom: 5px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.event-copy small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.event-empty {
+  min-height: 130px;
+  display: grid;
+  place-content: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.event-empty strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.event-empty span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.metric-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.metric-cell { min-width: 0; padding: 8px 14px; border-left: 1px solid var(--border-color); background: transparent; }
+.metric-cell:first-child { padding-left: 0; border-left: 0; }
+.metric-cell > span,
+.metric-cell > small { overflow: hidden; color: var(--text-secondary); font-size: 12px; white-space: nowrap; text-overflow: ellipsis; }
+.metric-cell > span { display: flex; align-items: center; gap: 5px; }
+.metric-cell > small { display: block; }
+.metric-label-icon { flex: 0 0 auto; color: var(--primary); font-size: 13px; }
+.metric-cell > strong { display: block; margin: 5px 0 3px; color: var(--text-primary); font-size: 18px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.metric-cell.stale > strong, .metric-cell.degraded > strong { color: var(--warning); }
+.metric-cell.missing > strong { color: var(--danger); }
 
 .queue-summary,
 .model-summary { gap: 14px; color: var(--text-secondary); font-size: 12px; }
 .queue-summary strong,
 .model-summary strong { color: var(--text-primary); font-size: 16px; }
-.danger-text { color: #ff7385 !important; }
+.danger-text { color: var(--danger) !important; }
 .table-actions { gap: 3px; }
 
-.mono { font-family: Consolas, 'Roboto Mono', monospace; }
-.digest { color: #89dff5; font-size: 12px; }
+.mono { font-family: var(--font-mono); }
+.digest { color: var(--accent-blue); font-size: 12px; }
+
+.governance-details {
+  margin-top: 4px;
+  border-top: 1px solid var(--border-color);
+}
+
+.governance-details > summary {
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.governance-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.governance-details > summary > div {
+  display: grid;
+  gap: 5px;
+}
+
+.governance-details > summary strong {
+  color: var(--text-primary);
+  font-size: 16px;
+}
+
+.governance-details > summary span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.summary-hint {
+  color: var(--accent) !important;
+}
+
+.governance-details[open] .summary-hint {
+  visibility: hidden;
+}
+
+.governance-content {
+  padding: 4px 0 8px;
+}
 
 .ops-footer {
   justify-content: flex-end;
   gap: 20px;
-  padding: 14px 2px 0;
+  padding: 20px 2px 0;
   color: var(--text-secondary);
   font-size: 12px;
 }
 
 @media (max-width: 1380px) {
-  .signal-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .workspace-grid { grid-template-columns: 1fr; }
+  .hero-status { width: min(760px, 72%); }
 }
 
 @media (max-width: 980px) {
   .operations-center { padding: 16px; }
   .ops-header { align-items: flex-start; flex-direction: column; }
-  .signal-grid, .detail-grid { grid-template-columns: 1fr; }
+  .detail-grid { grid-template-columns: 1fr; }
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .metric-cell,
+  .metric-cell:first-child { padding: 12px; border: 0; border-bottom: 1px solid var(--border-color); }
   .header-actions { width: 100%; justify-content: space-between; }
+  .status-hero { background-position: 58% center; }
+  .hero-status { width: 100%; background: rgba(255, 255, 255, 0.86); }
+}
+
+@media (max-width: 640px) {
+  .ops-header h1 { font-size: 29px; }
+  .status-hero,
+  .hero-status { min-height: 0; }
+  .hero-status { padding: 24px 20px; }
+  .hero-signal-grid { grid-template-columns: 1fr; gap: 14px; }
+  .hero-signal,
+  .hero-signal:first-child { padding: 0 0 12px; border: 0; border-bottom: 1px solid rgba(69, 89, 76, 0.14); }
+  .hero-actions { align-items: flex-start; flex-direction: column; }
+  .metric-grid { grid-template-columns: 1fr; }
+  .ops-footer { align-items: flex-start; flex-direction: column; gap: 7px; }
 }
 </style>

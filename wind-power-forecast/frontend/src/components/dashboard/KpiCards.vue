@@ -6,7 +6,6 @@
       class="kpi-card"
       :class="`kpi-${item.theme || 'cyan'}`"
     >
-      <div class="kpi-deco"></div>
       <div class="kpi-label">{{ item.label }}</div>
 
       <div v-if="item.type === 'accuracy-split'" class="kpi-main">
@@ -19,11 +18,11 @@
       </div>
 
       <div v-if="item.type === 'accuracy-split'" class="kpi-sub-row">
-        <span class="sub-label" style="color:#60a5fa">短期</span>
-        <span class="sub-value" style="color:#60a5fa">{{ item.value?.shortTerm ?? '--' }}%</span>
+        <span class="sub-label sub-short">短期</span>
+        <span class="sub-value sub-short">{{ item.value?.shortTerm ?? '--' }}%</span>
         <span class="sub-sep"></span>
-        <span class="sub-label" style="color:#fbbf24">超短期</span>
-        <span class="sub-value" style="color:#fbbf24">{{ item.value?.ultraShort ?? '--' }}%</span>
+        <span class="sub-label sub-ultra">超短期</span>
+        <span class="sub-value sub-ultra">{{ item.value?.ultraShort ?? '--' }}%</span>
       </div>
       <div v-else-if="item.sub?.length" class="kpi-sub-row">
         <template v-for="(s, i) in item.sub" :key="i">
@@ -69,27 +68,21 @@ function formatAccuracy(value) {
 
 .kpi-card {
   position: relative;
-  padding: 14px 16px;
-  border-radius: 10px;
+  padding: 16px 18px;
+  border: 1px solid var(--border-light);
+  border-radius: 14px;
+  background: var(--surface);
   overflow: hidden;
-  min-height: 90px;
+  min-height: 108px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-}
-
-.kpi-deco {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 64px;
-  height: 64px;
-  pointer-events: none;
+  box-shadow: var(--shadow-card);
 }
 
 .kpi-label {
-  font-size: 11px;
-  color: #8fb2ca;
+  font-size: 12px;
+  color: var(--text-muted);
   margin-bottom: 4px;
 }
 
@@ -100,9 +93,9 @@ function formatAccuracy(value) {
 }
 
 .kpi-number {
-  font-size: 26px;
-  font-weight: 700;
-  font-family: Consolas, Menlo, Monaco, monospace;
+  font-size: 28px;
+  font-weight: 650;
+  font-family: var(--font-mono);
   line-height: 1.2;
 }
 
@@ -117,59 +110,37 @@ function formatAccuracy(value) {
   gap: 8px;
   margin-top: 6px;
   padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--border-light);
   flex-wrap: wrap;
 }
 
 .sub-label {
   font-size: 10px;
-  color: #7a96aa;
+  color: var(--text-muted);
 }
 
 .sub-value {
   font-size: 12px;
   font-weight: 600;
-  color: #9fc4df;
+  color: var(--text-secondary);
 }
 
 .sub-highlight {
-  color: #2dd36f;
+  color: var(--success);
 }
 
 .sub-sep {
   width: 1px;
   height: 12px;
-  background: rgba(136, 186, 217, 0.15);
+  background: var(--border-color);
 }
 
-/* Theme variants */
-.kpi-cyan {
-  background: linear-gradient(135deg, rgba(18, 215, 255, 0.08), rgba(18, 215, 255, 0.02));
-  border: 1px solid rgba(18, 215, 255, 0.18);
-}
-.kpi-cyan .kpi-number, .kpi-cyan .kpi-unit { color: #12d7ff; }
-.kpi-cyan .kpi-deco { background: radial-gradient(circle at top right, rgba(18, 215, 255, 0.12), transparent); }
-
-.kpi-green {
-  background: linear-gradient(135deg, rgba(45, 211, 111, 0.08), rgba(45, 211, 111, 0.02));
-  border: 1px solid rgba(45, 211, 111, 0.18);
-}
-.kpi-green .kpi-number, .kpi-green .kpi-unit { color: #2dd36f; }
-.kpi-green .kpi-deco { background: radial-gradient(circle at top right, rgba(45, 211, 111, 0.12), transparent); }
-
-.kpi-yellow {
-  background: linear-gradient(135deg, rgba(251, 191, 36, 0.08), rgba(251, 191, 36, 0.02));
-  border: 1px solid rgba(251, 191, 36, 0.18);
-}
-.kpi-yellow .kpi-number, .kpi-yellow .kpi-unit { color: #fbbf24; }
-.kpi-yellow .kpi-deco { background: radial-gradient(circle at top right, rgba(251, 191, 36, 0.12), transparent); }
-
-.kpi-purple {
-  background: linear-gradient(135deg, rgba(167, 139, 250, 0.08), rgba(167, 139, 250, 0.02));
-  border: 1px solid rgba(167, 139, 250, 0.18);
-}
-.kpi-purple .kpi-number, .kpi-purple .kpi-unit { color: #a78bfa; }
-.kpi-purple .kpi-deco { background: radial-gradient(circle at top right, rgba(167, 139, 250, 0.12), transparent); }
+.sub-short { color: #397b91; }
+.sub-ultra { color: #b7791f; }
+.kpi-cyan .kpi-number, .kpi-cyan .kpi-unit { color: #397b91; }
+.kpi-green .kpi-number, .kpi-green .kpi-unit { color: #247a52; }
+.kpi-yellow .kpi-number, .kpi-yellow .kpi-unit { color: #b7791f; }
+.kpi-purple .kpi-number, .kpi-purple .kpi-unit { color: #7c6f9b; }
 
 @media (max-width: 720px) {
   .kpi-row {

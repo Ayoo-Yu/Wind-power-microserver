@@ -21,10 +21,10 @@
       <div class="panel-card panel-trend">
         <div class="panel-title trend-legend">
           日功率预测
-          <span class="legend-line" style="background:#2dd4bf"></span>实绩
-          <span class="legend-line ll-dash" style="background:#60a5fa"></span>短期
-          <span class="legend-line ll-dot" style="background:#fbbf24"></span>超短期
-          <span class="legend-line" style="background:#a78bfa"></span>容量
+          <span class="legend-line legend-actual"></span>实绩
+          <span class="legend-line legend-short ll-dash"></span>短期
+          <span class="legend-line legend-ultra ll-dot"></span>超短期
+          <span class="legend-line legend-capacity"></span>容量
         </div>
         <PowerTrendChart v-if="trendPoints.length" :points="trendPoints" @range-change="onRangeChange" />
         <div v-else-if="!loading" class="empty-state">暂无功率预测数据</div>
@@ -39,13 +39,6 @@
 
           <div v-if="weatherMetrics.length" class="weather-metrics-grid">
             <div v-for="item in weatherMetrics" :key="item.label" class="weather-metric-item">
-              <div class="metric-icon" :class="`metric-${item.icon}`">
-                <i v-if="item.icon === 'wind'" class="wind-icon-sm"></i>
-                <i v-else-if="item.icon === 'compass'" class="compass-icon-sm"></i>
-                <i v-else-if="item.icon === 'temp'" class="temp-icon-sm"></i>
-                <i v-else-if="item.icon === 'pressure'" class="pressure-icon-sm"></i>
-                <i v-else class="drop-icon-sm"></i>
-              </div>
               <div class="metric-info">
                 <div class="metric-label">{{ item.label }}</div>
                 <div class="metric-value">{{ item.value }} <small>{{ item.unit }}</small></div>
@@ -187,24 +180,24 @@ onBeforeUnmount(() => {
 .home-dashboard {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 64px);
+  height: calc(100vh - 72px);
   overflow: hidden;
 }
 
-/* ---- header ---- */
 .dashboard-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 16px;
+  padding: 18px 20px;
   flex-shrink: 0;
 }
 
 .dashboard-head h1 {
   margin: 0;
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
+  color: var(--text-primary);
+  font-size: 23px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
 }
 
 .title-wrap {
@@ -223,8 +216,7 @@ onBeforeUnmount(() => {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #2dd36f;
-  box-shadow: 0 0 8px rgba(45, 211, 111, 0.6);
+  background: var(--success);
 }
 
 .title-time {
@@ -233,39 +225,37 @@ onBeforeUnmount(() => {
 }
 
 .refresh-btn {
-  border: 1px solid rgba(146, 186, 220, 0.3) !important;
-  background: transparent !important;
+  border: 1px solid var(--border-color) !important;
+  background: var(--surface) !important;
   color: var(--text-secondary) !important;
-  border-radius: 8px !important;
-  padding: 8px !important;
+  border-radius: 10px !important;
+  padding: 9px !important;
   transition: all 0.2s ease;
 }
 
 .refresh-btn:hover {
-  border-color: rgba(18, 215, 255, 0.5) !important;
-  color: var(--accent) !important;
-  background: rgba(18, 215, 255, 0.06) !important;
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+  background: var(--primary-soft) !important;
 }
 
-/* ---- KPI section ---- */
 .kpi-section {
   flex-shrink: 0;
   padding: 0 0 2px 0;
 }
 
-/* ---- main body: trend (left) + right sidebar ---- */
 .dashboard-body {
   flex: 1;
   min-height: 0;
   display: grid;
   grid-template-columns: 2fr 1fr;
-  gap: 12px;
+  gap: 16px;
 }
 
 .col-right {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   min-height: 0;
 }
 
@@ -291,55 +281,48 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-/* ---- panel-card base ---- */
 .panel-card {
   position: relative;
-  padding: 14px;
+  padding: 20px;
   overflow: hidden;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-}
-
-.panel-card::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(18, 215, 255, 0.15), transparent);
-  pointer-events: none;
+  box-shadow: var(--shadow-card);
 }
 
 .panel-title {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 14px;
   flex-shrink: 0;
 }
 
-/* ---- trend legend ---- */
 .legend-line {
   display: inline-block;
   width: 16px;
-  height: 2px;
+  height: 0;
   vertical-align: middle;
   margin: 0 3px 0 6px;
-  border-radius: 1px;
+  border-top: 2px solid currentColor;
 }
 
 .ll-dash {
-  background: repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 7px) !important;
+  border-top-style: dashed;
 }
 
 .ll-dot {
-  background: repeating-linear-gradient(90deg, currentColor 0 2px, transparent 2px 4px) !important;
+  border-top-style: dotted;
 }
 
-/* ---- weather ---- */
+.legend-actual { color: #247a52; }
+.legend-short { color: #397b91; }
+.legend-ultra { color: #b7791f; }
+.legend-capacity { color: #7c6f9b; }
+
 .weather-update-hint {
   margin-left: 12px;
   font-size: 12px;
-  color: #7ca8c4;
+  font-weight: 400;
+  color: var(--text-muted);
 }
 
 .weather-metrics-grid {
@@ -353,11 +336,11 @@ onBeforeUnmount(() => {
 .weather-metric-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px;
-  border: 1px solid rgba(136, 186, 217, 0.12);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.025);
+  gap: 8px;
+  padding: 11px 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--surface-soft);
   overflow: hidden;
 }
 
@@ -367,117 +350,22 @@ onBeforeUnmount(() => {
   justify-self: center;
 }
 
-.metric-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.metric-wind { background: rgba(18, 215, 255, 0.12); }
-.metric-compass { background: rgba(45, 211, 111, 0.12); }
-.metric-temp { background: rgba(255, 125, 69, 0.12); }
-.metric-drop { background: rgba(100, 160, 255, 0.12); }
-.metric-pressure { background: rgba(167, 200, 220, 0.12); }
-
-.wind-icon-sm {
-  width: 14px;
-  height: 14px;
-  display: inline-block;
-  position: relative;
-}
-.wind-icon-sm::before,
-.wind-icon-sm::after {
-  content: '';
-  position: absolute;
-  background: #5de0ff;
-  border-radius: 1px;
-}
-.wind-icon-sm::before { width: 2px; height: 14px; left: 6px; top: 0; }
-.wind-icon-sm::after { width: 10px; height: 2px; left: 2px; top: 4px; }
-
-.compass-icon-sm {
-  width: 12px;
-  height: 12px;
-  border: 2px solid #2dd36f;
-  border-radius: 50%;
-  display: inline-block;
-  position: relative;
-}
-.compass-icon-sm::after {
-  content: '';
-  position: absolute;
-  top: 1px;
-  left: 3px;
-  width: 0;
-  height: 0;
-  border-left: 3px solid transparent;
-  border-right: 3px solid transparent;
-  border-bottom: 5px solid #2dd36f;
-}
-
-.temp-icon-sm, .drop-icon-sm {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  display: inline-block;
-}
-.temp-icon-sm { background: #ff7d45; }
-.drop-icon-sm {
-  display: inline-block !important;
-  width: 12px !important;
-  height: 12px !important;
-  background: radial-gradient(circle at 40% 35%, #8ec5ff, #5a9ef5);
-  border-radius: 50%;
-}
-
-.pressure-icon-sm {
-  width: 14px;
-  height: 12px;
-  display: inline-block;
-  position: relative;
-}
-.pressure-icon-sm::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 3px;
-  width: 14px;
-  height: 2px;
-  background: #a7c8dc;
-  border-radius: 1px;
-}
-.pressure-icon-sm::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 7px;
-  width: 14px;
-  height: 6px;
-  border: 2px solid #a7c8dc;
-  border-top: none;
-  border-radius: 0 0 3px 3px;
-}
-
 .metric-info {
   display: flex;
   flex-direction: column;
   gap: 1px;
   min-width: 0;
 }
-.metric-label { font-size: 11px; color: #9fc4df; white-space: nowrap; }
+.metric-label { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
 .metric-value {
   font-size: 16px;
-  font-family: Consolas, Menlo, Monaco, monospace;
-  color: #dff3ff;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  font-weight: 600;
   white-space: nowrap;
 }
-.metric-value small { font-size: 11px; color: #8fb2ca; margin-left: 2px; }
+.metric-value small { font-size: 11px; color: var(--text-muted); margin-left: 2px; font-weight: 400; }
 
-/* ---- empty & animation ---- */
 .empty-state {
   text-align: center;
   color: var(--text-muted);
@@ -485,12 +373,6 @@ onBeforeUnmount(() => {
   font-size: 13px;
 }
 
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
-
-/* ---- responsive ---- */
 @media (max-width: 1280px) {
   .dashboard-body {
     grid-template-columns: 1fr;

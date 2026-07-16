@@ -11,14 +11,13 @@
       </div>
     </div>
 
-    <div class="background-container">
-      <div :style="backgroundStyle"></div>
-    </div>
-
-    <el-aside ref="sidebarRef" :width="isCollapsed ? '64px' : '240px'" class="sidebar">
+    <el-aside ref="sidebarRef" :width="isCollapsed ? '72px' : '248px'" class="sidebar">
       <div class="brand" @click="toggleCollapse">
-        <img v-if="!isCollapsed" src="@/assets/Hust_logo.png" alt="华中科技大学" class="brand-logo" />
-        <el-icon v-else class="collapse-icon"><Expand /></el-icon>
+        <img src="@/assets/Hust_logo.png" alt="华中科技大学" class="brand-logo" />
+        <div v-if="!isCollapsed" class="brand-copy">
+          <strong>风电功率预测系统</strong>
+          <span>预测运行 · 数据治理 · 质量评估</span>
+        </div>
       </div>
 
       <el-menu
@@ -116,7 +115,6 @@
             <Fold v-if="!isCollapsed" />
             <Expand v-else />
           </el-icon>
-          <h1 class="header-title">{{ uiText.platformTitle }}</h1>
         </div>
 
         <div class="header-right">
@@ -239,16 +237,6 @@ export default {
     const unsubscribeDb = dbState.onChange((val) => { dbUnavailable.value = val })
 
     provide('isAnimatedBackground', isAnimatedBackground)
-
-    const backgroundStyle = computed(() => ({
-      position: 'absolute',
-      top: '0',
-      left: '0',
-      width: '100%',
-      height: '100%',
-      background: 'radial-gradient(circle at 18% 8%, rgba(18, 215, 255, 0.18) 0%, rgba(18, 215, 255, 0) 42%), linear-gradient(140deg, #05111c 0%, #071b2c 58%, #04111d 100%)',
-      opacity: '1'
-    }))
 
     const activeMenu = computed(() => (route.path === '/' ? '/' : route.path))
     const activeGroup = computed(() => {
@@ -380,6 +368,12 @@ export default {
       isCollapsed.value = !isCollapsed.value
     }
 
+    const syncCollapseForViewport = () => {
+      if (window.innerWidth <= 980) {
+        isCollapsed.value = true
+      }
+    }
+
     const handleSelect = (index) => {
       router.push(index)
     }
@@ -434,11 +428,13 @@ export default {
     }
 
     onMounted(() => {
+      syncCollapseForViewport()
       refreshSystemTime()
       timeTicker = setInterval(refreshSystemTime, 1000)
       fetchCurrentUser()
       fetchCapabilities()
       capabilityTicker = setInterval(fetchCapabilities, 30000)
+      window.addEventListener('resize', syncCollapseForViewport)
       document.addEventListener('visibilitychange', refreshCapabilitiesWhenVisible)
       syncMenuForRoute()
     })
@@ -450,6 +446,7 @@ export default {
       if (capabilityTicker) {
         clearInterval(capabilityTicker)
       }
+      window.removeEventListener('resize', syncCollapseForViewport)
       document.removeEventListener('visibilitychange', refreshCapabilitiesWhenVisible)
       unsubscribeDb()
     })
@@ -465,7 +462,6 @@ export default {
       dbUnavailable,
       toggleCollapse,
       handleSelect,
-      backgroundStyle,
       userInitial,
       userName,
       alertCount,
@@ -490,6 +486,7 @@ export default {
 .app-container {
   height: 100vh;
   position: relative;
+  background: var(--bg-root);
 }
 
 .background-container {
@@ -509,7 +506,7 @@ export default {
 
 .main-container,
 .main-content {
-  background: transparent !important;
+  background: var(--bg-root) !important;
 }
 
 .main-content {
@@ -518,33 +515,53 @@ export default {
 }
 
 .sidebar {
-  background: var(--gradient-sidebar);
-  border-right: 1px solid rgba(18, 215, 255, 0.12);
+  background: #fbfcfb;
+  border-right: 1px solid var(--border-color);
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 1000;
-  box-shadow: 4px 0 18px rgba(0, 0, 0, 0.3), 1px 0 0 rgba(18, 215, 255, 0.08);
+  box-shadow: none;
 }
 
 .brand {
-  height: 64px;
+  height: 72px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 16px;
+  justify-content: flex-start;
+  gap: 11px;
+  padding: 13px 16px;
   cursor: pointer;
-  border-bottom: 1px solid rgba(18, 215, 255, 0.1);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .brand-logo {
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
   object-fit: contain;
-  filter: drop-shadow(0 0 8px rgba(18, 215, 255, 0.2));
+  filter: none;
 }
 
-.collapse-icon {
-  font-size: 24px;
-  color: #fff;
+.brand-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.brand-copy strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 650;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.brand-copy span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .el-menu-vertical,
@@ -556,38 +573,39 @@ export default {
 
 .el-menu-item {
   color: var(--text-secondary);
-  height: 50px;
-  margin: 8px 0;
+  height: 46px;
+  margin: 4px 10px;
+  border-radius: 9px;
 }
 
 :deep(.el-sub-menu__title) {
   color: var(--text-secondary);
-  height: 50px;
-  margin: 8px 0;
+  height: 46px;
+  margin: 4px 10px;
+  border-radius: 9px;
 }
 
 :deep(.el-sub-menu .el-menu-item) {
   min-width: 0;
-  height: 44px;
-  margin: 0;
+  height: 40px;
+  margin: 2px 10px;
   padding-left: 54px !important;
 }
 
 .el-menu-item.is-active {
-  background: linear-gradient(90deg, rgba(18, 215, 255, 0.14), rgba(18, 215, 255, 0.02));
-  color: #9beaff;
-  border-left: 3px solid var(--accent);
-  box-shadow: inset 3px 0 10px rgba(18, 215, 255, 0.08);
+  color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .el-menu-item:hover {
-  background: rgba(18, 215, 255, 0.06);
-  color: #c0e8ff;
+  color: var(--text-primary);
+  background: #f0f3f0;
 }
 
 :deep(.el-sub-menu__title:hover) {
-  background: rgba(18, 215, 255, 0.06);
-  color: #c0e8ff;
+  color: var(--text-primary);
+  background: #f0f3f0;
 }
 
 .el-menu-item .el-icon {
@@ -595,16 +613,16 @@ export default {
 }
 
 .header {
-  background: rgba(16, 38, 58, 0.85);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border-bottom: 1px solid rgba(18, 215, 255, 0.1);
+  height: 72px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border-color);
   z-index: 999;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  height: 64px;
 }
 
 .header-left,
@@ -615,16 +633,20 @@ export default {
 }
 
 .collapse-btn {
-  font-size: 20px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
   cursor: pointer;
-  color: var(--text-primary);
+  color: var(--text-secondary);
+  border-radius: 8px;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
-.header-title {
-  font-size: 20px;
-  font-weight: 600;
+.collapse-btn:hover {
   color: var(--text-primary);
-  margin: 0;
+  background: var(--bg-muted);
 }
 
 .alert-badge :deep(.el-badge__content) {
@@ -636,34 +658,35 @@ export default {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  border: 1px solid rgba(18, 215, 255, 0.25);
-  background: rgba(10, 25, 38, 0.6);
-  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  background: #ffffff;
+  color: var(--text-secondary);
   transition: all var(--transition-normal);
 }
 .alert-btn:hover {
-  border-color: rgba(18, 215, 255, 0.5);
-  box-shadow: 0 0 10px rgba(18, 215, 255, 0.2);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+  background: var(--bg-card-soft);
 }
 
 .system-time-chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(146, 186, 220, 0.35);
-  background: rgba(10, 25, 38, 0.6);
+  padding: 6px 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .capability-chip {
   padding: 6px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(246, 183, 60, 0.5);
-  background: rgba(246, 183, 60, 0.12);
-  color: #f6c453;
+  border: 1px solid #e7d3ad;
+  background: var(--warning-soft);
+  color: #966019;
   font-size: 12px;
   cursor: help;
 }
@@ -673,12 +696,12 @@ export default {
   height: 8px;
   border-radius: 50%;
   background: var(--accent-2);
-  box-shadow: 0 0 8px rgba(45, 211, 111, 0.75);
+  box-shadow: none;
 }
 
 .time-value {
   color: var(--text-primary);
-  font-family: Consolas, 'Roboto Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .user-profile {
@@ -686,14 +709,14 @@ export default {
   align-items: center;
   gap: 8px;
   cursor: pointer;
-  padding: 6px 12px;
+  padding: 5px 8px;
   border-radius: 20px;
-  transition: all 0.3s ease;
-  background: rgba(255, 255, 255, 0.05);
+  transition: background-color var(--transition-fast);
+  background: transparent;
 }
 
 .user-profile:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-muted);
 }
 
 .username {
@@ -708,8 +731,8 @@ export default {
   left: 0;
   right: 0;
   z-index: 9999;
-  background: linear-gradient(90deg, #f6b73c, #e6a817);
-  color: #1a1a2e;
+  background: #f3d598;
+  color: #5b3a0c;
   text-align: center;
   padding: 8px 16px;
   font-size: 13px;
@@ -720,7 +743,7 @@ export default {
 .auth-loading-overlay {
   position: fixed;
   inset: 0;
-  background-color: rgba(6, 18, 31, 0.8);
+  background-color: rgba(245, 247, 244, 0.88);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -728,11 +751,11 @@ export default {
 }
 
 .auth-loading-container {
-  background: rgba(15, 42, 64, 0.95);
-  border: 1px solid rgba(18, 215, 255, 0.2);
+  background: #ffffff;
+  border: 1px solid var(--border-color);
   padding: 30px;
   border-radius: 12px;
-  box-shadow: 0 0 30px rgba(6, 18, 31, 0.5);
+  box-shadow: var(--shadow-float);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -768,8 +791,10 @@ export default {
     top: 0;
   }
 
-  .header-title {
-    font-size: 16px;
+  .main-container {
+    width: calc(100% - 72px);
+    min-width: 0;
+    margin-left: 72px;
   }
 
   .username,
@@ -788,7 +813,6 @@ export default {
     gap: 10px;
   }
 
-  .header-title,
   .username,
   .system-time-chip,
   .capability-chip {

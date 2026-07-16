@@ -396,7 +396,7 @@ export default {
 
 .page-header {
   margin-bottom: 32px;
-  text-align: center;
+  text-align: left;
   position: relative;
   z-index: 1;
 }
@@ -404,17 +404,15 @@ export default {
 .page-title {
   font-size: 32px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text-primary);
   margin: 0 0 12px 0;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   letter-spacing: 1px;
 }
 
 .page-description {
   font-size: 18px;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--text-secondary);
   margin: 0;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
 .system-cards {
@@ -427,18 +425,15 @@ export default {
 }
 
 .info-card {
-  background: rgba(7, 24, 39, 0.58);
-  backdrop-filter: blur(15px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
   transition: all 0.3s ease;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  box-shadow: none;
 }
 
 .info-card:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
-  background: rgba(7, 24, 39, 0.58);
+  border-color: var(--border-strong);
 }
 
 .card-header {
@@ -460,15 +455,15 @@ export default {
 }
 
 .hardware-card .card-icon {
-  color: #409eff;
+  color: var(--accent-blue);
 }
 
 .software-card .card-icon {
-  color: #67c23a;
+  color: var(--success);
 }
 
 .runtime-card .card-icon {
-  color: #e6a23c;
+  color: var(--warning);
 }
 
 .info-grid {
@@ -481,13 +476,13 @@ export default {
   display: flex;
   flex-direction: column;
   padding: 16px;
-  background: rgba(18, 215, 255, 0.06);
+  background: var(--surface-soft);
   border-radius: 12px;
   transition: background 0.3s ease;
 }
 
 .info-item:hover {
-  background: rgba(18, 215, 255, 0.08);
+  background: var(--bg-muted);
 }
 
 .info-label {
@@ -505,11 +500,10 @@ export default {
 }
 
 .log-card {
-  background: rgba(7, 24, 39, 0.58);
-  backdrop-filter: blur(15px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 20px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: none;
   position: relative;
   z-index: 1;
 }
@@ -548,7 +542,7 @@ export default {
 }
 
 .log-item:hover {
-  background: rgba(18, 215, 255, 0.08);
+  background: var(--surface-soft);
 }
 
 .log-time {
@@ -576,7 +570,7 @@ export default {
 }
 
 .log-info .log-level {
-  color: #409eff;
+  color: var(--accent-blue);
 }
 
 .log-warning {
@@ -584,7 +578,7 @@ export default {
 }
 
 .log-warning .log-level {
-  color: #e6a23c;
+  color: var(--warning);
 }
 
 .log-error {
@@ -592,7 +586,7 @@ export default {
 }
 
 .log-error .log-level {
-  color: #f56c6c;
+  color: var(--danger);
 }
 
 /* 进度条样式调整 */
@@ -600,20 +594,6 @@ export default {
   background-color: rgba(0, 0, 0, 0.1);
 }
 
-/* 背景动画 */
-@keyframes gradient {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-/* 为.system-maintenance添加伪元素背景 */
 .system-maintenance::before {
   content: '';
   position: fixed;
@@ -621,9 +601,7 @@ export default {
   left: 0;
   width: 100%;
   height: 100%;
-  background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
-  background-size: 400% 400%;
-  animation: gradient 15s ease infinite;
+  background: var(--bg-root);
   z-index: -1;
 }
 

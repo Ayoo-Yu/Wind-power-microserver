@@ -501,23 +501,25 @@ export default {
 <style scoped>
 .scada-connection-page {
   position: relative;
-  min-height: 100vh;
-  padding: 20px;
+  min-height: 100%;
+  padding: 28px 32px 40px;
 }
 .gradient-background {
   position: fixed;
   inset: 0;
   z-index: -1;
-  background: linear-gradient(135deg, #0c1b2e 0%, #0f2744 50%, #0a1a2f 100%);
+  background: var(--bg-root);
 }
 .page-header {
-  text-align: center;
+  text-align: left;
   margin-bottom: 20px;
 }
 .page-title {
   margin: 0 0 6px;
   color: var(--text-primary, #e0e8f0);
-  font-size: 22px;
+  font-size: 28px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
 }
 .page-description {
   margin: 0;
@@ -541,9 +543,9 @@ export default {
 
 /* Connection Card */
 .connection-card {
-  border: 1px solid rgba(146, 186, 220, 0.2);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
-  background: rgba(8, 24, 38, 0.65);
+  background: var(--surface);
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -551,29 +553,28 @@ export default {
   transition: border-color 0.3s, box-shadow 0.3s;
 }
 .connection-card:hover {
-  border-color: rgba(64, 158, 255, 0.4);
-  box-shadow: 0 4px 20px rgba(64, 158, 255, 0.08);
+  border-color: var(--border-strong);
 }
 .connection-card.status-running {
-  border-left: 3px solid #67c23a;
+  border-left: 3px solid var(--success);
 }
 .connection-card.status-healthy {
-  border-left: 3px solid #67c23a;
+  border-left: 3px solid var(--success);
 }
 .connection-card.status-degraded,
 .connection-card.status-stale,
 .connection-card.status-no_data,
 .connection-card.status-connecting {
-  border-left: 3px solid #e6a23c;
+  border-left: 3px solid var(--warning);
 }
 .connection-card.status-error {
-  border-left: 3px solid #f56c6c;
+  border-left: 3px solid var(--danger);
 }
 .connection-card.status-stopped,
 .connection-card.status-disabled,
 .connection-card.status-deployment_disabled,
 .connection-card.status-unknown {
-  border-left: 3px solid #909399;
+  border-left: 3px solid var(--text-muted);
 }
 
 .card-top {

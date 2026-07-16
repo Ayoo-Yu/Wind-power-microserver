@@ -82,40 +82,40 @@ function render() {
     {
       tooltip: {
         trigger: 'axis',
-        backgroundColor: 'rgba(10, 22, 40, 0.92)',
-        borderColor: 'rgba(18, 215, 255, 0.2)',
+        backgroundColor: '#ffffff',
+        borderColor: '#dfe5e0',
         borderWidth: 1,
-        textStyle: { color: '#dff3ff', fontSize: 12 },
+        textStyle: { color: '#17211b', fontSize: 12 },
         formatter: (params) => {
           if (!params?.length) return ''
           const time = params[0].axisValue
-          let html = `<div style="font-size:12px;color:#9fc4df;margin-bottom:4px">${time}</div>`
+          let html = `<div style="font-size:12px;color:#667169;margin-bottom:4px">${time}</div>`
           params.forEach(p => {
             const val = p.value != null ? Number(p.value).toFixed(1) + ' MW' : '--'
-            html += `<div style="display:flex;justify-content:space-between;gap:16px;font-size:12px"><span>${p.marker} ${p.seriesName}</span><span style="font-weight:600;color:#dff3ff">${val}</span></div>`
+            html += `<div style="display:flex;justify-content:space-between;gap:16px;font-size:12px"><span>${p.marker} ${p.seriesName}</span><span style="font-weight:600;color:#17211b">${val}</span></div>`
           })
           return html
         }
       },
       legend: {
         data: [
-          { name: '实绩功率', icon: 'path://M0,4L12,4', itemStyle: { color: '#2dd4bf' } },
-          { name: '短期预测', icon: 'path://M0,4L4,4L6,1L8,7L10,4L12,4', itemStyle: { color: '#60a5fa' } },
-          { name: '超短期预测', icon: 'path://M0,4L3,4L4,1L5,7L6,4L9,4L10,1L11,7L12,4', itemStyle: { color: '#fbbf24' } },
-          { name: '可用容量上限', icon: 'path://M0,4L12,4', itemStyle: { color: '#a78bfa' } }
+          { name: '实绩功率', icon: 'path://M0,4L12,4', itemStyle: { color: '#247a52' } },
+          { name: '短期预测', icon: 'path://M0,4L4,4L6,1L8,7L10,4L12,4', itemStyle: { color: '#397b91' } },
+          { name: '超短期预测', icon: 'path://M0,4L3,4L4,1L5,7L6,4L9,4L10,1L11,7L12,4', itemStyle: { color: '#b7791f' } },
+          { name: '可用容量上限', icon: 'path://M0,4L12,4', itemStyle: { color: '#7c6f9b' } }
         ],
         top: 0,
         left: 'center',
         itemWidth: 16,
         itemHeight: 8,
-        textStyle: { color: '#9fc4df', fontSize: 11 }
+        textStyle: { color: '#667169', fontSize: 11 }
       },
       grid: { top: 34, right: 28, bottom: 38, left: 52 },
       xAxis: {
         type: 'category',
         data: labels,
         axisLabel: {
-          color: '#7a96aa',
+          color: '#768078',
           fontSize: 11,
           interval: tickInterval,
           formatter: (val) => {
@@ -123,15 +123,15 @@ function render() {
             return m ? val : ''
           }
         },
-        axisLine: { lineStyle: { color: 'rgba(159,182,204,.18)' } },
+        axisLine: { lineStyle: { color: '#dfe5e0' } },
         splitLine: { show: false }
       },
       yAxis: {
         type: 'value',
         name: 'MW',
-        nameTextStyle: { color: '#7a96aa', fontSize: 11 },
-        axisLabel: { color: '#7a96aa', fontSize: 11 },
-        splitLine: { lineStyle: { color: 'rgba(159,182,204,.08)', type: 'dashed' } }
+        nameTextStyle: { color: '#768078', fontSize: 11 },
+        axisLabel: { color: '#768078', fontSize: 11 },
+        splitLine: { lineStyle: { color: '#e8ece9', type: 'dashed' } }
       },
       dataZoom: [
         { type: 'inside' },
@@ -139,9 +139,9 @@ function render() {
           type: 'slider',
           height: 14,
           bottom: 6,
-          borderColor: 'rgba(159,182,204,.2)',
-          backgroundColor: 'rgba(9,20,32,.6)',
-          fillerColor: 'rgba(18,215,255,.15)'
+          borderColor: '#dfe5e0',
+          backgroundColor: '#f7f9f7',
+          fillerColor: 'rgba(36,122,82,.16)'
         }
       ],
       series: [
@@ -150,7 +150,7 @@ function render() {
           type: 'line',
           smooth: true,
           showSymbol: false,
-          lineStyle: { width: 2.2, color: '#2dd4bf', type: 'solid' },
+          lineStyle: { width: 2.2, color: '#247a52', type: 'solid' },
           data: actual
         },
         {
@@ -158,7 +158,7 @@ function render() {
           type: 'line',
           smooth: true,
           showSymbol: false,
-          lineStyle: { width: 2, color: '#60a5fa', type: 'dashed' },
+          lineStyle: { width: 2, color: '#397b91', type: 'dashed' },
           data: shortTerm
         },
         {
@@ -166,11 +166,11 @@ function render() {
           type: 'line',
           smooth: true,
           showSymbol: false,
-          lineStyle: { width: 2, color: '#fbbf24', type: [8, 4, 2, 4] },
+          lineStyle: { width: 2, color: '#b7791f', type: [8, 4, 2, 4] },
           data: ultraShort,
           markLine: {
             symbol: 'none',
-            lineStyle: { color: 'rgba(220,235,250,0.45)', width: 1.5, type: 'dashed' },
+            lineStyle: { color: '#aeb7b0', width: 1.5, type: 'dashed' },
             label: {
               show: true,
               position: 'start',
@@ -181,9 +181,9 @@ function render() {
                 const mm = String(d.getMinutes()).padStart(2, '0')
                 return `当前 ${hh}:${mm}`
               },
-              color: '#c8dce8',
+              color: '#3e4941',
               fontSize: 11,
-              backgroundColor: 'rgba(18,24,39,0.85)',
+              backgroundColor: '#f2f5f2',
               padding: [3, 8, 3, 8],
               borderRadius: 3
             },
@@ -195,8 +195,8 @@ function render() {
           type: 'line',
           smooth: true,
           showSymbol: false,
-          lineStyle: { width: 1.5, color: '#a78bfa', type: 'solid' },
-          areaStyle: { color: 'rgba(167,139,250,0.06)' },
+          lineStyle: { width: 1.5, color: '#7c6f9b', type: 'solid' },
+          areaStyle: { color: 'rgba(124,111,155,0.08)' },
           data: availableCap
         }
       ]
@@ -241,23 +241,23 @@ onBeforeUnmount(() => {
 .range-btn {
   padding: 2px 10px;
   font-size: 11px;
-  color: #7a96aa;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(136, 186, 217, 0.15);
-  border-radius: 4px;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .range-btn:hover {
-  color: #9fc4df;
-  border-color: rgba(18, 215, 255, 0.3);
+  color: var(--primary);
+  border-color: var(--primary);
 }
 
 .range-btn.active {
-  color: #12d7ff;
-  background: rgba(18, 215, 255, 0.1);
-  border-color: rgba(18, 215, 255, 0.4);
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-color: rgba(36, 122, 82, 0.32);
 }
 
 .chart-canvas {

@@ -72,8 +72,8 @@
       <div class="group-title">步骤三：数据与报表导出</div>
       <el-dropdown @command="handleExportCommand">
         <el-button type="success">
-          📥 导出报表
-          <el-icon class="el-icon--right"><Download /></el-icon>
+          <el-icon><Download /></el-icon>
+          导出报表
         </el-button>
         <template #dropdown>
           <el-dropdown-menu>
@@ -249,12 +249,12 @@ export default {
     },
     curveLegendItems() {
       return [
-        { name: '实测值', color: '#fb7185' },
-        { name: '超短期预测', color: '#22d3ee' },
-        { name: '短期预测', color: '#60a5fa' },
-        { name: '中期预测', color: '#4ade80' },
-        { name: '短期风速预测', color: '#fbbf24' },
-        { name: '中期风速预测', color: '#c084fc' }
+        { name: '实测值', color: '#247a52' },
+        { name: '超短期预测', color: '#b7791f' },
+        { name: '短期预测', color: '#397b91' },
+        { name: '中期预测', color: '#2f8a5f' },
+        { name: '短期风速预测', color: '#8b6f47' },
+        { name: '中期风速预测', color: '#7c6f9b' }
       ]
     }
   },
@@ -820,12 +820,12 @@ export default {
         this.pushCustomCurve(series, name, data, color, YAXIS_WINDSPEED, 'dashed')
       }
 
-      if (this.selectedTypes.includes('实测值')) pushPower('实测值', s.actualValues, '#fb7185')
-      if (this.selectedTypes.includes('超短期预测')) pushPower('超短期预测', s.superValues, '#22d3ee')
-      if (this.selectedTypes.includes('短期预测')) pushPower('短期预测', s.shortValues, '#60a5fa')
-      if (this.selectedTypes.includes('中期预测')) pushPower('中期预测', s.midValues, '#4ade80')
-      if (this.selectedTypes.includes('短期风速预测')) pushWind('短期风速预测', s.shortWindValues, '#fbbf24')
-      if (this.selectedTypes.includes('中期风速预测')) pushWind('中期风速预测', s.midWindValues, '#c084fc')
+      if (this.selectedTypes.includes('实测值')) pushPower('实测值', s.actualValues, '#247a52')
+      if (this.selectedTypes.includes('超短期预测')) pushPower('超短期预测', s.superValues, '#b7791f')
+      if (this.selectedTypes.includes('短期预测')) pushPower('短期预测', s.shortValues, '#397b91')
+      if (this.selectedTypes.includes('中期预测')) pushPower('中期预测', s.midValues, '#2f8a5f')
+      if (this.selectedTypes.includes('短期风速预测')) pushWind('短期风速预测', s.shortWindValues, '#8b6f47')
+      if (this.selectedTypes.includes('中期风速预测')) pushWind('中期风速预测', s.midWindValues, '#7c6f9b')
       // 可用容量仅用于 installedCapacity 计算，不在图表中显示
 
       const markAreas = this.buildCurtailmentMarkAreas(s.labels, s.curtailmentValues)
@@ -834,7 +834,7 @@ export default {
           silent: true,
           itemStyle: { color: 'rgba(255, 99, 71, 0.12)' },
           data: markAreas,
-          label: { show: true, color: '#ffd7cc', formatter: '限电时段' }
+          label: { show: true, color: '#a64343', formatter: '限电时段' }
         }
       }
       return series
@@ -880,8 +880,8 @@ export default {
       return { min: 0, max: Math.max(fallbackMax, range.max) }
     },
     drawAxes(ctx, plot, labels, leftRange, rightRange, options = {}) {
-      ctx.strokeStyle = 'rgba(159, 182, 204, 0.18)'
-      ctx.fillStyle = '#9fb6cc'
+      ctx.strokeStyle = '#e8ece9'
+      ctx.fillStyle = '#768078'
       ctx.lineWidth = 1
       for (let i = 0; i <= 4; i += 1) {
         const y = plot.top + (plot.height * i) / 4
@@ -896,17 +896,17 @@ export default {
           ctx.fillText(rightVal.toFixed(1), plot.right + 10, y + 4)
         }
       }
-      ctx.strokeStyle = '#6b8aa3'
+      ctx.strokeStyle = '#cbd3cd'
       ctx.beginPath()
       ctx.moveTo(plot.left, plot.top)
       ctx.lineTo(plot.left, plot.bottom)
       ctx.lineTo(plot.right, plot.bottom)
       ctx.stroke()
-      ctx.fillStyle = '#b8d7eb'
+      ctx.fillStyle = '#59645d'
       if (options.leftTitle) ctx.fillText(options.leftTitle, plot.left, 18)
       if (options.rightTitle) ctx.fillText(options.rightTitle, plot.right - 60, 18)
       const labelStep = Math.max(1, Math.ceil(labels.length / 8))
-      ctx.fillStyle = '#9fb6cc'
+      ctx.fillStyle = '#768078'
       labels.forEach((label, index) => {
         if (index % labelStep !== 0 && index !== labels.length - 1) return
         const x = plot.left + (plot.width * index) / Math.max(1, labels.length - 1)
@@ -933,7 +933,7 @@ export default {
       this.drawAxes(ctx, plot, labels, powerRange, windRange, options)
       this.chartMeta[refKey] = { labels, series, plot, type: 'line' }
       if (!series.length) {
-        ctx.fillStyle = '#9fb6cc'
+        ctx.fillStyle = '#768078'
         ctx.font = '14px Microsoft YaHei, Arial, sans-serif'
         ctx.fillText('暂无可绘制曲线', plot.left + 18, plot.top + 34)
         return canvas
@@ -1043,7 +1043,7 @@ export default {
           ctx.fillRect(x, y, barWidth, plot.bottom - y)
         })
         ctx.fillRect(plot.left + seriesIndex * 150, 16, 16, 8)
-        ctx.fillStyle = '#d9e9ff'
+        ctx.fillStyle = '#3e4941'
         ctx.fillText(item.name, plot.left + seriesIndex * 150 + 22, 24)
         ctx.fillStyle = item.color
       })
@@ -1117,18 +1117,18 @@ export default {
           series.push({ name, values, color, axis: 'power', dashed: true })
         }
       }
-      add('实测值', datasets['实测值'] || state.actualValues, '#fb7185')
-      add('超短期预测', datasets['超短期预测'] || state.superValues, '#22d3ee')
-      add('短期预测', datasets['短期预测'] || state.shortValues, '#60a5fa')
-      add('中期预测', datasets['中期预测'] || state.midValues, '#4ade80')
-      add('短期风速预测', datasets['短期风速预测'] || state.shortWindValues, '#fbbf24', 'wind', true)
-      add('中期风速预测', datasets['中期风速预测'] || state.midWindValues, '#c084fc', 'wind', true)
-      addInterval('超短期预测区间', '超短期区间下限', datasets['超短期预测下限'] || state.supershortLowerValues, 'rgba(34, 211, 238, 0.55)')
-      addInterval('超短期预测区间', '超短期区间上限', datasets['超短期预测上限'] || state.supershortUpperValues, 'rgba(34, 211, 238, 0.55)')
-      addInterval('短期预测区间', '短期区间下限', datasets['短期预测下限'] || state.shortLowerValues, 'rgba(96, 165, 250, 0.55)')
-      addInterval('短期预测区间', '短期区间上限', datasets['短期预测上限'] || state.shortUpperValues, 'rgba(96, 165, 250, 0.55)')
-      addInterval('中期预测区间', '中期区间下限', datasets['中期预测下限'] || state.midLowerValues, 'rgba(74, 222, 128, 0.55)')
-      addInterval('中期预测区间', '中期区间上限', datasets['中期预测上限'] || state.midUpperValues, 'rgba(74, 222, 128, 0.55)')
+      add('实测值', datasets['实测值'] || state.actualValues, '#247a52')
+      add('超短期预测', datasets['超短期预测'] || state.superValues, '#b7791f')
+      add('短期预测', datasets['短期预测'] || state.shortValues, '#397b91')
+      add('中期预测', datasets['中期预测'] || state.midValues, '#2f8a5f')
+      add('短期风速预测', datasets['短期风速预测'] || state.shortWindValues, '#8b6f47', 'wind', true)
+      add('中期风速预测', datasets['中期风速预测'] || state.midWindValues, '#7c6f9b', 'wind', true)
+      addInterval('超短期预测区间', '超短期区间下限', datasets['超短期预测下限'] || state.supershortLowerValues, 'rgba(183, 121, 31, 0.45)')
+      addInterval('超短期预测区间', '超短期区间上限', datasets['超短期预测上限'] || state.supershortUpperValues, 'rgba(183, 121, 31, 0.45)')
+      addInterval('短期预测区间', '短期区间下限', datasets['短期预测下限'] || state.shortLowerValues, 'rgba(57, 123, 145, 0.45)')
+      addInterval('短期预测区间', '短期区间上限', datasets['短期预测上限'] || state.shortUpperValues, 'rgba(57, 123, 145, 0.45)')
+      addInterval('中期预测区间', '中期区间下限', datasets['中期预测下限'] || state.midLowerValues, 'rgba(47, 138, 95, 0.45)')
+      addInterval('中期预测区间', '中期区间上限', datasets['中期预测上限'] || state.midUpperValues, 'rgba(47, 138, 95, 0.45)')
       this.mainChart = this.drawLineCanvas('mainChartCanvas', labels, series, {
         leftTitle: '功率(MW)',
         rightTitle: '风速(m/s)'
@@ -1151,8 +1151,8 @@ export default {
         return
       }
       this.errorChart = this.drawBarLineCanvas('errorChartCanvas', labels, [
-        { name: '短期误差', values: shortErr, color: 'rgba(96, 165, 250, 0.75)', type: 'bar' },
-        { name: '超短期误差', values: superErr, color: '#22d3ee', type: 'line' }
+        { name: '短期误差', values: shortErr, color: 'rgba(57, 123, 145, 0.75)', type: 'bar' },
+        { name: '超短期误差', values: superErr, color: '#b7791f', type: 'line' }
       ], { leftTitle: '误差(MW)' })
     },
     async fetchFleetCompareData(requestSeq = this.fetchSeq) {
@@ -1211,9 +1211,9 @@ export default {
         'fleetBarChartCanvas',
         this.fleetCompareRows.map(v => v.farm_name || v.farm_code),
         [
-          { name: '短期准确率(%)', values: this.fleetCompareRows.map(v => v.short_acc), color: 'rgba(96, 165, 250, 0.78)' },
-          { name: '中期第4日准确率(%)', values: this.fleetCompareRows.map(v => v.mid_acc), color: 'rgba(74, 222, 128, 0.78)' },
-          { name: '超短期准确率(%)', values: this.fleetCompareRows.map(v => v.supershort_acc), color: 'rgba(34, 211, 238, 0.78)' }
+          { name: '短期准确率(%)', values: this.fleetCompareRows.map(v => v.short_acc), color: 'rgba(57, 123, 145, 0.78)' },
+          { name: '中期第4日准确率(%)', values: this.fleetCompareRows.map(v => v.mid_acc), color: 'rgba(47, 138, 95, 0.78)' },
+          { name: '超短期准确率(%)', values: this.fleetCompareRows.map(v => v.supershort_acc), color: 'rgba(183, 121, 31, 0.78)' }
         ]
       )
     },
@@ -1306,33 +1306,33 @@ export default {
 <style scoped>
 .power-compare-container { min-height: auto; padding: 18px 22px 28px; color: var(--text-primary); }
 .policy-alert { margin-bottom: 14px; }
-.page-title { margin: 0 0 14px; color: #f2f7ff; font-size: 28px; font-weight: 700; }
+.page-title { margin: 0 0 14px; color: var(--text-primary); font-size: 28px; font-weight: 650; }
 .analysis-tabs { margin-bottom: 12px; }
 .single-view-tabs { margin: 8px 0 12px; }
 .summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
-.summary-card, .control-card, .chart-card, .empty-data-card { background: rgba(8, 24, 39, 0.75); border: 1px solid rgba(116, 174, 214, 0.25); }
-.summary-label { color: #9fc1d8; font-size: 12px; margin-bottom: 4px; }
-.summary-value { color: #e8f6ff; font-family: Consolas, Menlo, Monaco, monospace; font-size: 16px; line-height: 1.3; }
-.summary-warning { color: #ffb867; }
+.summary-card, .control-card, .chart-card, .empty-data-card { background: var(--surface); border: 1px solid var(--border-color); }
+.summary-label { color: var(--text-muted); font-size: 12px; margin-bottom: 4px; }
+.summary-value { color: var(--text-primary); font-family: var(--font-mono); font-size: 16px; line-height: 1.3; }
+.summary-warning { color: var(--warning); }
 .control-card { margin-bottom: 14px; }
-.group-title { color: #b8d7eb; font-size: 12px; margin: 8px 0; }
+.group-title { color: var(--text-secondary); font-size: 12px; margin: 8px 0; }
 .control-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .farm-select { min-width: 280px; }
 .time-range-picker { min-width: 360px; }
 .query-btn { min-width: 92px; }
-.card-header { color: #d8edff; font-weight: 600; }
+.card-header { color: var(--text-primary); font-weight: 600; }
 .single-chart-section { display: block !important; width: 100%; margin-top: 12px; }
 .chart-card { margin-bottom: 12px; }
-.force-chart-card { display: block !important; min-height: 320px !important; outline: 1px solid rgba(18, 215, 255, 0.45); }
+.force-chart-card { display: block !important; min-height: 320px !important; }
 .series-legend { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
-.legend-toggle { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid rgba(159, 182, 204, 0.32); background: rgba(10, 28, 45, 0.82); color: #d9e9ff; font-size: 12px; cursor: pointer; }
+.legend-toggle { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--surface); color: var(--text-secondary); font-size: 12px; cursor: pointer; }
 .legend-toggle.inactive { opacity: 0.42; }
 .legend-swatch { width: 18px; height: 3px; border-radius: 2px; }
-.chart-wrapper { height: 48vh; min-height: 390px; position: relative; background: rgba(3, 16, 28, 0.45); border: 1px dashed rgba(34, 211, 238, 0.28); }
+.chart-wrapper { height: 48vh; min-height: 390px; position: relative; background: var(--surface); border: 1px solid var(--border-light); }
 .chart-wrapper.small { height: 30vh; min-height: 240px; }
 .native-chart-canvas { display: block !important; width: 100% !important; height: 100% !important; min-height: 220px; }
-.chart-tooltip { position: fixed; z-index: 3000; min-width: 180px; max-width: 280px; padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(34, 211, 238, 0.45); background: rgba(3, 16, 28, 0.95); color: #d9e9ff; font-size: 12px; line-height: 1.6; pointer-events: none; box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35); }
-.empty-data-content { text-align: center; color: #a9c9de; }
+.chart-tooltip { position: fixed; z-index: 3000; min-width: 180px; max-width: 280px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--surface); color: var(--text-primary); font-size: 12px; line-height: 1.6; pointer-events: none; box-shadow: var(--shadow-float); }
+.empty-data-content { text-align: center; color: var(--text-muted); }
 @media (max-width: 980px) {
   .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .farm-select, .time-range-picker { min-width: 100%; }

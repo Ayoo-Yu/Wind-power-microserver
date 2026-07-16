@@ -713,9 +713,7 @@ h1 {
   overflow: hidden;
   min-height: 218px;
   padding: 20px;
-  background:
-    radial-gradient(circle at 100% 0%, rgba(18, 215, 255, 0.12), transparent 42%),
-    var(--gradient-card);
+  background: var(--surface);
 }
 
 .health-card::before {
@@ -1085,9 +1083,9 @@ h1 {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
-  border: 1px solid rgba(146, 186, 220, 0.15);
+  border: 1px solid var(--border-color);
   border-radius: 10px;
-  background: rgba(4, 18, 30, 0.45);
+  background: var(--surface-soft);
 }
 
 .category-tabs button {
@@ -1108,21 +1106,21 @@ h1 {
 }
 
 .category-tabs button:hover {
-  color: #dceeff;
-  background: rgba(18, 215, 255, 0.06);
+  color: var(--primary);
+  background: var(--surface);
 }
 
 .category-tabs button.active {
-  background: rgba(18, 215, 255, 0.12);
-  color: #b8f3ff;
-  box-shadow: inset 0 0 0 1px rgba(18, 215, 255, 0.18);
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow: inset 0 0 0 1px rgba(36, 122, 82, 0.22);
 }
 
 .category-tabs strong {
   min-width: 20px;
   padding: 1px 5px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--bg-muted);
   color: inherit;
   font-size: 10px;
 }
@@ -1136,13 +1134,13 @@ h1 {
 }
 
 :deep(.el-table) {
-  --el-table-bg-color: transparent;
-  --el-table-tr-bg-color: transparent;
-  --el-table-row-hover-bg-color: rgba(18, 215, 255, 0.055);
-  --el-table-header-bg-color: rgba(14, 40, 61, 0.88);
-  --el-table-border-color: rgba(119, 190, 226, 0.11);
-  --el-table-text-color: #dcecf6;
-  --el-table-header-text-color: #8fb1c6;
+  --el-table-bg-color: #ffffff;
+  --el-table-tr-bg-color: #ffffff;
+  --el-table-row-hover-bg-color: #f4f8f5;
+  --el-table-header-bg-color: #f7f9f7;
+  --el-table-border-color: #e7ebe8;
+  --el-table-text-color: #17211b;
+  --el-table-header-text-color: #59645d;
 }
 
 :deep(.el-table th.el-table__cell) {

@@ -414,23 +414,23 @@ export default {
       )).length
       const channelOk = totalChannels > 0 && totalChannels === connectedChannels
 
-      let schedulerText = '🔴 未检测到 Celery Beat 心跳'
-      if (schedulerRunning) schedulerText = '🟢 Celery Beat 心跳正常'
-      else if (heartbeatStatus === 'unavailable') schedulerText = '🔴 Redis 不可用，无法确认调度状态'
-      else if (!schedulerManagedExternally) schedulerText = '🔴 调度器已停止'
+      let schedulerText = '未检测到 Celery Beat 心跳'
+      if (schedulerRunning) schedulerText = 'Celery Beat 心跳正常'
+      else if (heartbeatStatus === 'unavailable') schedulerText = 'Redis 不可用，无法确认调度状态'
+      else if (!schedulerManagedExternally) schedulerText = '调度器已停止'
 
       const arrivalReady = totalStations > 0 && arrivalPercent >= 90
       const arrivalStatus = totalStations === 0 ? 'warning' : (arrivalReady ? 'ready' : (arrivalPercent >= 60 ? 'warning' : 'danger'))
       const arrivalText = totalStations === 0
         ? '暂无启用的场站任务'
-        : `${arrivalReady ? '🟢' : '🔴'} ${readyStations}/${totalStations} 个场站今日已就绪`
+        : `${readyStations}/${totalStations} 个场站今日已就绪`
       const parseStatus = parsePercent === null ? 'warning' : (parsePercent >= 95 ? 'ready' : (parsePercent >= 70 ? 'warning' : 'danger'))
       const parseText = parsePercent === null
         ? '今日尚无执行记录'
-        : (parsePercent === 100 ? '🟢 100% 成功无报错' : `${parsePercent}% 成功`)
+        : (parsePercent === 100 ? '100% 成功无报错' : `${parsePercent}% 成功`)
 
       return {
-        channel: { status: channelOk ? 'ready' : 'warning', text: channelOk ? '🟢 所有SFTP配置正常' : (totalChannels ? `🔴 存在断连通道 (${connectedChannels}/${totalChannels})` : '尚未配置 SFTP 通道') },
+        channel: { status: channelOk ? 'ready' : 'warning', text: channelOk ? '所有 SFTP 配置正常' : (totalChannels ? `存在断连通道 (${connectedChannels}/${totalChannels})` : '尚未配置 SFTP 通道') },
         scheduler: {
           status: schedulerRunning ? 'ready' : 'warning',
           text: schedulerText
@@ -466,12 +466,12 @@ export default {
       if (backendText) return { type: task.today_status_type || 'info', text: backendText }
       const status = (task.status || '').toLowerCase()
       const runTime = formatShortTime(task.last_run)
-      if (status === 'success' || status === 'parsed' || status === 'completed') return { type: 'success', text: `🟢 已获取并校验${runTime ? ` (${runTime})` : ''}` }
-      if (status === 'partial') return { type: 'warning', text: '🟡 部分文件处理失败' }
-      if (status === 'error' || status.includes('parse_failed')) return { type: 'danger', text: '🔴 文件处理失败' }
-      if (status.includes('not_found')) return { type: 'danger', text: '🔴 文件未找到' }
+      if (status === 'success' || status === 'parsed' || status === 'completed') return { type: 'success', text: `已获取并校验${runTime ? ` (${runTime})` : ''}` }
+      if (status === 'partial') return { type: 'warning', text: '部分文件处理失败' }
+      if (status === 'error' || status.includes('parse_failed')) return { type: 'danger', text: '文件处理失败' }
+      if (status.includes('not_found')) return { type: 'danger', text: '文件未找到' }
       if (!task.enabled) return { type: 'info', text: '⏸ 已停用' }
-      return { type: 'warning', text: '🟡 等待执行' }
+      return { type: 'warning', text: '等待执行' }
     }
 
     const getConnectionStatusTag = (connection) => {
@@ -729,36 +729,36 @@ export default {
 </script>
 
 <style scoped>
-.weather-data-fetcher { position: relative; min-height: 100vh; padding: 20px; }
-.page-header { text-align: center; margin-bottom: 14px; }
-.page-title { margin: 0 0 6px; color: var(--text-primary); }
+.weather-data-fetcher { position: relative; min-height: 100%; padding: 28px 32px 40px; }
+.page-header { text-align: left; margin-bottom: 18px; }
+.page-title { margin: 0 0 6px; color: var(--text-primary); font-size: 28px; font-weight: 650; letter-spacing: -0.02em; }
 .page-description { margin: 0; color: var(--text-secondary); }
 .meta-updated { margin-bottom: 12px; color: var(--text-secondary); font-size: 12px; font-family: Consolas, "Roboto Mono", monospace; }
 .card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .card-title { font-weight: 600; color: var(--text-primary); font-size: 16px; }
 .health-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-.health-node { border: 1px solid rgba(146, 186, 220, 0.25); border-radius: 12px; background: rgba(8, 24, 38, 0.58); padding: 12px; min-height: 100px; }
+.health-node { border: 1px solid var(--border-color); border-radius: 12px; background: var(--surface); padding: 12px; min-height: 100px; }
 .health-name { color: var(--text-primary); font-size: 13px; font-weight: 600; margin-bottom: 6px; }
 .health-text { color: var(--text-secondary); font-size: 12px; }
 .health-node-ring { display: flex; flex-direction: column; align-items: center; }
 .ring-center { font-size: 14px; font-weight: 600; }
-.health-node.is-ready { box-shadow: inset 0 0 0 1px rgba(103, 194, 58, 0.4); }
-.health-node.is-warning { box-shadow: inset 0 0 0 1px rgba(230, 162, 60, 0.4); }
-.health-node.is-danger { box-shadow: inset 0 0 0 1px rgba(245, 108, 108, 0.4); }
+.health-node.is-ready { border-color: #cbe2d4; }
+.health-node.is-warning { border-color: #ead6b4; }
+.health-node.is-danger { border-color: #edc9c9; }
 .button-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .action-buttons-container { display: flex; align-items: center; gap: 6px; justify-content: center; flex-wrap: wrap; }
 .logs-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .logs-filters { display: flex; gap: 8px; align-items: center; }
 .logs-content { max-height: 600px; overflow-y: auto; }
 .logs-list { display: flex; flex-direction: column; gap: 8px; }
-.log-item { padding: 12px 16px; border-radius: 8px; border-left: 4px solid #409eff; background: rgba(8, 24, 38, 0.65); }
-.log-item.log-success { border-left-color: #67c23a; }
-.log-item.log-warning { border-left-color: #e6a23c; }
-.log-item.log-error { border-left-color: #f56c6c; }
+.log-item { padding: 12px 16px; border-radius: 8px; border-left: 4px solid var(--accent-blue); background: var(--surface-soft); }
+.log-item.log-success { border-left-color: var(--success); }
+.log-item.log-warning { border-left-color: var(--warning); }
+.log-item.log-error { border-left-color: var(--danger); }
 .log-header-line { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .log-time { font-size: 12px; color: var(--text-muted); font-family: Consolas, "Roboto Mono", monospace; }
 .log-message { color: var(--text-primary); font-size: 14px; margin-bottom: 4px; }
 .log-details { color: var(--text-secondary); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
 @media (max-width: 1200px) { .health-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 768px) { .weather-data-fetcher { padding: 14px; } .health-grid { grid-template-columns: 1fr; } }
+@media (max-width: 768px) { .weather-data-fetcher { padding: 18px 14px 28px; } .health-grid { grid-template-columns: 1fr; } }
 </style>
