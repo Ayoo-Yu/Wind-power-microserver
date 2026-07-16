@@ -14,7 +14,6 @@ from services.file_service import allowed_file, save_uploaded_file
 import os
 from db_session import db_session
 from connection_middleware import register_middleware
-from sqlalchemy import text
 from flask_jwt_extended import JWTManager
 from common.api_response import success
 
@@ -106,6 +105,7 @@ from routes.report_outbox_router import report_outbox_bp
 from routes.capability_router import capability_bp
 from routes.database_governance_router import database_governance_bp
 from routes.operations_router import operations_bp
+from routes.health_router import health_bp
 
 # app.register_blueprint(upload_bp, url_prefix='/')
 app.register_blueprint(download_bp, url_prefix='/')
@@ -156,6 +156,7 @@ app.register_blueprint(
     name='database_governance_v1',
 )
 app.register_blueprint(operations_bp)  # 现场运维总览和预测输入追溯
+app.register_blueprint(health_bp)  # 应用存活和数据库就绪探针
 
 
 def validate_database_schema():
@@ -212,42 +213,6 @@ def invalid_token_callback(error):
 @jwt.unauthorized_loader
 def missing_token_callback(error):
     return jsonify({"message": "缺少认证令牌"}), 401
-
-def _build_health_status():
-    health_status = {
-        "status": "ok",
-        "database": "unknown"
-    }
-
-    try:
-        with db_session() as db:
-            db.execute(text("SELECT 1"))
-            health_status["database"] = "ok"
-    except Exception as e:
-        health_status["database"] = "error"
-        from database_config import invalidate_engine, _sync_legacy_refs
-        invalidate_engine()
-        _sync_legacy_refs()
-        current_app.logger.warning("Health check DB probe failed: %s", e)
-
-    return health_status
-
-
-@app.route('/health', methods=['GET'])
-def health_check():
-    health_status = _build_health_status()
-    # Always return 200 so Docker doesn't restart the container.
-    # The payload tells callers whether DB is connected.
-    return jsonify(health_status)
-
-
-@app.route('/api/v1/health', methods=['GET'])
-def health_check_v1():
-    health_status = _build_health_status()
-    is_healthy = health_status["database"] == "ok"
-    payload = success(data=health_status, message="ok" if is_healthy else "degraded")
-    # Always 200 — DB status is in the payload, not the HTTP status.
-    return jsonify(payload), 200
 
 @app.route('/api/v1/public/overview', methods=['GET'])
 def public_overview():
