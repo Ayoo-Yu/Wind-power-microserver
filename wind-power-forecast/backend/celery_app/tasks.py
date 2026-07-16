@@ -491,8 +491,6 @@ def process_report_outbox(self, batch_size=20):
 def scan_scheduled_reports(self):
     """由 Celery Beat 扫描到期的自动上报配置。"""
 
-    if os.environ.get("REPORT_SCHEDULER_MODE", "embedded").lower() != "celery":
-        return {"status": "skipped", "reason": "scheduler mode is not celery"}
     try:
         from routes.report_management_router import check_and_execute_scheduled_reports
 
@@ -501,3 +499,140 @@ def scan_scheduled_reports(self):
     except Exception as exc:
         logger.exception("Scheduled report scan failed")
         raise self.retry(exc=exc, countdown=30)
+
+
+def _acquire_weather_lock(task_id, timeout_seconds):
+    """使用 Redis 防止同一个气象任务并发执行。"""
+
+    import uuid
+    import redis
+
+    broker_url = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
+    client = redis.Redis.from_url(broker_url)
+    key = f"windpower:weather-task-lock:{int(task_id)}"
+    token = uuid.uuid4().hex
+    acquired = client.set(
+        key,
+        token,
+        nx=True,
+        ex=max(7500, int(timeout_seconds) + 120),
+    )
+    return client, key, token, bool(acquired)
+
+
+def _release_weather_lock(client, key, token):
+    """仅释放当前执行者持有的气象任务锁。"""
+
+    client.eval(
+        """
+        if redis.call('get', KEYS[1]) == ARGV[1] then
+            return redis.call('del', KEYS[1])
+        end
+        return 0
+        """,
+        1,
+        key,
+        token,
+    )
+
+
+@celery_app.task(bind=True, max_retries=10, soft_time_limit=7200)
+def run_weather_fetch(self, task_id, scheduled=True):
+    """在独立 Worker 中执行气象文件拉取任务。"""
+
+    from db_models import WeatherConnection, WeatherLog, WeatherTask
+    from services.task_executor import execute_weather_task
+
+    with db_session() as session:
+        task = session.query(WeatherTask).filter(
+            WeatherTask.id == int(task_id),
+            WeatherTask.deleted_at.is_(None),
+        ).first()
+        if not task:
+            return {"status": "skipped", "reason": "task_not_found", "task_id": task_id}
+        if scheduled and not task.enabled:
+            return {"status": "skipped", "reason": "task_disabled", "task_id": task_id}
+
+        connection = session.query(WeatherConnection).filter(
+            WeatherConnection.id == task.connection_id,
+            WeatherConnection.deleted_at.is_(None),
+        ).first()
+        if not connection:
+            session.add(WeatherLog(
+                task_id=task.id,
+                farm_code=task.farm_code,
+                log_level="error",
+                message="关联的 SSH 连接不存在",
+                created_at=datetime.now(),
+            ))
+            return {"status": "failed", "reason": "connection_not_found", "task_id": task_id}
+
+        try:
+            lock = _acquire_weather_lock(task.id, task.timeout or 300)
+        except Exception as exc:
+            logger.exception("Weather task lock is unavailable")
+            raise self.retry(exc=exc, countdown=30)
+
+        client, key, token, acquired = lock
+        if not acquired:
+            return {"status": "skipped", "reason": "already_running", "task_id": task_id}
+
+        try:
+            result = execute_weather_task(task, connection, session)
+            if result.get("success"):
+                return {"status": "success", "task_id": task_id, **result}
+
+            error = RuntimeError(result.get("error") or "气象任务执行失败")
+            retry_count = max(0, min(int(task.retry_count or 0), 10))
+            if self.request.retries < retry_count:
+                raise self.retry(
+                    exc=error,
+                    countdown=min(300, 30 * (self.request.retries + 1)),
+                    max_retries=retry_count,
+                )
+            return {"status": "failed", "task_id": task_id, **result}
+        finally:
+            try:
+                _release_weather_lock(client, key, token)
+            except Exception:
+                logger.exception("Failed to release weather task lock: %s", task_id)
+
+
+@celery_app.task(bind=True, max_retries=2, soft_time_limit=1800)
+def run_partition_maintenance(self):
+    """创建未来分区并整理默认分区。"""
+
+    try:
+        from services.partition_maintenance_service import ensure_future_partitions
+
+        return ensure_future_partitions()
+    except Exception as exc:
+        logger.exception("Partition maintenance failed")
+        raise self.retry(exc=exc, countdown=300)
+
+
+@celery_app.task(bind=True, max_retries=0, soft_time_limit=7200)
+def run_etext_pipeline(
+    self,
+    job_id=None,
+    incoming_dir=None,
+    force=False,
+    started_at=None,
+):
+    """在独立 Worker 中执行 E 文本入库管道。"""
+
+    from services.etext_config import read_config
+    from services.etext_job_service import execute_pipeline
+
+    if incoming_dir is None:
+        config = read_config()
+        if not config.get("enabled", True):
+            return {"status": "skipped", "reason": "pipeline_disabled"}
+        incoming_dir = config.get("incoming_dir") or None
+
+    return execute_pipeline(
+        incoming_dir=incoming_dir,
+        force=bool(force),
+        job_id=job_id,
+        started_at=started_at,
+    )

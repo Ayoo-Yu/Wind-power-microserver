@@ -95,9 +95,11 @@ def validate_and_apply_config_updates(cfg, updates):
             minutes = [int(m) for m in updates["schedule_minutes"]]
         except (ValueError, TypeError):
             return cfg, "minutes must be integers"
+        if not minutes:
+            return cfg, "至少需要配置一个执行分钟"
         if not all(0 <= m <= 59 for m in minutes):
             return cfg, "minutes must be 0-59"
-        cfg = {**cfg, "schedule_minutes": sorted(minutes)}
+        cfg = {**cfg, "schedule_minutes": sorted(set(minutes))}
 
     if "enabled" in updates:
         cfg = {**cfg, "enabled": bool(updates["enabled"])}

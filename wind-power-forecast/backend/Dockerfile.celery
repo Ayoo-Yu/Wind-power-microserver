@@ -37,7 +37,7 @@ RUN pip install --no-cache-dir --retries 5 \
     schedule==1.2.2 six==1.16.0 sqlalchemy==2.0.38 threadpoolctl==3.5.0 \
     typing-extensions==4.12.2 tzdata==2024.2 urllib3==2.3.0 \
     werkzeug==2.3.3 wsproto==1.2.0 zipp==3.21.0 \
-    gunicorn==20.1.0 flask-jwt-extended==4.7.1 apscheduler==3.11.0 \
+    gunicorn==20.1.0 flask-jwt-extended==4.7.1 \
     psutil==5.9.0 gevent==23.9.1 gevent-websocket==0.10.1 \
     celery==5.6.3 flower==2.0.1 c104==2.2.1
 

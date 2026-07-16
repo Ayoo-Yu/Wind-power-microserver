@@ -9,9 +9,8 @@ import subprocess
 import paramiko
 import os
 import logging
-from services.task_executor import execute_weather_task
-from services.scheduler_service import get_scheduler
 from services import ssh_service
+from services.cron_service import validate_cron_expression
 from services.weather_connection_security import (
     apply_connection_secrets,
     build_connection_config,
@@ -339,6 +338,10 @@ def create_task():
             schedule = data.get('schedule', '0 */6 * * *')
             if schedule == 'custom':
                 schedule = data.get('custom_schedule', '0 */6 * * *')
+            try:
+                schedule = validate_cron_expression(schedule)
+            except ValueError as exc:
+                return jsonify({'message': str(exc)}), 400
 
             # 处理时间范围
             time_range_start = None
@@ -376,24 +379,16 @@ def create_task():
                 retry_count=data.get('retry_count', 3),
                 description=data.get('description', ''),
                 farm_code=task_farm_code,  # 新增场站字段
-                target_table=data.get('target_table', 'weather_data_records'),  # 新增目标表字段
                 created_by=current_user_id
             )
 
             db.add(task)
             db.commit()
 
-            # 将任务添加到调度器
-            try:
-                scheduler = get_scheduler()
-                if scheduler and task.enabled:
-                    scheduler.add_task_to_scheduler(task)
-            except Exception as e:
-                logger.error(f"添加任务到调度器失败: {e}")
-
             return jsonify({
                 'message': '任务创建成功',
-                'id': task.id
+                'id': task.id,
+                'scheduler_mode': 'celery'
             }), 201
 
     except Exception as e:
@@ -416,6 +411,15 @@ def update_task(task_id):
             
             if not task:
                 return jsonify({'message': '任务不存在'}), 404
+
+            if 'schedule' in data:
+                schedule = data['schedule']
+                if schedule == 'custom':
+                    schedule = data.get('custom_schedule', '0 */6 * * *')
+                try:
+                    data = {**data, 'schedule': validate_cron_expression(schedule)}
+                except ValueError as exc:
+                    return jsonify({'message': str(exc)}), 400
             
             # 处理时间相关字段
             if 'time_strategy' in data:
@@ -443,23 +447,12 @@ def update_task(task_id):
             
             for field in update_fields:
                 if field in data:
-                    if field == 'schedule' and data[field] == 'custom':
-                        setattr(task, field, data.get('custom_schedule', '0 */6 * * *'))
-                    else:
-                        setattr(task, field, data[field])
+                    setattr(task, field, data[field])
             
             task.updated_at = datetime.utcnow()
             db.commit()
             
-            # 更新调度器中的任务
-            try:
-                scheduler = get_scheduler()
-                if scheduler:
-                    scheduler.update_task_in_scheduler(task)
-            except Exception as e:
-                logger.error(f"更新调度器中的任务失败: {e}")
-            
-            return jsonify({'message': '任务更新成功'})
+            return jsonify({'message': '任务更新成功', 'scheduler_mode': 'celery'})
             
     except Exception as e:
         logger.error(f"更新任务失败: {e}")
@@ -482,15 +475,8 @@ def delete_task(task_id):
             
             # 软删除
             task.deleted_at = datetime.utcnow()
+            task.updated_at = datetime.utcnow()
             db.commit()
-            
-            # 从调度器中移除任务
-            try:
-                scheduler = get_scheduler()
-                if scheduler:
-                    scheduler.remove_task_from_scheduler(task.id)
-            except Exception as e:
-                logger.error(f"从调度器移除任务失败: {e}")
             
             return jsonify({'message': '任务删除成功'})
             
@@ -516,14 +502,6 @@ def toggle_task(task_id):
             task.enabled = not task.enabled
             task.updated_at = datetime.utcnow()
             db.commit()
-            
-            # 更新调度器中的任务状态
-            try:
-                scheduler = get_scheduler()
-                if scheduler:
-                    scheduler.update_task_in_scheduler(task)
-            except Exception as e:
-                logger.error(f"更新调度器中的任务状态失败: {e}")
             
             return jsonify({
                 'message': f'任务已{"启用" if task.enabled else "停用"}',
@@ -558,21 +536,19 @@ def run_task(task_id):
             if not connection:
                 return jsonify({'message': '连接不存在'}), 404
             
-            # 实际执行任务
-            result = execute_weather_task(task, connection, db)
-            
-            if result['success']:
-                return jsonify({
-                    'message': '任务执行完成',
-                    'files_processed': result.get('files_processed', 0),
-                    'save_path': result.get('save_path', ''),
-                    'total_size': result.get('total_size', 0)
-                })
-            else:
-                return jsonify({
-                    'message': '任务执行失败',
-                    'error': result.get('error', '未知错误')
-                }), 500
+            try:
+                from celery_app.tasks import run_weather_fetch
+
+                result = run_weather_fetch.apply_async(args=(task.id, False))
+            except Exception as exc:
+                logger.error(f"提交气象任务失败: {exc}")
+                return jsonify({'message': '任务队列当前不可用'}), 503
+
+            return jsonify({
+                'message': '任务已进入执行队列',
+                'status': 'queued',
+                'celery_task_id': result.id,
+            }), 202
             
     except Exception as e:
         logger.error(f"执行任务失败: {e}")
@@ -659,18 +635,31 @@ def get_task_logs(task_id):
 @jwt_required()
 @permission_required('manage_weather_data')
 def get_scheduler_status():
-    """获取调度器状态"""
+    """获取由 Celery Beat 托管的气象调度配置。"""
     try:
-        scheduler = get_scheduler()
-        if not scheduler:
+        with db_session() as db:
+            tasks = db.query(WeatherTask).filter(
+                WeatherTask.enabled.is_(True),
+                WeatherTask.deleted_at.is_(None),
+            ).order_by(WeatherTask.id).all()
+            jobs = [{
+                'id': f'weather_task_{task.id}',
+                'name': task.name,
+                'trigger': task.schedule,
+                'next_run_time': None,
+            } for task in tasks]
             return jsonify({
-                'message': '调度器未初始化',
-                'is_running': False,
-                'jobs': [],
-                'total_jobs': 0
-            }), 503
-        
-        return jsonify(scheduler.get_scheduled_jobs())
+                'message': '气象任务由 Celery Beat 托管',
+                'is_running': None,
+                'configured': True,
+                'mode': 'celery',
+                'managed_externally': True,
+                'reload_interval_seconds': int(
+                    os.environ.get('CELERY_BEAT_RELOAD_INTERVAL_SEC', '60')
+                ),
+                'jobs': jobs,
+                'total_jobs': len(jobs),
+            })
     except Exception as e:
         logger.error(f"获取调度器状态失败: {e}")
         return jsonify({'message': '获取调度器状态失败'}), 500
@@ -715,23 +704,12 @@ def get_stats():
                 WeatherTask.deleted_at == None
             ).count()
             
-            # 获取调度器状态
-            scheduler_status = "未知"
-            try:
-                scheduler = get_scheduler()
-                if scheduler:
-                    scheduler_status = "运行中" if scheduler.is_running else "已停止"
-                else:
-                    scheduler_status = "未初始化"
-            except:
-                scheduler_status = "错误"
-            
             return jsonify({
                 'files_processed_today': files_processed_today,
                 'records_inserted_today': records_inserted_today,
                 'success_rate': success_rate,
                 'active_tasks': active_tasks,
-                'scheduler_status': scheduler_status
+                'scheduler_status': 'Celery Beat 托管'
             })
             
     except Exception as e:
@@ -801,42 +779,9 @@ def check_directories():
 @jwt_required()
 @permission_required('manage_weather_data')
 def restart_scheduler():
-    """重启调度器"""
-    try:
-        from services.scheduler_service import weather_scheduler, init_scheduler
-        import os
-        
-        # 停止当前调度器
-        if weather_scheduler and weather_scheduler.is_running:
-            weather_scheduler.stop()
-            logger.info("旧调度器已停止")
-        
-        # 重新初始化调度器
-        db_host = os.environ.get('DB_HOST', 'localhost')
-        db_port = os.environ.get('DB_PORT', '54321')
-        db_user = os.environ.get('DB_USER', 'system')
-        db_password = os.environ.get('DB_PASSWORD')
-        if not db_password:
-            return jsonify({'message': 'DB_PASSWORD 未配置'}), 503
-        db_name = os.environ.get('DB_NAME', 'windpower')
-        database_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
-        
-        init_scheduler(database_url)
-        logger.info("调度器重启成功")
-        
-        # 获取重启后的状态
-        scheduler = get_scheduler()
-        status = scheduler.get_scheduled_jobs() if scheduler else {
-            'is_running': False,
-            'jobs': [],
-            'total_jobs': 0
-        }
-        
-        return jsonify({
-            'message': '调度器重启成功',
-            'status': status
-        })
-        
-    except Exception as e:
-        logger.error(f"重启调度器失败: {e}")
-        return jsonify({'message': f'重启调度器失败: {str(e)}'}), 500
+    """Web 进程无权重启独立调度服务。"""
+    return jsonify({
+        'message': '气象任务由 Celery Beat 托管，请通过服务管理工具操作',
+        'mode': 'celery',
+        'managed_externally': True,
+    }), 409

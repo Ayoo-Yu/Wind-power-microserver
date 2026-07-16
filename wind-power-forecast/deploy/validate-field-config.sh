@@ -65,9 +65,10 @@ fi
 if [ "${MODEL_AUTO_APPROVAL_ENABLED:-true}" != "false" ]; then
     error "场站模式必须关闭模型自动审批"
 fi
-if [ "${REPORT_SCHEDULER_MODE:-}" != "celery" ]; then
-    error "REPORT_SCHEDULER_MODE 必须为 celery"
-fi
+case "${DB_SCHEMA_ACTION:-}" in
+    prepare|upgrade|check) ;;
+    *) error "DB_SCHEMA_ACTION 仅支持 prepare、upgrade 或 check" ;;
+esac
 
 actual_fallback_age="${ACTUAL_POWER_RAW_FALLBACK_MAX_AGE_SECONDS:-900}"
 case "$actual_fallback_age" in

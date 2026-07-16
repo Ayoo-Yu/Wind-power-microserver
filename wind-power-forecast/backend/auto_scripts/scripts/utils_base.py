@@ -5,6 +5,8 @@ evaluation. Both ``utils_short`` and ``utils_middle`` re-export everything from
 this module for backward compatibility.
 """
 
+from __future__ import annotations
+
 import math
 import logging
 import os

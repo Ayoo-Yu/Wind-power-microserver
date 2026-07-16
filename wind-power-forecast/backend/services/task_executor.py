@@ -21,6 +21,7 @@ def execute_weather_task(task: WeatherTask, connection: WeatherConnection, sessi
         # 记录开始日志
         log_entry = WeatherLog(
             task_id=task.id,
+            farm_code=task.farm_code,
             log_level='info',
             message='任务开始执行',
             created_at=datetime.now()
@@ -46,6 +47,7 @@ def execute_weather_task(task: WeatherTask, connection: WeatherConnection, sessi
         if not files:
             log_entry = WeatherLog(
                 task_id=task.id,
+                farm_code=task.farm_code,
                 log_level='warning',
                 message='未找到匹配的文件',
                 created_at=datetime.now()
@@ -85,6 +87,7 @@ def execute_weather_task(task: WeatherTask, connection: WeatherConnection, sessi
                     if _should_skip_file(session, task.id, file_info, final_file_path, dedup_options):
                         log_entry = WeatherLog(
                             task_id=task.id,
+                            farm_code=task.farm_code,
                             log_level='info',
                             message=f'跳过已存在文件: {file_info["name"]}',
                             details=f'文件已存在于: {final_file_path}',
@@ -107,6 +110,7 @@ def execute_weather_task(task: WeatherTask, connection: WeatherConnection, sessi
                     if not download_result['success']:
                         log_entry = WeatherLog(
                             task_id=task.id,
+                            farm_code=task.farm_code,
                             log_level='error',
                             message=f'文件下载失败: {file_info["name"]}',
                             details=download_result.get('error'),
@@ -117,6 +121,7 @@ def execute_weather_task(task: WeatherTask, connection: WeatherConnection, sessi
                     
                     log_entry = WeatherLog(
                         task_id=task.id,
+                        farm_code=task.farm_code,
                         log_level='info',
                         message=f'文件下载成功: {file_info["name"]}',
                         details=f'大小: {file_info.get("size", 0)} 字节',
@@ -126,6 +131,7 @@ def execute_weather_task(task: WeatherTask, connection: WeatherConnection, sessi
                 else:
                     log_entry = WeatherLog(
                         task_id=task.id,
+                        farm_code=task.farm_code,
                         log_level='info',
                         message=f'使用已存在文件: {file_info["name"]}',
                         details=f'路径: {final_file_path}',
@@ -146,6 +152,7 @@ def execute_weather_task(task: WeatherTask, connection: WeatherConnection, sessi
                     # 记录处理结果
                     data_record = WeatherData(
                         task_id=task.id,
+                        farm_code=task.farm_code,
                         file_name=file_info['name'],
                         file_path=final_file_path,
                         file_size=file_info.get('size', 0),
@@ -158,6 +165,7 @@ def execute_weather_task(task: WeatherTask, connection: WeatherConnection, sessi
                     
                     log_entry = WeatherLog(
                         task_id=task.id,
+                        farm_code=task.farm_code,
                         log_level='success',
                         message=f'文件保存成功: {file_info["name"]}',
                         details=f'保存路径: {final_file_path}',
@@ -167,6 +175,7 @@ def execute_weather_task(task: WeatherTask, connection: WeatherConnection, sessi
                 else:
                     log_entry = WeatherLog(
                         task_id=task.id,
+                        farm_code=task.farm_code,
                         log_level='error',
                         message=f'文件处理失败: {file_info["name"]}',
                         details=process_result.get('error'),
@@ -181,6 +190,7 @@ def execute_weather_task(task: WeatherTask, connection: WeatherConnection, sessi
             except Exception as e:
                 log_entry = WeatherLog(
                     task_id=task.id,
+                    farm_code=task.farm_code,
                     log_level='error',
                     message=f'处理文件时发生错误: {file_info["name"]}',
                     details=str(e),
@@ -196,6 +206,7 @@ def execute_weather_task(task: WeatherTask, connection: WeatherConnection, sessi
         # 记录完成日志
         log_entry = WeatherLog(
             task_id=task.id,
+            farm_code=task.farm_code,
             log_level='info',
             message='任务执行完成',
             details=f'保存文件数: {processed_files}, 总文件大小: {total_size} 字节, 保存路径: {save_path}',
@@ -219,6 +230,7 @@ def execute_weather_task(task: WeatherTask, connection: WeatherConnection, sessi
         # 记录错误日志
         log_entry = WeatherLog(
             task_id=task.id,
+            farm_code=task.farm_code,
             log_level='error',
             message='任务执行失败',
             details=str(e),

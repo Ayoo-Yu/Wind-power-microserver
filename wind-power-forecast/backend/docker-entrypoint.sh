@@ -6,14 +6,8 @@ cd /app
 echo "等待数据库服务..."
 python manage_db.py wait --timeout "${DB_WAIT_TIMEOUT_SECONDS:-60}"
 
-SCHEMA_ACTION="${DB_SCHEMA_ACTION:-prepare}"
+SCHEMA_ACTION="${DB_SCHEMA_ACTION:-check}"
 case "${SCHEMA_ACTION}" in
-    prepare)
-        python manage_db.py prepare
-        ;;
-    upgrade)
-        python manage_db.py upgrade
-        ;;
     check)
         python manage_db.py check
         ;;
@@ -21,15 +15,10 @@ case "${SCHEMA_ACTION}" in
         echo "已按配置跳过数据库结构检查"
         ;;
     *)
-        echo "不支持的 DB_SCHEMA_ACTION: ${SCHEMA_ACTION}" >&2
+        echo "Web 容器只允许 DB_SCHEMA_ACTION=check 或 skip。请先运行 python deployment_init.py。" >&2
         exit 2
         ;;
 esac
-
-echo "初始化默认角色；仅在显式提供引导密码时创建管理员账号..."
-python -m init_users
-python -m fix_admin_permissions
-python -m fix_user_permissions
 
 CORES="$(grep -c '^processor' /proc/cpuinfo || echo 1)"
 WORKERS="${GUNICORN_WORKERS:-3}"
@@ -45,5 +34,4 @@ exec gunicorn \
   --max-requests-jitter 200 \
   --log-level info \
   --bind 0.0.0.0:5000 \
-  --preload \
   wsgi_app:app

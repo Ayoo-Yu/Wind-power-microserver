@@ -5,6 +5,8 @@ polling PM2 process state.  All deprecated PM2-management endpoints
 return 410 Gone so that older frontends get a clear signal.
 """
 
+from __future__ import annotations
+
 import json
 import datetime
 import glob

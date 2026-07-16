@@ -6,10 +6,33 @@ services:
     networks:
       - wind-power-network
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     environment:
       - TZ=Asia/Shanghai
     restart: unless-stopped
+
+  deployment-init:
+    image: ${PREDICTION_IMAGE:-wind-power-celery-worker:latest}
+    entrypoint: ["python"]
+    command: ["deployment_init.py"]
+    environment:
+      - DB_HOST=kingbase
+      - DB_PORT=54321
+      - DB_USER=system
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=windpower
+      - DB_SCHEMA_ACTION=${DB_SCHEMA_ACTION:-prepare}
+      - DB_WAIT_TIMEOUT_SECONDS=${DB_WAIT_TIMEOUT_SECONDS:-120}
+      - BOOTSTRAP_ADMIN_PASSWORD=${BOOTSTRAP_ADMIN_PASSWORD:-}
+      - BOOTSTRAP_ADMIN_PASSWORD_FILE=${BOOTSTRAP_ADMIN_PASSWORD_FILE:-}
+      - PYTHONPATH=/app
+      - TZ=Asia/Shanghai
+    volumes:
+      - ./app.env:/app/.env:ro
+    networks:
+      - wind-power-network
+    restart: "no"
 
   backend:
     image: ${PREDICTION_IMAGE:-wind-power-celery-worker:latest}
@@ -21,14 +44,12 @@ services:
       - DB_USER=system
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=windpower
-      - DB_SCHEMA_ACTION=${DB_SCHEMA_ACTION:-prepare}
+      - DB_SCHEMA_ACTION=check
       - DB_SCHEMA_STRICT=${DB_SCHEMA_STRICT:-true}
       - TZ=Asia/Shanghai
       - SECRET_KEY=${SECRET_KEY}
       - CREDENTIAL_ENCRYPTION_KEY=${CREDENTIAL_ENCRYPTION_KEY:-}
       - CREDENTIAL_ENCRYPTION_KEY_FILE=${CREDENTIAL_ENCRYPTION_KEY_FILE:-}
-      - BOOTSTRAP_ADMIN_PASSWORD=${BOOTSTRAP_ADMIN_PASSWORD:-}
-      - BOOTSTRAP_ADMIN_PASSWORD_FILE=${BOOTSTRAP_ADMIN_PASSWORD_FILE:-}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - API_BASE_URL=http://backend:5000
@@ -53,7 +74,7 @@ services:
       - ACTUAL_POWER_RAW_FALLBACK_MAX_AGE_SECONDS=${ACTUAL_POWER_RAW_FALLBACK_MAX_AGE_SECONDS:-900}
       - ACTUAL_POWER_TURBINE_SOURCE_UNIT=${ACTUAL_POWER_TURBINE_SOURCE_UNIT:-kW}
       - MODEL_AUTO_APPROVAL_ENABLED=${MODEL_AUTO_APPROVAL_ENABLED:-false}
-      - REPORT_SCHEDULER_MODE=${REPORT_SCHEDULER_MODE:-celery}
+      - CELERY_BEAT_RELOAD_INTERVAL_SEC=${CELERY_BEAT_RELOAD_INTERVAL_SEC:-60}
       - REGULATORY_EVALUATION_ENABLED=${REGULATORY_EVALUATION_ENABLED:-true}
       - REGULATORY_EVALUATION_LOOKBACK_DAYS=${REGULATORY_EVALUATION_LOOKBACK_DAYS:-3}
       - INTEGRATION_API_ENABLED=${INTEGRATION_API_ENABLED:-false}
@@ -72,10 +93,14 @@ services:
       - ./backend-data/saved_scalers:/app/saved_scalers
       - ./backend-data/saved_metrics:/app/saved_metrics
       - ./backend-data/data_etext:/app/data/etext
+      - ./backend-data/weather:/data/weather
       - ./backend-data/archives:/app/archives
       - ./backend-data/integration:/app/runtime/integration
     networks:
       - wind-power-network
+    depends_on:
+      deployment-init:
+        condition: service_completed_successfully
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health/ready"]
@@ -177,7 +202,6 @@ services:
       - NWP_DATA_STALE_AFTER_SECONDS=${NWP_DATA_STALE_AFTER_SECONDS:-21600}
       - ACTUAL_POWER_RAW_FALLBACK_MAX_AGE_SECONDS=${ACTUAL_POWER_RAW_FALLBACK_MAX_AGE_SECONDS:-900}
       - ACTUAL_POWER_TURBINE_SOURCE_UNIT=${ACTUAL_POWER_TURBINE_SOURCE_UNIT:-kW}
-      - REPORT_SCHEDULER_MODE=${REPORT_SCHEDULER_MODE:-celery}
       - REGULATORY_EVALUATION_ENABLED=${REGULATORY_EVALUATION_ENABLED:-true}
       - REGULATORY_EVALUATION_HOUR=${REGULATORY_EVALUATION_HOUR:-1}
       - REGULATORY_EVALUATION_MINUTE=${REGULATORY_EVALUATION_MINUTE:-20}
@@ -185,12 +209,15 @@ services:
     networks:
       - wind-power-network
     depends_on:
+      deployment-init:
+        condition: service_completed_successfully
       redis:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
     volumes:
       - ./app.env:/app/.env:ro
       - ./backend-data/data_etext:/app/data/etext
+      - ./backend-data/weather:/data/weather
       - ./backend-data/forecast_models:/app/forecast_models
       - ./datasets:/app/auto_scripts/scripts/middle/datasets
       - ./predict_inputs:/app/auto_scripts/scripts/middle/predict_inputs
@@ -230,18 +257,20 @@ services:
       - PYTHONPATH=/app
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - REPORT_SCHEDULER_MODE=${REPORT_SCHEDULER_MODE:-celery}
       - REGULATORY_EVALUATION_ENABLED=${REGULATORY_EVALUATION_ENABLED:-true}
       - REGULATORY_EVALUATION_HOUR=${REGULATORY_EVALUATION_HOUR:-1}
       - REGULATORY_EVALUATION_MINUTE=${REGULATORY_EVALUATION_MINUTE:-20}
     volumes:
       - ./app.env:/app/.env:ro
+      - ./backend-data/data_etext:/app/data/etext
       - ./celery-beat-data:/app/celerybeat-data
     networks:
       - wind-power-network
     depends_on:
+      deployment-init:
+        condition: service_completed_successfully
       redis:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
 
   redis:

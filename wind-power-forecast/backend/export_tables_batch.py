@@ -6,6 +6,8 @@ Examples:
     python export_tables_batch.py D:\exports --table train_pre_short_zyx --table train_pre_middle_zyx
 """
 
+from __future__ import annotations
+
 import argparse
 import os
 import sys

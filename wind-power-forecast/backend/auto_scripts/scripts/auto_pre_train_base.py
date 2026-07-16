@@ -5,6 +5,8 @@ monitoring loop.  Each variant (``auto_pre_train.py`` in ``short/`` and
 ``middle/``) provides a small ``VARIANT`` dict with the few parameters that
 differ and then calls :func:`run_main` from this module.
 """
+from __future__ import annotations
+
 import argparse
 import logging
 import os

@@ -16,7 +16,7 @@
           <span class="card-title">今日系统气象健康大盘</span>
           <div class="button-group">
             <el-button type="info" size="small" :loading="checkingScheduler" @click="checkSchedulerStatus">刷新状态</el-button>
-            <el-button type="warning" size="small" :loading="restartingScheduler" @click="restartScheduler">重启调度器</el-button>
+            <el-button v-if="!schedulerInfo.managed_externally" type="warning" size="small" :loading="restartingScheduler" @click="restartScheduler">重启调度器</el-button>
           </div>
         </div>
       </template>
@@ -205,7 +205,7 @@
           </el-select>
         </el-form-item>
         <el-form-item v-if="taskForm.schedule === 'custom'" label="Cron表达式" prop="custom_schedule"><el-input v-model="taskForm.custom_schedule" placeholder="0 10 * * *" /></el-form-item>
-        <el-form-item label="本地保存路径" prop="save_path"><el-input v-model="taskForm.save_path" placeholder="D:\\weather_data\\{date}\\" /></el-form-item>
+        <el-form-item label="本地保存路径" prop="save_path"><el-input v-model="taskForm.save_path" placeholder="/data/weather/{date}/" /></el-form-item>
         <el-form-item label="超时时间(秒)" prop="timeout"><el-input-number v-model="taskForm.timeout" :min="30" :max="3600" /></el-form-item>
         <el-form-item label="重试次数" prop="retry_count"><el-input-number v-model="taskForm.retry_count" :min="0" :max="5" /></el-form-item>
         <el-form-item label="任务描述" prop="description"><el-input v-model="taskForm.description" type="textarea" :rows="3" placeholder="可填写任务说明" /></el-form-item>
@@ -367,7 +367,7 @@ export default {
       key_passphrase_set: false
     })
 
-    const defaultSavePath = navigator.userAgent.includes('Windows') ? 'D:\\weather_data\\{date}\\' : '/data/weather/{date}/'
+    const defaultSavePath = '/data/weather/{date}/'
 
     const taskForm = reactive({
       id: null,
@@ -432,7 +432,8 @@ export default {
       const totalChannels = connections.value.length
       const connectedChannels = connections.value.filter((item) => item.status === 'connected').length
       const channelOk = totalChannels > 0 && totalChannels === connectedChannels
-      const schedulerRunning = !!schedulerInfo.value?.is_running
+      const schedulerManagedExternally = !!schedulerInfo.value?.managed_externally
+      const schedulerRunning = schedulerManagedExternally || !!schedulerInfo.value?.is_running
       const farmKeys = tasks.value.map((item) => item.farm_code || `task-${item.id}`)
       const totalStations = new Set(farmKeys).size
       const readyStations = new Set(tasks.value.filter((item) => isToday(item.last_run) && ['success', 'parsed', 'completed'].includes((item.status || '').toLowerCase())).map((item) => item.farm_code || `task-${item.id}`)).size
@@ -443,7 +444,10 @@ export default {
 
       return {
         channel: { status: channelOk ? 'ready' : 'warning', text: channelOk ? '🟢 所有SFTP配置正常' : `🔴 存在断连通道 (${connectedChannels}/${totalChannels || 0})` },
-        scheduler: { status: schedulerRunning ? 'ready' : 'warning', text: schedulerRunning ? '🟢 运行中' : '🔴 已停止' },
+        scheduler: {
+          status: schedulerRunning ? 'ready' : 'warning',
+          text: schedulerManagedExternally ? '🟢 Celery Beat 托管' : (schedulerRunning ? '🟢 运行中' : '🔴 已停止')
+        },
         arrival: {
           status: arrivalPercent >= 90 ? 'ready' : (arrivalPercent >= 60 ? 'warning' : 'danger'),
           percent: arrivalPercent,
@@ -626,7 +630,7 @@ export default {
       try {
         await taskFormRef.value.validate()
         savingTask.value = true
-        const payload = { ...taskForm, file_pattern: taskForm.filename_template, schedule: taskForm.schedule === 'custom' ? taskForm.custom_schedule : taskForm.schedule, path_pattern: 'custom', custom_path_pattern: 'manual-template', time_strategy: 'latest', processing_options: ['integrity_check'], deduplication_options: ['skip_existing'], target_table: 'weather_data_records' }
+        const payload = { ...taskForm, file_pattern: taskForm.filename_template, schedule: taskForm.schedule === 'custom' ? taskForm.custom_schedule : taskForm.schedule, path_pattern: 'custom', custom_path_pattern: 'manual-template', time_strategy: 'latest', processing_options: ['integrity_check'], deduplication_options: ['skip_existing'] }
         if (editingTask.value) await updateWeatherTask(taskForm.id, payload)
         else await createWeatherTask(payload)
         ElMessage.success(editingTask.value ? '任务更新成功' : '任务创建成功')
@@ -765,7 +769,7 @@ export default {
       showConnectionDialog, showTaskDialog, showLogsDialog, showManualUploadDialog, editingConnection, editingTask,
       connectionFormRef, taskFormRef, manualUploadFormRef,
       connectionForm, taskForm, manualUploadForm, manualUploadRules, connectionRules, taskRules, manualUploadFileList, manualUploadResult,
-      currentTaskName, logLevel, schedulerCheckedAt, healthBoard,
+      currentTaskName, logLevel, schedulerCheckedAt, schedulerInfo, healthBoard,
       ecmwfStatus, loadingEcmwf, refreshEcmwfStatus,
       checkSchedulerStatus, restartScheduler, openConnectionDialog, editConnection, saveConnection, deleteConnection, testConnection,
       openTaskDialog, editTask, saveTask, deleteTask, runTask, toggleTask,

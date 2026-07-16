@@ -7,7 +7,9 @@ from celery.schedules import crontab
 from sqlalchemy import func
 
 from db_session import db_session
-from db_models import PredictionTask
+from db_models import PredictionTask, WeatherTask
+from services.cron_service import build_crontab
+from services.etext_config import CONFIG_FILE, read_config
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +29,10 @@ STATIC_SCHEDULES = {
     "report_schedule_scan": {
         "task": "celery_app.tasks.scan_scheduled_reports",
         "schedule": crontab(minute="*"),
+    },
+    "partition_maintenance_daily": {
+        "task": "celery_app.tasks.run_partition_maintenance",
+        "schedule": crontab(hour=2, minute=10),
     },
 }
 
@@ -64,14 +70,58 @@ def _parse_day_of_week(value):
 def build_beat_schedule():
     # 可靠上报恢复任务不能依赖预测任务表是否可用。
     schedule = dict(STATIC_SCHEDULES)
+    _add_etext_schedule(schedule)
     try:
         with db_session() as session:
-            tasks = session.query(PredictionTask).filter_by(enabled=True).all()
-            for t in tasks:
-                _add_prediction_schedules(schedule, t)
+            prediction_tasks = session.query(PredictionTask).filter_by(enabled=True).all()
+            for task in prediction_tasks:
+                _add_prediction_schedules(schedule, task)
+
+            weather_tasks = session.query(WeatherTask).filter(
+                WeatherTask.enabled.is_(True),
+                WeatherTask.deleted_at.is_(None),
+            ).all()
+            for task in weather_tasks:
+                _add_weather_schedule(schedule, task)
     except Exception:
-        logger.exception("Failed to load prediction schedules, keeping static schedules active")
+        logger.exception("Failed to load database schedules, keeping static schedules active")
     return schedule
+
+
+def _add_etext_schedule(schedule):
+    try:
+        config = read_config()
+        if not config.get("enabled", True):
+            return
+
+        minutes = config.get("schedule_minutes") or []
+        if not minutes:
+            logger.warning("E text schedule has no configured minutes and was skipped")
+            return
+
+        schedule["etext_pipeline_daily"] = {
+            "task": "celery_app.tasks.run_etext_pipeline",
+            "schedule": crontab(
+                hour=int(config.get("schedule_hour", 8)),
+                minute=",".join(str(int(minute)) for minute in minutes),
+            ),
+        }
+    except Exception:
+        logger.exception("Failed to load E text schedule")
+
+
+def _add_weather_schedule(schedule, task):
+    try:
+        task_schedule = build_crontab(task.schedule)
+    except ValueError as exc:
+        logger.error("Weather task %s has invalid cron expression: %s", task.id, exc)
+        return
+
+    schedule[f"weather_task_{task.id}"] = {
+        "task": "celery_app.tasks.run_weather_fetch",
+        "args": (task.id, True),
+        "schedule": task_schedule,
+    }
 
 
 def _add_prediction_schedules(schedule, task):
@@ -132,15 +182,30 @@ def _add_prediction_schedules(schedule, task):
 
 def get_schedule_revision():
     try:
+        etext_revision = os.stat(CONFIG_FILE).st_mtime_ns
+    except OSError:
+        etext_revision = None
+
+    try:
         with db_session() as session:
-            row = session.query(
+            prediction_row = session.query(
                 func.count(PredictionTask.id),
                 func.max(PredictionTask.updated_at),
             ).one()
-            return row[0], row[1].isoformat() if row[1] else None
+            weather_row = session.query(
+                func.count(WeatherTask.id),
+                func.max(WeatherTask.updated_at),
+            ).one()
+            return (
+                prediction_row[0],
+                prediction_row[1].isoformat() if prediction_row[1] else None,
+                weather_row[0],
+                weather_row[1].isoformat() if weather_row[1] else None,
+                etext_revision,
+            )
     except Exception:
-        logger.exception("Failed to read prediction schedule revision")
-        return "database-unavailable", None
+        logger.exception("Failed to read database schedule revision")
+        return "database-unavailable", etext_revision
 
 
 class DatabaseScheduler(PersistentScheduler):

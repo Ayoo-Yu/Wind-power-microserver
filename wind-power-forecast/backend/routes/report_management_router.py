@@ -27,16 +27,6 @@ from utils.credential_cipher import (
     has_secret,
 )
 
-# 添加定时调度器
-from apscheduler.schedulers.background import BackgroundScheduler
-import atexit
-from threading import Lock
-
-# 创建调度器实例和锁
-report_scheduler = BackgroundScheduler(daemon=True)
-scheduler_lock = Lock()
-REPORT_SCHEDULER_MODE = os.environ.get('REPORT_SCHEDULER_MODE', 'embedded').lower()
-
 report_management_bp = Blueprint('report_management', __name__)
 
 CONFIG_META_PUBLIC_FIELDS = {
@@ -1651,80 +1641,26 @@ def check_and_execute_scheduled_reports():
         'results': execution_results,
     }
 
-def start_report_scheduler():
-    """启动上报调度器"""
-    try:
-        # 避免重复启动
-        if report_scheduler.running:
-            logging.info("上报调度器已在运行，跳过启动")
-            return
-            
-        # 使用CRON模式精确调度 - 每分钟检查一次以支持长期预测定点上报
-        report_scheduler.add_job(
-            check_and_execute_scheduled_reports,
-            'cron',
-            minute='*',
-            second='45',
-            id='report_scheduler_cron',
-            max_instances=1,
-            coalesce=True,
-            misfire_grace_time=30
-        )
-        
-        report_scheduler.start()
-        logging.info("上报调度器启动成功 - 使用CRON模式")
-        logging.info("调度策略: 每分钟XX:45秒检查，长期预测按定时时间执行，其他类型保持15分钟间隔")
-        
-        # 注册程序退出时的清理函数
-        atexit.register(lambda: report_scheduler.shutdown())
-        
-    except Exception as e:
-        logging.error(f"启动上报调度器失败: {str(e)}")
-
-def stop_report_scheduler():
-    """停止上报调度器"""
-    try:
-        if report_scheduler.running:
-            report_scheduler.shutdown()
-            logging.info("上报调度器已停止")
-    except Exception as e:
-        logging.error(f"停止上报调度器时出错: {str(e)}")
-
 # 添加控制调度器的API接口
 @report_management_bp.route('/scheduler/start', methods=['POST'])
 @permission_required('manage_reports')
 def start_scheduler():
-    """启动上报调度器"""
-    try:
-        if REPORT_SCHEDULER_MODE == 'celery':
-            return jsonify({
-                'message': '自动上报由 Celery Beat 托管，请通过服务管理工具操作',
-                'mode': 'celery',
-            }), 409
-        if not report_scheduler.running:
-            start_report_scheduler()
-            return jsonify({'message': '上报调度器启动成功'})
-        else:
-            return jsonify({'message': '上报调度器已在运行中'})
-    except Exception as e:
-        logging.error(f"启动调度器失败: {str(e)}")
-        return jsonify({'error': '启动调度器失败'}), 500
+    """Web 进程无权启动独立调度服务。"""
+    return jsonify({
+        'message': '自动上报由 Celery Beat 托管，请通过服务管理工具操作',
+        'mode': 'celery',
+        'managed_externally': True,
+    }), 409
 
 @report_management_bp.route('/scheduler/stop', methods=['POST'])
 @permission_required('manage_reports')
 def stop_scheduler():
-    """停止上报调度器"""
-    try:
-        if REPORT_SCHEDULER_MODE == 'celery':
-            return jsonify({
-                'message': '自动上报由 Celery Beat 托管，请通过服务管理工具操作',
-                'mode': 'celery',
-            }), 409
-        stop_report_scheduler()
-        return jsonify({'message': '上报调度器已停止'})
-    except Exception as e:
-        logging.error(f"停止调度器失败: {str(e)}")
-        return jsonify({'error': '停止调度器失败'}), 500
+    """Web 进程无权停止独立调度服务。"""
+    return jsonify({
+        'message': '自动上报由 Celery Beat 托管，请通过服务管理工具操作',
+        'mode': 'celery',
+        'managed_externally': True,
+    }), 409
 
 @report_management_bp.route('/scheduler/status', methods=['GET'])
 @permission_required('manage_reports')
@@ -1732,10 +1668,10 @@ def get_scheduler_status():
     """获取调度器状态"""
     try:
         status = {
-            'running': report_scheduler.running if REPORT_SCHEDULER_MODE == 'embedded' else None,
+            'running': None,
             'configured': True,
-            'mode': REPORT_SCHEDULER_MODE,
-            'managed_externally': REPORT_SCHEDULER_MODE == 'celery',
+            'mode': 'celery',
+            'managed_externally': True,
             'next_report_times': get_next_report_times()
         }
         return jsonify(status)
@@ -1747,23 +1683,7 @@ def get_next_report_times():
     """获取接下来的调度检查时间点"""
     now = datetime.now()
 
-    if REPORT_SCHEDULER_MODE == 'celery':
-        next_time = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
-        return [next_time.strftime('%H:%M:%S')]
-    
-    # 调度器每分钟的45秒检查
-    if now.second < 45:
-        # 当前分钟的45秒还没到
-        next_time = now.replace(second=45, microsecond=0)
-    else:
-        # 当前分钟的45秒已过，取下一分钟的45秒
-        if now.minute == 59:
-            # 跨小时
-            next_hour = now.hour + 1 if now.hour < 23 else 0
-            next_time = now.replace(hour=next_hour, minute=0, second=45, microsecond=0)
-        else:
-            next_time = now.replace(minute=now.minute + 1, second=45, microsecond=0)
-    
+    next_time = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
     return [next_time.strftime('%H:%M:%S')]
 
 def get_data_structure_info(report_type):
@@ -2692,14 +2612,8 @@ def update_daily_statistics(db: Session, farm_code: str, date: str):
         logging.error(f"更新{farm_code}在{date}的统计数据失败: {str(e)}")
         return {'success': False, 'error': str(e)}
 
-# 兼容模式允许单进程开发环境继续使用内嵌调度器。
-if REPORT_SCHEDULER_MODE == 'embedded':
-    try:
-        start_report_scheduler()
-    except Exception as e:
-        logging.error(f"自动启动上报调度器失败: {str(e)}")
-else:
-    logging.info("自动上报调度由 Celery Beat 托管，Web 进程不启动内嵌调度器")
+# Web 进程只提供管理接口。生产与本地开发均由 Celery Beat 托管周期任务。
+logging.info("自动上报调度由 Celery Beat 托管")
 
 @report_management_bp.route('/statistics/test-update', methods=['POST'])
 @permission_required('manage_reports')

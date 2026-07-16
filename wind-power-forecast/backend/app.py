@@ -186,22 +186,6 @@ def validate_database_schema():
 
 validate_database_schema()
 
-try:
-    from services.scheduler_service import init_scheduler
-    db_host = os.environ.get('DB_HOST', 'localhost')
-    db_port = os.environ.get('DB_PORT', '54321')
-    db_user = os.environ.get('DB_USER', 'system')
-    db_password = os.environ.get('DB_PASSWORD')
-    if not db_password:
-        raise RuntimeError('DB_PASSWORD not set for scheduler.')
-    db_name = os.environ.get('DB_NAME', 'windpower')
-    database_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
-    
-    init_scheduler(database_url)
-    print("调度器初始化成功")
-except Exception as e:
-    print(f"调度器初始化失败: {e}")
-
 @jwt.expired_token_loader
 def expired_token_callback(jwt_header, jwt_payload):
     return jsonify({"message": "登录已过期"}), 401

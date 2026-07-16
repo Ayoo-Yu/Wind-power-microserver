@@ -1,4 +1,6 @@
 """Test round_to_quarter_hour window logic."""
+from __future__ import annotations
+
 import sys
 sys.path.insert(0, '.')
 

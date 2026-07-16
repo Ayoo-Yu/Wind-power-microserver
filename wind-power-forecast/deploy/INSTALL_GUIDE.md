@@ -93,7 +93,7 @@ INTEGRATION_API_TOKEN=<独立随机令牌>
 DEPLOYMENT_MODE=field
 DB_SCHEMA_STRICT=true
 MODEL_AUTO_APPROVAL_ENABLED=false
-REPORT_SCHEDULER_MODE=celery
+DB_SCHEMA_ACTION=prepare
 ```
 
 校验配置：
@@ -120,13 +120,13 @@ chmod +x deploy.sh validate-field-config.sh verify-release.sh
 3. 创建数据库、Redis、模型、日志、归档和接入目录。
 4. 启动 KingBase 并确认数据库可连接。
 5. 导入可选种子数据。
-6. 通过入口脚本执行 `alembic upgrade head` 和严格结构检查。
-7. 启动后端、SCADA Manager、NWP 接入处理器、Celery、Redis 和前端。
+6. 由一次性 `deployment-init` 容器执行数据库迁移、基础角色初始化和严格结构检查。
+7. 初始化成功后启动后端、SCADA Manager、NWP 接入处理器、Celery、Redis 和前端。
 
 ## 6. 启动后检查
 
 ```bash
-curl -fsS http://127.0.0.1:5000/health
+curl -fsS http://127.0.0.1:5000/health/ready
 docker compose -f docker-compose.prod.yaml ps
 docker compose -f docker-compose.db.yaml ps
 docker compose -f docker-compose.prod.yaml logs --tail 100 scada-manager
@@ -160,6 +160,7 @@ deploy/
 │   ├── forecast_models/
 │   ├── uploads/
 │   ├── logs/
+│   ├── weather/
 │   ├── archives/
 │   └── integration/
 ├── redis-data/
@@ -222,6 +223,7 @@ docker compose -f docker-compose.prod.yaml restart celery-worker
 
 ```bash
 docker compose -f docker-compose.prod.yaml logs --tail 200 backend
+docker compose -f docker-compose.prod.yaml logs --tail 200 deployment-init
 docker compose -f docker-compose.prod.yaml exec backend alembic current
 docker compose -f docker-compose.prod.yaml exec backend alembic heads
 ```

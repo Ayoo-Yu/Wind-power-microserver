@@ -9,10 +9,36 @@ services:
     networks:
       - wind-power-network  # 鏉╃偞甯撮崥灞肩缂冩垹绮?
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     environment:
       - TZ=Asia/Shanghai # Set Timezone to Beijing Time
     restart: unless-stopped
+  deployment-init:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: wind-power-backend:v250714_1.0
+    entrypoint: ["python"]
+    command: ["deployment_init.py"]
+    environment:
+      - DB_HOST=kingbase
+      - DB_PORT=54321
+      - DB_USER=system
+      - DB_PASSWORD=${DB_PASSWORD:-change-me-in-production}
+      - DB_NAME=windpower
+      - DB_SCHEMA_ACTION=${DB_SCHEMA_ACTION:-prepare}
+      - DB_WAIT_TIMEOUT_SECONDS=${DB_WAIT_TIMEOUT_SECONDS:-120}
+      - BOOTSTRAP_ADMIN_PASSWORD=${BOOTSTRAP_ADMIN_PASSWORD:-}
+      - BOOTSTRAP_ADMIN_PASSWORD_FILE=${BOOTSTRAP_ADMIN_PASSWORD_FILE:-}
+      - TZ=Asia/Shanghai
+    networks:
+      - wind-power-network
+    depends_on:
+      kingbase:
+        condition: service_healthy
+    restart: "no"
+
   backend:
     build:
       context: ./backend
@@ -27,7 +53,7 @@ services:
       - DB_USER=system         # 闁叉垳绮ㄦ妯款吇閻劍鍩?
       - DB_PASSWORD=${DB_PASSWORD:-change-me-in-production}
       - DB_NAME=windpower      # 鏉╃偞甯撮崚鐨恑ndpower閺佺増宓佹惔?
-      - DB_SCHEMA_ACTION=${DB_SCHEMA_ACTION:-prepare}
+      - DB_SCHEMA_ACTION=check
       - DB_SCHEMA_STRICT=${DB_SCHEMA_STRICT:-true}
       - TZ=Asia/Shanghai # Set Timezone to Beijing Time
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
@@ -53,7 +79,7 @@ services:
       - ACTUAL_POWER_RAW_FALLBACK_MAX_AGE_SECONDS=${ACTUAL_POWER_RAW_FALLBACK_MAX_AGE_SECONDS:-900}
       - ACTUAL_POWER_TURBINE_SOURCE_UNIT=${ACTUAL_POWER_TURBINE_SOURCE_UNIT:-kW}
       - MODEL_AUTO_APPROVAL_ENABLED=${MODEL_AUTO_APPROVAL_ENABLED:-false}
-      - REPORT_SCHEDULER_MODE=${REPORT_SCHEDULER_MODE:-celery}
+      - CELERY_BEAT_RELOAD_INTERVAL_SEC=${CELERY_BEAT_RELOAD_INTERVAL_SEC:-60}
       - REGULATORY_EVALUATION_ENABLED=${REGULATORY_EVALUATION_ENABLED:-true}
       - REGULATORY_EVALUATION_LOOKBACK_DAYS=${REGULATORY_EVALUATION_LOOKBACK_DAYS:-3}
       - INTEGRATION_API_ENABLED=${INTEGRATION_API_ENABLED:-false}
@@ -62,9 +88,13 @@ services:
       - INTEGRATION_SPOOL_DIR=/app/runtime/integration
     networks:
       - wind-power-network
-    # No depends_on for kingbase: backend starts independently and auto-reconnects.
+    depends_on:
+      deployment-init:
+        condition: service_completed_successfully
     restart: unless-stopped
     volumes:
+      - ./backend/data/etext:/app/data/etext
+      - ./backend/data/weather:/data/weather
       - ./backend/runtime/integration:/app/runtime/integration
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health/ready"]
@@ -195,7 +225,6 @@ services:
       - NWP_DATA_STALE_AFTER_SECONDS=${NWP_DATA_STALE_AFTER_SECONDS:-21600}
       - ACTUAL_POWER_RAW_FALLBACK_MAX_AGE_SECONDS=${ACTUAL_POWER_RAW_FALLBACK_MAX_AGE_SECONDS:-900}
       - ACTUAL_POWER_TURBINE_SOURCE_UNIT=${ACTUAL_POWER_TURBINE_SOURCE_UNIT:-kW}
-      - REPORT_SCHEDULER_MODE=${REPORT_SCHEDULER_MODE:-celery}
       - REGULATORY_EVALUATION_ENABLED=${REGULATORY_EVALUATION_ENABLED:-true}
       - REGULATORY_EVALUATION_HOUR=${REGULATORY_EVALUATION_HOUR:-1}
       - REGULATORY_EVALUATION_MINUTE=${REGULATORY_EVALUATION_MINUTE:-20}
@@ -203,10 +232,14 @@ services:
     networks:
       - wind-power-network
     depends_on:
+      deployment-init:
+        condition: service_completed_successfully
       redis:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
     volumes:
+      - ./backend/data/etext:/app/data/etext
+      - ./backend/data/weather:/data/weather
       # 娑擃厽婀℃０鍕ゴ閻╃鍙ч惄顔肩秿
       - ./backend/auto_scripts/scripts/middle/datasets:/app/auto_scripts/scripts/middle/datasets
       - ./backend/auto_scripts/scripts/middle/predict_inputs:/app/auto_scripts/scripts/middle/predict_inputs
@@ -250,15 +283,18 @@ services:
       - REDIS_PORT=6379
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - REPORT_SCHEDULER_MODE=${REPORT_SCHEDULER_MODE:-celery}
       - REGULATORY_EVALUATION_ENABLED=${REGULATORY_EVALUATION_ENABLED:-true}
       - REGULATORY_EVALUATION_HOUR=${REGULATORY_EVALUATION_HOUR:-1}
       - REGULATORY_EVALUATION_MINUTE=${REGULATORY_EVALUATION_MINUTE:-20}
     networks:
       - wind-power-network
     depends_on:
+      deployment-init:
+        condition: service_completed_successfully
       redis:
-        condition: service_started
+        condition: service_healthy
+    volumes:
+      - ./backend/data/etext:/app/data/etext
     restart: unless-stopped
 
   celery-flower:
