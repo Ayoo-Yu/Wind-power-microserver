@@ -25,51 +25,47 @@
       :title="errorMessage"
     />
 
-    <el-row :gutter="12">
-      <el-col :span="12">
-        <el-card class="card-shell">
-          <template #header>节假日与免考核日期</template>
-          <el-date-picker v-model="holidayDate" type="date" value-format="YYYY-MM-DD" />
-          <el-input
-            v-model.trim="holidayNote"
-            placeholder="填写节假日备注，例如：国庆节"
-            style="margin-top: 8px"
-          />
-          <div class="actions">
-            <el-button type="primary" @click="addHoliday">新增</el-button>
-          </div>
-          <el-table
-            v-loading="loading"
-            :data="holidays"
-            size="small"
-            style="margin-top: 10px"
-            empty-text="暂无节假日配置"
-          >
-            <el-table-column prop="date" label="日期" />
-            <el-table-column prop="note" label="备注" />
-            <el-table-column label="操作" width="90">
-              <template #default="{ $index }">
-                <el-button link type="danger" @click="removeHoliday($index)">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-        </el-card>
-      </el-col>
+    <div class="settings-grid">
+      <el-card class="card-shell settings-card">
+        <template #header>节假日与免考核日期</template>
+        <el-date-picker v-model="holidayDate" type="date" value-format="YYYY-MM-DD" />
+        <el-input
+          v-model.trim="holidayNote"
+          placeholder="填写节假日备注，例如：国庆节"
+          style="margin-top: 8px"
+        />
+        <div class="actions">
+          <el-button type="primary" @click="addHoliday">新增</el-button>
+        </div>
+        <el-table
+          v-loading="loading"
+          :data="holidays"
+          size="small"
+          style="margin-top: 10px"
+          empty-text="暂无节假日配置"
+        >
+          <el-table-column prop="date" label="日期" />
+          <el-table-column prop="note" label="备注" />
+          <el-table-column label="操作" width="90">
+            <template #default="{ $index }">
+              <el-button link type="danger" @click="removeHoliday($index)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
 
-      <el-col :span="12">
-        <el-card class="card-shell">
-          <template #header>字典配置</template>
-          <el-form label-width="100px">
-            <el-form-item label="机型列表">
-              <el-input v-model="dict.turbineModels" placeholder="多个机型使用英文逗号分隔" />
-            </el-form-item>
-            <el-form-item label="厂家列表">
-              <el-input v-model="dict.vendors" placeholder="多个厂家使用英文逗号分隔" />
-            </el-form-item>
-          </el-form>
-        </el-card>
-      </el-col>
-    </el-row>
+      <el-card class="card-shell settings-card">
+        <template #header>字典配置</template>
+        <el-form label-width="100px">
+          <el-form-item label="机型列表">
+            <el-input v-model="dict.turbineModels" placeholder="多个机型使用英文逗号分隔" />
+          </el-form-item>
+          <el-form-item label="厂家列表">
+            <el-input v-model="dict.vendors" placeholder="多个厂家使用英文逗号分隔" />
+          </el-form-item>
+        </el-form>
+      </el-card>
+    </div>
 
     <el-card class="card-shell retention-card">
       <template #header>保留策略</template>
@@ -315,9 +311,20 @@ export default {
   margin-bottom: 12px;
 }
 
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 12px;
+}
+
 .card-shell {
   background: var(--surface);
   border: 1px solid var(--border-color);
+}
+
+.settings-card {
+  height: 100%;
 }
 
 .retention-card {
@@ -340,6 +347,10 @@ export default {
 @media (max-width: 960px) {
   .page-header {
     flex-direction: column;
+  }
+
+  .settings-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>
