@@ -44,9 +44,8 @@ set "MAIN_APP_HOST=127.0.0.1"
 set "MAIN_APP_PORT=18080"
 set "APP_DEBUG=false"
 
-REM Frontend dev proxy target ports. Keep AUTO_BACKEND_PORT for vue.config.js compatibility.
+REM 前端开发代理使用主后端端口。
 set "MAIN_BACKEND_PORT=%MAIN_APP_PORT%"
-set "AUTO_BACKEND_PORT=%MAIN_APP_PORT%"
 set "API_BASE_URL=http://%MAIN_APP_HOST%:%MAIN_APP_PORT%"
 set "SCADA_BACKEND_URL=http://%MAIN_APP_HOST%:%MAIN_APP_PORT%"
 set "APP_HOST=%MAIN_APP_HOST%"
@@ -68,8 +67,8 @@ if errorlevel 1 (
 set "FRONTEND_CMD="
 if exist "%FRONTEND_DIR%\package.json" (
   set "FRONTEND_CMD=npm run serve"
-) else if exist "%FRONTEND_DIR%\node_modules\.bin\vue-cli-service.cmd" (
-  set "FRONTEND_CMD=%FRONTEND_DIR%\node_modules\.bin\vue-cli-service.cmd serve"
+) else if exist "%FRONTEND_DIR%\node_modules\.bin\vite.cmd" (
+  set "FRONTEND_CMD=%FRONTEND_DIR%\node_modules\.bin\vite.cmd"
 )
 
 if not exist "%BACKEND_DIR%\app.py" (
@@ -84,7 +83,7 @@ if not exist "%BACKEND_DIR%\celery_app\__init__.py" (
   exit /b 1
 )
 
-if not exist "%FRONTEND_DIR%\vue.config.js" (
+if not exist "%FRONTEND_DIR%\vite.config.mjs" (
   echo [ERROR] Frontend directory is incomplete: "%FRONTEND_DIR%"
   pause
   exit /b 1
@@ -244,7 +243,7 @@ if defined FRONTEND_CMD (
     exit /b 1
   )
 ) else (
-  echo [WARN] Frontend startup skipped. Neither package.json nor vue-cli-service.cmd was found.
+  echo [WARN] Frontend startup skipped. Neither package.json nor vite.cmd was found.
 )
 
 echo Services are starting...

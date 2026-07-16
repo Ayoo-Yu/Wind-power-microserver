@@ -1,4 +1,3 @@
-const babelParser = require('@babel/eslint-parser')
 const js = require('@eslint/js')
 const vue = require('eslint-plugin-vue')
 const globals = require('globals')
@@ -10,8 +9,10 @@ module.exports = [
   js.configs.recommended,
   ...vue.configs['flat/essential'],
   {
-    files: ['**/*.{js,cjs,vue}'],
+    files: ['**/*.{js,cjs,mjs,vue}'],
     languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
       globals: {
         ...globals.browser,
         ...globals.node
@@ -28,28 +29,6 @@ module.exports = [
       'vue/no-undef-components': ['error', {
         ignorePatterns: ['^el-', '^router-(link|view)$']
       }]
-    }
-  },
-  {
-    files: ['**/*.{js,cjs}'],
-    languageOptions: {
-      parser: babelParser,
-      parserOptions: {
-        requireConfigFile: false,
-        ecmaVersion: 'latest',
-        sourceType: 'module'
-      }
-    }
-  },
-  {
-    files: ['**/*.vue'],
-    languageOptions: {
-      parserOptions: {
-        parser: babelParser,
-        requireConfigFile: false,
-        ecmaVersion: 'latest',
-        sourceType: 'module'
-      }
     }
   }
 ]

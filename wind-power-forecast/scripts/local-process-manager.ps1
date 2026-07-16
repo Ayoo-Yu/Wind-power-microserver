@@ -115,14 +115,13 @@ function Start-LocalService {
         }
         "frontend" {
             $PackageFile = Join-Path $FrontendDir "package.json"
-            $VueCli = Join-Path $FrontendDir "node_modules\.bin\vue-cli-service.cmd"
+            $ViteCli = Join-Path $FrontendDir "node_modules\.bin\vite.cmd"
             if (Test-Path -LiteralPath $PackageFile) {
                 $Executable = (Get-Command npm.cmd -ErrorAction Stop).Source
                 $Arguments = @("run", "serve")
             }
-            elseif (Test-Path -LiteralPath $VueCli) {
-                $Executable = $VueCli
-                $Arguments = @("serve")
+            elseif (Test-Path -LiteralPath $ViteCli) {
+                $Executable = $ViteCli
             }
             else {
                 throw "Frontend command was not found."

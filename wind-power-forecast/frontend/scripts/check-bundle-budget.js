@@ -4,51 +4,63 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const distDir = path.resolve(__dirname, '..', 'dist')
+const indexPath = path.join(distDir, 'index.html')
 
-function listAssets(folder, extension) {
-  const target = path.join(distDir, folder)
-  if (!fs.existsSync(target)) return []
-  return fs.readdirSync(target)
-    .filter((name) => name.endsWith(extension))
-    .map((name) => ({
-      name: `${folder}/${name}`,
-      size: fs.statSync(path.join(target, name)).size
-    }))
+function listAssets(folder) {
+  if (!fs.existsSync(folder)) return []
+  return fs.readdirSync(folder, { withFileTypes: true }).flatMap((entry) => {
+    const absolutePath = path.join(folder, entry.name)
+    if (entry.isDirectory()) return listAssets(absolutePath)
+    if (!entry.name.endsWith('.js') && !entry.name.endsWith('.css')) return []
+    return [{
+      name: path.relative(distDir, absolutePath).replace(/\\/g, '/'),
+      size: fs.statSync(absolutePath).size
+    }]
+  })
 }
 
-function findAsset(assets, prefix) {
-  const item = assets.find((asset) => path.basename(asset.name).startsWith(prefix))
-  if (!item) throw new Error(`构建产物缺少 ${prefix}* 文件`)
-  return item
+function largestAsset(assets, emptyName) {
+  return assets.reduce(
+    (largest, asset) => asset.size > largest.size ? asset : largest,
+    { name: emptyName, size: 0 }
+  )
 }
 
 function formatKiB(bytes) {
   return `${(bytes / 1024).toFixed(1)} KiB`
 }
 
-if (!fs.existsSync(distDir)) {
-  throw new Error('缺少 dist 目录，请先执行 npm run build')
+if (!fs.existsSync(indexPath)) {
+  throw new Error('缺少 dist/index.html，请先执行 npm run build')
 }
 
-const jsAssets = listAssets('js', '.js')
-const cssAssets = listAssets('css', '.css')
-const vendorJs = findAsset(jsAssets, 'chunk-vendors.')
-const appJs = findAsset(jsAssets, 'app.')
-const vendorCss = findAsset(cssAssets, 'chunk-vendors.')
-const appCss = findAsset(cssAssets, 'app.')
-const routeAssets = jsAssets.filter((asset) => asset !== vendorJs && asset !== appJs)
-const largestRoute = routeAssets.reduce(
-  (largest, asset) => asset.size > largest.size ? asset : largest,
-  { name: '无异步脚本', size: 0 }
+const assets = listAssets(path.join(distDir, 'assets'))
+const assetByName = new Map(assets.map((asset) => [asset.name, asset]))
+const html = fs.readFileSync(indexPath, 'utf8')
+const initialNames = new Set(
+  [...html.matchAll(/(?:src|href)=["']\/?([^"']+\.(?:js|css))(?:\?[^"']*)?["']/g)]
+    .map((match) => match[1])
 )
-const initialSize = vendorJs.size + appJs.size + vendorCss.size + appCss.size
+const initialAssets = [...initialNames].map((name) => {
+  const asset = assetByName.get(name)
+  if (!asset) throw new Error(`首页引用的构建产物不存在: ${name}`)
+  return asset
+})
+const initialJs = initialAssets.filter((asset) => asset.name.endsWith('.js'))
+const cssAssets = assets.filter((asset) => asset.name.endsWith('.css'))
+const initialJsNames = new Set(initialJs.map((asset) => asset.name))
+const asyncJs = assets.filter((asset) => asset.name.endsWith('.js') && !initialJsNames.has(asset.name))
+const largestInitialJs = largestAsset(initialJs, '无首屏脚本')
+const largestCss = largestAsset(cssAssets, '无样式文件')
+const largestAsyncJs = largestAsset(asyncJs, '无异步脚本')
+const initialSize = initialAssets.reduce((sum, asset) => sum + asset.size, 0)
 
-// 预算以本次完成树摇优化后的产物为基线，并保留小幅正常增长空间。
+// 预算以 Vite 迁移和树摇优化后的产物为基线，并保留小幅正常增长空间。
 const checks = [
-  { label: '首屏静态资源总量', actual: initialSize, limit: 1650 * 1024 },
-  { label: '供应商脚本', actual: vendorJs.size, limit: 1250 * 1024 },
-  { label: '供应商样式', actual: vendorCss.size, limit: 360 * 1024 },
-  { label: `最大异步脚本 ${largestRoute.name}`, actual: largestRoute.size, limit: 600 * 1024 }
+  { label: '首屏静态资源总量', actual: initialSize, limit: 1500 * 1024 },
+  { label: `最大首屏脚本 ${largestInitialJs.name}`, actual: largestInitialJs.size, limit: 800 * 1024 },
+  { label: `最大样式 ${largestCss.name}`, actual: largestCss.size, limit: 380 * 1024 },
+  { label: `最大异步脚本 ${largestAsyncJs.name}`, actual: largestAsyncJs.size, limit: 625 * 1024 }
 ]
 
 let failed = false

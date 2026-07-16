@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "serve": "vue-cli-service serve",
-    "build": "vue-cli-service build",
-    "lint": "eslint src scripts vue.config.js --max-warnings 0",
+    "serve": "vite",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 8080",
+    "lint": "eslint src scripts vite.config.mjs --max-warnings 0",
     "test:contracts": "node --test tests/*.test.cjs",
     "verify": "npm run lint && npm run test:contracts && npm run build && npm run check:bundle",
     "check:bundle": "node scripts/check-bundle-budget.js",
@@ -23,16 +24,14 @@
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
-    "@babel/eslint-parser": "7.29.7",
     "@eslint/js": "9.39.5",
-    "@vue/cli-plugin-babel": "^5.0.8",
-    "@vue/cli-service": "^5.0.8",
+    "@vitejs/plugin-vue": "6.0.8",
     "@vue/compiler-sfc": "^3.5.13",
     "eslint": "9.39.5",
     "eslint-plugin-vue": "10.9.2",
     "globals": "17.7.0",
     "sass": "^1.86.3",
-    "sass-loader": "^13.3.3",
+    "vite": "8.1.5",
     "vue-eslint-parser": "10.4.1"
   }
 }
