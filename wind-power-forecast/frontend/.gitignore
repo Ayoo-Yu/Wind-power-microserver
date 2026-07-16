@@ -27,6 +27,8 @@ raw_data/
 # 按文件类型忽略常见数据格式
 *.csv
 *.json
+!package.json
+!package-lock.json
 *.xml
 *.xls
 *.xlsx
