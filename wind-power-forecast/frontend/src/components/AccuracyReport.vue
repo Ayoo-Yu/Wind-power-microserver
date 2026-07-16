@@ -5,7 +5,6 @@
         <h2>准确率/合格率报表</h2>
         <p>按月份汇总各场站短期与超短期预测的准确率、合格率，并叠加免考标记统计。</p>
       </div>
-      <el-tag type="success" effect="dark">数据源：report/accuracy-statistics</el-tag>
     </div>
 
     <div class="summary-grid">

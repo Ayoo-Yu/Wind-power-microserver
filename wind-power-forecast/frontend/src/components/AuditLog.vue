@@ -5,7 +5,6 @@
         <h2>操作日志审计</h2>
         <p>当前页面已切换为后端驱动的审计日志查询，筛选、排序和分页均由服务端完成。</p>
       </div>
-      <el-tag type="info" effect="dark">数据源：auth/audit-logs</el-tag>
     </div>
 
     <el-card class="card-shell">

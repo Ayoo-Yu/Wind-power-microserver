@@ -5,9 +5,6 @@
         <h2>人工修正工作台</h2>
         <p>基于上报配置预览数据进行人工修正、版本保存、版本比对和手工上报。</p>
       </div>
-      <el-tag type="warning" effect="dark">
-        数据源：report/configs + preview-report + manual-intervention/versions + manual-report
-      </el-tag>
     </div>
 
     <div class="layout">
