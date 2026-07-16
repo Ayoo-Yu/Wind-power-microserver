@@ -61,3 +61,20 @@ def test_schema_status_reports_missing_model_tables_before_version(monkeypatch):
 
     assert status["state"] == "drift"
     assert status["missing_tables"] == ["roles"]
+
+
+def test_schema_status_allows_pending_migration_to_create_new_tables(monkeypatch):
+    _patch_schema(
+        monkeypatch,
+        tables={"users", "alembic_version"},
+        model_tables={"users", "ingestion_batches"},
+        revisions={"20260715_02"},
+        heads={"20260715_03"},
+    )
+
+    status = migration_service.inspect_schema_status(object())
+
+    assert status["state"] == "pending"
+    assert status["ready"] is False
+    assert status["missing_tables"] == ["ingestion_batches"]
+    assert "upgrade" in migration_service.schema_state_message(status)

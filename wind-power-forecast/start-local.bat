@@ -195,6 +195,13 @@ if /I "%NWP_INGESTION_ENABLED%"=="true" (
     pause
     exit /b 1
   )
+  if /I "%NWP_ETEXT_SHADOW_ENABLED%"=="true" (
+    CALL :start_local_process nwp-shadow
+    IF ERRORLEVEL 1 (
+      pause
+      exit /b 1
+    )
+  )
   CALL :start_local_process integration
   IF ERRORLEVEL 1 (
     pause
@@ -237,6 +244,7 @@ echo Celery beat:   local console window
 echo KingBase:      %DB_HOST%:%DB_PORT%
 echo Redis:         %REDIS_HOST%:%REDIS_PORT%
 echo Frontend:      http://localhost:8080
+if /I "%NWP_ETEXT_SHADOW_ENABLED%"=="true" echo NWP shadow:    %NWP_ETEXT_INPUT_DIR%
 echo Infrastructure management: manage-local-infra.bat status^|stop^|logs^|tools
 echo.
 exit /b 0

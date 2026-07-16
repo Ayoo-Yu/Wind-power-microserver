@@ -23,7 +23,9 @@ SCADA 样本接入接口或验收模拟接收端
 
 NWP 确定性文件仿真器
         ↓
-五场站长格式 CSV 与异常文件
+生产形态 DQYC E 文本或五场站长格式 CSV
+        ↓
+原始层、508 时刻模型层与完整时效业务层
         ↓
 可靠接入目录与业务处理器
         ↓
@@ -47,7 +49,22 @@ start-scada-test.bat
 start-scada-dev.bat
 ```
 
-该命令依次启动 C104 仿真器、NWP 仿真器、故障代理、本地 KingBase、Redis、Flask、独立 SCADA Manager、接入处理器、Celery 和 Vue，并通过本地后端 API 写入版本化点表。Worker 在开发模式下使用 `floor_quarter` 时间策略，同一十五分钟内的数据更新同一条本地记录。每个样本会先进入 `/api/v1/scada/ingest`，完成质量校验、规范观测和业务投影。运行状态可通过 `/api/v1/scada/health` 和前端运行控制中心查询。
+该命令依次启动 C104 仿真器、NWP 仿真器、故障代理、本地 KingBase、Redis、Flask、独立 SCADA Manager、接入处理器、Celery 和 Vue，并通过本地后端 API 写入版本化点表。NWP 默认使用 `etext-shadow` 模式，将真实 DQYC 样本回放到当前时间，再按五个场站生成长格式业务文件。Worker 在开发模式下使用 `floor_quarter` 时间策略，同一十五分钟内的数据更新同一条本地记录。每个样本会先进入 `/api/v1/scada/ingest`，完成质量校验、规范观测和业务投影。运行状态可通过 `/api/v1/scada/health` 和前端运行控制中心查询。
+
+仅启动生产形态 NWP 影子适配器：
+
+```bat
+start-nwp-shadow-dev.bat
+```
+
+需要继续使用原有长格式 CSV 仿真器时，可以在同一个命令行窗口执行：
+
+```bat
+set NWP_DEV_MODE=long-csv
+start-scada-dev.bat
+```
+
+DQYC 分层、240 小时扩展边界和回放方式详见 `NWP_SHADOW_ENVIRONMENT.md`。
 
 业务闭环、状态含义和生产配置详见 `SCADA_CLOSED_LOOP.md`。
 

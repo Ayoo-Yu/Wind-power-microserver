@@ -4,7 +4,7 @@ param(
     [string]$Action,
 
     [Parameter(Mandatory = $true)]
-    [ValidateSet("backend", "worker", "beat", "scada-manager", "integration", "frontend", "all")]
+    [ValidateSet("backend", "worker", "beat", "scada-manager", "nwp-shadow", "integration", "frontend", "all")]
     [string]$Service
 )
 
@@ -77,6 +77,36 @@ function Start-LocalService {
             $WorkingDirectory = $BackendDir
             $WindowStyle = "Hidden"
         }
+        "nwp-shadow" {
+            if (-not $env:NWP_ETEXT_INPUT_DIR) {
+                throw "NWP_ETEXT_INPUT_DIR is required for nwp-shadow."
+            }
+            if (-not $env:NWP_ETEXT_OUTPUT_ROOT) {
+                throw "NWP_ETEXT_OUTPUT_ROOT is required for nwp-shadow."
+            }
+            if (-not $env:NWP_ETEXT_CONTRACT) {
+                throw "NWP_ETEXT_CONTRACT is required for nwp-shadow."
+            }
+            $Executable = $env:MAIN_PY
+            $Arguments = @(
+                "-u", (Join-Path $ProjectDir "scripts\nwp_shadow.py"),
+                "watch",
+                "--input-dir", $env:NWP_ETEXT_INPUT_DIR,
+                "--output-root", $env:NWP_ETEXT_OUTPUT_ROOT,
+                "--contract", $env:NWP_ETEXT_CONTRACT
+            )
+            if ($env:NWP_ETEXT_SEED_FILE) {
+                $Arguments += @("--seed-file", $env:NWP_ETEXT_SEED_FILE)
+            }
+            if ($env:NWP_ETEXT_REPLAY_LATEST -eq "true") {
+                $Arguments += "--replay-now"
+            }
+            if ($env:NWP_ETEXT_GENERATE_SEED_IF_MISSING -eq "true") {
+                $Arguments += "--generate-seed-if-missing"
+            }
+            $WorkingDirectory = $ProjectDir
+            $WindowStyle = "Hidden"
+        }
         "scada-manager" {
             $Executable = $env:MAIN_PY
             $Arguments = @("scada_manager_main.py")
@@ -137,7 +167,7 @@ if ($Action -eq "start") {
 }
 
 if ($Service -eq "all") {
-    foreach ($Name in @("frontend", "integration", "scada-manager", "beat", "worker", "backend")) {
+    foreach ($Name in @("frontend", "integration", "nwp-shadow", "scada-manager", "beat", "worker", "backend")) {
         Stop-LocalService -Name $Name
     }
 }

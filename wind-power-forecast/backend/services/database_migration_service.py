@@ -60,12 +60,13 @@ def inspect_schema_status(engine) -> dict[str, Any]:
 
     if not application_tables:
         state = "empty"
+    elif not current_revisions:
+        state = "drift" if missing_tables else "unversioned"
+    elif set(current_revisions) != set(heads):
+        # 新迁移创建的表在升级前必然尚不存在，应先按版本判断为待升级。
+        state = "pending"
     elif missing_tables:
         state = "drift"
-    elif not current_revisions:
-        state = "unversioned"
-    elif set(current_revisions) != set(heads):
-        state = "pending"
     else:
         state = "ready"
 

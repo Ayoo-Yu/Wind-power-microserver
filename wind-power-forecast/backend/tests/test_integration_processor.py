@@ -1,12 +1,17 @@
 from contextlib import contextmanager
 from datetime import datetime, timezone
+import os
+import time
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from db_models.data_lineage import IngestionBatch
 from integration.contracts import build_manifest
-from integration.processor import BusinessPackageProcessor
+from integration.processor import (
+    BusinessPackageProcessor,
+    _recover_stale_processing,
+)
 from integration.spool import DurableSpool
 
 
@@ -108,6 +113,7 @@ def test_processor_retries_nwp_package_while_capability_is_disabled(tmp_path):
         session.close()
         engine.dispose()
 
+
 def test_processor_quarantines_unsupported_business_payload(tmp_path):
     spool_dir = tmp_path / "spool"
     payload = b"value=1"
@@ -136,3 +142,27 @@ def test_processor_quarantines_unsupported_business_payload(tmp_path):
     finally:
         session.close()
         engine.dispose()
+
+
+def test_processor_startup_recovery_returns_interrupted_package_to_inbox(tmp_path):
+    spool_dir = tmp_path / "spool"
+    manifest = _enqueue_nwp(spool_dir)
+    spool = DurableSpool(spool_dir)
+    claimed = spool.claim(manifest.message_id)
+    old = time.time() - 600
+    os.utime(claimed.path, (old, old))
+    context, _factory, engine = _session_context(tmp_path)
+    processor = BusinessPackageProcessor(
+        spool_dir,
+        session_context=context,
+        nwp_enabled=True,
+    )
+
+    recovered = _recover_stale_processing(
+        processor,
+        older_than_seconds=300,
+    )
+
+    assert recovered == [manifest.message_id]
+    assert spool.locate(manifest.message_id)[0] == "inbox"
+    engine.dispose()

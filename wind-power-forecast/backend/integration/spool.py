@@ -235,14 +235,23 @@ class DurableSpool:
                     continue
                 destination = self.state_path("inbox", source.name)
                 if destination.exists():
+                    if not source.exists():
+                        continue
                     raise PackageConflictError(f"recovery destination exists: {source.name}")
-                os.replace(source, destination)
-                state = self._read_state(destination)
+                state = self._read_state(source)
                 state["state"] = "inbox"
                 state["updated_at"] = datetime.now(timezone.utc).isoformat()
                 state["recovered"] = True
                 state.pop("next_attempt_at", None)
-                self._write_text(destination / "state.json", json.dumps(state, ensure_ascii=False, indent=2))
+                self._write_text(
+                    source / "state.json",
+                    json.dumps(state, ensure_ascii=False, indent=2),
+                )
+                try:
+                    os.replace(source, destination)
+                except FileNotFoundError:
+                    # 另一个恢复进程可能已经完成同一数据包的原子移动。
+                    continue
                 recovered.append(source.name)
         return recovered
 

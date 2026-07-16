@@ -9,9 +9,27 @@ set "SCADA_DATA_STALE_AFTER_SECONDS=60"
 set "SCADA_TIMESTAMP_POLICY=floor_quarter"
 set "NWP_INGESTION_ENABLED=true"
 set "NWP_INGESTION_REQUIRED=true"
-set "NWP_INPUT_ROOT=%~dp0..\simulation\scada-test\artifacts\nwp-inbox"
 set "NWP_FARM_CODES=CF,BNJ,SDS,DPLZ,ZYX"
 set "INTEGRATION_SPOOL_DIR=%~dp0backend\runtime\integration"
+
+if not defined NWP_DEV_MODE set "NWP_DEV_MODE=etext-shadow"
+if /I "%NWP_DEV_MODE%"=="etext-shadow" (
+  set "NWP_ETEXT_SHADOW_ENABLED=true"
+  set "NWP_ETEXT_INPUT_DIR=%~dp0..\simulation\nwp-shadow\artifacts\etext-inbox"
+  set "NWP_ETEXT_OUTPUT_ROOT=%~dp0..\simulation\nwp-shadow\artifacts"
+  set "NWP_ETEXT_CONTRACT=%~dp0config\nwp-etext-contract-v1.json"
+  if not defined NWP_ETEXT_SEED_FILE set "NWP_ETEXT_SEED_FILE=%~dp0..\data\YCSJ_YN.ZhuYXDC_DQYC_20260504_191500.dat"
+  if not defined NWP_ETEXT_REPLAY_LATEST set "NWP_ETEXT_REPLAY_LATEST=true"
+  if not defined NWP_ETEXT_GENERATE_SEED_IF_MISSING set "NWP_ETEXT_GENERATE_SEED_IF_MISSING=true"
+  set "NWP_INPUT_ROOT=%~dp0..\simulation\nwp-shadow\artifacts\business"
+) else if /I "%NWP_DEV_MODE%"=="long-csv" (
+  set "NWP_ETEXT_SHADOW_ENABLED=false"
+  set "NWP_INPUT_ROOT=%~dp0..\simulation\scada-test\artifacts\nwp-inbox"
+) else (
+  echo [ERROR] NWP_DEV_MODE 仅支持 etext-shadow 或 long-csv。
+  pause
+  exit /b 1
+)
 
 call "%~dp0start-scada-test.bat"
 if errorlevel 1 exit /b 1
@@ -32,7 +50,8 @@ if errorlevel 1 (
 
 echo [OK] 风电预测开发环境与 SCADA 测试链路均已启动。
 echo C104:   127.0.0.1:12404
-echo NWP:     %NWP_INPUT_ROOT%
+echo NWP mode: %NWP_DEV_MODE%
+echo NWP data: %NWP_INPUT_ROOT%
 echo Backend: http://127.0.0.1:18080
 echo Frontend: http://127.0.0.1:8080
 echo.

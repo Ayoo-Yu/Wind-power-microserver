@@ -36,6 +36,8 @@ raw_data/
 # SCADA 测试环境的版本化契约与确定性场景属于源代码。
 !simulation/scada-test/config/
 !simulation/scada-test/config/*.json
+!wind-power-forecast/config/
+!wind-power-forecast/config/*.json
 
 # 忽略大型压缩包
 *.zip
@@ -156,4 +158,5 @@ template_predict_input.csv
 
 # 本地开发进程状态
 **/.local-run/
+simulation/nwp-shadow/artifacts/
 

@@ -222,10 +222,46 @@ def _farm_codes(value: str) -> list[str]:
     return codes
 
 
+def _positive_seconds(value: str) -> float:
+    seconds = float(value)
+    if seconds <= 0:
+        raise argparse.ArgumentTypeError("秒数必须大于零")
+    return seconds
+
+
+def _recover_stale_processing(
+    processor: BusinessPackageProcessor,
+    *,
+    older_than_seconds: float,
+) -> list[str]:
+    recovered = processor.spool.recover_processing(
+        older_than_seconds=older_than_seconds
+    )
+    if recovered:
+        LOGGER.warning(
+            "已回收 %s 个超时处理中数据包: %s",
+            len(recovered),
+            ", ".join(recovered),
+        )
+    return recovered
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="风电系统业务数据包处理器")
     parser.add_argument("--spool", required=True)
     parser.add_argument("--poll-seconds", type=float, default=2.0)
+    parser.add_argument(
+        "--processing-timeout-seconds",
+        type=_positive_seconds,
+        default=300.0,
+        help="处理中数据包超过该时长后回收到接入箱",
+    )
+    parser.add_argument(
+        "--recovery-interval-seconds",
+        type=_positive_seconds,
+        default=60.0,
+        help="扫描超时处理中数据包的间隔",
+    )
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--nwp-input-root")
     parser.add_argument("--nwp-farm-codes", type=_farm_codes)
@@ -244,7 +280,16 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("--nwp-input-root 与 --nwp-farm-codes 必须同时配置")
 
     processor = BusinessPackageProcessor(args.spool)
+    next_recovery_at = 0.0
     while True:
+        now = time.monotonic()
+        if now >= next_recovery_at:
+            _recover_stale_processing(
+                processor,
+                older_than_seconds=args.processing_timeout_seconds,
+            )
+            next_recovery_at = now + args.recovery_interval_seconds
+
         ingress_results = []
         if args.nwp_input_root:
             root = Path(args.nwp_input_root)

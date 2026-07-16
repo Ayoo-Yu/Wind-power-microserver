@@ -81,7 +81,8 @@ if ($parseErrors.Count -gt 0) {
 
 $scadaPowerShellFiles = @(
     "scripts/scada-test.ps1",
-    "scripts/configure-scada-test.ps1"
+    "scripts/configure-scada-test.ps1",
+    "scripts/local-process-manager.ps1"
 )
 foreach ($scadaPowerShellFile in $scadaPowerShellFiles) {
     $parseErrors = $null
@@ -96,10 +97,13 @@ foreach ($scadaPowerShellFile in $scadaPowerShellFiles) {
 }
 
 $scadaBatchFiles = @(
+    "start-local.bat",
     "start-scada-dev.bat",
     "start-scada-test.bat",
     "stop-scada-dev.bat",
     "stop-scada-test.bat",
+    "start-nwp-shadow-dev.bat",
+    "stop-nwp-shadow-dev.bat",
     "test-scada-test.bat"
 )
 foreach ($scadaBatchFile in $scadaBatchFiles) {
@@ -120,6 +124,10 @@ if (Get-Command bash -ErrorAction SilentlyContinue) {
     try {
         $shellFiles = @(
             "deploy/deploy.sh",
+            "deploy/ecmwf/apply_yunnan_service_consolidation.sh",
+            "deploy/ecmwf/health_check.sh",
+            "deploy/ecmwf/rollback_yunnan_service_consolidation.sh",
+            "deploy/ecmwf/run_yunnan_service_consolidation.sh",
             "deploy/verify-release.sh",
             "deploy/validate-field-config.sh",
             "deploy/zone-agent/install-zone-agent.sh",
