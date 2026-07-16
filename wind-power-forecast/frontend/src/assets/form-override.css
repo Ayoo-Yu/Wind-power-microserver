@@ -1,10 +1,10 @@
 :root {
   --el-text-color-primary: #17211b;
   --el-text-color-regular: #4f5b53;
-  --el-text-color-secondary: #727d75;
-  --el-text-color-placeholder: #9aa39d;
-  --el-text-color-disabled: #aeb6b0;
-  --el-disabled-text-color: #aeb6b0;
+  --el-text-color-secondary: #667169;
+  --el-text-color-placeholder: #6f7972;
+  --el-text-color-disabled: #7f8982;
+  --el-disabled-text-color: #7f8982;
   --el-disabled-bg-color: #f3f5f3;
   --el-disabled-border-color: #e5e9e6;
   --el-fill-color: #f2f5f2;

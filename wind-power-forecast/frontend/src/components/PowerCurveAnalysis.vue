@@ -37,15 +37,15 @@
         <div class="stat-label">异常率</div>
       </el-card>
       <el-card shadow="hover">
-        <div class="stat-value" style="color:#a855f7">{{ summary.outliers }}</div>
+        <div class="stat-value stat-outlier">{{ summary.outliers }}</div>
         <div class="stat-label">离群点</div>
       </el-card>
       <el-card shadow="hover">
-        <div class="stat-value" style="color:#ef4444">{{ summary.curtailments }}</div>
+        <div class="stat-value stat-danger">{{ summary.curtailments }}</div>
         <div class="stat-label">限电</div>
       </el-card>
       <el-card shadow="hover">
-        <div class="stat-value" style="color:#f59e0b">{{ summary.underperformance }}</div>
+        <div class="stat-value stat-warning">{{ summary.underperformance }}</div>
         <div class="stat-label">欠发</div>
       </el-card>
     </div>
@@ -394,18 +394,21 @@ export default {
 .stat-value {
   font-size: 28px;
   font-weight: 700;
-  color: #e0e0e0;
+  color: var(--text-primary);
 }
 .stat-label {
   font-size: 13px;
-  color: #999;
+  color: var(--text-muted);
   margin-top: 4px;
 }
+.stat-outlier { color: #6f5a94; }
+.stat-danger { color: #a64343; }
+.stat-warning { color: #966019; }
 .alert-card {
   border: 2px solid #ef4444 !important;
 }
 .alert-card .stat-value {
-  color: #ef4444;
+  color: #a64343;
 }
 .chart-container {
   width: 100%;

@@ -2734,9 +2734,9 @@ export default {
     }
 
     const getGaugeColor = (percent) => {
-      if (percent >= 99) return '#2dd36f'
-      if (percent >= 95) return '#f6b73c'
-      return '#ff5d73'
+      if (percent >= 99) return '#247a52'
+      if (percent >= 95) return '#966019'
+      return '#a64343'
     }
 
     // 根据比率获取颜色

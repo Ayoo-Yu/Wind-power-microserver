@@ -885,11 +885,11 @@ export default {
 }
 
 .delta-positive {
-  color: #fca5a5;
+  color: #a64343;
 }
 
 .delta-negative {
-  color: #86efac;
+  color: var(--accent);
 }
 
 @media (max-width: 1200px) {

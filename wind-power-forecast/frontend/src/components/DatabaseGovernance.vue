@@ -336,9 +336,9 @@ const managedCoverage = computed(() => {
 })
 
 const coverageColor = computed(() => {
-  if (managedCoverage.value >= 100) return '#2dd36f'
-  if (managedCoverage.value >= 90) return '#12d7ff'
-  return '#f6b73c'
+  if (managedCoverage.value >= 100) return '#247a52'
+  if (managedCoverage.value >= 90) return '#397b91'
+  return '#966019'
 })
 
 const structureHealth = computed(() => {
@@ -626,7 +626,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 7px;
   margin-bottom: 7px;
-  color: #52d6c5;
+  color: var(--accent);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 2.1px;
@@ -638,7 +638,7 @@ onBeforeUnmount(() => {
 
 h1 {
   margin: 0;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 30px;
   line-height: 1.2;
   letter-spacing: -0.4px;
@@ -664,16 +664,16 @@ h1 {
   gap: 8px;
   min-height: 34px;
   padding: 5px 10px;
-  border: 1px solid rgba(45, 211, 111, 0.28);
+  border: 1px solid #bfd5c8;
   border-radius: 999px;
-  background: rgba(45, 211, 111, 0.07);
-  color: #a9c9ba;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
   font-size: 12px;
 }
 
 .refresh-mode.paused {
   border-color: var(--border-color);
-  background: rgba(159, 182, 204, 0.05);
+  background: var(--bg-card-soft);
   color: var(--text-muted);
 }
 
@@ -705,7 +705,7 @@ h1 {
 .signal-card {
   border: 1px solid var(--border-color);
   border-radius: 14px;
-  box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow: var(--shadow-soft);
 }
 
 .health-card {
@@ -741,10 +741,10 @@ h1 {
   width: 42px;
   height: 42px;
   place-items: center;
-  border: 1px solid rgba(45, 211, 111, 0.28);
+  border: 1px solid #c9ded2;
   border-radius: 12px;
-  background: rgba(45, 211, 111, 0.1);
-  color: var(--accent-2);
+  background: var(--accent-soft);
+  color: var(--accent);
   font-size: 22px;
 }
 
@@ -767,7 +767,7 @@ h1 {
 
 .health-heading h2 {
   margin: 2px 0 0;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 21px;
 }
 
@@ -790,7 +790,8 @@ h1 {
   min-width: 0;
   padding: 9px 8px;
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--bg-card-soft);
+  border: 1px solid var(--border-light);
 }
 
 .status-meta span,
@@ -806,7 +807,7 @@ h1 {
 
 .status-meta strong {
   overflow: hidden;
-  color: #eaf4ff;
+  color: var(--text-primary);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -822,7 +823,7 @@ h1 {
 }
 
 .coverage-row strong {
-  color: #eaf4ff;
+  color: var(--text-primary);
   font-size: 12px;
 }
 
@@ -851,10 +852,10 @@ h1 {
   font-size: 20px;
 }
 
-.tone-cyan { background: rgba(18, 215, 255, 0.1); color: var(--accent); }
-.tone-violet { background: rgba(167, 139, 250, 0.1); color: #a78bfa; }
-.tone-green { background: rgba(45, 211, 111, 0.1); color: var(--accent-2); }
-.tone-amber { background: rgba(246, 183, 60, 0.1); color: var(--warning); }
+.tone-cyan { background: var(--accent-blue-soft); color: var(--accent-blue); }
+.tone-violet { background: #f2eff7; color: #6f5a94; }
+.tone-green { background: var(--accent-soft); color: var(--accent); }
+.tone-amber { background: var(--warning-soft); color: #966019; }
 
 .signal-copy span,
 .signal-copy strong,
@@ -869,7 +870,7 @@ h1 {
 
 .signal-copy strong {
   margin: 5px 0;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 24px;
   line-height: 1;
 }
@@ -915,7 +916,7 @@ h1 {
 
 .card-title {
   display: block;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 16px;
   font-weight: 650;
 }
@@ -959,9 +960,9 @@ h1 {
   grid-template-columns: 32px minmax(0, 1fr);
   gap: 10px;
   padding: 10px 11px;
-  border: 1px solid rgba(146, 186, 220, 0.08);
+  border: 1px solid var(--border-light);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--bg-card-soft);
 }
 
 .recommendation-icon {
@@ -998,7 +999,7 @@ h1 {
 }
 
 .recommendation-copy strong {
-  color: #f3f9fd;
+  color: var(--text-primary);
   font-size: 13px;
 }
 
@@ -1029,9 +1030,9 @@ h1 {
 .constraint-grid > div {
   min-width: 0;
   padding: 10px 11px;
-  border: 1px solid rgba(146, 186, 220, 0.08);
+  border: 1px solid var(--border-light);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--bg-card-soft);
 }
 
 .constraint-grid span,
@@ -1047,7 +1048,7 @@ h1 {
 
 .constraint-grid strong {
   margin: 5px 0 3px;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 20px;
 }
 
@@ -1057,9 +1058,9 @@ h1 {
 }
 
 .constraint-grid .healthy strong,
-.constraint-grid .healthy small { color: var(--accent-2); }
+.constraint-grid .healthy small { color: var(--accent); }
 .constraint-grid .warning strong,
-.constraint-grid .warning small { color: var(--warning); }
+.constraint-grid .warning small { color: #966019; }
 
 .table-card,
 .duplicate-card {
@@ -1161,16 +1162,17 @@ h1 {
 
 .table-name-cell strong {
   overflow: hidden;
-  color: #e9f5fd;
-  font-size: 12px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .table-name-cell small {
   margin-top: 3px;
-  color: var(--text-muted);
-  font-size: 10px;
+  color: var(--text-secondary);
+  font-size: 11px;
 }
 
 .mono {
@@ -1178,8 +1180,8 @@ h1 {
 }
 
 .table-number {
-  color: #b9cfe0;
-  font-size: 11px;
+  color: #3f594b;
+  font-size: 12px;
 }
 
 .data-state {
@@ -1187,7 +1189,7 @@ h1 {
   align-items: center;
   gap: 6px;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .data-state i {
@@ -1197,25 +1199,25 @@ h1 {
   background: currentColor;
 }
 
-.has-data { color: var(--accent-2); }
-.is-empty { color: var(--text-muted); }
+.has-data { color: var(--accent); }
+.is-empty { color: var(--text-secondary); }
 
 .key-state {
   display: inline-block;
   min-width: 54px;
   padding: 3px 7px;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .key-state.ready {
-  background: rgba(45, 211, 111, 0.08);
-  color: #65dc91;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
 }
 
 .key-state.attention {
-  background: rgba(246, 183, 60, 0.1);
-  color: var(--warning);
+  background: var(--warning-soft);
+  color: #966019;
 }
 
 .pagination-row {
@@ -1224,8 +1226,8 @@ h1 {
   justify-content: space-between;
   gap: 16px;
   padding-top: 14px;
-  color: var(--text-muted);
-  font-size: 11px;
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 @media (max-width: 1160px) {

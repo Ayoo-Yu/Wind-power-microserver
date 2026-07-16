@@ -139,23 +139,23 @@ onBeforeUnmount(() => {
 }
 
 /* Severity colors */
-.severity-normal { color: #2dd36f; }
-.severity-unknown { color: #94a3b8; }
-.severity-info { color: #f6b73c; }
-.severity-warning { color: #ff9f43; }
-.severity-danger { color: #ff5d73; animation: pulse-danger 1.4s ease-in-out infinite; }
+.severity-normal { color: var(--accent); }
+.severity-unknown { color: var(--text-secondary); }
+.severity-info { color: var(--accent-blue); }
+.severity-warning { color: #966019; }
+.severity-danger { color: #a64343; animation: pulse-danger 1.4s ease-in-out infinite; }
 
-.ew-icon.severity-normal { color: #2dd36f; filter: drop-shadow(0 0 6px rgba(45, 211, 111, 0.4)); }
-.ew-icon.severity-unknown { color: #94a3b8; }
-.ew-icon.severity-info { color: #f6b73c; filter: drop-shadow(0 0 6px rgba(246, 183, 60, 0.4)); }
-.ew-icon.severity-warning { color: #ff9f43; filter: drop-shadow(0 0 6px rgba(255, 159, 67, 0.4)); }
-.ew-icon.severity-danger { color: #ff5d73; filter: drop-shadow(0 0 6px rgba(255, 93, 115, 0.5)); }
+.ew-icon.severity-normal { color: var(--accent); }
+.ew-icon.severity-unknown { color: var(--text-secondary); }
+.ew-icon.severity-info { color: var(--accent-blue); }
+.ew-icon.severity-warning { color: #966019; }
+.ew-icon.severity-danger { color: #a64343; }
 
-.extreme-weather-card.severity-normal { border-left: 3px solid #2dd36f; }
-.extreme-weather-card.severity-unknown { border-left: 3px solid #94a3b8; }
-.extreme-weather-card.severity-info { border-left: 3px solid #f6b73c; }
-.extreme-weather-card.severity-warning { border-left: 3px solid #ff9f43; }
-.extreme-weather-card.severity-danger { border-left: 3px solid #ff5d73; }
+.extreme-weather-card.severity-normal { border-left: 3px solid var(--accent); }
+.extreme-weather-card.severity-unknown { border-left: 3px solid var(--text-secondary); }
+.extreme-weather-card.severity-info { border-left: 3px solid var(--accent-blue); }
+.extreme-weather-card.severity-warning { border-left: 3px solid #966019; }
+.extreme-weather-card.severity-danger { border-left: 3px solid #a64343; }
 
 @keyframes pulse-danger {
   0%, 100% { opacity: 1; }
