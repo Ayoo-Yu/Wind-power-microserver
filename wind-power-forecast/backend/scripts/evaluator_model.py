@@ -10,7 +10,7 @@ import os
 import pathlib
 
 class ModelEvaluator:
-    def __init__(self, data_path, output_dir=None, wfcapacity=779.0):
+    def __init__(self, data_path, output_dir=None, wfcapacity=None):
         """
         初始化模型评估器
         
@@ -20,9 +20,18 @@ class ModelEvaluator:
             模型预测结果CSV文件路径
         output_dir : str, optional
             结果保存目录，如果未提供，将自动创建
-        wfcapacity : float, optional
-            风电场装机容量，默认为779.0 MW
+        wfcapacity : float
+            风电场装机容量，单位为 MW
         """
+        if wfcapacity is None:
+            raise ValueError('必须提供风电场装机容量')
+        try:
+            normalized_capacity = float(wfcapacity)
+        except (TypeError, ValueError) as exc:
+            raise ValueError('风电场装机容量必须为有效数值') from exc
+        if not np.isfinite(normalized_capacity) or normalized_capacity <= 0:
+            raise ValueError('风电场装机容量必须大于 0')
+
         # 读取数据
         self.data = pd.read_csv(data_path)
         self.model_name = pathlib.Path(data_path).stem
@@ -32,7 +41,7 @@ class ModelEvaluator:
         
         # 添加日期列
         self.data['date'] = self.data['Timestamp'].dt.date
-        self.wfcapacity = wfcapacity
+        self.wfcapacity = normalized_capacity
         
         # 初始化模型信息
         self.model_info = None
@@ -466,7 +475,7 @@ def evaluate_model(
     save_csv=True,
     save_report=True,
     custom_save_dir=None,
-    wfcapacity=779.0,
+    wfcapacity=None,
     model_info=None,
 ):
     """
@@ -484,8 +493,8 @@ def evaluate_model(
         是否生成评估报告，默认为True
     custom_save_dir : str, optional
         自定义的结果保存目录，如果不提供则使用默认目录结构
-    wfcapacity : float, optional
-        风电场装机容量，默认为779.0 MW
+    wfcapacity : float
+        风电场装机容量，单位为 MW
     model_info : dict, optional
         模型相关信息，包括模型类型、训练参数等
     """

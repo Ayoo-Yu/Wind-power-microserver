@@ -1,5 +1,4 @@
 import { getPowerCompareData } from '../api/powerCompareApi'
-import { getFarms } from '../api/farmApi'
 import farmService from '../utils/farmService'
 import axiosInstance from '../api/axios'
 
@@ -12,44 +11,15 @@ const CUT_OUT_SPEED = 25
 const CURTAILMENT_STD_THRESHOLD = 0.05
 const MIN_CONSECUTIVE = 5
 const ISOLATION_WINDOW = 3
-const DEFAULT_CAPACITY = 779.0
-
-const farmCapacityCache = new Map()
-
-/**
- * Fetch the installed capacity (in kW) for a given farm code.
- * Uses a simple in-memory cache to avoid repeated API calls.
- */
-async function fetchFarmCapacity(farmCode) {
-  if (farmCapacityCache.has(farmCode)) {
-    return farmCapacityCache.get(farmCode)
-  }
-  try {
-    const farms = await getFarms()
-    const farm = (farms || []).find(
-      (f) => f.farm_code === farmCode
-    )
-    const capacity = farm && Number(farm.capacity) > 0
-      ? Number(farm.capacity)
-      : DEFAULT_CAPACITY
-    farmCapacityCache.set(farmCode, capacity)
-    return capacity
-  } catch {
-    return DEFAULT_CAPACITY
-  }
-}
 
 export async function fetchPowerCurveData(startDate, endDate) {
   const farmCode = farmService.getCurrentFarm()
-  const [response] = await Promise.all([
-    getPowerCompareData({
-      start: startDate,
-      end: endDate,
-      types: ['实测值', '理论功率'],
-      farm_code: farmCode,
-    }),
-    fetchFarmCapacity(farmCode),
-  ])
+  const response = await getPowerCompareData({
+    start: startDate,
+    end: endDate,
+    types: ['实测值', '理论功率'],
+    farm_code: farmCode,
+  })
   return response.data || response
 }
 
@@ -115,7 +85,12 @@ export function computeBinStatistics(points) {
   return statistics.sort((a, b) => a.binIndex - b.binIndex)
 }
 
-export function detectAnomalies(points, binStats, capacity = DEFAULT_CAPACITY) {
+export function detectAnomalies(points, binStats, capacity) {
+  const installedCapacity = Number(capacity)
+  if (!Number.isFinite(installedCapacity) || installedCapacity <= 0) {
+    throw new Error('场站装机容量缺失，无法执行功率曲线异常分类')
+  }
+
   const binLookup = new Map()
   for (const stat of binStats) {
     binLookup.set(stat.binIndex, stat)
@@ -149,7 +124,7 @@ export function detectAnomalies(points, binStats, capacity = DEFAULT_CAPACITY) {
     }
   })
 
-  return classifyAnomalies(candidates, capacity)
+  return classifyAnomalies(candidates, installedCapacity)
 }
 
 /**

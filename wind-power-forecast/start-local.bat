@@ -25,10 +25,11 @@ set "ACTUAL_POWER_RAW_FALLBACK_MAX_AGE_SECONDS=900"
 set "ACTUAL_POWER_TURBINE_SOURCE_UNIT=kW"
 if not defined LOCAL_SECRET_KEY set "LOCAL_SECRET_KEY=local-dev-secret-key-do-not-use-in-prod"
 set "SECRET_KEY=%LOCAL_SECRET_KEY%"
+set "JWT_SECRET_KEY=%LOCAL_SECRET_KEY%"
 if not defined LOCAL_CREDENTIAL_ENCRYPTION_KEY set "LOCAL_CREDENTIAL_ENCRYPTION_KEY=local-dev-credential-encryption-key-32-chars"
 set "CREDENTIAL_ENCRYPTION_KEY=%LOCAL_CREDENTIAL_ENCRYPTION_KEY%"
 set "CREDENTIAL_ENCRYPTION_KEY_FILE="
-if not defined LOCAL_SEED_ENABLED set "LOCAL_SEED_ENABLED=true"
+if not defined LOCAL_FARM_CATALOG_ENABLED set "LOCAL_FARM_CATALOG_ENABLED=false"
 
 REM Redis and Celery
 set "REDIS_HOST=localhost"
@@ -157,18 +158,18 @@ IF ERRORLEVEL 1 (
   exit /b 1
 )
 
-REM Seed farms and historical data.
-if /I "%LOCAL_SEED_ENABLED%"=="true" (
-  echo [INFO] Running seed script...
-  cd /D "%BACKEND_DIR%" && set DB_HOST=%DB_HOST% && set DB_PORT=%DB_PORT% && set DB_USER=%DB_USER% && set DB_PASSWORD=%DB_PASSWORD% && set DB_NAME=%DB_NAME% && ""%MAIN_PY%"" seed_farms.py
+REM SCADA 开发环境可显式补充场站目录，普通本地启动不写入业务数据。
+if /I "%LOCAL_FARM_CATALOG_ENABLED%"=="true" (
+  echo [INFO] Preparing local SCADA farm catalog...
+  cd /D "%BACKEND_DIR%" && set DB_HOST=%DB_HOST% && set DB_PORT=%DB_PORT% && set DB_USER=%DB_USER% && set DB_PASSWORD=%DB_PASSWORD% && set DB_NAME=%DB_NAME% && ""%MAIN_PY%"" provision_local_farms.py
   IF ERRORLEVEL 1 (
-    echo [ERROR] Seed script failed.
+    echo [ERROR] Local SCADA farm catalog preparation failed.
     pause
     exit /b 1
   )
-  echo [OK] Seed data initialized.
+  echo [OK] Local SCADA farm catalog is ready.
 ) else (
-  echo [INFO] Seed data initialization skipped by LOCAL_SEED_ENABLED=%LOCAL_SEED_ENABLED%.
+  echo [INFO] Local startup will not create farm catalog or synthetic business data.
 )
 
 REM Start merged backend.

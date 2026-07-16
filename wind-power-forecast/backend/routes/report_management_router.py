@@ -192,12 +192,6 @@ def _upsert_report_config_meta(db, config_id, payload):
         return
     db.add(ReportConfigMeta(config_id=config_id, payload=serialized_payload))
 
-@report_management_bp.route('/test', methods=['GET'])
-@permission_required('manage_reports')
-def test_route():
-    """测试路由"""
-    return jsonify({'message': '上报管理路由工作正常', 'status': 'ok'})
-
 @report_management_bp.route('/farms', methods=['GET'])
 @permission_required('manage_reports')
 def get_wind_farms():
@@ -2618,57 +2612,6 @@ def update_daily_statistics(db: Session, farm_code: str, date: str):
 
 # Web 进程只提供管理接口。生产与本地开发均由 Celery Beat 托管周期任务。
 logging.info("自动上报调度由 Celery Beat 托管")
-
-@report_management_bp.route('/statistics/test-update', methods=['POST'])
-@permission_required('manage_reports')
-def test_statistics_update():
-    """测试统计更新功能"""
-    try:
-        data = request.get_json() or {}
-        farm_code = data.get('farm_code', 'TEST001')
-        
-        with db_session() as db:
-            # 模拟一次成功的上报
-            current_time = datetime.now()
-            update_quality_statistics_async(db, farm_code, current_time, 1.0, True, 'actual')
-            db.commit()
-            
-            # 查询更新后的统计
-            today_date = current_time.strftime('%Y-%m-%d')
-            stats = db.query(ReportQualityStatistics).filter(
-                and_(
-                    ReportQualityStatistics.farm_code == farm_code,
-                    ReportQualityStatistics.date == today_date
-                )
-            ).all()
-            
-            if stats:
-                results = []
-                for stat in stats:
-                    results.append({
-                        'farm_code': stat.farm_code,
-                        'report_type': stat.report_type,
-                        'date': stat.date,
-                        'total_reports': stat.total_reports,
-                        'on_time_reports': stat.on_time_reports,
-                        'completeness_rate': stat.completeness_rate,
-                        'timeliness_rate': stat.timeliness_rate,
-                        'notes': stat.notes
-                    })
-                
-                result = {
-                    'success': True,
-                    'statistics': results,
-                    'total_types': len(results)
-                }
-            else:
-                result = {'success': False, 'message': '未找到统计记录'}
-            
-            return jsonify(result)
-            
-    except Exception as e:
-        logging.error(f"测试统计更新失败: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 def check_data_completeness(data, report_type):
     """检查数据完整性 - 计算非空数据占总数据的比例"""

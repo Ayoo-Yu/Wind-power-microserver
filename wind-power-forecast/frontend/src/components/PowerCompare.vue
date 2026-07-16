@@ -174,7 +174,7 @@ export default {
       fleetCompareFarmCodes: [],
       selectedTypes: ['实测值', '超短期预测', '短期预测', '中期预测', '短期风速预测', '中期风速预测'],
       showCurtailmentTag: true,
-      installedCapacity: 779.0,
+      installedCapacity: 0,
       mainChart: null,
       errorChart: null,
       fleetBarChart: null,
@@ -301,7 +301,7 @@ export default {
     },
     updateInstalledCapacity(farmCode) {
       const farm = this.fleetCompareFarms.find(f => f.code === farmCode)
-      if (farm && farm.capacity > 0) this.installedCapacity = farm.capacity
+      this.installedCapacity = farm && farm.capacity > 0 ? farm.capacity : 0
     },
     applyRouteQuery() {
       const query = this.$route?.query || {}
@@ -674,7 +674,9 @@ export default {
         if (maxCap > 0) this.installedCapacity = Number((maxCap * 1.05).toFixed(2))
       }
 
-      const capacityValues = capacityValuesRaw.some(Number.isFinite) ? capacityValuesRaw : labels.map(() => this.installedCapacity)
+      const capacityValues = capacityValuesRaw.some(Number.isFinite)
+        ? capacityValuesRaw
+        : labels.map(() => (this.installedCapacity > 0 ? this.installedCapacity : null))
       const curtailmentValues = this.alignedSeries(sortedTimeline, curtailmentSeries, 'value', alignToleranceMs)
 
       // 对齐预测区间数据

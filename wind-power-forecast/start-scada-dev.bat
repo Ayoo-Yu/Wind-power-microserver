@@ -7,6 +7,7 @@ set "SCADA_REALTIME_ENABLED=true"
 set "SCADA_REQUIRED=true"
 set "SCADA_DATA_STALE_AFTER_SECONDS=60"
 set "SCADA_TIMESTAMP_POLICY=floor_quarter"
+set "LOCAL_FARM_CATALOG_ENABLED=true"
 set "NWP_INGESTION_ENABLED=true"
 set "NWP_INGESTION_REQUIRED=true"
 set "NWP_FARM_CODES=CF,BNJ,SDS,DPLZ,ZYX"
@@ -29,6 +30,14 @@ if /I "%NWP_DEV_MODE%"=="etext-shadow" (
   echo [ERROR] NWP_DEV_MODE 仅支持 etext-shadow 或 long-csv。
   pause
   exit /b 1
+)
+
+if /I "%START_SCADA_DEV_VALIDATE_ONLY%"=="true" (
+  set "START_LOCAL_VALIDATE_ONLY=true"
+  call "%~dp0start-local.bat"
+  if errorlevel 1 exit /b 1
+  echo [OK] start-scada-dev.bat validation passed.
+  exit /b 0
 )
 
 call "%~dp0start-scada-test.bat"

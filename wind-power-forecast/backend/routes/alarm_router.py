@@ -1,7 +1,5 @@
-import json
 import logging
-import os
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
@@ -31,19 +29,6 @@ def _normalize_level(value):
     if text in ('warning', 'warn'):
         return 'warning'
     return 'info'
-
-
-def _parse_log_time(value):
-    if not value:
-        return datetime.utcnow()
-    if isinstance(value, datetime):
-        return value
-    for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S'):
-        try:
-            return datetime.strptime(str(value), fmt)
-        except ValueError:
-            continue
-    return datetime.utcnow()
 
 
 def _get_current_user(session):
@@ -101,107 +86,6 @@ def _serialize_alarm_policy(item):
     }
 
 
-def _read_system_log_snapshot():
-    logs = []
-    log_file_path = os.path.join(os.path.dirname(__file__), '..', 'logs', 'app.log')
-    if os.path.exists(log_file_path):
-        try:
-            with open(log_file_path, 'r', encoding='utf-8') as file_handle:
-                lines = file_handle.readlines()
-            recent_lines = lines[-30:] if len(lines) > 30 else lines
-            for line in recent_lines:
-                parts = line.strip().split(' - ')
-                if len(parts) < 3:
-                    continue
-                logs.append({
-                    'timestamp': parts[0],
-                    'level': parts[1].lower(),
-                    'message': ' - '.join(parts[2:]),
-                })
-        except Exception as error:
-            logging.error(f'failed to read system log snapshot: {error}', exc_info=True)
-
-    if not logs:
-        now = datetime.utcnow()
-        logs = [
-            {
-                'timestamp': now.strftime('%Y-%m-%d %H:%M:%S'),
-                'level': 'info',
-                'message': 'system service heartbeat is normal',
-            },
-            {
-                'timestamp': (now - timedelta(minutes=8)).strftime('%Y-%m-%d %H:%M:%S'),
-                'level': 'warning',
-                'message': 'scheduler latency is higher than expected',
-            },
-        ]
-    return logs
-
-
-def _seed_alarms_from_logs(session):
-    _ensure_alarm_tables(session)
-    if session.query(AlarmRecord).count() > 0:
-        return
-
-    for row in _read_system_log_snapshot():
-        level = _normalize_level(row.get('level'))
-        message = row.get('message') or ''
-        session.add(AlarmRecord(
-            source='system-log',
-            farm_code=None,
-            module='system-log',
-            level=level,
-            message=message,
-            status='open',
-            notify_sound=level == 'danger',
-            notify_sms=level == 'danger',
-            occurred_at=_parse_log_time(row.get('timestamp')),
-            raw_payload=json.dumps(row, ensure_ascii=False),
-        ))
-    session.commit()
-
-
-def _seed_default_configs(session):
-    _ensure_alarm_tables(session)
-    if session.query(AlarmRule).count() == 0:
-        session.add(AlarmRule(
-            rule_name='系统错误告警',
-            module='system-log',
-            level='danger',
-            keyword='error',
-            is_enabled=True,
-            notify_sound=True,
-            notify_sms=True,
-        ))
-        session.add(AlarmRule(
-            rule_name='调度异常告警',
-            module='scheduler',
-            level='warning',
-            keyword='scheduler',
-            is_enabled=True,
-            notify_sound=True,
-            notify_sms=False,
-        ))
-    if session.query(AlarmNotificationPolicy).count() == 0:
-        session.add(AlarmNotificationPolicy(
-            policy_name='默认声音通知',
-            channel='sound',
-            target='browser-audio',
-            min_level='warning',
-            is_enabled=True,
-            cooldown_minutes=1,
-        ))
-        session.add(AlarmNotificationPolicy(
-            policy_name='默认短信通知',
-            channel='sms',
-            target='ops-oncall',
-            min_level='danger',
-            is_enabled=False,
-            cooldown_minutes=10,
-        ))
-    session.commit()
-
-
 @alarm_bp.route('/alarms', methods=['GET'])
 @jwt_required()
 @permission_required('view_all_data')
@@ -211,8 +95,6 @@ def list_alarms():
         level = request.args.get('level')
         with db_session() as session:
             _ensure_alarm_tables(session)
-            _seed_alarms_from_logs(session)
-            _seed_default_configs(session)
             query = session.query(AlarmRecord)
             if status:
                 query = query.filter(AlarmRecord.status == status)
@@ -232,8 +114,6 @@ def list_alarm_notifications():
     try:
         with db_session() as session:
             _ensure_alarm_tables(session)
-            _seed_alarms_from_logs(session)
-            _seed_default_configs(session)
             rows = session.query(AlarmRecord).order_by(AlarmRecord.occurred_at.desc(), AlarmRecord.id.desc()).limit(50).all()
             notifications = []
             for item in rows:
@@ -266,7 +146,6 @@ def list_alarm_rules():
     try:
         with db_session() as session:
             _ensure_alarm_tables(session)
-            _seed_default_configs(session)
             rows = session.query(AlarmRule).order_by(AlarmRule.updated_at.desc(), AlarmRule.id.desc()).all()
             return jsonify([_serialize_alarm_rule(item) for item in rows])
     except Exception as error:
@@ -358,7 +237,6 @@ def list_alarm_policies():
     try:
         with db_session() as session:
             _ensure_alarm_tables(session)
-            _seed_default_configs(session)
             rows = session.query(AlarmNotificationPolicy).order_by(AlarmNotificationPolicy.updated_at.desc(), AlarmNotificationPolicy.id.desc()).all()
             return jsonify([_serialize_alarm_policy(item) for item in rows])
     except Exception as error:

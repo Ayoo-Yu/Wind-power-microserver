@@ -29,21 +29,44 @@ def get_current_farm_code() -> str:
     return os.environ.get('FARM_CODE', os.environ.get('DEFAULT_FARM_CODE', 'DEFAULT_FARM'))
 
 
+def _get_configured_capacity_fallback() -> float | None:
+    """读取运维人员显式配置的容量回退值。"""
+    raw_value = os.environ.get('WF_CAPACITY_FALLBACK')
+    if raw_value is None or not raw_value.strip():
+        return None
+    try:
+        capacity = float(raw_value)
+    except ValueError as exc:
+        raise ValueError('WF_CAPACITY_FALLBACK 必须为有效数值') from exc
+    if capacity <= 0:
+        raise ValueError('WF_CAPACITY_FALLBACK 必须大于 0')
+    return capacity
+
+
 def get_farm_capacity(farm_code: str) -> float:
-    """Look up installed capacity from wind_farms table, fallback to env var."""
+    """从场站主数据读取装机容量，允许显式的运维回退配置。"""
+    lookup_error = None
     try:
         from db_session import db_session
         from sqlalchemy import text
         with db_session() as session:
             row = session.execute(
-                text("SELECT installed_capacity FROM wind_farms WHERE farm_code = :code"),
+                text("SELECT capacity FROM wind_farms WHERE farm_code = :code"),
                 {"code": farm_code},
             ).fetchone()
-            if row and row[0]:
+            if row and row[0] is not None and float(row[0]) > 0:
                 return float(row[0])
-    except Exception:
-        pass
-    return float(os.environ.get('WF_CAPACITY_FALLBACK', '779.0'))
+    except Exception as exc:
+        lookup_error = exc
+
+    fallback = _get_configured_capacity_fallback()
+    if fallback is not None:
+        if lookup_error is not None:
+            logger.warning('场站容量读取失败，使用显式配置的容量回退值')
+        return fallback
+    if lookup_error is not None:
+        raise RuntimeError(f'无法读取场站 {farm_code} 的装机容量') from lookup_error
+    raise ValueError(f'场站 {farm_code} 未配置有效装机容量')
 
 
 def get_evaluation_capacity(farm_code: str | None = None, capacity: float | None = None) -> float:

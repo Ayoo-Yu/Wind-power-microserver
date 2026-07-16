@@ -34,6 +34,9 @@ PROFILE_FIELDS = {
     'point_act_power',
     'point_wind_speed',
     'point_avail_count',
+}
+
+NON_AUTHORITATIVE_PROFILE_FIELDS = {
     'scada_status',
     'nwp_status',
     'current_actual_power',
@@ -56,7 +59,13 @@ def _read_profile_payload(profile):
         return {}
     try:
         payload = json.loads(profile.payload)
-        return payload if isinstance(payload, dict) else {}
+        if not isinstance(payload, dict):
+            return {}
+        return {
+            key: value
+            for key, value in payload.items()
+            if key not in NON_AUTHORITATIVE_PROFILE_FIELDS
+        }
     except Exception:
         logger.warning('failed to parse farm profile payload for %s', getattr(profile, 'farm_code', None))
         return {}

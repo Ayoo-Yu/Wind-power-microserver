@@ -32,7 +32,7 @@
             </div>
             <div class="status-pill" :class="row.is_active ? 'active' : 'inactive'">
               <StatusDot :active="row.is_active" />
-              <span>{{ row.is_active ? '运行中' : '离线' }}</span>
+              <span>{{ row.is_active ? '已启用' : '已停用' }}</span>
             </div>
           </div>
 
@@ -44,19 +44,6 @@
             <div class="meta-item">
               <span class="meta-label">机组台数</span>
               <span class="meta-value">{{ row.turbine_count || 0 }} 台</span>
-            </div>
-          </div>
-
-          <div class="biz-status">
-            <div class="biz-row">
-              <span>当前实测</span>
-              <strong>{{ toMw(row.current_actual_power) }} MW</strong>
-            </div>
-            <div class="biz-row">
-              <span>数据源状态</span>
-              <span class="source-status">
-                SCADA({{ normalizeSourceLabel(row.scada_status) }}) | NWP({{ normalizeSourceLabel(row.nwp_status) }})
-              </span>
             </div>
           </div>
 
@@ -100,7 +87,7 @@
             <div class="table-status">
               <el-tag :type="row.is_active ? 'success' : 'info'" class="status-tag">
                 <StatusDot :active="row.is_active" />
-                <span>{{ row.is_active ? '运行中' : '离线' }}</span>
+                <span>{{ row.is_active ? '已启用' : '已停用' }}</span>
               </el-tag>
               <el-switch :model-value="!!row.is_active" @change="(val) => handleSetActive(row, val)" />
             </div>
@@ -275,27 +262,6 @@
             <el-form-item label="机组可用台数测点">
               <el-input v-model="formData.point_avail_count" placeholder="Point_Avail_Count" />
             </el-form-item>
-            <el-form-item label="数据源健康状态">
-              <el-row :gutter="14" style="width: 100%">
-                <el-col :span="12">
-                  <el-select v-model="formData.scada_status" style="width: 100%">
-                    <el-option label="正常" value="normal" />
-                    <el-option label="异常" value="abnormal" />
-                    <el-option label="未知" value="unknown" />
-                  </el-select>
-                </el-col>
-                <el-col :span="12">
-                  <el-select v-model="formData.nwp_status" style="width: 100%">
-                    <el-option label="正常" value="normal" />
-                    <el-option label="异常" value="abnormal" />
-                    <el-option label="未知" value="unknown" />
-                  </el-select>
-                </el-col>
-              </el-row>
-            </el-form-item>
-            <el-form-item label="当前实测功率(MW)">
-              <el-input-number v-model="formData.current_actual_power" :min="0" :precision="2" style="width: 100%" />
-            </el-form-item>
             <el-form-item label="场站启用">
               <el-switch v-model="formData.is_active" />
             </el-form-item>
@@ -320,8 +286,6 @@ import { WindPower } from '@element-plus/icons-vue'
 import * as echarts from '../utils/echarts'
 import { createFarm, deleteFarm, getFarms, updateFarm } from '@/api/farmApi'
 import StatusDot from './common/StatusDot.vue'
-
-const LOCAL_EXT_KEY = 'farm_management_ext_configs_v2_backendized'
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -359,10 +323,7 @@ const formData = reactive({
   curtailment_threshold: null,
   point_act_power: '',
   point_wind_speed: '',
-  point_avail_count: '',
-  scada_status: 'normal',
-  nwp_status: 'normal',
-  current_actual_power: 0
+  point_avail_count: ''
 })
 
 const rules = {
@@ -396,20 +357,13 @@ function formatCoord(value) {
   return value.toFixed(6)
 }
 
-function normalizeSourceLabel(value) {
-  const text = String(value || '').toLowerCase()
-  if (text === 'normal') return '正常'
-  if (text === 'abnormal') return '异常'
-  return '未知'
-}
-
 function buildLocationText() {
   const parts = [formData.province, formData.region].filter(Boolean)
   return parts.join('-')
 }
 
 function normalizeFarm(raw = {}) {
-  const source = { ...raw, ...getExtConfig(raw.farm_code) }
+  const source = { ...raw }
   const locationText = source.location || ''
   const locationParts = String(locationText).split('-')
 
@@ -421,40 +375,8 @@ function normalizeFarm(raw = {}) {
     region: source.region || locationParts[1] || '',
     longitude: parseCoord(source.longitude),
     latitude: parseCoord(source.latitude),
-    turbine_count: Number(source.turbine_count || 0),
-    current_actual_power: Number(source.current_actual_power || 0),
-    scada_status: source.scada_status || 'normal',
-    nwp_status: source.nwp_status || 'normal'
+    turbine_count: Number(source.turbine_count || 0)
   }
-}
-
-function readExtConfigMap() {
-  try {
-    void LOCAL_EXT_KEY
-    return {}
-  } catch (error) {
-    console.warn('读取场站扩展配置失败:', error)
-    return {}
-  }
-}
-
-function writeExtConfigMap(data) {
-  return data
-}
-
-function getExtConfig(farmCode) {
-  if (!farmCode) return {}
-  const configMap = readExtConfigMap()
-  return configMap[farmCode] || {}
-}
-
-function saveExtConfig(farmCode, config) {
-  if (!farmCode) return
-  writeExtConfigMap(config)
-}
-
-function removeExtConfig(farmCode) {
-  return farmCode
 }
 
 function resetForm() {
@@ -481,10 +403,7 @@ function resetForm() {
     curtailment_threshold: null,
     point_act_power: '',
     point_wind_speed: '',
-    point_avail_count: '',
-    scada_status: 'normal',
-    nwp_status: 'normal',
-    current_actual_power: 0
+    point_avail_count: ''
   })
 }
 
@@ -536,10 +455,7 @@ function openEditDrawer(row) {
     curtailment_threshold: parseCoord(row.curtailment_threshold),
     point_act_power: row.point_act_power || '',
     point_wind_speed: row.point_wind_speed || '',
-    point_avail_count: row.point_avail_count || '',
-    scada_status: row.scada_status || 'normal',
-    nwp_status: row.nwp_status || 'normal',
-    current_actual_power: Number(row.current_actual_power || 0)
+    point_avail_count: row.point_avail_count || ''
   })
   drawerVisible.value = true
 }
@@ -563,10 +479,7 @@ function buildExtPayload() {
     curtailment_threshold: parseCoord(formData.curtailment_threshold),
     point_act_power: formData.point_act_power || '',
     point_wind_speed: formData.point_wind_speed || '',
-    point_avail_count: formData.point_avail_count || '',
-    scada_status: formData.scada_status || 'normal',
-    nwp_status: formData.nwp_status || 'normal',
-    current_actual_power: Number(formData.current_actual_power || 0)
+    point_avail_count: formData.point_avail_count || ''
   }
 }
 
@@ -592,7 +505,6 @@ async function handleSubmit() {
       ElMessage.success('场站创建成功')
     }
 
-    saveExtConfig(formData.farm_code, extPayload)
     drawerVisible.value = false
     await fetchFarms()
   } finally {
@@ -622,7 +534,6 @@ async function handleDelete(row) {
     { type: 'warning' }
   )
   await deleteFarm(row.farm_code)
-  removeExtConfig(row.farm_code)
   ElMessage.success('场站已删除')
   await fetchFarms()
 }
@@ -839,31 +750,6 @@ onBeforeUnmount(() => {
 
 .meta-value {
   color: var(--text-primary);
-  font-weight: 500;
-}
-
-.biz-status {
-  margin-top: 12px;
-  background: var(--surface-soft);
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  padding: 10px 12px;
-}
-
-.biz-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.biz-row + .biz-row {
-  margin-top: 8px;
-}
-
-.source-status {
   font-weight: 500;
 }
 

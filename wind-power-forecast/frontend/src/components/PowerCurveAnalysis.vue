@@ -83,7 +83,7 @@ export default {
     const allResults = ref([])
     const binStats = ref([])
     const summary = ref(null)
-    const farmCapacity = ref(779.0)
+    const farmCapacity = ref(null)
 
     const hasAnomalies = computed(() => {
       return summary.value && summary.value.abnormalCount > 0
@@ -91,14 +91,15 @@ export default {
 
     async function resolveCapacity() {
       const farmCode = farmService.getCurrentFarm()
+      farmCapacity.value = null
       try {
         const farms = await getFarms()
         const farm = (farms || []).find((f) => f.farm_code === farmCode)
         if (farm && Number(farm.capacity) > 0) {
           farmCapacity.value = Number(farm.capacity)
         }
-      } catch {
-        // keep default 779.0
+      } catch (error) {
+        console.warn('读取场站装机容量失败:', error)
       }
     }
 
@@ -144,6 +145,9 @@ export default {
       if (!dateRange.value || dateRange.value.length < 2) return
       loading.value = true
       try {
+        if (!Number.isFinite(farmCapacity.value) || farmCapacity.value <= 0) {
+          throw new Error('当前场站未配置有效装机容量')
+        }
         const rawData = await fetchPowerCurveData(dateRange.value[0], dateRange.value[1])
         const points = extractWindPowerPairs(rawData)
         const stats = computeBinStatistics(points)

@@ -29,8 +29,12 @@ Run `start-local.bat` from Windows. The script will:
 1. Start the isolated local KingBase and Redis services.
 2. Wait for both services to become healthy.
 3. Create the `windpower` database on the first run.
-4. Seed local development data unless `LOCAL_SEED_ENABLED=false`.
+4. Apply database migrations without creating synthetic business data.
 5. Start Flask, Celery Worker, Celery Beat and Vue in local console windows.
+
+`start-scada-dev.bat` explicitly enables the local farm catalog required by the
+SCADA testbed. Catalog provisioning creates only missing farm metadata. Live
+measurements continue to come from the isolated SCADA testbed.
 
 Local infrastructure uses dedicated containers and volumes. It does not reuse the
 production Compose project or the database files under `deploy`.
@@ -58,7 +62,6 @@ set LOCAL_DB_PORT=15432
 set LOCAL_DB_USER=system
 set LOCAL_DB_PASSWORD=your-local-password
 set LOCAL_REDIS_PORT=6379
-set LOCAL_SEED_ENABLED=false
 start-local.bat
 ```
 
