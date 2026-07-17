@@ -19,6 +19,11 @@ wind-power-forecast/deploy/
 
 发布包必须来自受控构建机，镜像标签和 Git 提交记录在 `release-manifest.json`。场站服务器不执行在线构建，也不访问公网软件仓库。
 
+发布包分为两类：
+
+1. `full`：首次安装包，包含数据库镜像、业务镜像和可选种子数据。
+2. `upgrade`：日常升级包，包含业务镜像、脚本、清单和 SBOM，不包含数据库种子数据。
+
 ## 2. 服务器要求
 
 | 项目 | 最低要求 |
@@ -55,6 +60,7 @@ vi .env
 始终修改：
 
 ```text
+DATA_ROOT
 DB_PASSWORD
 SECRET_KEY
 FRONTEND_IMAGE
@@ -96,6 +102,8 @@ MODEL_AUTO_APPROVAL_ENABLED=false
 DB_SCHEMA_ACTION=prepare
 ```
 
+`DATA_ROOT` 必须是发布包目录外的 Linux 绝对路径，例如 `/opt/wind-power/data`。后续升级继续复用该目录，避免换发布目录后重新生成空数据库和空模型目录。
+
 校验配置：
 
 ```bash
@@ -119,9 +127,16 @@ chmod +x deploy.sh validate-field-config.sh verify-release.sh
 2. 导入离线镜像并创建 Docker 网络。
 3. 创建数据库、Redis、模型、日志、归档和接入目录。
 4. 启动 KingBase 并确认数据库可连接。
-5. 导入可选种子数据。
-6. 由一次性 `deployment-init` 容器执行数据库迁移、基础角色初始化和严格结构检查。
-7. 初始化成功后启动后端、SCADA Manager、NWP 接入处理器、Celery、Redis 和前端。
+5. 由一次性 `deployment-init` 容器执行数据库迁移、基础角色初始化和严格结构检查。
+6. 初始化成功后启动后端、SCADA Manager、NWP 接入处理器、Celery、Redis 和前端。
+
+如果是全新演示库，并且确实需要导入发布包里的 `03_seed_data.dump`，在启动数据库后单独执行：
+
+```bash
+./deploy.sh init-seed
+```
+
+生产升级不要执行该命令。
 
 ## 6. 启动后检查
 
@@ -151,10 +166,10 @@ http://<服务器地址>:8080
 
 ## 7. 数据持久化
 
-主要目录：
+主要目录位于 `.env` 的 `DATA_ROOT` 下：
 
 ```text
-deploy/
+DATA_ROOT/
 ├── kingbase-data/
 ├── backend-data/
 │   ├── forecast_models/
@@ -177,6 +192,7 @@ deploy/
 
 ```bash
 ./deploy.sh start
+./deploy.sh upgrade
 ./deploy.sh stop
 ./deploy.sh restart
 ./deploy.sh status
@@ -209,13 +225,12 @@ docker compose -f docker-compose.prod.yaml restart celery-worker
 更新步骤：
 
 ```bash
-./deploy.sh stop
 ./deploy.sh install
-./deploy.sh start
+./deploy.sh upgrade
 ./deploy.sh status
 ```
 
-应用回滚时切换到上一发布目录和上一组固定镜像标签。数据库迁移采用向前兼容设计，出现问题时优先执行经过审核的修复迁移。未经演练不得直接删除新表或新列。
+升级会保留数据库、Redis、模型、日志、气象输入和预测输出目录，只导入新镜像、执行迁移门禁并重建业务容器。应用回滚时切换到上一发布目录和上一组固定镜像标签，然后执行 `./deploy.sh upgrade`。数据库迁移采用向前兼容设计，出现问题时优先执行经过审核的修复迁移。未经演练不得直接删除新表或新列。
 
 ## 10. 故障排查
 
@@ -239,7 +254,7 @@ NWP 问题：
 
 ```bash
 docker compose -f docker-compose.prod.yaml logs --tail 200 integration-processor
-find backend-data/integration -maxdepth 3 -type f | head
+find "$DATA_ROOT/backend-data/integration" -maxdepth 3 -type f | head
 ```
 
 上报问题：
@@ -252,7 +267,7 @@ docker compose -f docker-compose.prod.yaml logs --tail 200 celery-worker
 
 ```bash
 df -h
-du -sh backend-data/* redis-data celery-beat-data
+du -sh "$DATA_ROOT"/backend-data/* "$DATA_ROOT"/redis-data "$DATA_ROOT"/celery-beat-data
 ```
 
 归档、镜像清理和日志删除都应通过审批流程执行，避免清除仍需追溯的数据与当前回滚镜像。

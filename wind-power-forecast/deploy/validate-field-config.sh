@@ -46,6 +46,19 @@ require_versioned_image() {
     esac
 }
 
+require_absolute_path() {
+    local name="$1"
+    local value="${!name:-}"
+    if [ -z "$value" ]; then
+        error "$name 不能为空"
+        return
+    fi
+    case "$value" in
+        /*) ;;
+        *) error "$name 必须使用 Linux 绝对路径" ;;
+    esac
+}
+
 if [ ! -f "$ENV_FILE" ]; then
     echo "配置错误：找不到环境文件 $ENV_FILE" >&2
     exit 1
@@ -88,6 +101,7 @@ esac
 
 require_secret DB_PASSWORD 16
 require_secret SECRET_KEY 32
+require_absolute_path DATA_ROOT
 if [ -n "${CREDENTIAL_ENCRYPTION_KEY:-}" ] && [ -n "${CREDENTIAL_ENCRYPTION_KEY_FILE:-}" ]; then
     error "CREDENTIAL_ENCRYPTION_KEY 与 CREDENTIAL_ENCRYPTION_KEY_FILE 不能同时设置"
 elif [ -n "${CREDENTIAL_ENCRYPTION_KEY:-}" ]; then

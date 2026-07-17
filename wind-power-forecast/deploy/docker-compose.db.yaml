@@ -11,7 +11,7 @@ services:
       - ENCODING=UTF8
       - TZ=Asia/Shanghai
     volumes:
-      - ./kingbase-data:/home/kingbase/userdata
+      - ${DATA_ROOT:-.}/kingbase-data:/home/kingbase/userdata
     ports:
       - "127.0.0.1:54321:54321"
     restart: unless-stopped

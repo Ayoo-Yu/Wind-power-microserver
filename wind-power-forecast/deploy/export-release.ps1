@@ -7,6 +7,8 @@ param(
     [string]$FrontendImage = "",
     [string]$PredictionImage = "",
     [string]$DatabaseImage = "kingbase_v009r001c002b0014_single_x86:v1",
+    [ValidateSet("Full", "Upgrade")]
+    [string]$PackageType = "Full",
     [string]$SigningKeyPath = "",
     [string]$SigningPublicKeyPath = "",
     [switch]$SkipBuild,
@@ -104,6 +106,10 @@ if (Test-Path -LiteralPath $releaseDir) {
 $databaseTar = Join-Path $releaseDir "01_database.tar"
 $predictionTar = Join-Path $releaseDir "02_prediction_system.tar"
 $seedDump = Join-Path $releaseDir "03_seed_data.dump"
+$isUpgradePackage = $PackageType -eq "Upgrade"
+if ($isUpgradePackage) {
+    $SkipDatabaseDump = $true
+}
 
 Write-Host "Project: $projectDir"
 Write-Host "Release: $releaseDir"
@@ -121,7 +127,9 @@ if (-not $SkipBuild) {
     )
 }
 
-Run "docker" @("save", "-o", $databaseTar, $DatabaseImage)
+if (-not $isUpgradePackage) {
+    Run "docker" @("save", "-o", $databaseTar, $DatabaseImage)
+}
 Run "docker" @(
     "save",
     "-o", $predictionTar,
@@ -218,7 +226,9 @@ Write-Utf8NoBom $pythonPackagesTemp $predictionPackageJson
 $imageMetadata = @(
     Get-ImageMetadata "frontend" $FrontendImage
     Get-ImageMetadata "prediction" $PredictionImage
-    Get-ImageMetadata "database" $DatabaseImage
+    if (-not $isUpgradePackage) {
+        Get-ImageMetadata "database" $DatabaseImage
+    }
     Get-ImageMetadata "redis" "redis:7-alpine"
 )
 Write-Utf8NoBom $imageMetadataTemp ($imageMetadata | ConvertTo-Json -Depth 6)
@@ -258,6 +268,7 @@ $artifactRows = @(
 
 $manifest = [ordered]@{
     schema_version = "1.1"
+    package_type = $PackageType.ToLowerInvariant()
     release_id = $ReleaseVersion
     created_at = (Get-Date).ToUniversalTime().ToString("o")
     source = [ordered]@{

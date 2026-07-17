@@ -9,6 +9,17 @@
 ```powershell
 .\deploy\export-release.ps1 `
   -ReleaseVersion 2026.07.15-rc1 `
+  -PackageType Full `
+  -SigningKeyPath C:\secure\release-private.pem `
+  -SigningPublicKeyPath C:\secure\release-public.pem
+```
+
+日常更新包使用：
+
+```powershell
+.\deploy\export-release.ps1 `
+  -ReleaseVersion 2026.07.15-patch1 `
+  -PackageType Upgrade `
   -SigningKeyPath C:\secure\release-private.pem `
   -SigningPublicKeyPath C:\secure\release-public.pem
 ```
@@ -17,12 +28,13 @@
 
 发布目录包含：
 
-1. 固定标签的数据库和业务镜像归档。
-2. 可选的种子数据备份。
-3. 精简部署脚本、Compose 文件和分区代理。
-4. `release-manifest.json`，记录 Git 提交、镜像标签和每个制品摘要。
-5. `application-sbom.cdx.json`，记录实际预测镜像 Python 包、前端锁定依赖和容器镜像摘要。
-6. `SHA256SUMS` 与可选签名文件。
+1. 固定标签的业务镜像归档。
+2. 首次安装包中的数据库镜像归档。
+3. 首次安装包中的可选种子数据备份。
+4. 精简部署脚本、Compose 文件和分区代理。
+5. `release-manifest.json`，记录 Git 提交、镜像标签和每个制品摘要。
+6. `application-sbom.cdx.json`，记录实际预测镜像 Python 包、前端锁定依赖和容器镜像摘要。
+7. `SHA256SUMS` 与可选签名文件。
 
 ## 场站接收
 
@@ -52,6 +64,8 @@ bash deploy.sh status
 
 `.env` 中必须替换数据库密码、JWT 密钥、凭据加密密钥和接入令牌。实际接入验收完成后再打开对应能力开关。
 
+`DATA_ROOT` 必须设置为发布包目录外的固定 Linux 绝对路径，例如 `/opt/wind-power/data`。数据库、Redis、模型、日志、E 文本、上传文件和预测输出都放在这个目录下，升级发布包时继续复用。
+
 `CREDENTIAL_ENCRYPTION_KEY` 专门保护上报服务器密码、气象连接密码和私钥口令，长度至少为 32 个字符。该密钥与数据库备份一同保存在受控介质中，访问权限应独立审批。丢失密钥后，已有密文无法恢复。升级包含历史凭据的数据库前必须先配置该密钥，迁移会在同一事务中把原有明文转换为 `enc:v1` 密文。日常更新应沿用原密钥，变更密钥前需要执行专门的重加密流程。
 
 可以在受控运维机生成随机密钥：`python -c "import secrets; print(secrets.token_urlsafe(48))"`。生成后不要写入发布包、源码仓库或普通操作日志。
@@ -77,10 +91,13 @@ bash validate-field-config.sh .env
 3. 校验新发布包。
 4. 执行新包的 `deploy.sh install` 导入固定标签镜像。
 5. 将旧 `.env` 中的场站密钥合并到新模板。
-6. 在业务窗口执行 `deploy.sh stop` 和新版本 `deploy.sh start`。
-7. 完成健康检查、预测抽样、接入测试和上报回执测试。
-8. 在运行控制中心确认 SCADA、NWP、预测输入和上报队列均达到验收状态。
+6. 确认新 `.env` 继续指向原 `DATA_ROOT`。
+7. 在业务窗口执行 `deploy.sh upgrade`。
+8. 完成健康检查、预测抽样、接入测试和上报回执测试。
+9. 在运行控制中心确认 SCADA、NWP、预测输入和上报队列均达到验收状态。
+
+`upgrade` 会导入业务镜像、执行数据库迁移门禁、重建后端、前端、SCADA Manager、接入处理器和 Celery 服务。它不会导入 `03_seed_data.dump`。只有首次演示库初始化时才执行 `deploy.sh init-seed`。
 
 ## 回滚
 
-每个发布包使用独立镜像标签。回滚时切回上一发布目录，恢复对应 `.env` 镜像变量并重新启动。数据库结构通过 Alembic 管理，应用升级前先在生产副本执行迁移演练。涉及不可逆数据变换时优先采用向前修复迁移，避免在现场直接删除新结构。
+每个发布包使用独立镜像标签。回滚时切回上一发布目录，恢复对应 `.env` 镜像变量，并执行 `bash deploy.sh upgrade`。数据库结构通过 Alembic 管理，应用升级前先在生产副本执行迁移演练。涉及不可逆数据变换时优先采用向前修复迁移，避免在现场直接删除新结构。

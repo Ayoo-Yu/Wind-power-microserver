@@ -85,17 +85,17 @@ services:
     volumes:
       - ./app.env:/app/.env:ro
       - ./backend-entrypoint.sh:/app/backend-entrypoint.sh:ro
-      - ./backend-data/forecast_models:/app/forecast_models
-      - ./backend-data/uploads:/app/uploads
-      - ./backend-data/forecasts:/app/forecasts
-      - ./backend-data/logs:/app/logs
-      - ./backend-data/saved_models:/app/saved_models
-      - ./backend-data/saved_scalers:/app/saved_scalers
-      - ./backend-data/saved_metrics:/app/saved_metrics
-      - ./backend-data/data_etext:/app/data/etext
-      - ./backend-data/weather:/data/weather
-      - ./backend-data/archives:/app/archives
-      - ./backend-data/integration:/app/runtime/integration
+      - ${DATA_ROOT:-.}/backend-data/forecast_models:/app/forecast_models
+      - ${DATA_ROOT:-.}/backend-data/uploads:/app/uploads
+      - ${DATA_ROOT:-.}/backend-data/forecasts:/app/forecasts
+      - ${DATA_ROOT:-.}/backend-data/logs:/app/logs
+      - ${DATA_ROOT:-.}/backend-data/saved_models:/app/saved_models
+      - ${DATA_ROOT:-.}/backend-data/saved_scalers:/app/saved_scalers
+      - ${DATA_ROOT:-.}/backend-data/saved_metrics:/app/saved_metrics
+      - ${DATA_ROOT:-.}/backend-data/data_etext:/app/data/etext
+      - ${DATA_ROOT:-.}/backend-data/weather:/data/weather
+      - ${DATA_ROOT:-.}/backend-data/archives:/app/archives
+      - ${DATA_ROOT:-.}/backend-data/integration:/app/runtime/integration
     networks:
       - wind-power-network
     depends_on:
@@ -130,7 +130,7 @@ services:
       - SCADA_MANAGER_RECONCILE_SECONDS=${SCADA_MANAGER_RECONCILE_SECONDS:-5}
       - SCADA_ALLOW_SYNTHETIC_HTTP_POLL=false
     volumes:
-      - ./backend-data/logs:/app/logs
+      - ${DATA_ROOT:-.}/backend-data/logs:/app/logs
     networks:
       - wind-power-network
     depends_on:
@@ -168,7 +168,7 @@ services:
       - DEPLOYMENT_MODE=${DEPLOYMENT_MODE:-field}
       - NWP_INGESTION_ENABLED=${NWP_INGESTION_ENABLED:-false}
     volumes:
-      - ./backend-data/integration:/app/runtime/integration
+      - ${DATA_ROOT:-.}/backend-data/integration:/app/runtime/integration
     networks:
       - wind-power-network
     depends_on:
@@ -216,27 +216,27 @@ services:
     restart: unless-stopped
     volumes:
       - ./app.env:/app/.env:ro
-      - ./backend-data/data_etext:/app/data/etext
-      - ./backend-data/weather:/data/weather
-      - ./backend-data/forecast_models:/app/forecast_models
-      - ./datasets:/app/auto_scripts/scripts/middle/datasets
-      - ./predict_inputs:/app/auto_scripts/scripts/middle/predict_inputs
-      - ./models:/app/auto_scripts/scripts/middle/models
-      - ./predict_outputs:/app/auto_scripts/scripts/middle/predict_outputs
-      - ./logs_middle:/app/auto_scripts/scripts/middle/logs
-      - ./merged_predict_outputs:/app/auto_scripts/scripts/middle/merged_predict_outputs
-      - ./feature_importance_mid:/app/auto_scripts/scripts/middle/feature_importance
-      - ./datasets_short:/app/auto_scripts/scripts/short/datasets
-      - ./predict_inputs_short:/app/auto_scripts/scripts/short/predict_inputs
-      - ./models_short:/app/auto_scripts/scripts/short/models
-      - ./predict_outputs_short:/app/auto_scripts/scripts/short/predict_outputs
-      - ./logs_short:/app/auto_scripts/scripts/short/logs
-      - ./feature_importance_short:/app/auto_scripts/scripts/short/feature_importance
-      - ./datasets_ss:/app/auto_scripts/scripts/supershort/datasets
-      - ./saved_models_ss:/app/auto_scripts/scripts/supershort/saved_models
-      - ./prediction_inputs_ss:/app/auto_scripts/scripts/supershort/prediction_inputs
-      - ./prediction_results_ss:/app/auto_scripts/scripts/supershort/prediction_results
-      - ./logs_ss:/app/auto_scripts/scripts/supershort/logs
+      - ${DATA_ROOT:-.}/backend-data/data_etext:/app/data/etext
+      - ${DATA_ROOT:-.}/backend-data/weather:/data/weather
+      - ${DATA_ROOT:-.}/backend-data/forecast_models:/app/forecast_models
+      - ${DATA_ROOT:-.}/datasets:/app/auto_scripts/scripts/middle/datasets
+      - ${DATA_ROOT:-.}/predict_inputs:/app/auto_scripts/scripts/middle/predict_inputs
+      - ${DATA_ROOT:-.}/models:/app/auto_scripts/scripts/middle/models
+      - ${DATA_ROOT:-.}/predict_outputs:/app/auto_scripts/scripts/middle/predict_outputs
+      - ${DATA_ROOT:-.}/logs_middle:/app/auto_scripts/scripts/middle/logs
+      - ${DATA_ROOT:-.}/merged_predict_outputs:/app/auto_scripts/scripts/middle/merged_predict_outputs
+      - ${DATA_ROOT:-.}/feature_importance_mid:/app/auto_scripts/scripts/middle/feature_importance
+      - ${DATA_ROOT:-.}/datasets_short:/app/auto_scripts/scripts/short/datasets
+      - ${DATA_ROOT:-.}/predict_inputs_short:/app/auto_scripts/scripts/short/predict_inputs
+      - ${DATA_ROOT:-.}/models_short:/app/auto_scripts/scripts/short/models
+      - ${DATA_ROOT:-.}/predict_outputs_short:/app/auto_scripts/scripts/short/predict_outputs
+      - ${DATA_ROOT:-.}/logs_short:/app/auto_scripts/scripts/short/logs
+      - ${DATA_ROOT:-.}/feature_importance_short:/app/auto_scripts/scripts/short/feature_importance
+      - ${DATA_ROOT:-.}/datasets_ss:/app/auto_scripts/scripts/supershort/datasets
+      - ${DATA_ROOT:-.}/saved_models_ss:/app/auto_scripts/scripts/supershort/saved_models
+      - ${DATA_ROOT:-.}/prediction_inputs_ss:/app/auto_scripts/scripts/supershort/prediction_inputs
+      - ${DATA_ROOT:-.}/prediction_results_ss:/app/auto_scripts/scripts/supershort/prediction_results
+      - ${DATA_ROOT:-.}/logs_ss:/app/auto_scripts/scripts/supershort/logs
 
   celery-beat:
     image: ${PREDICTION_IMAGE:-wind-power-celery-worker:latest}
@@ -262,8 +262,8 @@ services:
       - REGULATORY_EVALUATION_MINUTE=${REGULATORY_EVALUATION_MINUTE:-20}
     volumes:
       - ./app.env:/app/.env:ro
-      - ./backend-data/data_etext:/app/data/etext
-      - ./celery-beat-data:/app/celerybeat-data
+      - ${DATA_ROOT:-.}/backend-data/data_etext:/app/data/etext
+      - ${DATA_ROOT:-.}/celery-beat-data:/app/celerybeat-data
     networks:
       - wind-power-network
     depends_on:
@@ -279,7 +279,7 @@ services:
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
-      - ./redis-data:/data
+      - ${DATA_ROOT:-.}/redis-data:/data
     command: redis-server --appendonly yes --appendfsync everysec
     restart: unless-stopped
     networks:

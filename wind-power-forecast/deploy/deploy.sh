@@ -6,10 +6,12 @@ set -e
 # Usage: ./deploy.sh [command]
 #   ./deploy.sh install   - Load images and create network
 #   ./deploy.sh start     - Start all services
+#   ./deploy.sh upgrade   - Apply an app release without reinitializing data
 #   ./deploy.sh stop      - Stop all services
 #   ./deploy.sh status    - Show service status
 #   ./deploy.sh restart   - Restart all services
 #   ./deploy.sh db-only   - Start only the database
+#   ./deploy.sh init-seed - Import optional seed data into an empty database
 #   ./deploy.sh logs      - Tail logs from all services
 # =============================================================
 
@@ -112,6 +114,13 @@ check_env() {
     set -a
     source .env
     set +a
+
+    DATA_ROOT="${DATA_ROOT:-$SCRIPT_DIR}"
+    case "$DATA_ROOT" in
+        /*) ;;
+        *) DATA_ROOT="$(realpath -m "$DATA_ROOT")" ;;
+    esac
+    export DATA_ROOT
 }
 
 check_docker() {
@@ -134,6 +143,11 @@ create_network() {
         info "Creating Docker network: wind-power-network"
         docker network create wind-power-network
     fi
+}
+
+data_path() {
+    local relative="$1"
+    printf '%s/%s\n' "${DATA_ROOT:-$SCRIPT_DIR}" "$relative"
 }
 
 generate_app_env() {
@@ -196,6 +210,24 @@ wait_for_database() {
         if [ "$i" -eq 60 ]; then
             error "Database health check timeout."
             docker logs --tail 80 wind-power-kingbase 2>/dev/null || true
+            exit 1
+        fi
+
+        sleep 2
+    done
+}
+
+wait_for_backend() {
+    info "Waiting for backend readiness..."
+    for i in $(seq 1 60); do
+        if curl -fsS http://127.0.0.1:5000/health/ready >/dev/null 2>&1; then
+            info "Backend is ready."
+            return 0
+        fi
+
+        if [ "$i" -eq 60 ]; then
+            error "Backend health check timeout."
+            docker_compose -f docker-compose.prod.yaml logs --tail 120 backend 2>/dev/null || true
             exit 1
         fi
 
@@ -290,36 +322,36 @@ create_dirs() {
     info "Creating data directories..."
 
     # Celery worker data (prediction pipeline)
-    ensure_dir datasets predict_inputs models predict_outputs logs_middle
-    ensure_dir merged_predict_outputs feature_importance_mid
-    ensure_dir datasets_short predict_inputs_short models_short predict_outputs_short
-    ensure_dir logs_short feature_importance_short
-    ensure_dir datasets_ss saved_models_ss prediction_inputs_ss prediction_results_ss logs_ss
+    ensure_dir "$(data_path datasets)" "$(data_path predict_inputs)" "$(data_path models)" "$(data_path predict_outputs)" "$(data_path logs_middle)"
+    ensure_dir "$(data_path merged_predict_outputs)" "$(data_path feature_importance_mid)"
+    ensure_dir "$(data_path datasets_short)" "$(data_path predict_inputs_short)" "$(data_path models_short)" "$(data_path predict_outputs_short)"
+    ensure_dir "$(data_path logs_short)" "$(data_path feature_importance_short)"
+    ensure_dir "$(data_path datasets_ss)" "$(data_path saved_models_ss)" "$(data_path prediction_inputs_ss)" "$(data_path prediction_results_ss)" "$(data_path logs_ss)"
 
     # Backend persistent data
-    ensure_dir backend-data/forecast_models
-    ensure_dir backend-data/uploads
-    ensure_dir backend-data/forecasts
-    ensure_dir backend-data/logs
-    ensure_dir backend-data/saved_models
-    ensure_dir backend-data/saved_scalers
-    ensure_dir backend-data/saved_metrics
-    ensure_dir backend-data/data_etext
-    ensure_dir backend-data/data_etext/incoming
-    ensure_dir backend-data/data_etext/csv
-    ensure_dir backend-data/weather
-    ensure_dir backend-data/archives
-    ensure_dir backend-data/integration
+    ensure_dir "$(data_path backend-data/forecast_models)"
+    ensure_dir "$(data_path backend-data/uploads)"
+    ensure_dir "$(data_path backend-data/forecasts)"
+    ensure_dir "$(data_path backend-data/logs)"
+    ensure_dir "$(data_path backend-data/saved_models)"
+    ensure_dir "$(data_path backend-data/saved_scalers)"
+    ensure_dir "$(data_path backend-data/saved_metrics)"
+    ensure_dir "$(data_path backend-data/data_etext)"
+    ensure_dir "$(data_path backend-data/data_etext/incoming)"
+    ensure_dir "$(data_path backend-data/data_etext/csv)"
+    ensure_dir "$(data_path backend-data/weather)"
+    ensure_dir "$(data_path backend-data/archives)"
+    ensure_dir "$(data_path backend-data/integration)"
 
     # Redis persistent data
-    ensure_dir redis-data
+    ensure_dir "$(data_path redis-data)"
 
     # Celery beat schedule data
-    ensure_dir celery-beat-data
+    ensure_dir "$(data_path celery-beat-data)"
 
     # KingBase data (if using db compose)
-    ensure_dir kingbase-data
-    chmod 777 kingbase-data 2>/dev/null || true
+    ensure_dir "$(data_path kingbase-data)"
+    chmod 777 "$(data_path kingbase-data)" 2>/dev/null || true
 }
 
 dir_has_content() {
@@ -364,28 +396,27 @@ seed_model_assets() {
     docker_cmd rm -f "$container" >/dev/null 2>&1 || true
     docker_cmd create --name "$container" --entrypoint /bin/true "$image" >/dev/null
 
-    copy_seed_dir "$container" "/app/forecast_models" "backend-data/forecast_models" "backend forecast models"
-    copy_seed_dir "$container" "/app/auto_scripts/scripts/middle/models" "models" "middle prediction models"
-    copy_seed_dir "$container" "/app/auto_scripts/scripts/short/models" "models_short" "short prediction models"
-    copy_seed_dir "$container" "/app/auto_scripts/scripts/supershort/saved_models" "saved_models_ss" "supershort saved models"
+    copy_seed_dir "$container" "/app/forecast_models" "$(data_path backend-data/forecast_models)" "backend forecast models"
+    copy_seed_dir "$container" "/app/auto_scripts/scripts/middle/models" "$(data_path models)" "middle prediction models"
+    copy_seed_dir "$container" "/app/auto_scripts/scripts/short/models" "$(data_path models_short)" "short prediction models"
+    copy_seed_dir "$container" "/app/auto_scripts/scripts/supershort/saved_models" "$(data_path saved_models_ss)" "supershort saved models"
 
     docker_cmd rm -f "$container" >/dev/null 2>&1 || true
 }
 
-do_install() {
+verify_release_if_present() {
     local checksum_file
-    local database_archive
-    local prediction_archive
-
-    info "=== Installing Wind Power Forecast System ==="
-    check_docker
 
     if checksum_file="$(find_package_file SHA256SUMS)"; then
         info "Verifying offline release package..."
         bash ./verify-release.sh "$(dirname "$checksum_file")"
     fi
+}
 
-    # Load database image
+load_release_images() {
+    local database_archive
+    local prediction_archive
+
     if database_archive="$(find_package_file 01_database.tar)"; then
         info "Loading database image..."
         docker load -i "$database_archive"
@@ -400,10 +431,15 @@ do_install() {
     else
         warn "02_prediction_system.tar not found, skipping prediction system images"
     fi
+}
+
+do_install() {
+    info "=== Installing Wind Power Forecast System ==="
+    check_docker
+    verify_release_if_present
+    load_release_images
 
     create_network
-    create_dirs
-    seed_model_assets
 
     info "=== Installation complete ==="
     info "Next steps:"
@@ -425,15 +461,55 @@ do_start() {
 
     wait_for_database
     ensure_app_database
-    import_seed_data
 
     info "Starting prediction system..."
     docker_compose -f docker-compose.prod.yaml up -d
+    wait_for_backend
 
     info "=== All services started ==="
     info "Frontend:    http://<server-ip>:8080"
     info "Backend API: http://<server-ip>:5000"
     info "数据库治理请使用前端运行控制中心与数据库治理页面"
+}
+
+do_upgrade() {
+    check_env
+    bash ./validate-field-config.sh .env
+    check_docker
+    verify_release_if_present
+    load_release_images
+    create_network
+    generate_app_env
+    create_dirs
+    seed_model_assets
+
+    info "Ensuring database is online..."
+    docker_compose -f docker-compose.db.yaml up -d
+    wait_for_database
+    ensure_app_database
+
+    info "Running database migration gate..."
+    DB_SCHEMA_ACTION=upgrade docker_compose -f docker-compose.prod.yaml up --force-recreate deployment-init
+
+    info "Recreating application services with the new images..."
+    DB_SCHEMA_ACTION=upgrade docker_compose -f docker-compose.prod.yaml up -d --remove-orphans
+    wait_for_backend
+
+    info "=== Upgrade complete ==="
+    do_status
+}
+
+do_init_seed() {
+    check_env
+    bash ./validate-field-config.sh .env
+    check_docker
+    create_network
+
+    info "Starting database for seed import..."
+    docker_compose -f docker-compose.db.yaml up -d
+    wait_for_database
+    ensure_app_database
+    import_seed_data
 }
 
 do_stop() {
@@ -490,21 +566,25 @@ do_logs() {
 case "${1:-}" in
     install)  do_install  ;;
     start)    do_start    ;;
+    upgrade)  do_upgrade  ;;
     stop)     do_stop     ;;
     status)   do_status   ;;
     restart)  do_restart  ;;
     db-only)  do_db_only  ;;
+    init-seed) do_init_seed ;;
     logs)     do_logs "${2:-}" ;;
     *)
-        echo "Usage: $0 {install|start|stop|status|restart|db-only|logs [service]}"
+        echo "Usage: $0 {install|start|upgrade|stop|status|restart|db-only|init-seed|logs [service]}"
         echo ""
         echo "Commands:"
         echo "  install   Load Docker images from tar files"
         echo "  start     Start all services (DB first, then app)"
+        echo "  upgrade   Load release images, migrate schema, and recreate app services"
         echo "  stop      Stop all services"
         echo "  status    Show status of all services"
         echo "  restart   Restart all services"
         echo "  db-only   Start only the database"
+        echo "  init-seed Import optional seed dump into an empty database"
         echo "  logs      Tail logs (optional: specify service name)"
         exit 1
         ;;
